@@ -618,11 +618,11 @@ Create `lib/auth/permissions.ts`:
 import { auth } from './config';
 import { prisma } from '@/lib/db';
 import { redis } from '@/lib/redis';
+import { headers } from 'next/headers';
 
 export async function requirePermission(permission: string): Promise<void> {
-  const session = await auth.api.getSession({
-    headers: await import('next/headers').then((m) => m.headers()),
-  });
+  const headersList = await headers();
+  const session = await auth.api.getSession({ headers: headersList });
 
   if (!session?.user?.id) {
     throw new Error('Unauthorized');
@@ -787,8 +787,8 @@ export async function auditLog(data: {
   oldValues?: any;
   newValues?: any;
 }): Promise<void> {
-  const session = await auth.api.getSession({ headers: await headers() });
   const headersList = await headers();
+  const session = await auth.api.getSession({ headers: headersList });
 
   await prisma.auditLog.create({
     data: {

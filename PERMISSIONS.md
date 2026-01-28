@@ -266,7 +266,10 @@ export async function getUserPermissions(userId: string): Promise<string[]> {
   const userRoles = await prisma.userRole.findMany({
     where: {
       userId,
-      expiresAt: { gt: new Date() } || null,
+      OR: [
+        { expiresAt: null },
+        { expiresAt: { gt: new Date() } }
+      ],
     },
     include: {
       role: {

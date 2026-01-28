@@ -384,6 +384,7 @@ model MusicFile {
   
   // Relations
   piece       MusicPiece @relation(fields: [pieceId], references: [id], onDelete: Cascade)
+  parts       MusicPart[]
   downloads   FileDownload[]
   
   @@index([pieceId])
