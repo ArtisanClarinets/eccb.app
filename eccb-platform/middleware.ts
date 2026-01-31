@@ -1,43 +1,19 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { getSessionCookie } from 'better-auth/next-js';
 
-const publicRoutes = ['/', '/about', '/events', '/contact', '/login', '/signup', '/forbidden'];
-const adminRoutes = ['/admin'];
+// Note: We removed the Better Auth middleware integration to strictly follow the "Proxy Pattern" requirement
+// and avoid middleware complexity or Edge Runtime issues.
+// Authentication is enforced in layouts/pages via `protectPage` and Server Actions via `protectAction`.
 
 export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
-
-  // 1. Allow public routes
-  if (publicRoutes.some((route) => pathname === route || pathname.startsWith(route + '/'))) {
-    return NextResponse.next();
-  }
-
-  // 2. Allow API routes (they should handle their own auth)
-  if (pathname.startsWith('/api/')) {
-    return NextResponse.next();
-  }
-
-  // 3. Check for session cookie
-  const sessionCookie = getSessionCookie(request);
+  const response = NextResponse.next();
   
-  if (!sessionCookie) {
-    const url = new URL('/login', request.url);
-    url.searchParams.set('callbackUrl', pathname);
-    return NextResponse.redirect(url);
-  }
-
-  // 4. RBAC for admin routes
-  // Note: In middleware, we can't easily check permissions from DB/Redis without making it slow.
-  // Better Auth can include roles in the session token/cookie if configured.
-  // For now, we'll let the page/layout handle detailed permission checks, 
-  // but we could do a basic check if we had the role in the session.
+  // Security headers
+  response.headers.set('X-Frame-Options', 'DENY');
+  response.headers.set('X-Content-Type-Options', 'nosniff');
+  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
   
-  if (pathname.startsWith('/admin')) {
-    // Detailed check will happen in the layout/page using requirePermission
-  }
-
-  return NextResponse.next();
+  return response;
 }
 
 export const config = {
