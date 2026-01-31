@@ -24,8 +24,8 @@ export async function auditLog(data: AuditLogData): Promise<void> {
         action: data.action,
         entityType: data.entityType,
         entityId: data.entityId,
-        oldValues: data.oldValues ? JSON.stringify(data.oldValues) : null,
-        newValues: data.newValues ? JSON.stringify(data.newValues) : null,
+        oldValues: data.oldValues ? JSON.stringify(data.oldValues) : undefined,
+        newValues: data.newValues ? JSON.stringify(data.newValues) : undefined,
       },
     });
   } catch (error) {
