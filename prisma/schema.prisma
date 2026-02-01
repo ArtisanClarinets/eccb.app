@@ -1,0 +1,760 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ====================================
+// Users & Authentication
+// ====================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified DateTime?
+  name          String?
+  image         String?
+  
+  password      String?
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+  
+  accounts      Account[]
+  sessions      Session[]
+  roles         UserRole[]
+  member        Member?
+  
+  auditLogs     AuditLog[]
+  notifications UserNotification[]
+  emailLogs     EmailLog[]
+  announcements Announcement[]
+  
+  @@index([email])
+  @@index([deletedAt])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  ipAddress    String?
+  userAgent    String?
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([expires])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+  
+  @@unique([identifier, token])
+}
+
+// ====================================
+// Roles & Permissions
+// ====================================
+
+enum RoleType {
+  SUPER_ADMIN
+  ADMIN
+  DIRECTOR
+  STAFF
+  SECTION_LEADER
+  LIBRARIAN
+  MUSICIAN
+  PUBLIC
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  displayName String
+  description String?
+  type        RoleType
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  users       UserRole[]
+  permissions RolePermission[]
+  
+  @@index([type])
+}
+
+model UserRole {
+  id        String   @id @default(cuid())
+  userId    String
+  roleId    String
+  
+  assignedAt DateTime @default(now())
+  assignedBy String?
+  expiresAt  DateTime?
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, roleId])
+  @@index([userId])
+  @@index([roleId])
+}
+
+model Permission {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  resource    String
+  action      String
+  scope       String?
+  description String?
+  
+  createdAt   DateTime @default(now())
+  
+  roles       RolePermission[]
+  
+  @@index([resource, action])
+}
+
+model RolePermission {
+  id           String @id @default(cuid())
+  roleId       String
+  permissionId String
+  
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  
+  @@unique([roleId, permissionId])
+  @@index([roleId])
+  @@index([permissionId])
+}
+
+// ====================================
+// Members & Profiles
+// ====================================
+
+enum MemberStatus {
+  ACTIVE
+  INACTIVE
+  LEAVE_OF_ABSENCE
+  ALUMNI
+  AUDITION
+  PENDING
+}
+
+model Member {
+  id              String       @id @default(cuid())
+  userId          String?      @unique
+  firstName       String
+  lastName        String
+  email           String?
+  phone           String?
+  profilePhoto    String?
+  status          MemberStatus @default(PENDING)
+  joinDate        DateTime?
+  leaveDate       DateTime?
+  emergencyName   String?
+  emergencyPhone  String?
+  emergencyEmail  String?
+  notes           String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  deletedAt       DateTime?
+  
+  user            User?        @relation(fields: [userId], references: [id])
+  instruments     MemberInstrument[]
+  sections        MemberSection[]
+  attendance      Attendance[]
+  musicAssignments MusicAssignment[]
+  
+  @@index([status])
+  @@index([lastName, firstName])
+  @@index([deletedAt])
+}
+
+model Instrument {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  family      String
+  sortOrder   Int      @default(0)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  members     MemberInstrument[]
+  musicParts  MusicPart[]
+  
+  @@index([family])
+  @@index([sortOrder])
+}
+
+model MemberInstrument {
+  id           String   @id @default(cuid())
+  memberId     String
+  instrumentId String
+  isPrimary    Boolean  @default(false)
+  
+  member     Member     @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  instrument Instrument @relation(fields: [instrumentId], references: [id])
+  
+  @@unique([memberId, instrumentId])
+  @@index([memberId])
+  @@index([instrumentId])
+}
+
+model Section {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  sortOrder   Int      @default(0)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  members     MemberSection[]
+  
+  @@index([sortOrder])
+}
+
+model MemberSection {
+  id        String   @id @default(cuid())
+  memberId  String
+  sectionId String
+  isLeader  Boolean  @default(false)
+  
+  assignedAt DateTime @default(now())
+  
+  member  Member  @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  section Section @relation(fields: [sectionId], references: [id])
+  
+  @@unique([memberId, sectionId])
+  @@index([memberId])
+  @@index([sectionId])
+}
+
+// ====================================
+// Music Library (Core)
+// ====================================
+
+enum MusicDifficulty {
+  GRADE_1
+  GRADE_2
+  GRADE_3
+  GRADE_4
+  GRADE_5
+  GRADE_6
+}
+
+model MusicPiece {
+  id              String           @id @default(cuid())
+  title           String
+  subtitle        String?
+  composerId      String?
+  arrangerId      String?
+  publisherId     String?
+  difficulty      MusicDifficulty?
+  duration        Int?
+  genre           String?
+  style           String?
+  instrumentation String?
+  tags            Json?
+  catalogNumber   String?          @unique
+  notes           String?
+  performanceHistory String?
+  isArchived      Boolean          @default(false)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  deletedAt       DateTime?
+  
+  composer        Person?          @relation("ComposerPieces", fields: [composerId], references: [id])
+  arranger        Person?          @relation("ArrangerPieces", fields: [arrangerId], references: [id])
+  publisher       Publisher?       @relation(fields: [publisherId], references: [id])
+  files           MusicFile[]
+  parts           MusicPart[]
+  assignments     MusicAssignment[]
+  eventMusic      EventMusic[]
+  
+  @@index([title])
+  @@index([composerId])
+  @@index([difficulty])
+  @@index([isArchived])
+  @@index([deletedAt])
+}
+
+enum FileType {
+  FULL_SCORE
+  CONDUCTOR_SCORE
+  PART
+  CONDENSED_SCORE
+  AUDIO
+  LICENSING
+  OTHER
+}
+
+model MusicFile {
+  id          String   @id @default(cuid())
+  pieceId     String
+  fileName    String
+  fileType    FileType
+  fileSize    Int
+  mimeType    String
+  storageKey  String
+  storageUrl  String?
+  version     Int      @default(1)
+  description String?
+  isPublic    Boolean  @default(false)
+  uploadedAt  DateTime @default(now())
+  uploadedBy  String?
+  
+  piece       MusicPiece @relation(fields: [pieceId], references: [id], onDelete: Cascade)
+  parts       MusicPart[]
+  downloads   FileDownload[]
+  
+  @@index([pieceId])
+  @@index([fileType])
+}
+
+model MusicPart {
+  id           String     @id @default(cuid())
+  pieceId      String
+  instrumentId String
+  partName     String
+  fileId       String?
+  isOptional   Boolean    @default(false)
+  notes        String?
+  
+  piece        MusicPiece @relation(fields: [pieceId], references: [id], onDelete: Cascade)
+  instrument   Instrument @relation(fields: [instrumentId], references: [id])
+  file         MusicFile? @relation(fields: [fileId], references: [id])
+  
+  @@index([pieceId])
+  @@index([instrumentId])
+}
+
+model Person {
+  id              String       @id @default(cuid())
+  firstName       String
+  lastName        String
+  fullName        String
+  bio             String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  
+  composedPieces  MusicPiece[] @relation("ComposerPieces")
+  arrangedPieces  MusicPiece[] @relation("ArrangerPieces")
+  
+  @@index([lastName, firstName])
+}
+
+model Publisher {
+  id          String       @id @default(cuid())
+  name        String       @unique
+  website     String?
+  contactInfo String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  
+  pieces      MusicPiece[]
+  
+  @@index([name])
+}
+
+model MusicAssignment {
+  id          String     @id @default(cuid())
+  pieceId     String
+  memberId    String
+  partName    String?
+  priority    Int?
+  notes       String?
+  assignedAt  DateTime   @default(now())
+  assignedBy  String?
+  dueDate     DateTime?
+  
+  piece       MusicPiece @relation(fields: [pieceId], references: [id], onDelete: Cascade)
+  member      Member     @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  
+  @@index([pieceId])
+  @@index([memberId])
+  @@index([dueDate])
+}
+
+model FileDownload {
+  id          String     @id @default(cuid())
+  fileId      String
+  userId      String?
+  downloadedAt DateTime  @default(now())
+  ipAddress    String?
+  userAgent    String?
+  
+  file        MusicFile  @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  
+  @@index([fileId])
+  @@index([userId])
+  @@index([downloadedAt])
+}
+
+// ====================================
+// Events & Rehearsals
+// ====================================
+
+enum EventType {
+  CONCERT
+  REHEARSAL
+  SECTIONAL
+  BOARD_MEETING
+  SOCIAL
+  OTHER
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  EXCUSED
+  LATE
+  LEFT_EARLY
+}
+
+model Event {
+  id              String       @id @default(cuid())
+  title           String
+  description     String?
+  type            EventType
+  startTime       DateTime
+  endTime         DateTime
+  location        String?
+  venueId         String?
+  callTime        DateTime?
+  dressCode       String?
+  programOrder    Json?
+  isCancelled     Boolean      @default(false)
+  isPublished     Boolean      @default(false)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  deletedAt       DateTime?
+  
+  venue           Venue?       @relation(fields: [venueId], references: [id])
+  attendance      Attendance[]
+  music           EventMusic[]
+  notes           EventNote[]
+  
+  @@index([type])
+  @@index([startTime])
+  @@index([isPublished])
+  @@index([deletedAt])
+}
+
+model Venue {
+  id          String   @id @default(cuid())
+  name        String
+  address     String?
+  city        String?
+  state       String?
+  zipCode     String?
+  directions  String?
+  parking     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  events      Event[]
+  
+  @@index([name])
+}
+
+model Attendance {
+  id          String           @id @default(cuid())
+  eventId     String
+  memberId    String
+  status      AttendanceStatus
+  notes       String?
+  markedAt    DateTime         @default(now())
+  markedBy    String?
+  
+  event       Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  member      Member           @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  
+  @@unique([eventId, memberId])
+  @@index([eventId])
+  @@index([memberId])
+  @@index([status])
+}
+
+model EventMusic {
+  id          String     @id @default(cuid())
+  eventId     String
+  pieceId     String
+  sortOrder   Int        @default(0)
+  notes       String?
+  
+  event       Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  piece       MusicPiece @relation(fields: [pieceId], references: [id], onDelete: Cascade)
+  
+  @@unique([eventId, pieceId])
+  @@index([eventId])
+  @@index([pieceId])
+}
+
+model EventNote {
+  id          String   @id @default(cuid())
+  eventId     String
+  title       String?
+  content     String
+  isPublic    Boolean  @default(false)
+  targetSection String?
+  createdAt   DateTime @default(now())
+  createdBy   String?
+  updatedAt   DateTime @updatedAt
+  
+  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  
+  @@index([eventId])
+}
+
+// ====================================
+// CMS & Content
+// ====================================
+
+enum ContentStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+  ARCHIVED
+}
+
+model Page {
+  id          String        @id @default(cuid())
+  title       String
+  slug        String        @unique
+  description String?
+  content     Json
+  rawMarkdown String?
+  metaTitle   String?
+  metaDescription String?
+  metaKeywords Json?
+  ogImage     String?
+  status      ContentStatus @default(DRAFT)
+  publishedAt DateTime?
+  scheduledFor DateTime?
+  version     Int           @default(1)
+  parentVersionId String?
+  createdAt   DateTime      @default(now())
+  createdBy   String?
+  updatedAt   DateTime      @updatedAt
+  updatedBy   String?
+  deletedAt   DateTime?
+  
+  versions    PageVersion[]
+  
+  @@index([slug])
+  @@index([status])
+  @@index([publishedAt])
+}
+
+model PageVersion {
+  id          String   @id @default(cuid())
+  pageId      String
+  version     Int
+  content     Json
+  createdAt   DateTime @default(now())
+  createdBy   String?
+  
+  page        Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  
+  @@unique([pageId, version])
+  @@index([pageId])
+}
+
+model Announcement {
+  id          String             @id @default(cuid())
+  title       String
+  content     String
+  type        AnnouncementType   @default(INFO)
+  audience    AnnouncementAudience @default(ALL)
+  targetRoles Json?
+  isUrgent    Boolean            @default(false)
+  isPinned    Boolean            @default(false)
+  status      ContentStatus      @default(DRAFT)
+  publishAt   DateTime?
+  publishedAt DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime           @default(now())
+  createdBy   String?
+  updatedAt   DateTime           @updatedAt
+  
+  author        User?              @relation(fields: [createdBy], references: [id])
+  notifications UserNotification[]
+  
+  @@index([status])
+  @@index([publishAt])
+  @@index([publishedAt])
+  @@index([expiresAt])
+  @@index([isPinned])
+}
+
+enum AnnouncementType {
+  INFO
+  WARNING
+  URGENT
+  EVENT
+}
+
+enum AnnouncementAudience {
+  ALL
+  MEMBERS
+  ADMINS
+}
+
+model MediaAsset {
+  id          String   @id @default(cuid())
+  fileName    String
+  fileSize    Int
+  mimeType    String
+  storageKey  String
+  storageUrl  String?
+  title       String?
+  altText     String?
+  caption     String?
+  tags        Json?
+  width       Int?
+  height      Int?
+  uploadedAt  DateTime @default(now())
+  uploadedBy  String?
+  
+  @@index([mimeType])
+  @@index([uploadedAt])
+}
+
+// ====================================
+// Communications
+// ====================================
+
+enum NotificationType {
+  ANNOUNCEMENT
+  EVENT_REMINDER
+  MUSIC_ASSIGNMENT
+  ATTENDANCE_REMINDER
+  SYSTEM
+}
+
+model UserNotification {
+  id             String           @id @default(cuid())
+  userId         String
+  type           NotificationType
+  title          String
+  message        String
+  linkUrl        String?
+  linkText       String?
+  announcementId String?
+  eventId        String?
+  isRead         Boolean          @default(false)
+  readAt         DateTime?
+  createdAt      DateTime         @default(now())
+  
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  announcement   Announcement?    @relation(fields: [announcementId], references: [id])
+  
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+}
+
+model Message {
+  id          String   @id @default(cuid())
+  subject     String
+  body        String
+  senderId    String
+  senderName  String
+  recipients  Json
+  sentAt      DateTime @default(now())
+  
+  @@index([senderId])
+  @@index([sentAt])
+}
+
+// ====================================
+// Configuration & System
+// ====================================
+
+enum EmailStatus {
+  PENDING
+  SENT
+  FAILED
+  BOUNCED
+}
+
+model EmailLog {
+  id             String      @id @default(cuid())
+  subject        String
+  body           String      @db.Text
+  recipientCount Int
+  recipientType  String
+  status         EmailStatus @default(PENDING)
+  sentById       String?
+  sentAt         DateTime?
+  errorMessage   String?     @db.Text
+  createdAt      DateTime    @default(now())
+  
+  sentBy         User?       @relation(fields: [sentById], references: [id])
+  
+  @@index([sentById])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model SystemSetting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String
+  description String?
+  updatedAt   DateTime @updatedAt
+  updatedBy   String?
+  
+  @@index([key])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String?
+  userName    String?
+  ipAddress   String?
+  userAgent   String?
+  action      String
+  entityType  String
+  entityId    String?
+  oldValues   Json?
+  newValues   Json?
+  timestamp   DateTime @default(now())
+  
+  user        User?    @relation(fields: [userId], references: [id])
+  
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([timestamp])
+  @@index([action])
+}
