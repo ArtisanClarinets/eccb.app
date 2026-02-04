@@ -1,20 +1,7 @@
-import { createAuthClient } from "better-auth/react"
-import { magicLinkClient, twoFactorClient, adminClient } from "better-auth/client/plugins"
+import { createAuthClient } from 'better-auth/client';
 
 export const authClient = createAuthClient({
-    baseURL: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
-    plugins: [
-        magicLinkClient(),
-        twoFactorClient(),
-        adminClient(),
-    ]
-})
+  baseURL: process.env.BETTER_AUTH_URL,
+});
 
-// Export auth methods for convenience
-export const { 
-    signIn, 
-    signUp, 
-    signOut, 
-    useSession,
-    getSession,
-} = authClient
+export const { useSession, signIn, signOut, signUp, forgetPassword, resetPassword, verifyEmail, getSession } = authClient;
