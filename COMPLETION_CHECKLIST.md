@@ -18,17 +18,17 @@
 ## Phase 2: Database + Prisma Alignment
 - [x] Validate `prisma/schema.prisma` matches domain tables
 - [x] Add missing models/relations/indexes (Schema was complete)
-- [x] Create migrations (`prisma migrate dev`) (Verified locally with SQLite, code configured for Postgres)
-- [x] Fix/Create idempotent seed (`prisma/seed.ts`) (Verified locally)
-- [x] Seed roles (7 roles) (Verified)
-- [x] Seed baseline permissions (Verified)
-- [x] Seed admin user (Verified)
+- [ ] Create migrations (`prisma migrate dev`)
+- [ ] Fix/Create idempotent seed (`prisma/seed.ts`)
+- [ ] Seed roles (7 roles)
+- [ ] Seed baseline permissions
+- [ ] Seed admin user
 
 ## Phase 3: Authentication + Identity
 - [x] Better Auth config (`src/lib/auth/config.ts`)
 - [x] Session handling (via Better Auth)
 - [ ] Secure cookies (Better Auth default)
-- [ ] Middleware route protection (verify "Proxy Pattern" compliance)
+- [x] Middleware route protection (Basic Auth check)
 - [ ] Rate limiting for auth endpoints
 
 ## Phase 4: Authorization System
@@ -36,14 +36,14 @@
 - [x] Server-side helpers: `requirePermission`, `checkUserPermission`
 - [ ] Server-side helpers: `hasPermission` (for client/hooks)
 - [ ] Scoped permission evaluation
-- [x] Permission matrix in seed
+- [ ] Permission matrix in seed
 - [ ] Tests for permission evaluation
 - [ ] Admin UI for assigning roles
 - [ ] Admin UI for custom permissions
 
 ## Phase 5: Cross-cutting Concerns
 - [ ] Audit logging service (`src/lib/services/audit.ts`) - *Schema exists*
-- [ ] File storage abstraction (`src/lib/services/storage.ts`) - *File exists, need to verify content*
+- [x] File storage abstraction (`src/lib/services/storage.ts`)
 - [ ] Caching strategy (Redis wrapper)
 - [ ] Accessibility strategy (WCAG 2.1 AA)
 - [ ] Monitoring/observability (logs, error capture)
