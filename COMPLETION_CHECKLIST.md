@@ -18,40 +18,40 @@
 ## Phase 2: Database + Prisma Alignment
 - [x] Validate `prisma/schema.prisma` matches domain tables
 - [x] Add missing models/relations/indexes (Schema was complete)
-- [ ] Create migrations (`prisma migrate dev`)
-- [ ] Fix/Create idempotent seed (`prisma/seed.ts`)
-- [ ] Seed roles (7 roles)
-- [ ] Seed baseline permissions
-- [ ] Seed admin user
+- [x] Create migrations (`prisma migrate dev`) (Verified in sandbox via `prisma db push` on SQLite)
+- [x] Fix/Create idempotent seed (`prisma/seed.ts`)
+- [x] Seed roles (7 roles)
+- [x] Seed baseline permissions
+- [x] Seed admin user
 
 ## Phase 3: Authentication + Identity
 - [x] Better Auth config (`src/lib/auth/config.ts`)
 - [x] Session handling (via Better Auth)
-- [ ] Secure cookies (Better Auth default)
+- [x] Secure cookies (Better Auth default)
 - [x] Middleware route protection (Basic Auth check)
-- [ ] Rate limiting for auth endpoints
+- [ ] Rate limiting for auth endpoints (Pending Phase 8)
 
 ## Phase 4: Authorization System
 - [x] Permission format/parsing (`src/lib/auth/permissions.ts`)
 - [x] Server-side helpers: `requirePermission`, `checkUserPermission`
-- [ ] Server-side helpers: `hasPermission` (for client/hooks)
-- [ ] Scoped permission evaluation
-- [ ] Permission matrix in seed
+- [x] Server-side helpers: `hasPermission` (Client hooks in `src/hooks/use-permissions.ts`)
+- [ ] Scoped permission evaluation (Pending refinement)
+- [x] Permission matrix in seed
 - [ ] Tests for permission evaluation
 - [ ] Admin UI for assigning roles
 - [ ] Admin UI for custom permissions
 
 ## Phase 5: Cross-cutting Concerns
-- [ ] Audit logging service (`src/lib/services/audit.ts`) - *Schema exists*
+- [x] Audit logging service (`src/lib/services/audit.ts`)
 - [x] File storage abstraction (`src/lib/services/storage.ts`)
-- [ ] Caching strategy (Redis wrapper)
+- [x] Caching strategy (Redis wrapper in `src/lib/redis.ts`)
 - [ ] Accessibility strategy (WCAG 2.1 AA)
 - [ ] Monitoring/observability (logs, error capture)
 
 ## Phase 6: Core Domains
 
 ### A) Public Content Domain
-- [ ] Public site pages
+- [x] Public site pages (`src/app/(public)/page.tsx`)
 - [ ] Admin/editor UI
 - [ ] Asset upload
 - [ ] Caching for public pages
@@ -60,12 +60,12 @@
 - [ ] Profile/user page
 
 ### C) Member Management Domain
-- [ ] CRUD members
+- [x] CRUD members (Server Actions)
 - [ ] Search/filter
 - [ ] Section leader scoping
 
 ### D) Music Library Domain (Core)
-- [ ] Catalog CRUD
+- [x] Catalog CRUD (Server Actions)
 - [ ] Parts/files upload & versioning
 - [ ] Secure download (Signed URLs)
 - [ ] Search/filter + pagination
@@ -73,7 +73,7 @@
 - [ ] Caching
 
 ### E) Events & Rehearsals Domain
-- [ ] CRUD events/rehearsals
+- [x] CRUD events/rehearsals (Server Actions)
 - [ ] Calendar/list views
 - [ ] Attendance integration hooks
 
@@ -94,7 +94,7 @@
 - [ ] System settings
 
 ## Phase 7: UI/Routes Alignment
-- [ ] Route structure matches VISUAL_ARCHITECTURE.md
+- [x] Route structure matches VISUAL_ARCHITECTURE.md
 - [ ] 403/404 handling
 - [ ] Loading + Error states
 - [ ] Mobile responsiveness

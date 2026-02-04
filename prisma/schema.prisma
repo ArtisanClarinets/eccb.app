@@ -711,13 +711,13 @@ enum EmailStatus {
 model EmailLog {
   id             String      @id @default(cuid())
   subject        String
-  body           String      @db.Text
+  body           String
   recipientCount Int
   recipientType  String
   status         EmailStatus @default(PENDING)
   sentById       String?
   sentAt         DateTime?
-  errorMessage   String?     @db.Text
+  errorMessage   String?
   createdAt      DateTime    @default(now())
   
   sentBy         User?       @relation(fields: [sentById], references: [id])
