@@ -1,0 +1,360 @@
+
+> eccb-platform@0.1.0 lint
+> eslint
+
+
+/home/dylan/eccb.app/prisma/seed.ts
+  141:41  warning  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+  142:9   warning  'adminRole' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  142:36  warning  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+  143:40  warning  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+  144:39  warning  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+  159:42  warning  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+  172:42  warning  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/scripts/test-storage.ts
+  1:22  warning  'getSignedDownloadUrl' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(admin)/admin/announcements/page.tsx
+   4:22  warning  'formatRelativeTime' is defined but never used  @typescript-eslint/no-unused-vars
+  29:3   warning  'Trash2' is defined but never used              @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(admin)/admin/communications/page.tsx
+  28:3  warning  'Pencil' is defined but never used  @typescript-eslint/no-unused-vars
+  29:3  warning  'Trash2' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(admin)/admin/events/[id]/page.tsx
+  5:34  warning  'formatDuration' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(admin)/admin/events/actions.ts
+   26:9   warning  'session' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   51:38  warning  Unexpected any. Specify a different type      @typescript-eslint/no-explicit-any
+   83:9   warning  'session' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  109:38  warning  Unexpected any. Specify a different type      @typescript-eslint/no-explicit-any
+  143:9   warning  'session' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  184:34  warning  Unexpected any. Specify a different type      @typescript-eslint/no-explicit-any
+  207:9   warning  'session' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  238:9   warning  'session' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  265:9   warning  'session' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(admin)/admin/events/page.tsx
+   6:29  warning  'CardDescription' is defined but never used  @typescript-eslint/no-unused-vars
+  32:16  warning  'TabsContent' is defined but never used      @typescript-eslint/no-unused-vars
+  69:16  warning  Unexpected any. Specify a different type     @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/app/(admin)/admin/layout.tsx
+   3:10  warning  'DashboardSidebar' is defined but never used  @typescript-eslint/no-unused-vars
+  15:10  warning  'cn' is defined but never used                @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(admin)/admin/members/actions.ts
+   27:9  warning  'session' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  116:9  warning  'session' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  208:9  warning  'session' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  232:9  warning  'session' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  258:9  warning  'session' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(admin)/admin/members/page.tsx
+  64:16  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/app/(admin)/admin/music/[id]/page.tsx
+   5:22  warning  'formatDuration' is defined but never used  @typescript-eslint/no-unused-vars
+  14:3   warning  'Music' is defined but never used           @typescript-eslint/no-unused-vars
+  17:3   warning  'Download' is defined but never used        @typescript-eslint/no-unused-vars
+  18:3   warning  'Trash2' is defined but never used          @typescript-eslint/no-unused-vars
+  19:3   warning  'Upload' is defined but never used          @typescript-eslint/no-unused-vars
+  20:3   warning  'Clock' is defined but never used           @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(admin)/admin/music/actions.ts
+    5:29  warning  'getSession' is defined but never used             @typescript-eslint/no-unused-vars
+   11:9   warning  'session' is assigned a value but never used       @typescript-eslint/no-unused-vars
+   93:9   warning  'session' is assigned a value but never used       @typescript-eslint/no-unused-vars
+  145:9   warning  'session' is assigned a value but never used       @typescript-eslint/no-unused-vars
+  181:9   warning  'session' is assigned a value but never used       @typescript-eslint/no-unused-vars
+  185:11  warning  'partType' is assigned a value but never used      @typescript-eslint/no-unused-vars
+  186:11  warning  'instrumentId' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  228:9   warning  'session' is assigned a value but never used       @typescript-eslint/no-unused-vars
+  298:9   warning  'session' is assigned a value but never used       @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(admin)/admin/music/new/page.tsx
+  8:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/app/(admin)/admin/music/page.tsx
+   4:10  warning  'formatDate' is defined but never used                                                                                          @typescript-eslint/no-unused-vars
+  37:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/app/(admin)/admin/page.tsx
+    9:3   warning  'TrendingUp' is defined but never used                                                                                          @typescript-eslint/no-unused-vars
+   10:3   warning  'ArrowRight' is defined but never used                                                                                          @typescript-eslint/no-unused-vars
+   20:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+  138:48  warning  Unexpected any. Specify a different type                                                                                        @typescript-eslint/no-explicit-any
+  183:46  warning  Unexpected any. Specify a different type                                                                                        @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/app/(admin)/admin/pages/actions.ts
+    5:29  warning  'getSession' is defined but never used        @typescript-eslint/no-unused-vars
+  182:9   warning  'session' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  270:9   warning  'session' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  322:9   warning  'session' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(admin)/admin/pages/page.tsx
+  28:3  warning  'Eye' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(admin)/admin/reports/page.tsx
+  17:3  warning  'BarChart3' is defined but never used  @typescript-eslint/no-unused-vars
+  23:3  warning  'Clock' is defined but never used      @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(admin)/admin/settings/actions.ts
+  9:7  warning  'settingSchema' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(auth)/login/page.tsx
+  8:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/app/(member)/dashboard/layout.tsx
+  4:10  warning  'headers' is defined but never used  @typescript-eslint/no-unused-vars
+  5:10  warning  'auth' is defined but never used     @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(member)/dashboard/page.tsx
+    5:10  warning  'MusicLibraryService' is defined but never used  @typescript-eslint/no-unused-vars
+   26:34  warning  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+   95:50  warning  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  143:40  warning  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/app/(member)/member/calendar/page.tsx
+   3:10  warning  'formatDate' is defined but never used        @typescript-eslint/no-unused-vars
+  17:9   warning  'session' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(member)/member/events/[id]/page.tsx
+   5:34  warning  'formatEventDateRange' is defined but never used  @typescript-eslint/no-unused-vars
+  10:10  warning  'Tabs' is defined but never used                  @typescript-eslint/no-unused-vars
+  10:16  warning  'TabsContent' is defined but never used           @typescript-eslint/no-unused-vars
+  10:29  warning  'TabsList' is defined but never used              @typescript-eslint/no-unused-vars
+  10:39  warning  'TabsTrigger' is defined but never used           @typescript-eslint/no-unused-vars
+  24:3   warning  'Users' is defined but never used                 @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(member)/member/music/[id]/page.tsx
+  11:3  warning  'Table' is defined but never used        @typescript-eslint/no-unused-vars
+  12:3  warning  'TableBody' is defined but never used    @typescript-eslint/no-unused-vars
+  13:3  warning  'TableCell' is defined but never used    @typescript-eslint/no-unused-vars
+  14:3  warning  'TableHead' is defined but never used    @typescript-eslint/no-unused-vars
+  15:3  warning  'TableHeader' is defined but never used  @typescript-eslint/no-unused-vars
+  16:3  warning  'TableRow' is defined but never used     @typescript-eslint/no-unused-vars
+  23:3  warning  'User' is defined but never used         @typescript-eslint/no-unused-vars
+  25:3  warning  'Clock' is defined but never used        @typescript-eslint/no-unused-vars
+  26:3  warning  'BarChart3' is defined but never used    @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(member)/member/music/page.tsx
+   6:29  warning  'CardDescription' is defined but never used                                                                                     @typescript-eslint/no-unused-vars
+   6:46  warning  'CardHeader' is defined but never used                                                                                          @typescript-eslint/no-unused-vars
+   6:58  warning  'CardTitle' is defined but never used                                                                                           @typescript-eslint/no-unused-vars
+  19:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+  53:9   warning  'session' is assigned a value but never used                                                                                    @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(member)/member/notifications/page.tsx
+   6:10  warning  'Button' is defined but never used            @typescript-eslint/no-unused-vars
+  14:3   warning  'Check' is defined but never used             @typescript-eslint/no-unused-vars
+  15:3   warning  'ChevronRight' is defined but never used      @typescript-eslint/no-unused-vars
+  19:9   warning  'session' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(member)/member/page.tsx
+   3:23  warning  'getUserWithProfile' is defined but never used                                                                                  @typescript-eslint/no-unused-vars
+   5:42  warning  'getFriendlyDateLabel' is defined but never used                                                                                @typescript-eslint/no-unused-vars
+   6:29  warning  'CardDescription' is defined but never used                                                                                     @typescript-eslint/no-unused-vars
+  20:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/app/(member)/member/profile/page.tsx
+  2:23  warning  'getUserWithProfile' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(public)/about/page.tsx
+  6:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/app/(public)/contact/page.tsx
+  5:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/app/(public)/directors/page.tsx
+  6:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/app/(public)/events/[id]/page.tsx
+   5:34  warning  'formatDateRange' is defined but never used                                                                                     @typescript-eslint/no-unused-vars
+   8:39  warning  'Users' is defined but never used                                                                                               @typescript-eslint/no-unused-vars
+  14:23  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/app/(public)/events/page.tsx
+   3:10  warning  'notFound' is defined but never used                                                                                            @typescript-eslint/no-unused-vars
+   5:34  warning  'formatDateRange' is defined but never used                                                                                     @typescript-eslint/no-unused-vars
+   6:10  warning  'Button' is defined but never used                                                                                              @typescript-eslint/no-unused-vars
+   8:39  warning  'Users' is defined but never used                                                                                               @typescript-eslint/no-unused-vars
+   8:46  warning  'ArrowLeft' is defined but never used                                                                                           @typescript-eslint/no-unused-vars
+  10:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/app/(public)/gallery/page.tsx
+  6:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/app/(public)/news/page.tsx
+  9:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/app/(public)/page.tsx
+  8:17  warning  'Calendar' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(public)/policies/page.tsx
+  11:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/app/(public)/sponsors/page.tsx
+  4:29  warning  'CardHeader' is defined but never used                                                                                          @typescript-eslint/no-unused-vars
+  4:41  warning  'CardTitle' is defined but never used                                                                                           @typescript-eslint/no-unused-vars
+  8:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/app/actions/cms.ts
+  15:40  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/app/actions/events.ts
+  16:41  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/app/actions/members.ts
+  18:42  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/app/actions/music.ts
+  20:46  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  39:58  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/app/api/health/route.ts
+  20:9  warning  'startTime' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/api/members/route.ts
+  19:16  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/app/layout.tsx
+  21:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+  58:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/app/offline/page.tsx
+  3:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/app/signup/page.tsx
+  41:14  warning  'err' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/components/admin/events/event-form.tsx
+   88:5   warning  'watch' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  126:14  warning  'error' is defined but never used           @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/components/admin/members/member-form.tsx
+   73:5   warning  'watch' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  106:14  warning  'error' is defined but never used           @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/components/admin/music/assign-music-dialog.tsx
+  115:14  warning  'error' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/components/admin/music/music-assignments.tsx
+  16:3   warning  'Dialog' is defined but never used             @typescript-eslint/no-unused-vars
+  17:3   warning  'DialogContent' is defined but never used      @typescript-eslint/no-unused-vars
+  18:3   warning  'DialogDescription' is defined but never used  @typescript-eslint/no-unused-vars
+  19:3   warning  'DialogFooter' is defined but never used       @typescript-eslint/no-unused-vars
+  20:3   warning  'DialogHeader' is defined but never used       @typescript-eslint/no-unused-vars
+  21:3   warning  'DialogTitle' is defined but never used        @typescript-eslint/no-unused-vars
+  22:3   warning  'DialogTrigger' is defined but never used      @typescript-eslint/no-unused-vars
+  79:14  warning  'error' is defined but never used              @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/components/admin/music/music-files-list.tsx
+  73:14  warning  'error' is defined but never used  @typescript-eslint/no-unused-vars
+  90:14  warning  'error' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/components/admin/music/music-form.tsx
+   80:3   warning  'instruments' is defined but never used     @typescript-eslint/no-unused-vars
+   88:43  warning  Unexpected any. Specify a different type    @typescript-eslint/no-explicit-any
+   96:5   warning  'watch' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  124:14  warning  'error' is defined but never used           @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/components/admin/settings/security-settings-form.tsx
+  17:10  warning  'Input' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/components/admin/sidebar.tsx
+  18:3  warning  'Folder' is defined but never used  @typescript-eslint/no-unused-vars
+  19:3  warning  'Image' is defined but never used   @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/components/dashboard/sidebar.tsx
+  28:52  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/components/home/upcoming-events.tsx
+  36:39  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/components/layout/navbar.tsx
+  7:26  warning  'User' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/components/member/settings-form.tsx
+  32:3   warning  'AlertDialog' is defined but never used               @typescript-eslint/no-unused-vars
+  33:3   warning  'AlertDialogAction' is defined but never used         @typescript-eslint/no-unused-vars
+  34:3   warning  'AlertDialogCancel' is defined but never used         @typescript-eslint/no-unused-vars
+  35:3   warning  'AlertDialogContent' is defined but never used        @typescript-eslint/no-unused-vars
+  36:3   warning  'AlertDialogDescription' is defined but never used    @typescript-eslint/no-unused-vars
+  37:3   warning  'AlertDialogFooter' is defined but never used         @typescript-eslint/no-unused-vars
+  38:3   warning  'AlertDialogHeader' is defined but never used         @typescript-eslint/no-unused-vars
+  39:3   warning  'AlertDialogTitle' is defined but never used          @typescript-eslint/no-unused-vars
+  40:3   warning  'AlertDialogTrigger' is defined but never used        @typescript-eslint/no-unused-vars
+  73:10  warning  'is2FADialogOpen' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/components/providers/service-worker-provider.tsx
+  52:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components                                                               react-refresh/only-export-components
+  57:35  error    React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?   react-hooks/rules-of-hooks
+  59:3   error    React Hook "useEffect" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?  react-hooks/rules-of-hooks
+
+/home/dylan/eccb.app/src/components/public/contact-form.tsx
+  69:14  warning  'error' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/components/ui/badge.tsx
+  46:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/components/ui/button-group.tsx
+  82:3  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/components/ui/button.tsx
+  62:18  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/components/ui/form.tsx
+  159:3  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/components/ui/navigation-menu.tsx
+  167:3  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/components/ui/sidebar.tsx
+  611:26  error    Error: Cannot call impure function during render
+
+`Math.random` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).
+
+/home/dylan/eccb.app/src/components/ui/sidebar.tsx:611:26
+  609 |   // Random width between 50 to 90%.
+  610 |   const width = React.useMemo(() => {
+> 611 |     return `${Math.floor(Math.random() * 40) + 50}%`
+      |                          ^^^^^^^^^^^^^ Cannot call impure function
+  612 |   }, [])
+  613 |
+  614 |   return (  react-hooks/purity
+  725:3   warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/components/ui/toggle.tsx
+  45:18  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/hooks/use-permissions.ts
+  16:26  warning  'permission' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/lib/logger.ts
+   9:18  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  12:61  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  23:34  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  26:34  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  29:36  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  29:48  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  32:35  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/lib/services/audit.ts
+  10:15  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  11:15  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/lib/services/cms.service.ts
+  8:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/lib/services/member.service.ts
+  104:18  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/lib/services/storage.ts
+  78:21  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+✖ 192 problems (3 errors, 189 warnings)
+

@@ -66,6 +66,9 @@ MinIO provides S3-compatible object storage for:
 - API: `http://localhost:9000`
 - Console: `http://localhost:9001`
 
+**Alternative: Local Disk Storage**
+If you prefer not to run MinIO, set `STORAGE_DRIVER="LOCAL"` and skip the MinIO installation. Ensure the storage path is writable by the app user.
+
 ### 3. Environment Configuration
 
 Copy `.env.example` to `.env` and configure:
@@ -79,9 +82,12 @@ BETTER_AUTH_SECRET="$(openssl rand -base64 32)"
 BETTER_AUTH_URL="https://your-domain.com"
 
 # S3/MinIO - from install-minio.sh output
+STORAGE_DRIVER="S3" # or "LOCAL"
 S3_ENDPOINT="http://localhost:9000"
 S3_ACCESS_KEY="minioadmin"
 S3_SECRET_KEY="your-minio-password"
+S3_FORCE_PATH_STYLE="true"
+LOCAL_STORAGE_PATH="/var/lib/eccb/music"
 
 # SMTP - your email provider settings
 SMTP_HOST="smtp.your-provider.com"

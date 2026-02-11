@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/db';
 import { requirePermission, getSession } from '@/lib/auth/guards';
-import { uploadFile, deleteFile } from '@/lib/storage';
+import { uploadFile, deleteFile } from '@/lib/services/storage';
 import { auditLog } from '@/lib/services/audit';
 import { MusicDifficulty, FileType } from '@prisma/client';
 

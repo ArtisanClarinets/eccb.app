@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getSession } from '@/lib/auth/guards';
-import { getFileUrl } from '@/lib/storage';
+import { getFileUrl } from '@/lib/services/storage';
 
 export async function GET(
   request: NextRequest,

@@ -3,7 +3,7 @@
 ## 1. Project Identity
 **Name:** Emerald Coast Community Band (ECCB) Management Platform
 **Purpose:** A production-grade, domain-driven platform integrating a public CMS-driven website, secure member portal, digital music library, and band operations management.
-**Tech Stack:** Next.js 16 (App Router), React 19, PostgreSQL, Prisma, Better Auth, Redis, AWS S3/R2.
+**Tech Stack:** Next.js 16 (App Router), React 19, PostgreSQL, Prisma, Better Auth, Redis, Local Disk or S3-Compatible (Free Tier).
 **Lifecycle:** Designed for 5-10 years of operation.
 
 ---
@@ -42,7 +42,7 @@ This project is strictly defined by the following documentation files. **All cod
 *   **Server Actions:** Used for all mutations (form submissions, data updates).
 *   **Middleware:** Handles auth checks and route protection.
 *   **Edge Caching:** Aggressive caching for public content; Redis for session/hot data.
-*   **File Storage:** S3/R2 with signed URLs for secure music access.
+*   **File Storage:** Local Disk or S3-Compatible (Free Tier) for secure music access.
 
 ---
 
@@ -56,7 +56,7 @@ This project is strictly defined by the following documentation files. **All cod
 *   **Music Library Structure:**
     *   `MusicPiece`: Metadata (Composer, Title, Difficulty).
     *   `MusicPart`: Specific instrument part (e.g., "Flute 1").
-    *   `MusicFile`: Physical file reference (S3 key).
+    *   `MusicFile`: Physical file reference (Storage key).
     *   `MusicAssignment`: Link between Member and MusicPiece/Part.
 
 ---

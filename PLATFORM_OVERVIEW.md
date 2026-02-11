@@ -11,7 +11,7 @@ This repository contains the **complete architectural design and implementation 
 
 **Designed for:** 5-10 year operational lifecycle  
 **Target scale:** Dozens to hundreds of members, hundreds to thousands of music files  
-**Technology:** Next.js 16, React 19, PostgreSQL, Better Auth, AWS S3/Cloudflare R2
+**Technology:** Next.js 16, React 19, PostgreSQL, Better Auth, Local Disk or S3-Compatible (Free Tier)
 
 ---
 
@@ -32,7 +32,7 @@ Complete high-level design covering:
 - Monitoring & observability
 - Development workflow & CI/CD
 - Migration path from current Vite app to Next.js
-- Total Cost of Ownership: **~$800-2,000/year**
+- Total Cost of Ownership: **~$600-1,500/year** (Zero storage cost)
 - Success metrics
 
 ### 2. DATABASE_SCHEMA.md (28KB)

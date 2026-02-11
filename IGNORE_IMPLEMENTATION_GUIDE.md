@@ -106,11 +106,18 @@ REDIS_URL="redis://localhost:6379"
 AUTH_SECRET="generate-with-openssl-rand-base64-32"
 AUTH_URL="http://localhost:3000"
 
-# AWS S3 (or Cloudflare R2)
-S3_BUCKET_NAME="eccb-files"
+# Storage Configuration (Local Disk or S3-Compatible)
+STORAGE_DRIVER="LOCAL" # or "S3"
+LOCAL_STORAGE_PATH="/var/lib/eccb/music"
+
+# S3 Configuration (if STORAGE_DRIVER="S3")
+# Use Free Tiers (e.g., Backblaze B2, Cloudflare R2)
+S3_BUCKET_NAME="eccb-music"
 S3_REGION="us-east-1"
 S3_ACCESS_KEY_ID="your-access-key"
 S3_SECRET_ACCESS_KEY="your-secret-key"
+S3_ENDPOINT="https://s3.us-east-1.backblaze.com" # Example
+S3_FORCE_PATH_STYLE="true"
 
 # Email (for notifications)
 SMTP_HOST="smtp.gmail.com"
@@ -719,7 +726,8 @@ export const config = {
 
 ## Phase 4: Core Services (Week 4-6)
 
-### 4.1 File Storage Service
+### 4.1 File Storage Service (Local or S3)
+Implement a provider-agnostic storage service that handles both Local Disk and S3.
 
 Create `lib/services/storage.ts`:
 
@@ -733,7 +741,18 @@ const s3Client = new S3Client({
     accessKeyId: process.env.S3_ACCESS_KEY_ID!,
     secretAccessKey: process.env.S3_SECRET_ACCESS_KEY!,
   },
+  // endpoint for non-AWS S3 providers (e.g., Backblaze B2, DigitalOcean)
+  ...(process.env.S3_ENDPOINT && { endpoint: process.env.S3_ENDPOINT }),
+  forcePathStyle: process.env.S3_FORCE_PATH_STYLE === 'true',
 });
+
+// Implementation should switch based on process.env.STORAGE_DRIVER ('LOCAL' or 'S3')
+export async function getDownloadUrl(key: string) {
+  if (process.env.STORAGE_DRIVER === 'LOCAL') {
+    return `/api/storage/local?key=${key}`; 
+  }
+  // S3 implementation...
+}
 
 export async function uploadFile(
   file: Buffer,
@@ -926,9 +945,3 @@ docker-compose up -d
 
 ## Conclusion
 
-This implementation guide provides a systematic approach to building the platform. Follow each phase, test thoroughly, and iterate based on feedback. The complete implementation will take 6-9 months with 2-3 developers.
-
-For complete code examples and detailed documentation, refer to:
-- `ARCHITECTURE.md` - System architecture
-- `DATABASE_SCHEMA.md` - Database design
-- `PERMISSIONS.md` - Permission system

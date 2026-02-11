@@ -41,14 +41,39 @@ redis-cli ping
 redis-cli monitor
 ```
 
-### MinIO S3-Compatible Storage
+## Music & Media Storage
+
+The platform supports two primary storage modes. For a truly free setup, **Local Disk** is recommended. For durable cloud storage, use an **S3-Compatible Free Tier**.
+
+### Option A: Local Disk Storage ($0 - Recommended)
+This is the simplest setup for self-hosting.
+
+1. **Create Storage Directory:**
+   ```bash
+   mkdir -p /home/dylan/eccb-storage/music
+   ```
+
+2. **Configure `.env`:**
+   ```env
+   STORAGE_DRIVER="LOCAL"
+   LOCAL_STORAGE_PATH="/home/dylan/eccb-storage/music"
+   ```
+
+### Option B: S3-Compatible Cloud (Free Tiers)
+Use this if you want to store files in the cloud for free.
+
+- **Cloudflare R2:** 10GB free / month.
+- **Backblaze B2:** 10GB free / month (S3-compatible).
+- **MinIO (Local):** For local S3-compatible testing.
+
+**MinIO Setup:**
 - **Service:** MinIO (latest)
 - **API Port:** 9000
 - **Console Port:** 9001
 - **Bucket:** `eccb-music`
 - **Access Key:** `eccb_admin`
 - **Secret Key:** `eccb_local_dev_password`
-- **Data Directory:** `/home/meb/minio-data`
+- **Data Directory:** `/home/dylan/minio-data`
 
 **Commands:**
 ```bash

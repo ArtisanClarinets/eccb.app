@@ -1,7 +1,7 @@
-import { useSession } from '@/lib/auth/client';
+import { authClient } from '@/lib/auth/client';
 
 export function usePermissions() {
-  const { data: session } = useSession();
+  const { data: session } = authClient.useSession();
   // Better Auth doesn't expose permissions directly in the session object by default unless configured
   // We need to fetch permissions from an API or rely on roles if simplified.
   // However, the spec says we should use permissions.

@@ -368,7 +368,7 @@ model MusicFile {
   fileType    FileType
   fileSize    Int      // bytes
   mimeType    String
-  storageKey  String   // S3 key
+  storageKey  String   // Local path or S3 key
   storageUrl  String?  // Full URL (if needed)
   
   // Metadata
@@ -726,7 +726,7 @@ model MediaAsset {
   fileName    String
   fileSize    Int
   mimeType    String
-  storageKey  String
+  storageKey  String   // Local path or S3 key
   storageUrl  String?
   
   // Metadata

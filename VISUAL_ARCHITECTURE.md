@@ -71,14 +71,14 @@
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                           │
 │  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────────┐ │
-│  │   PostgreSQL     │  │      Redis       │  │  S3 / R2 Storage     │ │
+│  │   PostgreSQL     │  │      Redis       │  │ Free Blob Storage    │ │
 │  │                  │  │                  │  │                      │ │
 │  │  • Users/Auth    │  │  • Sessions      │  │  • Music PDFs        │ │
 │  │  • Members       │  │  • Permissions   │  │  • Images            │ │
 │  │  • Music Catalog │  │  • Rate limits   │  │  • Documents         │ │
 │  │  • Events        │  │  • Query cache   │  │  • Backups           │ │
 │  │  • CMS Content   │  │  • Pub/Sub       │  │                      │ │
-│  │  • Audit Logs    │  │                  │  │  With signed URLs    │ │
+│  │  • Audit Logs    │  │                  │  │  (Local or S3-Comp)  │ │
 │  └──────────────────┘  └──────────────────┘  └──────────────────────┘ │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -281,7 +281,7 @@
 │ • name   │ │ • part   │ │          │ │          │
 │ • type   │ │ • inst.  │ │          │ │ • order  │
 │ • size   │ │          │ │          │ │          │
-│ • S3 key │ │          │ │          │ │          │
+│ • storage key│ │          │ │          │ │          │
 └──────────┘ └──────────┘ └────┬─────┘ └────┬─────┘
                                │ N          │ N
                                │ 1          │ 1
@@ -339,7 +339,7 @@
 ┌─────────────────────────────────────────────────────────────────────────┐
 │  STEP 5: Generate signed URL                                             │
 │  • Get file storage key from MusicFile table                             │
-│  • Generate S3 signed URL (expires in 1 hour)                            │
+│  • Generate secure access URL (e.g., S3 signed URL)                      │
 │  • Optional: Add watermark with member ID                                │
 └───────────────────────────────────┬─────────────────────────────────────┘
                                     │
@@ -360,9 +360,9 @@
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  STEP 8: Return signed URL to client                                     │
-│  • Client redirects to S3 URL                                            │
-│  • File downloaded directly from S3                                      │
+│  STEP 8: Return secure URL to client                                     │
+│  • Client redirects to Storage URL                                       │
+│  • File downloaded directly from container                                │
 │  • No application server load                                            │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -509,8 +509,8 @@ Production Environment:
         │                │                │
         ▼                ▼                ▼
 ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
-│  PostgreSQL  │ │    Redis     │ │  S3 Storage  │
-│  (Supabase)  │ │   (Upstash)  │ │    (AWS)     │
+│  PostgreSQL  │ │    Redis     │ │ Free Storage │
+│  (Supabase)  │ │   (Upstash)  │ │(Local/S3-Comp)│
 │              │ │              │ │              │
 │ • Primary DB │ │ • Cache      │ │ • Music PDFs │
 │ • Backups    │ │ • Sessions   │ │ • Images     │
@@ -585,7 +585,7 @@ Layer 6: Data Protection
 ┌────────────────────────────────────────────────────────────────────────┐
 │  • Encryption at rest (database, S3)                                    │
 │  • Encryption in transit (TLS)                                          │
-│  • Signed URLs for file access                                          │
+│  • Secure access URLs (signed) for file access                          │
 │  • PII encryption (sensitive fields)                                    │
 │  • Secure secrets management (env vars)                                 │
 └────────────────────────────────────────────────────────────────────────┘

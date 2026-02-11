@@ -13,30 +13,37 @@ const publicRoutes = [
   '/verify-email'
 ];
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const response = NextResponse.next();
 
-  // Allow static assets, API routes
+  // Security headers
+  response.headers.set('X-Frame-Options', 'DENY');
+  response.headers.set('X-Content-Type-Options', 'nosniff');
+  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+
+  // Allow static assets
   if (
     pathname.startsWith('/_next') ||
     pathname.startsWith('/static') ||
-    pathname.startsWith('/api') ||
     pathname === '/favicon.ico' ||
     pathname === '/robots.txt' ||
     pathname === '/sitemap.xml'
   ) {
-    return NextResponse.next();
+    return response;
+  }
+
+  // Allow API routes (Auth handled internally in routes)
+  if (pathname.startsWith('/api')) {
+    return response;
   }
 
   // Allow public routes
   if (publicRoutes.some((route) => pathname === route || pathname.startsWith(route + '/'))) {
-    return NextResponse.next();
+    return response;
   }
 
   // Check for session cookie
-  // Note: This is a basic authentication check.
-  // Full authorization (permissions) happens on the server (layouts/pages/actions)
-  // because we cannot access the database (Prisma) in the Edge Runtime.
   const hasSession = request.cookies.has('better-auth.session_token') ||
                      request.cookies.has('__Secure-better-auth.session_token');
 
@@ -46,7 +53,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  return NextResponse.next();
+  return response;
 }
 
 export const config = {

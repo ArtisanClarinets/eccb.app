@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db';
+import { Prisma } from '@prisma/client';
 import { auth } from '@/lib/auth/config';
 import { headers } from 'next/headers';
 
@@ -22,8 +23,8 @@ export async function auditLog(data: {
         action: data.action,
         entityType: data.entityType,
         entityId: data.entityId,
-        oldValues: data.oldValues ? JSON.stringify(data.oldValues) : null,
-        newValues: data.newValues ? JSON.stringify(data.newValues) : null,
+        oldValues: data.oldValues ?? Prisma.JsonNull,
+        newValues: data.newValues ?? Prisma.JsonNull,
       },
     });
   } catch (error) {

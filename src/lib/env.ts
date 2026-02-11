@@ -17,6 +17,10 @@ const envSchema = z.object({
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   
+  // Storage Configuration
+  STORAGE_DRIVER: z.enum(['LOCAL', 'S3']).default('LOCAL'),
+  LOCAL_STORAGE_PATH: z.string().default('./storage'),
+
   // S3/MinIO Storage
   S3_ENDPOINT: z.string().url().default('http://localhost:9000'),
   S3_BUCKET_NAME: z.string().default('eccb-music'),

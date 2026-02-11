@@ -16,7 +16,7 @@ This document outlines the production-grade architecture for a Community Band Ma
 - TypeScript
 - PostgreSQL with Prisma ORM
 - Better Auth for authentication
-- AWS S3 or Cloudflare R2 for file storage
+- Local Disk or S3-Compatible (Free Tier) for file storage
 - Redis for caching and sessions
 
 ---
@@ -70,8 +70,8 @@ This document outlines the production-grade architecture for a Community Band Ma
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                   │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐         │
-│  │  PostgreSQL  │  │    Redis     │  │  S3/R2 File  │         │
-│  │  (Primary)   │  │  (Cache)     │  │   Storage    │         │
+│  │  PostgreSQL  │  │    Redis     │  │ Free Storage  │         │
+│  │  (Primary)   │  │  (Cache)     │  │ (Local/S3-Comp)│         │
 │  └──────────────┘  └──────────────┘  └──────────────┘         │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -208,12 +208,14 @@ This document outlines the production-grade architecture for a Community Band Ma
 - Rate limiting counters
 - Real-time features (pub/sub)
 
-**AWS S3 or Cloudflare R2**
+**Local Disk or S3-Compatible (Free Tier)**
 - Scalable object storage for music PDFs
-- Signed URLs for secure access
+- Local storage for zero-cost self-hosting
+- S3-compatible cloud (e.g., Backblaze B2 10GB Free Tier) for durable cloud storage
+- Signed URLs (S3) or secure stream serving (Local)
 - Versioning support
 - Lifecycle policies
-- CDN integration
+- CDN integration (optional)
 
 ### 3.3 Infrastructure
 
@@ -291,7 +293,7 @@ Super Admin
 ### 4.3 Data Security
 
 1. **File Access**
-   - Music PDFs stored in private S3 buckets
+   - Music PDFs stored in private storage containers (local or cloud)
    - Access via signed URLs (expiring links)
    - Download logging for audit trail
    - Optional watermarking with member ID
@@ -381,7 +383,7 @@ Logs queryable via admin dashboard, exportable for compliance.
 
 ### 6.2 File Storage Scaling
 
-- S3/R2 scales infinitely
+- Local disk scales with server capacity; S3-Compatible cloud scales infinitely
 - Lifecycle policies: move old versions to Glacier
 - CDN for music file delivery
 
@@ -403,9 +405,9 @@ Logs queryable via admin dashboard, exportable for compliance.
 - Weekly manual exports to S3
 
 **File Storage:**
-- S3 versioning enabled
-- Cross-region replication (optional)
-- Lifecycle policies
+- S3 versioning enabled (cloud) or filesystem snapshots (local)
+- Cross-region replication (optional for cloud)
+- Periodic off-site sync for local storage
 
 **Application Code:**
 - Git repository (GitHub)
@@ -636,16 +638,15 @@ src/
 - Vercel Pro: $240/year
 - PostgreSQL (Supabase): $300/year
 - Redis (Upstash): $120/year
-- S3 Storage (500GB): $150/year
+- S3 Storage (Free Tier): $0/year
 - CDN: Included with Vercel
-- **Total: ~$810/year**
+- **Total: ~$660/year**
 
 **Self-Hosted Alternative:**
-- VPS (4GB RAM): $240/year
 - Managed PostgreSQL: $300/year
 - Redis: Included in VPS
-- S3 Storage: $150/year
-- **Total: ~$690/year**
+- Storage (Local Disk): $0/year
+- **Total: ~$540/year**
 
 ### 13.2 Years 2-10 Costs
 

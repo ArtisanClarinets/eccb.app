@@ -1,22 +1,21 @@
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { prisma } from '@/lib/db';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import {
-  Users,
-  Music,
-  Calendar,
-  FileText,
+import { 
+  Users, 
+  Music, 
+  Calendar, 
+  ShieldCheck,
   TrendingUp,
   ArrowRight,
+  ChevronRight,
   Clock,
-  AlertTriangle,
-  CheckCircle,
   Activity,
+  UserPlus
 } from 'lucide-react';
 import { formatDate, formatRelativeTime } from '@/lib/date';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 
 export const metadata: Metadata = {
   title: 'Admin Dashboard',
@@ -25,49 +24,34 @@ export const metadata: Metadata = {
 async function getDashboardStats() {
   const [
     memberCount,
-    activeMemberCount,
     musicCount,
     eventCount,
     upcomingEvents,
-    recentMembers,
     recentAuditLogs,
   ] = await Promise.all([
     prisma.member.count({ where: { deletedAt: null } }),
-    prisma.member.count({ where: { status: 'ACTIVE', deletedAt: null } }),
-    prisma.musicPiece.count({ where: { deletedAt: null, isArchived: false } }),
+    prisma.musicPiece.count({ where: { deletedAt: null } }),
     prisma.event.count({ where: { deletedAt: null } }),
     prisma.event.findMany({
       where: {
         startTime: { gte: new Date() },
         deletedAt: null,
-        isCancelled: false,
       },
       orderBy: { startTime: 'asc' },
-      take: 5,
-      include: { venue: true },
-    }),
-    prisma.member.findMany({
-      where: { deletedAt: null },
-      orderBy: { createdAt: 'desc' },
-      take: 5,
-      include: {
-        instruments: { include: { instrument: true } },
-      },
+      take: 4,
     }),
     prisma.auditLog.findMany({
       orderBy: { timestamp: 'desc' },
-      take: 10,
+      take: 6,
       include: { user: true },
     }),
   ]);
 
   return {
     memberCount,
-    activeMemberCount,
     musicCount,
     eventCount,
     upcomingEvents,
-    recentMembers,
     recentAuditLogs,
   };
 }
@@ -76,212 +60,150 @@ export default async function AdminDashboardPage() {
   const stats = await getDashboardStats();
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold">Dashboard</h1>
-        <p className="text-muted-foreground mt-1">
-          Overview of band operations and recent activity.
-        </p>
+      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
+        <div>
+          <h1 className="font-display text-4xl font-black text-foreground uppercase tracking-tight">
+            System Overview
+          </h1>
+          <p className="text-muted-foreground italic">
+            Band management and system administration
+          </p>
+        </div>
+        <div className="flex gap-3">
+          <Button asChild size="sm" variant="outline" className="h-10">
+            <Link href="/admin/settings">System Settings</Link>
+          </Button>
+          <Button asChild size="sm" className="h-10 bg-primary">
+            <Link href="/admin/members/new">
+              <UserPlus className="mr-2 h-4 w-4" /> Add Member
+            </Link>
+          </Button>
+        </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Members</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.memberCount}</div>
-            <p className="text-xs text-muted-foreground">
-              {stats.activeMemberCount} active
-            </p>
-          </CardContent>
-        </Card>
+      {/* Stats Grid */}
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-2xl border bg-card p-6 shadow-sm">
+          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <Users size={20} />
+          </div>
+          <p className="text-sm font-medium text-muted-foreground">Total Members</p>
+          <h4 className="text-2xl font-bold">{stats.memberCount}</h4>
+        </div>
+        
+        <div className="rounded-2xl border bg-card p-6 shadow-sm">
+          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600">
+            <Music size={20} />
+          </div>
+          <p className="text-sm font-medium text-muted-foreground">Library Pieces</p>
+          <h4 className="text-2xl font-bold">{stats.musicCount}</h4>
+        </div>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Music Library</CardTitle>
-            <Music className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.musicCount}</div>
-            <p className="text-xs text-muted-foreground">
-              pieces in library
-            </p>
-          </CardContent>
-        </Card>
+        <div className="rounded-2xl border bg-card p-6 shadow-sm">
+          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10 text-accent">
+            <Calendar size={20} />
+          </div>
+          <p className="text-sm font-medium text-muted-foreground">Total Events</p>
+          <h4 className="text-2xl font-bold">{stats.eventCount}</h4>
+        </div>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Upcoming Events</CardTitle>
-            <Calendar className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.upcomingEvents.length}</div>
-            <p className="text-xs text-muted-foreground">
-              scheduled
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Events</CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.eventCount}</div>
-            <p className="text-xs text-muted-foreground">
-              all time
-            </p>
-          </CardContent>
-        </Card>
+        <div className="rounded-2xl border bg-card p-6 shadow-sm">
+          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-slate-500/10 text-slate-600">
+            <ShieldCheck size={20} />
+          </div>
+          <p className="text-sm font-medium text-muted-foreground">Audit Logs</p>
+          <h4 className="text-2xl font-bold">Live</h4>
+        </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-10 lg:grid-cols-2">
         {/* Upcoming Events */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>Upcoming Events</CardTitle>
-              <Button variant="ghost" size="sm" asChild>
-                <Link href="/admin/events">
-                  View All
-                  <ArrowRight className="ml-1 h-4 w-4" />
-                </Link>
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {stats.upcomingEvents.length === 0 ? (
-              <p className="text-muted-foreground text-center py-8">
-                No upcoming events scheduled.
-              </p>
-            ) : (
-              <div className="space-y-4">
-                {stats.upcomingEvents.map((event) => (
-                  <Link
-                    key={event.id}
-                    href={`/admin/events/${event.id}`}
-                    className="flex items-center gap-4 p-3 rounded-lg hover:bg-muted/50 transition-colors"
-                  >
-                    <div className="flex-shrink-0 w-12 h-12 bg-primary/10 rounded-lg flex flex-col items-center justify-center">
-                      <span className="text-xs font-medium text-primary">
-                        {formatDate(event.startTime, 'MMM')}
-                      </span>
-                      <span className="text-lg font-bold text-primary">
-                        {formatDate(event.startTime, 'd')}
-                      </span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-medium truncate">{event.title}</h4>
-                      <p className="text-sm text-muted-foreground truncate">
-                        {event.venue?.name || 'No venue set'}
-                      </p>
-                    </div>
-                    <Badge variant={event.isPublished ? 'default' : 'secondary'}>
-                      {event.isPublished ? 'Published' : 'Draft'}
-                    </Badge>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Recent Members */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>Recent Members</CardTitle>
-              <Button variant="ghost" size="sm" asChild>
-                <Link href="/admin/members">
-                  View All
-                  <ArrowRight className="ml-1 h-4 w-4" />
-                </Link>
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {stats.recentMembers.length === 0 ? (
-              <p className="text-muted-foreground text-center py-8">
-                No members yet.
-              </p>
-            ) : (
-              <div className="space-y-4">
-                {stats.recentMembers.map((member) => (
-                  <Link
-                    key={member.id}
-                    href={`/admin/members/${member.id}`}
-                    className="flex items-center gap-4 p-3 rounded-lg hover:bg-muted/50 transition-colors"
-                  >
-                    <div className="flex-shrink-0 w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                      <Users className="h-5 w-5 text-primary" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-medium truncate">
-                        {member.firstName} {member.lastName}
-                      </h4>
-                      <p className="text-sm text-muted-foreground truncate">
-                        {member.instruments.find(i => i.isPrimary)?.instrument.name || 'No instrument'}
-                      </p>
-                    </div>
-                    <Badge variant={member.status === 'ACTIVE' ? 'default' : 'secondary'}>
-                      {member.status}
-                    </Badge>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Recent Activity */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent Activity</CardTitle>
-          <CardDescription>Audit log of recent actions</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {stats.recentAuditLogs.length === 0 ? (
-            <p className="text-muted-foreground text-center py-8">
-              No recent activity.
-            </p>
-          ) : (
-            <div className="space-y-3">
-              {stats.recentAuditLogs.map((log) => (
-                <div
-                  key={log.id}
-                  className="flex items-start gap-3 text-sm"
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <h3 className="font-display text-xl font-bold uppercase tracking-wider">
+              Upcoming Events
+            </h3>
+            <Link 
+              href="/admin/events" 
+              className="text-sm font-medium text-primary hover:underline flex items-center"
+            >
+              Manage All <ChevronRight size={14} />
+            </Link>
+          </div>
+          
+          <div className="space-y-4">
+            {stats.upcomingEvents.length > 0 ? (
+              stats.upcomingEvents.map((event: any) => (
+                <div 
+                  key={event.id}
+                  className="flex items-center justify-between rounded-xl border bg-card p-4 transition-all hover:shadow-md"
                 >
-                  <div className="flex-shrink-0 w-8 h-8 bg-muted rounded-full flex items-center justify-center">
-                    {log.action.includes('create') ? (
-                      <CheckCircle className="h-4 w-4 text-green-500" />
-                    ) : log.action.includes('delete') ? (
-                      <AlertTriangle className="h-4 w-4 text-red-500" />
-                    ) : (
-                      <Activity className="h-4 w-4 text-blue-500" />
-                    )}
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-12 w-12 flex-col items-center justify-center rounded-lg bg-primary/10 text-primary">
+                      <span className="text-[10px] font-bold uppercase">{formatDate(event.startTime, 'MMM')}</span>
+                      <span className="text-lg font-black">{formatDate(event.startTime, 'd')}</span>
+                    </div>
+                    <div>
+                      <h5 className="font-bold text-foreground">{event.title}</h5>
+                      <p className="text-xs text-muted-foreground">
+                        {event.type} • {formatDate(event.startTime, 'h:mm a')}
+                      </p>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-foreground">
-                      <span className="font-medium">{log.userName || 'System'}</span>
-                      {' '}{log.action}{' '}
-                      <span className="text-muted-foreground">{log.entityType}</span>
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {formatRelativeTime(log.timestamp)}
-                    </p>
-                  </div>
+                  <Badge variant={event.isPublished ? "default" : "secondary"}>
+                    {event.isPublished ? "Public" : "Draft"}
+                  </Badge>
                 </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+              ))
+            ) : (
+              <p className="py-10 text-center text-sm text-muted-foreground italic border-2 border-dashed rounded-2xl">
+                No upcoming events found.
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Audit Logs */}
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <h3 className="font-display text-xl font-bold uppercase tracking-wider">
+              System Activity
+            </h3>
+            <Link 
+              href="/admin/audit" 
+              className="text-sm font-medium text-primary hover:underline flex items-center"
+            >
+              Full Audit Trail <ChevronRight size={14} />
+            </Link>
+          </div>
+          
+          <div className="space-y-4">
+            {stats.recentAuditLogs.map((log: any) => (
+              <div 
+                key={log.id}
+                className="flex items-start gap-4 rounded-xl border bg-card p-4 text-sm"
+              >
+                <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted">
+                  <Activity size={14} className="text-muted-foreground" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-foreground">
+                    <span className="font-bold">{log.user?.name || 'System'}</span>
+                    {' '}{log.action}{' '}
+                    <span className="font-medium text-primary">{log.entityType}</span>
+                  </p>
+                  <p className="flex items-center gap-2 text-xs text-muted-foreground uppercase tracking-wider">
+                    <Clock size={10} /> {formatRelativeTime(log.timestamp)}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
+

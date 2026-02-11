@@ -1,14 +1,17 @@
-import { PrismaClient } from '@prisma/client'
-import bcrypt from 'bcryptjs'
+import 'dotenv/config';
+import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import pg from 'pg';
+import bcrypt from 'bcryptjs';
 
-const prisma = new PrismaClient({
-  log: ['query', 'error', 'warn']
-})
+const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
 
 async function main() {
-  console.log('🌱 Seeding database...')
+  console.log('🌱 Seeding database...');
 
-  // Create roles
+  // 1. Roles
   const roles = await Promise.all([
     prisma.role.upsert({
       where: { name: 'SUPER_ADMIN' },
@@ -51,6 +54,16 @@ async function main() {
       },
     }),
     prisma.role.upsert({
+      where: { name: 'SECTION_LEADER' },
+      update: {},
+      create: {
+        name: 'SECTION_LEADER',
+        displayName: 'Section Leader',
+        type: 'SECTION_LEADER',
+        description: 'Musical leadership for a section',
+      },
+    }),
+    prisma.role.upsert({
       where: { name: 'MUSICIAN' },
       update: {},
       create: {
@@ -60,11 +73,21 @@ async function main() {
         description: 'Band member',
       },
     }),
-  ])
+    prisma.role.upsert({
+      where: { name: 'PUBLIC' },
+      update: {},
+      create: {
+        name: 'PUBLIC',
+        displayName: 'Public User',
+        type: 'PUBLIC',
+        description: 'Limited access for public users',
+      },
+    }),
+  ]);
 
-  console.log(`✅ Created ${roles.length} roles`)
+  console.log(`✅ Created ${roles.length} roles`);
 
-  // Create permissions
+  // 2. Permissions
   const permissions = [
     // Music
     { name: 'music.view.all', resource: 'music', action: 'view', scope: 'all' },
@@ -101,178 +124,160 @@ async function main() {
     
     // System
     { name: 'system.config', resource: 'system', action: 'config', scope: null },
-  ]
+    { name: 'system.audit', resource: 'system', action: 'audit', scope: null },
+  ];
 
   for (const perm of permissions) {
     await prisma.permission.upsert({
       where: { name: perm.name },
       update: {},
       create: perm,
-    })
+    });
   }
 
-  console.log(`✅ Created ${permissions.length} permissions`)
+  console.log(`✅ Created ${permissions.length} permissions`);
 
-  // Assign permissions to roles
-  const superAdminRole = roles.find((r) => r.name === 'SUPER_ADMIN')!
-  const librarianRole = roles.find((r) => r.name === 'LIBRARIAN')!
-  const musicianRole = roles.find((r) => r.name === 'MUSICIAN')!
+  // 3. Assign permissions to roles
+  const superAdminRole = roles.find((r: any) => r.name === 'SUPER_ADMIN')!;
+  const adminRole = roles.find((r: any) => r.name === 'ADMIN')!;
+  const librarianRole = roles.find((r: any) => r.name === 'LIBRARIAN')!;
+  const musicianRole = roles.find((r: any) => r.name === 'MUSICIAN')!;
 
-  // Super admin gets all permissions
-  for (const perm of permissions) {
-    const permission = await prisma.permission.findUnique({ where: { name: perm.name } })
-    if (permission) {
-      await prisma.rolePermission.upsert({
-        where: {
-          roleId_permissionId: {
-            roleId: superAdminRole.id,
-            permissionId: permission.id,
-          },
-        },
-        update: {},
-        create: {
-          roleId: superAdminRole.id,
-          permissionId: permission.id,
-        },
-      })
-    }
+  // Super admin gets everything
+  const allPermissions = await prisma.permission.findMany();
+  for (const perm of allPermissions) {
+    await prisma.rolePermission.upsert({
+      where: { roleId_permissionId: { roleId: superAdminRole.id, permissionId: perm.id } },
+      update: {},
+      create: { roleId: superAdminRole.id, permissionId: perm.id },
+    });
   }
 
   // Librarian music permissions
-  const librarianPerms = permissions.filter((p) => p.resource === 'music')
-  for (const perm of librarianPerms) {
-    const permission = await prisma.permission.findUnique({ where: { name: perm.name } })
-    if (permission) {
+  const librarianPermTypes = ['music.view.all', 'music.create', 'music.edit', 'music.delete', 'music.upload', 'music.download.all'];
+  for (const permName of librarianPermTypes) {
+    const perm = allPermissions.find((p: any) => p.name === permName);
+    if (perm) {
       await prisma.rolePermission.upsert({
-        where: {
-          roleId_permissionId: {
-            roleId: librarianRole.id,
-            permissionId: permission.id,
-          },
-        },
+        where: { roleId_permissionId: { roleId: librarianRole.id, permissionId: perm.id } },
         update: {},
-        create: {
-          roleId: librarianRole.id,
-          permissionId: permission.id,
-        },
-      })
+        create: { roleId: librarianRole.id, permissionId: perm.id },
+      });
     }
   }
 
-  // Musician limited permissions
-  const musicianPerms = ['music.view.assigned', 'music.download.assigned', 'member.view.own', 'member.edit.own']
-  for (const permName of musicianPerms) {
-    const permission = await prisma.permission.findUnique({ where: { name: permName } })
-    if (permission) {
+  // Musician permissions
+  const musicianPermNames = ['music.view.assigned', 'music.download.assigned', 'member.view.own', 'member.edit.own', 'event.view.all', 'attendance.mark.own'];
+  for (const permName of musicianPermNames) {
+    const perm = allPermissions.find((p: any) => p.name === permName);
+    if (perm) {
       await prisma.rolePermission.upsert({
-        where: {
-          roleId_permissionId: {
-            roleId: musicianRole.id,
-            permissionId: permission.id,
-          },
-        },
+        where: { roleId_permissionId: { roleId: musicianRole.id, permissionId: perm.id } },
         update: {},
-        create: {
-          roleId: musicianRole.id,
-          permissionId: permission.id,
-        },
-      })
+        create: { roleId: musicianRole.id, permissionId: perm.id },
+      });
     }
   }
 
-  // Create instruments
+  console.log('✅ Assigned permissions to roles');
+
+  // 4. Instruments
   const instruments = [
-    // Woodwinds
     { name: 'Piccolo', family: 'Woodwind', sortOrder: 1 },
     { name: 'Flute', family: 'Woodwind', sortOrder: 2 },
     { name: 'Oboe', family: 'Woodwind', sortOrder: 3 },
     { name: 'Bassoon', family: 'Woodwind', sortOrder: 4 },
     { name: 'Eb Clarinet', family: 'Woodwind', sortOrder: 5 },
     { name: 'Bb Clarinet', family: 'Woodwind', sortOrder: 6 },
-    { name: 'Bass Clarinet', family: 'Woodwind', sortOrder: 7 },
-    { name: 'Alto Saxophone', family: 'Woodwind', sortOrder: 8 },
-    { name: 'Tenor Saxophone', family: 'Woodwind', sortOrder: 9 },
-    { name: 'Baritone Saxophone', family: 'Woodwind', sortOrder: 10 },
-    
-    // Brass
-    { name: 'Trumpet', family: 'Brass', sortOrder: 20 },
+    { name: 'Alto Clarinet', family: 'Woodwind', sortOrder: 7 },
+    { name: 'Bass Clarinet', family: 'Woodwind', sortOrder: 8 },
+    { name: 'Alto Saxophone', family: 'Woodwind', sortOrder: 9 },
+    { name: 'Tenor Saxophone', family: 'Woodwind', sortOrder: 10 },
+    { name: 'Baritone Saxophone', family: 'Woodwind', sortOrder: 11 },
+    { name: 'Bb Trumpet', family: 'Brass', sortOrder: 20 },
     { name: 'Cornet', family: 'Brass', sortOrder: 21 },
     { name: 'French Horn', family: 'Brass', sortOrder: 22 },
     { name: 'Trombone', family: 'Brass', sortOrder: 23 },
-    { name: 'Euphonium', family: 'Brass', sortOrder: 24 },
-    { name: 'Tuba', family: 'Brass', sortOrder: 25 },
-    
-    // Percussion
+    { name: 'Bass Trombone', family: 'Brass', sortOrder: 24 },
+    { name: 'Euphonium', family: 'Brass', sortOrder: 25 },
+    { name: 'Tuba', family: 'Brass', sortOrder: 26 },
     { name: 'Percussion', family: 'Percussion', sortOrder: 30 },
     { name: 'Timpani', family: 'Percussion', sortOrder: 31 },
-  ]
+    { name: 'String Bass', family: 'String', sortOrder: 40 },
+  ];
 
   for (const inst of instruments) {
     await prisma.instrument.upsert({
       where: { name: inst.name },
       update: {},
       create: inst,
-    })
+    });
   }
 
-  console.log(`✅ Created ${instruments.length} instruments`)
+  console.log(`✅ Created ${instruments.length} instruments`);
 
-  // Create sections
+  // 5. Sections
   const sections = [
     { name: 'Woodwinds', sortOrder: 1 },
     { name: 'Brass', sortOrder: 2 },
     { name: 'Percussion', sortOrder: 3 },
-  ]
+  ];
 
-  for (const section of sections) {
+  for (const sec of sections) {
     await prisma.section.upsert({
-      where: { name: section.name },
+      where: { name: sec.name },
       update: {},
-      create: section,
-    })
+      create: sec,
+    });
   }
 
-  console.log(`✅ Created ${sections.length} sections`)
+  console.log(`✅ Created ${sections.length} sections`);
 
-  // Create super admin user (if not exists)
+  // 6. Super Admin User
+  const adminEmail = 'admin@eccb.app';
+  const hashedPassword = await bcrypt.hash('eccb_admin_2026!', 12);
+  
   const adminUser = await prisma.user.upsert({
-    where: { email: 'admin@eccb.org' },
-    update: {},
+    where: { email: adminEmail },
+    update: { password: hashedPassword },
     create: {
-      email: 'admin@eccb.org',
-      emailVerified: new Date(),
+      email: adminEmail,
       name: 'System Administrator',
-      password: await bcrypt.hash('ECCB@2024!', 12),
+      password: hashedPassword,
+      emailVerified: new Date(),
     },
-  })
+  });
 
-  console.log('✅ Created admin user:', adminUser.email)
-
-  // Assign super admin role (using upsert to avoid duplicates)
   await prisma.userRole.upsert({
-    where: {
-      userId_roleId: {
-        userId: adminUser.id,
-        roleId: superAdminRole.id,
-      },
-    },
+    where: { userId_roleId: { userId: adminUser.id, roleId: superAdminRole.id } },
+    update: {},
+    create: { userId: adminUser.id, roleId: superAdminRole.id },
+  });
+
+  // Create member profile for admin
+  await prisma.member.upsert({
+    where: { userId: adminUser.id },
     update: {},
     create: {
       userId: adminUser.id,
-      roleId: superAdminRole.id,
+      firstName: 'System',
+      lastName: 'Administrator',
+      email: adminEmail,
+      status: 'ACTIVE',
+      joinDate: new Date(),
     },
-  })
+  });
 
-  console.log('✅ Created demo admin user: admin@eccb.org')
+  console.log(`✅ Created Super Admin user: ${adminEmail} / eccb_admin_2026!`);
 
-  console.log('🎉 Seeding complete!')
+  console.log('🎉 Seeding complete!');
 }
 
 main()
   .catch((e) => {
-    console.error('❌ Seeding failed:', e)
-    process.exit(1)
+    console.error('❌ Seeding failed:', e);
+    process.exit(1);
   })
   .finally(async () => {
-    await prisma.$disconnect()
-  })
+    await prisma.$disconnect();
+  });
