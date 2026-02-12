@@ -13,6 +13,10 @@ const envSchema = z.object({
   AUTH_URL: z.string().url().default('http://localhost:3000'),
   BETTER_AUTH_URL: z.string().url().default('http://localhost:3000'),
   
+  // Super Admin Credentials
+  SUPER_ADMIN_EMAIL: z.string().email().default('admin@eccb.org'),
+  SUPER_ADMIN_PASSWORD: z.string().min(8).default('eccb_admin_2026!'),
+
   // OAuth (optional)
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),

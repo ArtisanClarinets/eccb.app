@@ -61,7 +61,7 @@ interface MemberSettingsFormProps {
     id: string;
     name: string | null;
     email: string;
-    emailVerified: Date | null;
+    emailVerified: boolean;
     twoFactorEnabled?: boolean;
   };
 }

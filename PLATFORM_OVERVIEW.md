@@ -250,70 +250,70 @@ PUBLIC (Website visitors)
 
 ## Implementation Roadmap
 
-### Timeline: 6-9 Months (2-3 Developers)
+### Timeline: 
 
-**Phase 1: Foundation (Weeks 1-2)**
+**Phase 1: Foundation**
 - Initialize Next.js 16 project
 - Set up TypeScript, Tailwind, ESLint
 - Configure development environment
 
-**Phase 2: Database (Weeks 2-3)**
+**Phase 2: Database**
 - Set up PostgreSQL and Prisma
 - Create schema and migrations
 - Seed initial data
 
-**Phase 3: Authentication (Weeks 3-4)**
+**Phase 3: Authentication**
 - Integrate Better Auth
 - Implement permission system
 - Create middleware
 
-**Phase 4: Core Services (Weeks 4-6)**
+**Phase 4: Core Services**
 - File storage service (S3)
 - Audit logging service
 - Email service
 
-**Phase 5: Music Library ⭐ (Weeks 6-10)**
+**Phase 5: Music Library ⭐**
 - Music catalog CRUD
 - File upload/download
 - Part assignment system
 - Advanced search
 
-**Phase 6: Events & Attendance (Weeks 10-12)**
+**Phase 6: Events & Attendance**
 - Event management
 - Attendance tracking
 - Music-event linking
 
-**Phase 7: Member Features (Weeks 12-14)**
+**Phase 7: Member Features**
 - Member dashboard
 - Profile management
 - Music assignment views
 
-**Phase 8: Admin Tools (Weeks 14-16)**
+**Phase 8: Admin Tools**
 - Admin dashboard
 - Reporting system
 - Configuration panels
 
-**Phase 9: Communications (Weeks 16-18)**
+**Phase 9: Communications**
 - Announcements
 - Notifications
 - Messaging
 
-**Phase 10: Search (Weeks 18-19)**
+**Phase 10: Search**
 - Global search
 - Music search
 - Member search
 
-**Phase 11: Public Website (Weeks 19-21)**
+**Phase 11: Public Website**
 - Migrate existing Vite/React sections
 - Integrate with CMS
 - Maintain GSAP animations
 
-**Phase 12: Security (Weeks 21-22)**
+**Phase 12: Security**
 - Rate limiting
 - CSRF protection
 - Virus scanning
 
-**Phase 13: Testing & Deployment (Weeks 22-24)**
+**Phase 13: Testing & Deployment**
 - Unit tests
 - Integration tests
 - E2E tests
@@ -340,7 +340,7 @@ PUBLIC (Website visitors)
 - **Total: ~$690/year**
 
 ### Development Cost
-- Initial build: **500-800 hours** (6-9 months with 2-3 devs)
+- Initial build: **500-800 hours*
 - Ongoing maintenance: **50-100 hours/year**
 
 ---

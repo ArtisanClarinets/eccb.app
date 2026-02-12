@@ -16,9 +16,10 @@ export default function LoginPage() {
       {/* Left side: Dramatic Entry */}
       <div className="relative hidden w-1/2 overflow-hidden bg-[#0f172a] lg:block">
         <Image
-          src="/images/hero_bg.png"
+          src="/images/hero_bg.jpg"
           alt="Emerald Coast"
           fill
+          sizes="50vw"
           className="object-cover opacity-50"
           priority
         />

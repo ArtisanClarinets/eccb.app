@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import pg from 'pg';
 import bcrypt from 'bcryptjs';
+import { auth } from '@/lib/auth/config';
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
@@ -234,41 +235,66 @@ async function main() {
   console.log(`✅ Created ${sections.length} sections`);
 
   // 6. Super Admin User
-  const adminEmail = 'admin@eccb.app';
-  const hashedPassword = await bcrypt.hash('eccb_admin_2026!', 12);
+  const adminEmail = process.env.SUPER_ADMIN_EMAIL || 'admin@eccb.org';
+  const adminPassword = process.env.SUPER_ADMIN_PASSWORD || 'eccb_admin_2026!';
   
-  const adminUser = await prisma.user.upsert({
-    where: { email: adminEmail },
-    update: { password: hashedPassword },
-    create: {
-      email: adminEmail,
-      name: 'System Administrator',
-      password: hashedPassword,
-      emailVerified: new Date(),
-    },
-  });
+  // Try to create user via Better Auth to ensure correct password hashing
+  let adminUser: any;
+  
+  try {
+    // Check if user exists first
+    const existingUser = await prisma.user.findUnique({ where: { email: adminEmail } });
+    
+    if (existingUser) {
+      console.log('Deleting existing admin user to ensure correct password hash...');
+      await prisma.member.deleteMany({ where: { userId: existingUser.id } });
+      await prisma.userRole.deleteMany({ where: { userId: existingUser.id } });
+      await prisma.session.deleteMany({ where: { userId: existingUser.id } });
+      await prisma.account.deleteMany({ where: { userId: existingUser.id } });
+      await prisma.user.delete({ where: { id: existingUser.id } });
+    }
 
-  await prisma.userRole.upsert({
-    where: { userId_roleId: { userId: adminUser.id, roleId: superAdminRole.id } },
-    update: {},
-    create: { userId: adminUser.id, roleId: superAdminRole.id },
-  });
+    console.log('Creating admin user via Better Auth...');
+    const res = await auth.api.signUpEmail({
+      body: {
+        email: adminEmail,
+        password: adminPassword,
+        name: 'System Administrator',
+      },
+    });
+    adminUser = res.user;
+  } catch (error) {
+    console.error('Error creating admin user via Auth API:', error);
+    // Fallback? If auth api fails, we might have issues.
+    // Try to find user again in case it was created but threw
+    adminUser = await prisma.user.findUnique({ where: { email: adminEmail } });
+  }
+  
+  if (adminUser) {
+    await prisma.userRole.upsert({
+      where: { userId_roleId: { userId: adminUser.id, roleId: superAdminRole.id } },
+      update: {},
+      create: { userId: adminUser.id, roleId: superAdminRole.id },
+    });
 
-  // Create member profile for admin
-  await prisma.member.upsert({
-    where: { userId: adminUser.id },
-    update: {},
-    create: {
-      userId: adminUser.id,
-      firstName: 'System',
-      lastName: 'Administrator',
-      email: adminEmail,
-      status: 'ACTIVE',
-      joinDate: new Date(),
-    },
-  });
-
-  console.log(`✅ Created Super Admin user: ${adminEmail} / eccb_admin_2026!`);
+    // Create member profile for admin
+    await prisma.member.upsert({
+      where: { userId: adminUser.id },
+      update: {},
+      create: {
+        userId: adminUser.id,
+        firstName: 'System',
+        lastName: 'Administrator',
+        email: adminEmail,
+        status: 'ACTIVE',
+        joinDate: new Date(),
+      },
+    });
+    
+    console.log(`✅ Verified Super Admin user: ${adminEmail}`);
+  } else {
+    console.error('❌ Failed to create or find Super Admin user');
+  }
 
   console.log('🎉 Seeding complete!');
 }
