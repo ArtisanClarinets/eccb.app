@@ -63,9 +63,9 @@ export default async function EventDetailPage({ params }: EventPageProps) {
   const isPast = new Date(event.endTime) < new Date();
 
   return (
-    <div className="pt-24">
+    <div className="w-full py-12 md:py-16">
       {/* Back navigation */}
-      <div className="mx-auto max-w-7xl px-6 lg:px-8 py-4">
+      <div className="mx-auto w-full max-w-4xl px-6 lg:px-8 py-4">
         <Button variant="ghost" asChild>
           <Link href="/events">
             <ArrowLeft className="mr-2 h-4 w-4" />

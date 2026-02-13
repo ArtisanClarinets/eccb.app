@@ -14,8 +14,8 @@ export async function UpcomingEvents() {
   }
 
   return (
-    <section className="bg-background py-24">
-      <div className="container mx-auto px-6">
+    <section className="bg-background py-12 md:py-24">
+      <div className="mx-auto w-full max-w-7xl px-6">
         <div className="mb-16 flex items-end justify-between">
           <div>
             <h2 className="mb-4 text-primary text-sm font-bold tracking-widest">

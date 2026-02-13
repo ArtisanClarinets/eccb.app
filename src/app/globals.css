@@ -20,6 +20,9 @@
   
   --font-oswald: var(--font-oswald);
   --font-inter: var(--font-inter);
+
+  /* global header height used by layouts to provide consistent top padding */
+  --site-header-height: 6rem;
 }
 
 .dark {
@@ -83,4 +86,50 @@ h1, h2, h3, h4, h5, h6 {
 .dark .glass-morphism {
   background: rgba(15, 23, 42, 0.7);
   border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Hero and decorative utilities used across sections */
+.ken-burns-enhanced img {
+  transform-origin: center;
+  animation: kenBurns 18s ease-in-out infinite;
+}
+
+@keyframes kenBurns {
+  0% { transform: scale(1.08) translateY(0); }
+  50% { transform: scale(1.14) translateY(-3%); }
+  100% { transform: scale(1.08) translateY(0); }
+}
+
+.gradient-pulse { animation: gradientPulse 8s ease-in-out infinite; }
+@keyframes gradientPulse {
+  0% { opacity: 0.25; transform: translateZ(0); }
+  50% { opacity: 0.45; }
+  100% { opacity: 0.25; }
+}
+
+.hero-particle { position: absolute; border-radius: 50%; background: rgba(255,255,255,0.08); animation: floatParticle 6s ease-in-out infinite; }
+@keyframes floatParticle { 0% { transform: translateY(0) } 50% { transform: translateY(-12px) } 100% { transform: translateY(0) } }
+
+.glow-pulse-enhanced { box-shadow: 0 6px 30px rgba(15,118,110,0.12), inset 0 -6px 20px rgba(0,0,0,0.06); }
+
+.shimmer { background: linear-gradient(90deg, rgba(255,255,255,0.02) 20%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.02) 80%); background-size: 200% 100%; animation: shimmer 2.5s linear infinite; }
+@keyframes shimmer { 0% { background-position: -200% 0 } 100% { background-position: 200% 0 } }
+
+.rotate-slow { animation: rotateSlow 24s linear infinite; }
+@keyframes rotateSlow { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
+
+.shadow-3d { box-shadow: 0 18px 35px -20px rgba(0,0,0,0.35); }
+.shadow-3d-hover { box-shadow: 0 30px 60px -10px rgba(0,0,0,0.45); }
+
+.musical-note-1 { animation: floatNote 6s ease-in-out infinite; }
+.musical-note-2 { animation: floatNote 8s ease-in-out infinite; }
+.musical-note-3 { animation: floatNote 10s ease-in-out infinite; }
+@keyframes floatNote { 0% { transform: translateY(0) } 50% { transform: translateY(-20px) } 100% { transform: translateY(0) } }
+
+/* Accessibility: reduce motion respects */
+@media (prefers-reduced-motion: reduce) {
+  .ken-burns-enhanced img, .gradient-pulse, .hero-particle, .rotate-slow, .shimmer, .musical-note-1, .musical-note-2, .musical-note-3 {
+    animation: none !important;
+    transition: none !important;
+  }
 }

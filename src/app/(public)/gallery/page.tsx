@@ -34,7 +34,7 @@ export default function GalleryPage() {
   const hasImages = galleryCategories.some(cat => cat.images.length > 0);
 
   return (
-    <div className="container py-12 md:py-16">
+    <div className="w-full py-12 md:py-16">
       {/* Hero Section */}
       <div className="text-center mb-12">
         <div className="inline-flex items-center gap-2 text-primary mb-4">

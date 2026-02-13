@@ -14,6 +14,7 @@ import {
   ExternalLink,
   ChevronRight
 } from 'lucide-react';
+import { Logo } from '@/components/icons/logo';
 import { authClient } from '@/lib/auth/client';
 import { useRouter } from 'next/navigation';
 
@@ -39,13 +40,9 @@ export function DashboardSidebar({ user }: { user: any }) {
     <aside className="fixed left-0 top-0 z-40 h-screen w-64 border-r bg-card shadow-sm transition-transform -translate-x-full md:translate-x-0">
       <div className="flex h-full flex-col px-4 py-6">
         {/* Brand */}
-        <Link href="/" className="mb-10 flex items-center gap-2 px-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-white">
-            <Music size={20} />
-          </div>
-          <span className="font-display text-xl font-bold tracking-widest text-foreground">
-            ECCB
-          </span>
+        <Link href="/" className="mb-10 flex items-center gap-3 px-2" aria-label="Emerald Coast Community Band">
+          <Logo className="h-9 w-auto text-primary" />
+          <span className="sr-only">Emerald Coast Community Band</span>
         </Link>
 
         {/* User Profile Summary */}

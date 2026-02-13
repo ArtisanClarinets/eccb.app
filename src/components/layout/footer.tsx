@@ -1,21 +1,18 @@
 import React from 'react';
 import Link from 'next/link';
 import { Music, Facebook, Instagram, Twitter, Mail, MapPin, Phone } from 'lucide-react';
+import { Logo } from '@/components/icons/logo';
 
 export function Footer() {
   return (
     <footer className="bg-neutral-dark pt-20 pb-10 text-white">
-      <div className="container mx-auto px-6">
+      <div className="mx-auto w-full max-w-7xl px-6">
         <div className="grid gap-12 md:grid-cols-4">
           {/* Brand Column */}
           <div className="md:col-span-1">
-            <Link href="/" className="mb-6 flex items-center gap-2">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-white">
-                <Music size={24} />
-              </div>
-              <span className="font-display text-2xl font-black tracking-widest">
-                ECCB
-              </span>
+            <Link href="/" className="mb-6 flex items-center gap-3" aria-label="Emerald Coast Community Band">
+              <Logo className="h-10 w-auto text-primary" />
+              <span className="sr-only">Emerald Coast Community Band</span>
             </Link>
             <p className="mb-8 text-sm leading-relaxed text-gray-400">
               The Emerald Coast Community Band is a non-profit organization dedicated

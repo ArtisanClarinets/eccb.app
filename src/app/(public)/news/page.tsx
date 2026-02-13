@@ -51,7 +51,7 @@ export default async function NewsPage() {
   });
 
   return (
-    <div className="container py-12 md:py-16">
+    <div className="w-full py-12 md:py-16">
       <div className="text-center mb-12">
         <h1 className="text-4xl font-bold tracking-tight mb-4">News & Updates</h1>
         <p className="text-xl text-muted-foreground max-w-2xl mx-auto">

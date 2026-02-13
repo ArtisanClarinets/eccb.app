@@ -39,7 +39,7 @@ export default async function DirectorsPage() {
   );
 
   return (
-    <div className="container py-12 md:py-16">
+    <div className="w-full py-12 md:py-16">
       {/* Hero Section */}
       <div className="text-center mb-16">
         <h1 className="text-4xl font-bold tracking-tight mb-4">Our Leadership</h1>

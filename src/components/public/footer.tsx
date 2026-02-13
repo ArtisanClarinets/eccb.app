@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Music, Facebook, Instagram, Youtube, Mail, Phone, MapPin } from 'lucide-react';
+import { Logo } from '@/components/icons/logo';
 
 const footerNavigation = {
   main: [
@@ -33,15 +34,13 @@ const footerNavigation = {
 export function PublicFooter() {
   return (
     <footer className="bg-slate-900 text-slate-200">
-      <div className="mx-auto max-w-7xl px-6 pb-8 pt-16 lg:px-8">
+      <div className="mx-auto w-full max-w-7xl px-6 pb-8 pt-12 lg:px-8">
         <div className="xl:grid xl:grid-cols-3 xl:gap-8">
           {/* Brand */}
           <div className="space-y-8">
             <div className="flex items-center gap-2">
-              <Music className="h-8 w-8 text-primary" />
-              <span className="text-xl font-bold text-white">
-                Emerald Coast Community Band
-              </span>
+              <Logo className="h-8 w-auto text-primary" />
+              <span className="text-xl font-bold text-white">Emerald Coast Community Band</span>
             </div>
             <p className="text-sm text-slate-400 max-w-xs">
               Bringing quality concert band music to the Emerald Coast community since 1985.

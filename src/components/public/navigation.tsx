@@ -2,10 +2,11 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Menu, X, Music, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { Logo } from '@/components/icons/logo';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -37,6 +38,7 @@ export function PublicNavigation() {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const headerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -46,23 +48,39 @@ export function PublicNavigation() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // Dynamically set the CSS var for header height so pages can offset correctly
+  useEffect(() => {
+    const setHeaderHeight = () => {
+      const el = headerRef.current;
+      if (!el) return;
+      const h = Math.ceil(el.getBoundingClientRect().height);
+      document.documentElement.style.setProperty('--site-header-height', `${h}px`);
+    };
+
+    setHeaderHeight();
+    window.addEventListener('resize', setHeaderHeight);
+    return () => window.removeEventListener('resize', setHeaderHeight);
+  }, [mobileMenuOpen]);
+
   return (
     <header
+      ref={headerRef}
       className={cn(
         'fixed inset-x-0 top-0 z-50 transition-all duration-300',
         scrolled
           ? 'bg-background/95 backdrop-blur-md shadow-sm'
           : 'bg-transparent'
       )}
+      role="banner"
     >
       <nav
         className="mx-auto flex max-w-7xl items-center justify-between p-4 lg:px-8"
         aria-label="Global"
       >
         <div className="flex lg:flex-1">
-          <Link href="/" className="-m-1.5 flex items-center gap-2 p-1.5">
-            <Music className="h-8 w-8 text-primary" />
-            <span className="text-lg font-bold text-primary">ECCB</span>
+          <Link href="/" className="-m-1.5 flex items-center gap-3 p-1.5" aria-label="Emerald Coast Community Band">
+            <Logo className="h-8 w-auto text-primary" />
+            <span className="sr-only">Emerald Coast Community Band</span>
           </Link>
         </div>
 
@@ -83,7 +101,7 @@ export function PublicNavigation() {
         </div>
 
         {/* Desktop navigation */}
-        <div className="hidden lg:flex lg:gap-x-1">
+        <div className="hidden lg:flex lg:gap-x-6 lg:items-center">
           {navigation.map((item) =>
             item.children ? (
               <DropdownMenu key={item.name}>
@@ -95,6 +113,8 @@ export function PublicNavigation() {
                       item.children.some((child) => pathname === child.href) &&
                         'text-primary'
                     )}
+                    aria-haspopup="menu"
+                    aria-expanded={item.children.some((child) => pathname === child.href)}
                   >
                     {item.name}
                     <ChevronDown className="h-4 w-4" />
@@ -105,6 +125,7 @@ export function PublicNavigation() {
                     <DropdownMenuItem key={child.name} asChild>
                       <Link
                         href={child.href}
+                        aria-current={pathname === child.href ? 'page' : undefined}
                         className={cn(
                           pathname === child.href && 'text-primary font-medium'
                         )}
@@ -119,10 +140,11 @@ export function PublicNavigation() {
               <Link
                 key={item.name}
                 href={item.href}
+                aria-current={pathname === item.href ? 'page' : undefined}
                 className={cn(
-                  'rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground',
+                  'rounded-md px-4 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground',
                   pathname === item.href
-                    ? 'text-primary'
+                    ? 'text-primary underline decoration-primary/30 underline-offset-4'
                     : 'text-muted-foreground'
                 )}
               >
@@ -133,12 +155,12 @@ export function PublicNavigation() {
         </div>
 
         {/* Member login button */}
-        <div className="hidden lg:flex lg:flex-1 lg:justify-end lg:gap-x-2">
+        <div className="hidden lg:flex lg:flex-1 lg:justify-end lg:gap-x-4">
           <Button variant="ghost" asChild>
             <Link href="/login">Sign In</Link>
           </Button>
-          <Button asChild>
-            <Link href="/member">Member Portal</Link>
+          <Button size="lg" asChild>
+            <Link href="/member" className="px-4">Member Portal</Link>
           </Button>
         </div>
       </nav>

@@ -1,8 +1,6 @@
 import React from 'react';
-import { Navbar } from '@/components/layout/navbar';
 import { Hero } from '@/components/home/hero';
 import { UpcomingEvents } from '@/components/home/upcoming-events';
-import { Footer } from '@/components/layout/footer';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { Music, Calendar, Users, Heart } from 'lucide-react';
@@ -10,15 +8,14 @@ import { Music, Calendar, Users, Heart } from 'lucide-react';
 export default function Home() {
   return (
     <div className="flex min-h-screen flex-col">
-      <Navbar />
       
       <main className="flex-grow">
         {/* Cinematic Hero */}
         <Hero />
 
         {/* Core Values Section */}
-        <section className="bg-background py-24">
-          <div className="container mx-auto px-6">
+        <section className="bg-background py-12 md:py-24">
+          <div className="mx-auto w-full max-w-7xl px-6">
             <div className="mb-16 text-center">
               <h2 className="font-display text-4xl font-black text-foreground uppercase tracking-tight md:text-5xl">
                 More Than Just <span className="text-primary italic">Music</span>
@@ -72,7 +69,7 @@ export default function Home() {
             <div className="h-full w-full bg-[radial-gradient(#0f766e_1px,transparent_1px)] [background-size:20px_20px]" />
           </div>
           
-          <div className="container relative mx-auto px-6 text-center">
+          <div className="mx-auto w-full max-w-7xl px-6 relative text-center">
             <h2 className="font-display text-4xl font-black uppercase tracking-tight md:text-6xl">
               Ready to <span className="text-primary italic">Join Us?</span>
             </h2>
@@ -91,8 +88,6 @@ export default function Home() {
           </div>
         </section>
       </main>
-
-      <Footer />
     </div>
   );
 }

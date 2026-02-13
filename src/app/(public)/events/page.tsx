@@ -55,11 +55,11 @@ export default async function EventsPage() {
   const pastEvents = events.filter((e) => new Date(e.startTime) < now || e.isCancelled);
 
   return (
-    <div className="pt-24">
+    <div className="w-full py-12 md:py-16">
       {/* Hero */}
       <section className="py-16 bg-gradient-to-b from-primary/10 to-transparent">
-        <div className="mx-auto max-w-7xl px-6 lg:px-8">
-          <div className="max-w-3xl">
+        <div className="mx-auto w-full max-w-4xl px-6 lg:px-8">
+          <div className="max-w-3xl mx-auto">
             <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
               Events & Concerts
             </h1>

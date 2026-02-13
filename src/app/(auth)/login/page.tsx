@@ -1,6 +1,8 @@
 import React, { Suspense } from 'react';
 import Image from 'next/image';
+import heroBg from '@/assets/hero_bg.jpg';
 import Link from 'next/link';
+import { Logo } from '@/components/icons/logo';
 import { Music, ChevronLeft } from 'lucide-react';
 import { LoginForm } from '@/components/auth/login-form';
 import { Button } from '@/components/ui/button';
@@ -16,9 +18,10 @@ export default function LoginPage() {
       {/* Left side: Dramatic Entry */}
       <div className="relative hidden w-1/2 overflow-hidden bg-[#0f172a] lg:block">
         <Image
-          src="/images/hero_bg.jpg"
+          src={heroBg}
           alt="Emerald Coast"
           fill
+          placeholder="blur"
           sizes="50vw"
           className="object-cover opacity-50"
           priority
@@ -26,13 +29,9 @@ export default function LoginPage() {
         <div className="absolute inset-0 bg-gradient-to-r from-primary/20 to-transparent" />
         
         <div className="absolute inset-0 flex flex-col justify-between p-12 text-white">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-white">
-              <Music size={24} />
-            </div>
-            <span className="font-display text-2xl font-black tracking-widest text-white">
-              ECCB
-            </span>
+          <Link href="/" className="flex items-center gap-3 p-1.5" aria-label="Emerald Coast Community Band">
+            <Logo className="h-10 w-auto text-white" />
+            <span className="sr-only">Emerald Coast Community Band</span>
           </Link>
           
           <div>
@@ -66,12 +65,8 @@ export default function LoginPage() {
             </Button>
             
             <div className="mb-8 flex flex-col items-center lg:hidden">
-              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary text-white shadow-xl">
-                <Music size={32} />
-              </div>
-              <h2 className="font-display text-3xl font-black tracking-widest text-foreground">
-                ECCB
-              </h2>
+              <Logo className="mb-4 h-16 w-auto text-primary" />
+              <h2 className="sr-only">Emerald Coast Community Band</h2>
             </div>
             
             <h3 className="font-display text-4xl font-black text-foreground uppercase tracking-tight">
