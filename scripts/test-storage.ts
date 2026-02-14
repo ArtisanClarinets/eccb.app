@@ -10,7 +10,7 @@ async function testStorage() {
   const content = Buffer.from('Hello ECCB!');
   
   // 1. Upload
-  await uploadFile(content, testKey, 'text/plain');
+  await uploadFile(testKey, content, { contentType: 'text/plain' });
   console.log('✅ Upload success');
 
   // 2. Get URL

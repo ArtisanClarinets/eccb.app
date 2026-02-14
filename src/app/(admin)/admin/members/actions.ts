@@ -6,6 +6,11 @@ import { requirePermission } from '@/lib/auth/guards';
 import { auditLog } from '@/lib/services/audit';
 import { z } from 'zod';
 import { MemberStatus } from '@prisma/client';
+import {
+  MEMBER_CREATE,
+  MEMBER_EDIT_ALL,
+  MEMBER_DELETE,
+} from '@/lib/auth/permission-constants';
 
 const memberSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
@@ -24,7 +29,7 @@ const memberSchema = z.object({
 });
 
 export async function createMember(formData: FormData) {
-  const session = await requirePermission('members:create');
+  const session = await requirePermission(MEMBER_CREATE);
 
   try {
     const data = {
@@ -113,7 +118,7 @@ export async function createMember(formData: FormData) {
 }
 
 export async function updateMember(id: string, formData: FormData) {
-  const session = await requirePermission('members:update');
+  const session = await requirePermission(MEMBER_EDIT_ALL);
 
   try {
     const data = {
@@ -205,7 +210,7 @@ export async function updateMember(id: string, formData: FormData) {
 }
 
 export async function deleteMember(id: string) {
-  const session = await requirePermission('members:delete');
+  const session = await requirePermission(MEMBER_DELETE);
 
   try {
     const member = await prisma.member.delete({
@@ -229,7 +234,7 @@ export async function deleteMember(id: string) {
 }
 
 export async function updateMemberStatus(id: string, status: string) {
-  const session = await requirePermission('members:update');
+  const session = await requirePermission(MEMBER_EDIT_ALL);
 
   try {
     const member = await prisma.member.update({
@@ -255,7 +260,7 @@ export async function updateMemberStatus(id: string, status: string) {
 }
 
 export async function assignMemberToSection(memberId: string, sectionId: string | null) {
-  const session = await requirePermission('members:update');
+  const session = await requirePermission(MEMBER_EDIT_ALL);
 
   try {
     // Remove existing section assignments
@@ -299,5 +304,232 @@ export async function assignMemberToSection(memberId: string, sectionId: string 
   } catch (error) {
     console.error('Failed to assign section:', error);
     return { success: false, error: 'Failed to assign section' };
+  }
+}
+
+// =============================================================================
+// BULK OPERATIONS
+// =============================================================================
+
+const bulkOperationSchema = z.object({
+  memberIds: z.array(z.string()).min(1, 'At least one member must be selected'),
+});
+
+export async function bulkUpdateMemberStatus(memberIds: string[], status: MemberStatus) {
+  const session = await requirePermission(MEMBER_EDIT_ALL);
+
+  try {
+    const validated = bulkOperationSchema.parse({ memberIds });
+
+    const result = await prisma.member.updateMany({
+      where: { id: { in: validated.memberIds } },
+      data: { status },
+    });
+
+    await auditLog({
+      action: 'member.bulk_status_change',
+      entityType: 'Member',
+      newValues: { count: result.count, status, memberIds: validated.memberIds },
+    });
+
+    revalidatePath('/admin/members');
+
+    return { success: true, count: result.count };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return { success: false, error: error.issues[0].message };
+    }
+    console.error('Failed to bulk update status:', error);
+    return { success: false, error: 'Failed to update member status' };
+  }
+}
+
+export async function bulkAssignSection(memberIds: string[], sectionId: string | null) {
+  const session = await requirePermission(MEMBER_EDIT_ALL);
+
+  try {
+    const validated = bulkOperationSchema.parse({ memberIds });
+
+    // Use a transaction to ensure atomicity
+    await prisma.$transaction(async (tx) => {
+      // Remove existing section assignments for all selected members
+      await tx.memberSection.deleteMany({
+        where: { memberId: { in: validated.memberIds } },
+      });
+
+      // Create new assignments if sectionId provided
+      if (sectionId) {
+        await tx.memberSection.createMany({
+          data: validated.memberIds.map((memberId) => ({
+            memberId,
+            sectionId,
+          })),
+        });
+      }
+    });
+
+    await auditLog({
+      action: 'member.bulk_section_assign',
+      entityType: 'Member',
+      newValues: { count: validated.memberIds.length, sectionId, memberIds: validated.memberIds },
+    });
+
+    revalidatePath('/admin/members');
+
+    return { success: true, count: validated.memberIds.length };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return { success: false, error: error.issues[0].message };
+    }
+    console.error('Failed to bulk assign section:', error);
+    return { success: false, error: 'Failed to assign section' };
+  }
+}
+
+export async function bulkAssignRole(memberIds: string[], roleId: string) {
+  const session = await requirePermission(MEMBER_EDIT_ALL);
+
+  try {
+    const validated = bulkOperationSchema.parse({ memberIds });
+
+    // Get user IDs linked to the selected members
+    const members = await prisma.member.findMany({
+      where: { id: { in: validated.memberIds } },
+      select: { id: true, userId: true, firstName: true, lastName: true },
+    });
+
+    const usersWithIds = members.filter((m) => m.userId);
+
+    if (usersWithIds.length === 0) {
+      return { success: false, error: 'No members with linked user accounts found' };
+    }
+
+    // Assign role to users
+    await prisma.$transaction(async (tx) => {
+      // Create role assignments (upsert to avoid duplicates)
+      for (const member of usersWithIds) {
+        if (member.userId) {
+          await tx.userRole.upsert({
+            where: {
+              userId_roleId: {
+                userId: member.userId,
+                roleId,
+              },
+            },
+            update: {}, // No update needed if exists
+            create: {
+              userId: member.userId,
+              roleId,
+              assignedBy: session.user.id,
+            },
+          });
+        }
+      }
+    });
+
+    await auditLog({
+      action: 'member.bulk_role_assign',
+      entityType: 'Member',
+      newValues: { count: usersWithIds.length, roleId, memberIds: validated.memberIds },
+    });
+
+    revalidatePath('/admin/members');
+
+    return { success: true, count: usersWithIds.length };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return { success: false, error: error.issues[0].message };
+    }
+    console.error('Failed to bulk assign role:', error);
+    return { success: false, error: 'Failed to assign role' };
+  }
+}
+
+export async function bulkDeleteMembers(memberIds: string[]) {
+  const session = await requirePermission(MEMBER_DELETE);
+
+  try {
+    const validated = bulkOperationSchema.parse({ memberIds });
+
+    const result = await prisma.member.deleteMany({
+      where: { id: { in: validated.memberIds } },
+    });
+
+    await auditLog({
+      action: 'member.bulk_delete',
+      entityType: 'Member',
+      newValues: { count: result.count, memberIds: validated.memberIds },
+    });
+
+    revalidatePath('/admin/members');
+
+    return { success: true, count: result.count };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return { success: false, error: error.issues[0].message };
+    }
+    console.error('Failed to bulk delete members:', error);
+    return { success: false, error: 'Failed to delete members' };
+  }
+}
+
+export async function linkMemberToUser(memberId: string, userId: string) {
+  const session = await requirePermission(MEMBER_EDIT_ALL);
+
+  try {
+    // Check if user already has a member profile
+    const existingMember = await prisma.member.findUnique({
+      where: { userId },
+    });
+
+    if (existingMember && existingMember.id !== memberId) {
+      return { success: false, error: 'User already has a different member profile' };
+    }
+
+    const member = await prisma.member.update({
+      where: { id: memberId },
+      data: { userId },
+    });
+
+    await auditLog({
+      action: 'member.link_user',
+      entityType: 'Member',
+      entityId: memberId,
+      newValues: { name: `${member.firstName} ${member.lastName}`, userId },
+    });
+
+    revalidatePath('/admin/members');
+    revalidatePath(`/admin/members/${memberId}`);
+
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to link member to user:', error);
+    return { success: false, error: 'Failed to link member to user' };
+  }
+}
+
+export async function unlinkMemberFromUser(memberId: string) {
+  const session = await requirePermission(MEMBER_EDIT_ALL);
+
+  try {
+    const member = await prisma.member.update({
+      where: { id: memberId },
+      data: { userId: null },
+    });
+
+    await auditLog({
+      action: 'member.unlink_user',
+      entityType: 'Member',
+      entityId: memberId,
+      newValues: { name: `${member.firstName} ${member.lastName}` },
+    });
+
+    revalidatePath('/admin/members');
+    revalidatePath(`/admin/members/${memberId}`);
+
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to unlink member from user:', error);
+    return { success: false, error: 'Failed to unlink member from user' };
   }
 }

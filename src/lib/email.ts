@@ -1,7 +1,56 @@
 import { createTransport, Transporter } from 'nodemailer';
 import { env } from '@/lib/env';
+import { writeFileSync, mkdirSync, existsSync } from 'fs';
+import { join } from 'path';
 
 let transporter: Transporter | null = null;
+
+// Check if SMTP is configured
+function isSmtpConfigured(): boolean {
+  return !!(env.SMTP_HOST && env.SMTP_PORT);
+}
+
+// Get the outbox directory path
+function getOutboxDir(): string {
+  return join(process.cwd(), 'outbox');
+}
+
+// Ensure outbox directory exists
+function ensureOutboxDir(): void {
+  const outboxDir = getOutboxDir();
+  if (!existsSync(outboxDir)) {
+    mkdirSync(outboxDir, { recursive: true });
+  }
+}
+
+// Write email to local file as .eml format
+function writeToOutbox(options: SendEmailOptions): string {
+  ensureOutboxDir();
+  
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const sanitizedName = options.subject.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 50);
+  const filename = `${timestamp}_${sanitizedName}.eml`;
+  const filepath = join(getOutboxDir(), filename);
+  
+  const to = Array.isArray(options.to) ? options.to.join(', ') : options.to;
+  const from = `${env.NEXT_PUBLIC_APP_NAME} <${env.SMTP_FROM}>`;
+  
+  const emlContent = [
+    `From: ${from}`,
+    `To: ${to}`,
+    `Subject: ${options.subject}`,
+    `Date: ${new Date().toUTCString()}`,
+    `MIME-Version: 1.0`,
+    `Content-Type: text/html; charset=utf-8`,
+    '',
+    options.html,
+  ].join('\r\n');
+  
+  writeFileSync(filepath, emlContent, 'utf-8');
+  console.log(`Email written to outbox: ${filepath}`);
+  
+  return filepath;
+}
 
 function getTransporter(): Transporter {
   if (!transporter) {
@@ -40,7 +89,30 @@ export interface SendEmailOptions {
   }>;
 }
 
-export async function sendEmail(options: SendEmailOptions): Promise<void> {
+export interface SendEmailResult {
+  success: boolean;
+  method: 'smtp' | 'outbox';
+  filepath?: string;
+  error?: string;
+}
+
+export async function sendEmail(options: SendEmailOptions): Promise<SendEmailResult> {
+  // If SMTP is not configured, write to local outbox
+  if (!isSmtpConfigured()) {
+    console.log('SMTP not configured, writing email to local outbox');
+    try {
+      const filepath = writeToOutbox(options);
+      return { success: true, method: 'outbox', filepath };
+    } catch (error) {
+      console.error('Failed to write email to outbox:', error);
+      return { 
+        success: false, 
+        method: 'outbox', 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      };
+    }
+  }
+  
   const transport = getTransporter();
   
   const mailOptions = {
@@ -58,17 +130,26 @@ export async function sendEmail(options: SendEmailOptions): Promise<void> {
   try {
     await transport.sendMail(mailOptions);
     console.log(`Email sent to ${mailOptions.to}: ${options.subject}`);
+    return { success: true, method: 'smtp' };
   } catch (error) {
-    console.error('Failed to send email:', error);
-    // In development, log the email content instead of failing
-    if (env.NODE_ENV === 'development') {
-      console.log('Development mode - Email content:');
-      console.log('To:', mailOptions.to);
-      console.log('Subject:', mailOptions.subject);
-      console.log('HTML:', options.html);
-    } else {
-      throw error;
+    console.error('Failed to send email via SMTP:', error);
+    
+    // Fallback to outbox if SMTP fails
+    if (env.NODE_ENV !== 'production') {
+      console.log('Falling back to local outbox');
+      try {
+        const filepath = writeToOutbox(options);
+        return { success: true, method: 'outbox', filepath };
+      } catch (outboxError) {
+        console.error('Failed to write email to outbox:', outboxError);
+      }
     }
+    
+    return { 
+      success: false, 
+      method: 'smtp', 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    };
   }
 }
 
@@ -162,8 +243,13 @@ export async function sendBulkEmails(
 
   for (const email of emails) {
     try {
-      await sendEmail(email);
-      results.success++;
+      const result = await sendEmail(email);
+      if (result.success) {
+        results.success++;
+      } else {
+        results.failed++;
+        results.errors.push(`${email.to}: ${result.error || 'Unknown error'}`);
+      }
       // Delay between emails to avoid rate limiting
       await new Promise(resolve => setTimeout(resolve, delayMs));
     } catch (error) {
@@ -177,6 +263,11 @@ export async function sendBulkEmails(
 
 // Verify SMTP connection
 export async function verifyEmailConnection(): Promise<boolean> {
+  if (!isSmtpConfigured()) {
+    console.log('SMTP not configured - emails will be written to local outbox');
+    return false;
+  }
+  
   try {
     const transport = getTransporter();
     await transport.verify();

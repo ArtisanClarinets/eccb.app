@@ -1,26 +1,127 @@
+'use client';
+
+import { useEffect, useState, useCallback } from 'react';
 import { authClient } from '@/lib/auth/client';
 
-export function usePermissions() {
+interface PermissionsData {
+  permissions: string[];
+  roles: string[];
+}
+
+interface UsePermissionsReturn {
+  permissions: string[];
+  roles: string[];
+  hasPermission: (permission: string) => boolean;
+  hasAnyPermission: (permissions: string[]) => boolean;
+  hasAllPermissions: (permissions: string[]) => boolean;
+  hasRole: (role: string) => boolean;
+  isLoading: boolean;
+  error: Error | null;
+  refetch: () => Promise<void>;
+}
+
+/**
+ * Hook to access and check user permissions
+ * Fetches permissions from /api/me/permissions
+ */
+export function usePermissions(): UsePermissionsReturn {
   const { data: session } = authClient.useSession();
-  // Better Auth doesn't expose permissions directly in the session object by default unless configured
-  // We need to fetch permissions from an API or rely on roles if simplified.
-  // However, the spec says we should use permissions.
-  // Let's assume we hydrate the session with permissions or fetch them.
+  const [permissionsData, setPermissionsData] = useState<PermissionsData>({
+    permissions: [],
+    roles: [],
+  });
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
 
-  // For now, let's implement a basic fetch or hook into the session if extended.
-  // Since we haven't extended the session type in `auth/config.ts` yet to include `permissions`,
-  // we might need to fetch them separately.
+  const fetchPermissions = useCallback(async () => {
+    if (!session?.user) {
+      setPermissionsData({ permissions: [], roles: [] });
+      setIsLoading(false);
+      return;
+    }
 
-  // Placeholder implementation assuming we will add an endpoint: /api/auth/permissions
+    try {
+      setIsLoading(true);
+      setError(null);
 
-  const hasPermission = (permission: string) => {
-    // Basic stub: check if user is admin
-    if (session?.user?.role === 'admin' || session?.user?.role === 'super_admin') return true;
-    return false; // TODO: Implement real client-side permission check
-  };
+      const response = await fetch('/api/me/permissions');
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          // User is not authenticated
+          setPermissionsData({ permissions: [], roles: [] });
+          return;
+        }
+        throw new Error(`Failed to fetch permissions: ${response.statusText}`);
+      }
+
+      const data: PermissionsData = await response.json();
+      setPermissionsData(data);
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error('Unknown error'));
+      console.error('Error fetching permissions:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [session?.user]);
+
+  useEffect(() => {
+    fetchPermissions();
+  }, [fetchPermissions]);
+
+  /**
+   * Check if the user has a specific permission
+   */
+  const hasPermission = useCallback(
+    (permission: string): boolean => {
+      return permissionsData.permissions.includes(permission);
+    },
+    [permissionsData.permissions]
+  );
+
+  /**
+   * Check if the user has any of the specified permissions
+   */
+  const hasAnyPermission = useCallback(
+    (permissions: string[]): boolean => {
+      return permissions.some((permission) =>
+        permissionsData.permissions.includes(permission)
+      );
+    },
+    [permissionsData.permissions]
+  );
+
+  /**
+   * Check if the user has all of the specified permissions
+   */
+  const hasAllPermissions = useCallback(
+    (permissions: string[]): boolean => {
+      return permissions.every((permission) =>
+        permissionsData.permissions.includes(permission)
+      );
+    },
+    [permissionsData.permissions]
+  );
+
+  /**
+   * Check if the user has a specific role
+   */
+  const hasRole = useCallback(
+    (role: string): boolean => {
+      return permissionsData.roles.includes(role);
+    },
+    [permissionsData.roles]
+  );
 
   return {
+    permissions: permissionsData.permissions,
+    roles: permissionsData.roles,
     hasPermission,
-    isLoading: !session,
+    hasAnyPermission,
+    hasAllPermissions,
+    hasRole,
+    isLoading,
+    error,
+    refetch: fetchPermissions,
   };
 }

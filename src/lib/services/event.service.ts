@@ -9,7 +9,7 @@ export interface CreateEventData {
   location?: string;
   startTime: Date;
   endTime: Date;
-  isPublic?: boolean;
+  isPublished?: boolean;
 }
 
 export class EventService {
@@ -36,11 +36,11 @@ export class EventService {
   /**
    * List upcoming events
    */
-  static async listUpcomingEvents(includePublic: boolean = true) {
+  static async listUpcomingEvents(includePublished: boolean = true) {
     return prisma.event.findMany({
       where: {
         startTime: { gte: new Date() },
-        ...(includePublic ? {} : { isPublic: false }),
+        ...(includePublished ? {} : { isPublished: false }),
       },
       orderBy: { startTime: 'asc' },
     });

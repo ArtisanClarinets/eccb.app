@@ -1,54 +1,43 @@
 'use client';
 
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 
+/**
+ * Service Worker Registration Provider
+ *
+ * PWA functionality is currently disabled. This component keeps the
+ * useOnlineStatus hook for offline detection but does not register
+ * a service worker.
+ *
+ * To re-enable PWA:
+ * 1. Create proper PWA icons in public/icons/
+ * 2. Update manifest.json with icon paths and display: "standalone"
+ * 3. Uncomment the registration logic below
+ */
 export function ServiceWorkerRegistration() {
   useEffect(() => {
-    if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
-      navigator.serviceWorker
-        .register('/sw.js')
-        .then((registration) => {
-          console.log('Service Worker registered:', registration.scope);
-
-          // Check for updates periodically
-          setInterval(() => {
-            registration.update();
-          }, 60 * 60 * 1000); // Every hour
-
-          // Handle updates
-          registration.addEventListener('updatefound', () => {
-            const newWorker = registration.installing;
-            if (newWorker) {
-              newWorker.addEventListener('statechange', () => {
-                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                  // New content available, notify user
-                  if (confirm('New content is available! Click OK to refresh.')) {
-                    window.location.reload();
-                  }
-                }
-              });
-            }
-          });
-        })
-        .catch((error) => {
-          console.error('Service Worker registration failed:', error);
-        });
-
-      // Handle controller changes (after update)
-      let refreshing = false;
-      navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (!refreshing) {
-          refreshing = true;
-          window.location.reload();
-        }
-      });
-    }
+    // PWA disabled - service worker registration commented out
+    // To re-enable, uncomment the following block and ensure icons exist:
+    //
+    // if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
+    //   navigator.serviceWorker
+    //     .register('/sw.js')
+    //     .then((registration) => {
+    //       console.log('Service Worker registered:', registration.scope);
+    //     })
+    //     .catch((error) => {
+    //       console.error('Service Worker registration failed:', error);
+    //     });
+    // }
   }, []);
 
   return null;
 }
 
-
+/**
+ * Hook to detect online/offline status
+ * Works independently of service worker registration
+ */
 export function useOnlineStatus() {
   const isOnline = useSyncExternalStore(
     (callback) => {

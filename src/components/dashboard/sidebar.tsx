@@ -18,12 +18,13 @@ import { Logo } from '@/components/icons/logo';
 import { authClient } from '@/lib/auth/client';
 import { useRouter } from 'next/navigation';
 
+// Updated to point to /member routes (canonical member area)
 const menuItems = [
-  { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },
-  { icon: Music, label: 'My Music', href: '/dashboard/music' },
-  { icon: Calendar, label: 'Schedule', href: '/dashboard/events' },
-  { icon: Users, label: 'Member List', href: '/dashboard/members' },
-  { icon: Settings, label: 'Account', href: '/dashboard/settings' },
+  { icon: LayoutDashboard, label: 'Dashboard', href: '/member' },
+  { icon: Music, label: 'My Music', href: '/member/music' },
+  { icon: Calendar, label: 'Calendar', href: '/member/calendar' },
+  { icon: Users, label: 'Attendance', href: '/member/attendance' },
+  { icon: Settings, label: 'Settings', href: '/member/settings' },
 ];
 
 export function DashboardSidebar({ user }: { user: any }) {
@@ -62,24 +63,31 @@ export function DashboardSidebar({ user }: { user: any }) {
 
         {/* Navigation */}
         <nav className="flex-grow space-y-1">
-          {menuItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                'group flex items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium transition-all',
-                pathname === item.href
-                  ? 'bg-primary text-white shadow-lg'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-              )}
-            >
-              <div className="flex items-center gap-3">
-                <item.icon size={20} />
-                {item.label}
-              </div>
-              {pathname === item.href && <ChevronRight size={16} />}
-            </Link>
-          ))}
+          {menuItems.map((item) => {
+            // Handle active state for /member base path
+            const isActive = item.href === '/member' 
+              ? pathname === '/member' 
+              : pathname.startsWith(item.href);
+            
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  'group flex items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium transition-all',
+                  isActive
+                    ? 'bg-primary text-white shadow-lg'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                )}
+              >
+                <div className="flex items-center gap-3">
+                  <item.icon size={20} />
+                  {item.label}
+                </div>
+                {isActive && <ChevronRight size={16} />}
+              </Link>
+            );
+          })}
         </nav>
 
         {/* Footer Actions */}

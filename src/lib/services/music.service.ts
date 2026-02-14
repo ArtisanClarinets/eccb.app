@@ -56,7 +56,9 @@ export class MusicLibraryService {
 
     if (data.file && data.fileName) {
       const storageKey = `music/${data.pieceId}/${Date.now()}-${data.fileName}`;
-      await uploadFile(data.file, storageKey, data.contentType || 'application/pdf');
+      await uploadFile(storageKey, data.file, {
+        contentType: data.contentType || 'application/pdf',
+      });
 
       const musicFile = await prisma.musicFile.create({
         data: {

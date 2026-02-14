@@ -422,6 +422,7 @@ model FileDownload {
   downloadedAt DateTime  @default(now())
   ipAddress    String?
   userAgent    String?
+  bytesTransferred Int?
   
   file        MusicFile  @relation(fields: [fileId], references: [id], onDelete: Cascade)
   

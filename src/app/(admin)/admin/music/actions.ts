@@ -6,9 +6,15 @@ import { requirePermission, getSession } from '@/lib/auth/guards';
 import { uploadFile, deleteFile } from '@/lib/services/storage';
 import { auditLog } from '@/lib/services/audit';
 import { MusicDifficulty, FileType } from '@prisma/client';
+import {
+  MUSIC_CREATE,
+  MUSIC_EDIT,
+  MUSIC_DELETE,
+  MUSIC_ASSIGN,
+} from '@/lib/auth/permission-constants';
 
 export async function createMusicPiece(formData: FormData) {
-  const session = await requirePermission('music:create');
+  const session = await requirePermission(MUSIC_CREATE);
   
   try {
     const title = formData.get('title') as string;
@@ -49,11 +55,9 @@ export async function createMusicPiece(formData: FormData) {
       if (file && file.size > 0) {
         const buffer = await file.arrayBuffer();
         const key = `music/${piece.id}/${Date.now()}-${file.name}`;
-        await uploadFile(
-          Buffer.from(buffer),
-          key,
-          file.type
-        );
+        await uploadFile(key, Buffer.from(buffer), {
+          contentType: file.type,
+        });
         
         uploadedFiles.push({
           pieceId: piece.id,
@@ -90,7 +94,7 @@ export async function createMusicPiece(formData: FormData) {
 }
 
 export async function updateMusicPiece(id: string, formData: FormData) {
-  const session = await requirePermission('music:update');
+  const session = await requirePermission(MUSIC_EDIT);
   
   try {
     const title = formData.get('title') as string;
@@ -142,7 +146,7 @@ export async function updateMusicPiece(id: string, formData: FormData) {
 }
 
 export async function deleteMusicPiece(id: string) {
-  const session = await requirePermission('music:delete');
+  const session = await requirePermission(MUSIC_DELETE);
   
   try {
     // Get all files for this piece
@@ -178,7 +182,7 @@ export async function deleteMusicPiece(id: string) {
 }
 
 export async function uploadMusicFile(musicPieceId: string, formData: FormData) {
-  const session = await requirePermission('music:update');
+  const session = await requirePermission(MUSIC_EDIT);
   
   try {
     const file = formData.get('file') as File;
@@ -191,11 +195,9 @@ export async function uploadMusicFile(musicPieceId: string, formData: FormData) 
 
     const buffer = await file.arrayBuffer();
     const key = `music/${musicPieceId}/${Date.now()}-${file.name}`;
-    await uploadFile(
-      Buffer.from(buffer),
-      key,
-      file.type
-    );
+    await uploadFile(key, Buffer.from(buffer), {
+      contentType: file.type,
+    });
 
     const musicFile = await prisma.musicFile.create({
       data: {
@@ -225,7 +227,7 @@ export async function uploadMusicFile(musicPieceId: string, formData: FormData) 
 }
 
 export async function deleteMusicFile(fileId: string) {
-  const session = await requirePermission('music:update');
+  const session = await requirePermission(MUSIC_EDIT);
   
   try {
     const file = await prisma.musicFile.findUnique({
@@ -260,7 +262,7 @@ export async function assignMusicToMembers(
   memberIds: string[],
   notes?: string
 ) {
-  const session = await requirePermission('music:assign');
+  const session = await requirePermission(MUSIC_ASSIGN);
   
   try {
     // Create assignments
@@ -295,7 +297,7 @@ export async function unassignMusicFromMember(
   pieceId: string,
   memberId: string
 ) {
-  const session = await requirePermission('music:assign');
+  const session = await requirePermission(MUSIC_ASSIGN);
   
   try {
     await prisma.musicAssignment.deleteMany({

@@ -4,6 +4,8 @@ import { auth } from '@/lib/auth/config';
 import { headers } from 'next/headers';
 import { z } from 'zod';
 import { AttendanceStatus } from '@prisma/client';
+import { validateCSRF } from '@/lib/csrf';
+import { applyRateLimit } from '@/lib/rate-limit';
 
 const rsvpSchema = z.object({
   eventId: z.string(),
@@ -13,6 +15,21 @@ const rsvpSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
+    // Apply rate limiting
+    const rateLimitResponse = await applyRateLimit(request, 'rsvp');
+    if (rateLimitResponse) {
+      return rateLimitResponse;
+    }
+
+    // Validate CSRF
+    const csrfResult = validateCSRF(request);
+    if (!csrfResult.valid) {
+      return NextResponse.json(
+        { error: 'CSRF validation failed', reason: csrfResult.reason },
+        { status: 403 }
+      );
+    }
+
     const session = await auth.api.getSession({
       headers: await headers(),
     });

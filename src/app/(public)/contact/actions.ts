@@ -2,8 +2,7 @@
 
 import { z } from 'zod';
 import { sendEmail } from '@/lib/email';
-import { rateLimit } from '@/lib/rate-limit';
-import { headers } from 'next/headers';
+import { rateLimit, createRateLimitKey } from '@/lib/rate-limit';
 
 const contactSchema = z.object({
   name: z.string().min(2),
@@ -23,19 +22,15 @@ const subjectLabels: Record<string, string> = {
 
 export async function submitContactForm(data: unknown) {
   try {
-    // Rate limiting
-    const headersList = await headers();
-    const ip = headersList.get('x-forwarded-for') || headersList.get('x-real-ip') || 'unknown';
-    
-    const rateLimitResult = await rateLimit(`contact:${ip}`, {
-      limit: 5,
-      window: 3600, // 1 hour
-    });
+    // Rate limiting using the contact type
+    const rateLimitKey = await createRateLimitKey('contact');
+    const rateLimitResult = await rateLimit(rateLimitKey, { type: 'contact' });
 
     if (!rateLimitResult.success) {
       return {
         success: false,
         error: 'Too many messages. Please try again later.',
+        retryAfter: rateLimitResult.retryAfter,
       };
     }
 

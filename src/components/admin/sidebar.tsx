@@ -15,55 +15,47 @@ import {
   Bell,
   X,
   Menu,
-  Folder,
-  Image,
 } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 
+// Updated navigation - removed dead links, fixed CMS paths to match actual routes
 const navigation = [
   { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
-  { 
-    name: 'Members', 
-    href: '/admin/members', 
+  {
+    name: 'Members',
+    href: '/admin/members',
     icon: Users,
     children: [
       { name: 'All Members', href: '/admin/members' },
-      { name: 'Sections', href: '/admin/members/sections' },
-      { name: 'Instruments', href: '/admin/members/instruments' },
+      { name: 'Add Member', href: '/admin/members/new' },
     ],
   },
-  { 
-    name: 'Music Library', 
-    href: '/admin/music', 
+  {
+    name: 'Music Library',
+    href: '/admin/music',
     icon: Music,
     children: [
       { name: 'All Music', href: '/admin/music' },
-      { name: 'Upload', href: '/admin/music/upload' },
-      { name: 'Assignments', href: '/admin/music/assignments' },
-      { name: 'Composers', href: '/admin/music/composers' },
-      { name: 'Publishers', href: '/admin/music/publishers' },
+      { name: 'Add Music', href: '/admin/music/new' },
     ],
   },
-  { 
-    name: 'Events', 
-    href: '/admin/events', 
+  {
+    name: 'Events',
+    href: '/admin/events',
     icon: Calendar,
     children: [
       { name: 'All Events', href: '/admin/events' },
       { name: 'Create Event', href: '/admin/events/new' },
-      { name: 'Venues', href: '/admin/events/venues' },
-      { name: 'Attendance', href: '/admin/events/attendance' },
     ],
   },
-  { 
-    name: 'CMS', 
-    href: '/admin/cms', 
+  {
+    name: 'CMS',
+    href: '/admin/pages',
     icon: FileText,
     children: [
-      { name: 'Pages', href: '/admin/cms/pages' },
-      { name: 'Announcements', href: '/admin/cms/announcements' },
-      { name: 'Media', href: '/admin/cms/media' },
+      { name: 'Pages', href: '/admin/pages' },
+      { name: 'Announcements', href: '/admin/announcements' },
     ],
   },
   { name: 'Communications', href: '/admin/communications', icon: Bell },
@@ -133,7 +125,7 @@ export function AdminSidebar() {
         {/* Navigation */}
         <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
           {navigation.map((item) => {
-            const isActive = pathname === item.href || 
+            const isActive = pathname === item.href ||
               (item.href !== '/admin' && pathname.startsWith(item.href));
             const isExpanded = expandedItems.includes(item.name) || isActive;
 

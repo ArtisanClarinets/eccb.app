@@ -5,6 +5,12 @@ import { prisma } from '@/lib/db';
 import { requirePermission } from '@/lib/auth/guards';
 import { auditLog } from '@/lib/services/audit';
 import { z } from 'zod';
+import {
+  EVENT_CREATE,
+  EVENT_EDIT,
+  EVENT_DELETE,
+  ATTENDANCE_MARK_ALL,
+} from '@/lib/auth/permission-constants';
 
 const eventSchema = z.object({
   title: z.string().min(1, 'Title is required'),
@@ -14,7 +20,7 @@ const eventSchema = z.object({
   startDate: z.string().min(1, 'Start date is required'),
   endDate: z.string().optional(),
   venueId: z.string().optional(),
-  isPublic: z.boolean().optional(),
+  isPublished: z.boolean().optional(),
   requiresRSVP: z.boolean().optional(),
   maxAttendees: z.number().optional(),
   notes: z.string().optional(),
@@ -23,7 +29,7 @@ const eventSchema = z.object({
 });
 
 export async function createEvent(formData: FormData) {
-  const session = await requirePermission('events:create');
+  const session = await requirePermission(EVENT_CREATE);
 
   try {
     const data = {
@@ -34,7 +40,7 @@ export async function createEvent(formData: FormData) {
       startDate: formData.get('startDate') as string,
       endDate: formData.get('endDate') as string || undefined,
       venueId: formData.get('venueId') as string || undefined,
-      isPublic: formData.get('isPublic') === 'true',
+      isPublished: formData.get('isPublished') === 'true',
       requiresRSVP: formData.get('requiresRSVP') === 'true',
       maxAttendees: formData.get('maxAttendees') ? parseInt(formData.get('maxAttendees') as string) : undefined,
       notes: formData.get('notes') as string || undefined,
@@ -52,7 +58,7 @@ export async function createEvent(formData: FormData) {
         startTime: new Date(validated.startDate),
         endTime: validated.endDate ? new Date(validated.endDate) : new Date(validated.startDate),
         venueId: validated.venueId || undefined,
-        isPublished: validated.isPublic ?? true,
+        isPublished: validated.isPublished ?? true,
         dressCode: validated.dressCode,
         callTime: validated.callTime ? new Date(validated.callTime) : undefined,
       },
@@ -80,7 +86,7 @@ export async function createEvent(formData: FormData) {
 }
 
 export async function updateEvent(id: string, formData: FormData) {
-  const session = await requirePermission('events:update');
+  const session = await requirePermission(EVENT_EDIT);
 
   try {
     const data = {
@@ -91,7 +97,7 @@ export async function updateEvent(id: string, formData: FormData) {
       startDate: formData.get('startDate') as string,
       endDate: formData.get('endDate') as string || undefined,
       venueId: formData.get('venueId') as string || undefined,
-      isPublic: formData.get('isPublic') === 'true',
+      isPublished: formData.get('isPublished') === 'true',
       requiresRSVP: formData.get('requiresRSVP') === 'true',
       maxAttendees: formData.get('maxAttendees') ? parseInt(formData.get('maxAttendees') as string) : undefined,
       notes: formData.get('notes') as string || undefined,
@@ -110,7 +116,7 @@ export async function updateEvent(id: string, formData: FormData) {
         startTime: new Date(validated.startDate),
         endTime: validated.endDate ? new Date(validated.endDate) : new Date(validated.startDate),
         venueId: validated.venueId || null,
-        isPublished: validated.isPublic ?? true,
+        isPublished: validated.isPublished ?? true,
         dressCode: validated.dressCode,
         callTime: validated.callTime ? new Date(validated.callTime) : null,
       },
@@ -140,7 +146,7 @@ export async function updateEvent(id: string, formData: FormData) {
 }
 
 export async function deleteEvent(id: string) {
-  const session = await requirePermission('events:delete');
+  const session = await requirePermission(EVENT_DELETE);
 
   try {
     const event = await prisma.event.delete({
@@ -168,7 +174,7 @@ export async function recordAttendance(
   eventId: string,
   records: Array<{ memberId: string; status: string; notes?: string }>
 ) {
-  const session = await requirePermission('attendance:manage');
+  const session = await requirePermission(ATTENDANCE_MARK_ALL);
 
   try {
     // Delete existing records for this event
@@ -183,7 +189,7 @@ export async function recordAttendance(
         memberId: record.memberId,
         status: record.status as any,
         notes: record.notes,
-        recordedById: session.user.id,
+        markedBy: session.user.id,
       })),
     });
 
@@ -204,7 +210,7 @@ export async function recordAttendance(
 }
 
 export async function addMusicToEvent(eventId: string, pieceId: string, sortOrder?: number) {
-  const session = await requirePermission('events:update');
+  const session = await requirePermission(EVENT_EDIT);
 
   try {
     const eventPiece = await prisma.eventMusic.create({
@@ -235,7 +241,7 @@ export async function addMusicToEvent(eventId: string, pieceId: string, sortOrde
 }
 
 export async function removeMusicFromEvent(eventId: string, eventPieceId: string) {
-  const session = await requirePermission('events:update');
+  const session = await requirePermission(EVENT_EDIT);
 
   try {
     const eventPiece = await prisma.eventMusic.delete({
@@ -262,7 +268,7 @@ export async function removeMusicFromEvent(eventId: string, eventPieceId: string
 }
 
 export async function updateEventStatus(id: string, status: string) {
-  const session = await requirePermission('events:update');
+  const session = await requirePermission(EVENT_EDIT);
 
   try {
     const event = await prisma.event.update({

@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { requirePermission } from '@/lib/auth/guards';
 import { auditLog } from '@/lib/services/audit';
+import { SYSTEM_CONFIG } from '@/lib/auth/permission-constants';
 
 const settingSchema = z.object({
   key: z.string().min(1),
@@ -12,7 +13,7 @@ const settingSchema = z.object({
 });
 
 export async function updateSetting(key: string, value: string) {
-  const session = await requirePermission('settings:write');
+  const session = await requirePermission(SYSTEM_CONFIG);
 
   try {
     const existing = await prisma.systemSetting.findUnique({
@@ -46,7 +47,7 @@ export async function updateSetting(key: string, value: string) {
 }
 
 export async function updateSettings(settings: Record<string, string>) {
-  const session = await requirePermission('settings:write');
+  const session = await requirePermission(SYSTEM_CONFIG);
 
   try {
     for (const [key, value] of Object.entries(settings)) {

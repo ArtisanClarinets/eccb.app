@@ -29,7 +29,7 @@ const eventSchema = z.object({
   startDate: z.string().min(1, 'Start date is required'),
   endDate: z.string().optional(),
   venueId: z.string().optional(),
-  isPublic: z.boolean().optional(),
+  isPublished: z.boolean().optional(),
   requiresRSVP: z.boolean().optional(),
   maxAttendees: z.number().optional(),
   notes: z.string().optional(),
@@ -78,7 +78,7 @@ export function EventForm({
 }: EventFormProps) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isPublic, setIsPublic] = useState(initialData?.isPublic ?? true);
+  const [isPublished, setIsPublished] = useState(initialData?.isPublished ?? true);
   const [requiresRSVP, setRequiresRSVP] = useState(initialData?.requiresRSVP ?? false);
 
   const {
@@ -93,7 +93,7 @@ export function EventForm({
       ...initialData,
       eventType: initialData?.eventType || 'REHEARSAL',
       status: initialData?.status || 'SCHEDULED',
-      isPublic: initialData?.isPublic ?? true,
+      isPublished: initialData?.isPublished ?? true,
       requiresRSVP: initialData?.requiresRSVP ?? false,
     },
   });
@@ -108,7 +108,7 @@ export function EventForm({
           formData.append(key, String(value));
         }
       });
-      formData.set('isPublic', String(isPublic));
+      formData.set('isPublished', String(isPublished));
       formData.set('requiresRSVP', String(requiresRSVP));
 
       const result = await onSubmit(formData);
@@ -318,8 +318,8 @@ export function EventForm({
                 </p>
               </div>
               <Switch
-                checked={isPublic}
-                onCheckedChange={setIsPublic}
+                checked={isPublished}
+                onCheckedChange={setIsPublished}
               />
             </div>
 

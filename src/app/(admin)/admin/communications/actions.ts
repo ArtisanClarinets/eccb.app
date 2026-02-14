@@ -6,6 +6,7 @@ import { prisma } from '@/lib/db';
 import { requirePermission } from '@/lib/auth/guards';
 import { auditLog } from '@/lib/services/audit';
 import { sendEmail, sendBulkEmails } from '@/lib/email';
+import { MESSAGE_SEND_ALL } from '@/lib/auth/permission-constants';
 
 const composeEmailSchema = z.object({
   subject: z.string().min(1, 'Subject is required'),
@@ -18,7 +19,7 @@ const composeEmailSchema = z.object({
 });
 
 export async function sendBulkEmailAction(formData: FormData) {
-  const session = await requirePermission('communications:write');
+  const session = await requirePermission(MESSAGE_SEND_ALL);
 
   const rawData = Object.fromEntries(formData.entries());
   const customRecipientsRaw = formData.get('customRecipients');

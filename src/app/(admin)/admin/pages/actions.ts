@@ -6,6 +6,11 @@ import { requirePermission, getSession } from '@/lib/auth/guards';
 import { auditLog } from '@/lib/services/audit';
 import { z } from 'zod';
 import { ContentStatus, Prisma, AnnouncementType, AnnouncementAudience } from '@prisma/client';
+import {
+  CMS_EDIT,
+  CMS_DELETE,
+  ANNOUNCEMENT_CREATE,
+} from '@/lib/auth/permission-constants';
 
 const pageSchema = z.object({
   title: z.string().min(1, 'Title is required'),
@@ -21,7 +26,7 @@ const pageSchema = z.object({
 });
 
 export async function createPage(formData: FormData) {
-  const session = await requirePermission('content:create');
+  const session = await requirePermission(CMS_EDIT);
 
   try {
     const contentStr = formData.get('content') as string || '{}';
@@ -94,7 +99,7 @@ export async function createPage(formData: FormData) {
 }
 
 export async function updatePage(id: string, formData: FormData) {
-  const session = await requirePermission('content:update');
+  const session = await requirePermission(CMS_EDIT);
 
   try {
     const contentStr = formData.get('content') as string || '{}';
@@ -179,7 +184,7 @@ export async function updatePage(id: string, formData: FormData) {
 }
 
 export async function deletePage(id: string) {
-  const session = await requirePermission('content:delete');
+  const session = await requirePermission(CMS_DELETE);
 
   try {
     const page = await prisma.page.delete({
@@ -216,7 +221,7 @@ const announcementSchema = z.object({
 });
 
 export async function createAnnouncement(formData: FormData) {
-  const session = await requirePermission('content:create');
+  const session = await requirePermission(ANNOUNCEMENT_CREATE);
 
   try {
     const data = {
@@ -267,7 +272,7 @@ export async function createAnnouncement(formData: FormData) {
 }
 
 export async function updateAnnouncement(id: string, formData: FormData) {
-  const session = await requirePermission('content:update');
+  const session = await requirePermission(CMS_EDIT);
 
   try {
     const data = {
@@ -319,7 +324,7 @@ export async function updateAnnouncement(id: string, formData: FormData) {
 }
 
 export async function deleteAnnouncement(id: string) {
-  const session = await requirePermission('content:delete');
+  const session = await requirePermission(CMS_DELETE);
 
   try {
     const announcement = await prisma.announcement.delete({

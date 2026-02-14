@@ -48,10 +48,10 @@ export const metadata: Metadata = {
       follow: true,
     },
   },
-  manifest: '/manifest.json',
+  // PWA disabled - manifest removed to prevent installability
+  // To re-enable: add manifest: '/manifest.json' and create proper icons
   icons: {
     icon: '/favicon.ico',
-    apple: '/apple-touch-icon.png',
   },
 };
 

@@ -1,371 +1,429 @@
-# Local Development Setup
+# Local Development Setup - Ubuntu 22.04 LTS
 
-## Infrastructure Services
+This guide covers setting up the Emerald Coast Community Band platform for local development on Ubuntu 22.04 LTS.
 
-All services are running locally on Ubuntu 22.04 LTS server. No cloud dependencies.
+## Prerequisites
 
-### PostgreSQL Database
-- **Service:** PostgreSQL 14+
-- **Database:** `eccb_platform`
-- **User:** `eccb_user`
-- **Password:** `eccb_local_dev_password`
-- **Port:** 5432
-- **Connection:** `postgresql://eccb_user:eccb_local_dev_password@localhost:5432/eccb_platform`
+### System Requirements
 
-**Commands:**
+- Ubuntu 22.04 LTS
+- 2GB RAM minimum (4GB recommended)
+- 10GB free disk space
+- sudo access
+
+### Required Software
+
+| Software | Version | Purpose |
+|----------|---------|---------|
+| Node.js | 20.x LTS | JavaScript runtime |
+| PostgreSQL | 14+ | Primary database |
+| Redis | 6.0+ | Caching and job queues |
+| Git | 2.34+ | Version control |
+
+## System Dependencies
+
+Install build tools and dependencies:
+
 ```bash
-# Check status
-sudo systemctl status postgresql
+# Update package lists
+sudo apt update
 
-# Restart if needed
-sudo systemctl restart postgresql
+# Install build essentials
+sudo apt install -y build-essential curl git
 
-# Connect to database
-psql -h localhost -U eccb_user -d eccb_platform
+# Install Python (for node-gyp)
+sudo apt install -y python3 python3-pip
 ```
 
-### Redis Cache
-- **Service:** Redis 6.0+
-- **Port:** 6379
-- **URL:** `redis://localhost:6379`
+## Node.js Installation
 
-**Commands:**
+Install Node.js 20.x LTS via NodeSource:
+
 ```bash
-# Check status
+# Add NodeSource repository
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+
+# Install Node.js
+sudo apt install -y nodejs
+
+# Verify installation
+node --version  # Should show v20.x.x
+npm --version   # Should show 10.x.x
+```
+
+## PostgreSQL Setup
+
+### Installation
+
+```bash
+# Install PostgreSQL 14
+sudo apt install -y postgresql postgresql-contrib
+
+# Start and enable service
+sudo systemctl start postgresql
+sudo systemctl enable postgresql
+
+# Verify status
+sudo systemctl status postgresql
+```
+
+### Database Configuration
+
+```bash
+# Switch to postgres user
+sudo -u postgres psql
+
+# Create database and user
+CREATE DATABASE eccb_platform;
+CREATE USER eccb_user WITH ENCRYPTED PASSWORD 'your_secure_password';
+GRANT ALL PRIVILEGES ON DATABASE eccb_platform TO eccb_user;
+
+# Connect to database and grant schema permissions
+\c eccb_platform
+GRANT ALL ON SCHEMA public TO eccb_user;
+
+# Exit psql
+\q
+```
+
+### Configure Authentication
+
+Edit PostgreSQL configuration to allow password authentication:
+
+```bash
+# Edit pg_hba.conf
+sudo nano /etc/postgresql/14/main/pg_hba.conf
+```
+
+Change the line for local connections from `peer` to `md5`:
+
+```
+# Before:
+local   all             all                                     peer
+
+# After:
+local   all             all                                     md5
+```
+
+Restart PostgreSQL:
+
+```bash
+sudo systemctl restart postgresql
+```
+
+### Test Connection
+
+```bash
+# Test connection with new user
+psql -h localhost -U eccb_user -d eccb_platform
+# Enter password when prompted
+```
+
+## Redis Setup
+
+### Installation
+
+```bash
+# Install Redis
+sudo apt install -y redis-server
+
+# Start and enable service
+sudo systemctl start redis-server
+sudo systemctl enable redis-server
+
+# Verify status
+sudo systemctl status redis-server
+```
+
+### Test Connection
+
+```bash
+# Test Redis connection
+redis-cli ping
+# Should return: PONG
+```
+
+## Application Setup
+
+### Clone Repository
+
+```bash
+# Clone the repository
+git clone https://github.com/your-org/eccb.app.git
+cd eccb.app
+```
+
+### Install Dependencies
+
+```bash
+# Install Node.js dependencies
+npm ci
+```
+
+### Environment Configuration
+
+```bash
+# Copy example environment file
+cp .env.example .env
+
+# Edit environment variables
+nano .env
+```
+
+Configure the following required variables:
+
+```env
+# Database - use the password you set earlier
+DATABASE_URL="postgresql://eccb_user:your_secure_password@localhost:5432/eccb_platform"
+
+# Redis
+REDIS_URL="redis://localhost:6379"
+
+# Auth secrets - generate with: openssl rand -base64 32
+AUTH_SECRET="your-generated-secret-here"
+BETTER_AUTH_SECRET="your-generated-secret-here"
+
+# Application URL
+AUTH_URL="http://localhost:3000"
+BETTER_AUTH_URL="http://localhost:3000"
+NEXT_PUBLIC_APP_URL="http://localhost:3000"
+
+# Storage (local filesystem)
+STORAGE_DRIVER="LOCAL"
+LOCAL_STORAGE_PATH="./storage"
+
+# Email (log to console for development)
+EMAIL_DRIVER="LOG"
+```
+
+Generate auth secrets:
+
+```bash
+# Generate two secrets
+openssl rand -base64 32
+openssl rand -base64 32
+```
+
+### Database Migrations
+
+```bash
+# Run Prisma migrations
+npm run db:migrate
+
+# Generate Prisma client
+npx prisma generate
+```
+
+### Seed Database
+
+```bash
+# Seed with initial data (admin user, roles, permissions)
+npm run db:seed
+```
+
+### Create Storage Directory
+
+```bash
+# Create local storage directory
+mkdir -p storage
+
+# Set permissions (if needed)
+chmod 755 storage
+```
+
+## Running the Application
+
+### Development Mode
+
+```bash
+# Start development server with hot reload
+npm run dev
+```
+
+Access the application at: http://localhost:3000
+
+### Production Build
+
+```bash
+# Build for production
+npm run build
+
+# Start production server
+npm start
+```
+
+### Available Scripts
+
+| Script | Description |
+|--------|-------------|
+| `npm run dev` | Start development server with hot reload |
+| `npm run build` | Type-check and build for production |
+| `npm start` | Start production server (requires build first) |
+| `npm run lint` | Run ESLint on codebase |
+| `npm run test` | Run test suite with Vitest |
+| `npm run db:migrate` | Run database migrations |
+| `npm run db:seed` | Seed database with initial data |
+| `npm run db:studio` | Open Prisma Studio GUI |
+
+## Default Login Credentials
+
+After seeding, a super admin account is created:
+
+- **Email:** `admin@eccb.org` (or value of `SUPER_ADMIN_EMAIL`)
+- **Password:** Value of `SUPER_ADMIN_PASSWORD` in `.env`
+
+**Important:** Change the default password immediately after first login.
+
+## Troubleshooting
+
+### Database Connection Issues
+
+```bash
+# Check PostgreSQL status
+sudo systemctl status postgresql
+
+# Test connection
+psql -h localhost -U eccb_user -d eccb_platform
+
+# Check logs
+sudo tail -f /var/log/postgresql/postgresql-14-main.log
+```
+
+### Redis Connection Issues
+
+```bash
+# Check Redis status
 sudo systemctl status redis-server
 
 # Test connection
 redis-cli ping
 
-# Monitor commands
-redis-cli monitor
+# Check logs
+sudo tail -f /var/log/redis/redis-server.log
 ```
 
-## Music & Media Storage
+### Port Already in Use
 
-The platform supports two primary storage modes. For a truly free setup, **Local Disk** is recommended. For durable cloud storage, use an **S3-Compatible Free Tier**.
-
-### Option A: Local Disk Storage ($0 - Recommended)
-This is the simplest setup for self-hosting.
-
-1. **Create Storage Directory:**
-   ```bash
-   mkdir -p /home/dylan/eccb-storage/music
-   ```
-
-2. **Configure `.env`:**
-   ```env
-   STORAGE_DRIVER="LOCAL"
-   LOCAL_STORAGE_PATH="/home/dylan/eccb-storage/music"
-   ```
-
-### Option B: S3-Compatible Cloud (Free Tiers)
-Use this if you want to store files in the cloud for free.
-
-- **Cloudflare R2:** 10GB free / month.
-- **Backblaze B2:** 10GB free / month (S3-compatible).
-- **MinIO (Local):** For local S3-compatible testing.
-
-**MinIO Setup:**
-- **Service:** MinIO (latest)
-- **API Port:** 9000
-- **Console Port:** 9001
-- **Bucket:** `eccb-music`
-- **Access Key:** `eccb_admin`
-- **Secret Key:** `eccb_local_dev_password`
-- **Data Directory:** `/home/dylan/minio-data`
-
-**Commands:**
 ```bash
-# Start MinIO (if not running)
-MINIO_ROOT_USER=eccb_admin MINIO_ROOT_PASSWORD=eccb_local_dev_password \
-  minio server /home/meb/minio-data --console-address ":9001" &
-
-# Check if running
-curl http://localhost:9000/minio/health/live
-
-# Access web console
-# Open: http://localhost:9001
-# Login: eccb_admin / eccb_local_dev_password
-
-# MinIO CLI commands
-mc alias set local http://localhost:9000 eccb_admin eccb_local_dev_password
-mc ls local/eccb-music
-mc cp myfile.pdf local/eccb-music/
-```
-
-## Application Setup
-
-### Root Directory (Public Website)
-- **Framework:** React 19 + Vite
-- **Port:** 5173
-- **Tailwind:** v4.1.8 (upgraded from v3)
-
-**Commands:**
-```bash
-cd /home/meb/eccb.app
-npm install
-npm run dev
-```
-
-**Access:** http://localhost:5173
-
-### eccb-platform (Next.js Platform)
-- **Framework:** Next.js 16.1.6
-- **Port:** 3001 (3000 is in use)
-- **Database:** PostgreSQL (via Prisma)
-- **Auth:** Better Auth
-
-**Commands:**
-```bash
-cd /home/meb/eccb.app/eccb-platform
-
-# Install dependencies
-npm install
-
-# Run migrations
-npx prisma migrate dev
-
-# Generate Prisma client
-npx prisma generate
-
-# Seed database
-npx prisma db seed
-
-# Start dev server
-npm run dev
-```
-
-**Access:** http://localhost:3001
-
-## Environment Variables
-
-Located at: `/home/meb/eccb.app/eccb-platform/.env`
-
-```env
-# Database
-DATABASE_URL="postgresql://eccb_user:eccb_local_dev_password@localhost:5432/eccb_platform?schema=public"
-DIRECT_URL="postgresql://eccb_user:eccb_local_dev_password@localhost:5432/eccb_platform?schema=public"
-
-# Redis
-REDIS_URL="redis://localhost:6379"
-
-# Better Auth
-AUTH_SECRET="bmufv9JfSQ4piu9D4jaxYfaQ8ZoIdz85E3R9LIdIq/4="
-BETTER_AUTH_SECRET="bmufv9JfSQ4piu9D4jaxYfaQ8ZoIdz85E3R9LIdIq/4="
-AUTH_URL="http://localhost:3001"
-BETTER_AUTH_URL="http://localhost:3001"
-
-# MinIO S3
-S3_ENDPOINT="http://localhost:9000"
-S3_BUCKET_NAME="eccb-music"
-S3_REGION="us-east-1"
-S3_ACCESS_KEY_ID="eccb_admin"
-S3_SECRET_ACCESS_KEY="eccb_local_dev_password"
-S3_FORCE_PATH_STYLE="true"
-
-# App Config
-NEXT_PUBLIC_APP_URL="http://localhost:3001"
-NEXT_PUBLIC_APP_NAME="Emerald Coast Community Band"
-```
-
-## Migration Status
-
-### Completed ✅
-1. **Tailwind CSS v4 Upgrade** - Root app upgraded to Tailwind v4 with CSS imports
-2. **PostgreSQL Setup** - Local database installed and configured
-3. **Redis Setup** - Local cache server running
-4. **MinIO Setup** - Local S3-compatible storage with `eccb-music` bucket
-5. **Prisma Migration** - Schema migrated from SQLite to PostgreSQL
-6. **Environment Configuration** - All local service URLs configured
-7. **Database Schema** - 30+ tables created and ready
-8. **eccb.platform Cleanup** - Obsolete duplicate folder removed
-
-### Next Steps 🚀
-1. **Create Next.js Route Groups:**
-   - `app/(public)` - Public pages (future port from Vite)
-   - `app/(member)` - Member portal (requires auth)
-   - `app/(admin)` - Admin dashboard (elevated permissions)
-   - `app/(auth)` - Login/signup (no auth required)
-
-2. **Port Public Sections:**
-   - Start with Hero section as proof-of-concept
-   - Verify GSAP animations work with `"use client"` directive
-   - Migrate remaining sections (About, Events, Contact, Footer)
-
-3. **Move eccb-platform to Root:**
-   - Archive current Vite app to `legacy/`
-   - Move eccb-platform contents to root
-   - Update all paths and configs
-   - Test unified application
-
-4. **Production Preparation:**
-   - Set up systemd services for MinIO
-   - Configure PostgreSQL for production settings
-   - Implement backup strategies
-   - Set up monitoring and logging
-
-## Troubleshooting
-
-### Port Conflicts
-Port 3000 is occupied. eccb-platform runs on 3001.
-
-**Find process:**
-```bash
+# Find process using port 3000
 lsof -i :3000
-sudo netstat -tulpn | grep 3000
-```
 
-### Database Connection Issues
-```bash
-# Test connection
-psql -h localhost -U eccb_user -d eccb_platform
-
-# Reset if needed
-sudo -u postgres psql -c "DROP DATABASE eccb_platform;"
-sudo -u postgres psql -c "CREATE DATABASE eccb_platform;"
-cd /home/meb/eccb.app/eccb-platform && npx prisma migrate dev
-```
-
-### MinIO Not Accessible
-```bash
-# Check if running
-ps aux | grep minio
-
-# View logs
-cat /home/meb/minio.log
-
-# Restart
-pkill minio
-MINIO_ROOT_USER=eccb_admin MINIO_ROOT_PASSWORD=eccb_local_dev_password \
-  minio server /home/meb/minio-data --console-address ":9001" &
+# Kill process
+kill -9 <PID>
 ```
 
 ### Prisma Issues
+
 ```bash
-# Regenerate client
+# Regenerate Prisma client
 npx prisma generate
 
-# Reset database
+# Reset database (WARNING: destroys all data)
 npx prisma migrate reset
 
-# View database schema
+# View database in GUI
 npx prisma studio
 ```
 
-## Security Notes
-
-⚠️ **Development Credentials**
-Current passwords are for local development only:
-- PostgreSQL: `eccb_local_dev_password`
-- MinIO: `eccb_local_dev_password`
-
-**Before production:**
-1. Generate strong random passwords
-2. Use environment-specific `.env` files
-3. Never commit `.env` to git
-4. Implement proper secrets management
-
-## Service Persistence
-
-### Auto-start on Boot
-
-**PostgreSQL & Redis:** Already enabled via systemd
-
-**MinIO:** Create systemd service
-```bash
-sudo nano /etc/systemd/system/minio.service
-```
-
-```ini
-[Unit]
-Description=MinIO
-Documentation=https://min.io/docs/minio/linux/index.html
-Wants=network-online.target
-After=network-online.target
-AssertFileIsExecutable=/usr/local/bin/minio
-
-[Service]
-WorkingDirectory=/usr/local
-User=meb
-Group=meb
-Environment="MINIO_ROOT_USER=eccb_admin"
-Environment="MINIO_ROOT_PASSWORD=eccb_local_dev_password"
-ExecStart=/usr/local/bin/minio server /home/meb/minio-data --console-address ":9001"
-Restart=always
-RestartSec=10
-LimitNOFILE=65536
-TasksMax=infinity
-TimeoutStopSec=infinity
-SendSIGKILL=no
-
-[Install]
-WantedBy=multi-user.target
-```
+### Build Errors
 
 ```bash
-sudo systemctl daemon-reload
-sudo systemctl enable minio
-sudo systemctl start minio
+# Clear Next.js cache
+rm -rf .next
+
+# Reinstall dependencies
+rm -rf node_modules
+npm ci
+
+# Rebuild
+npm run build
+```
+
+## Health Check
+
+Verify all services are running:
+
+```bash
+# Check application health endpoint
+curl http://localhost:3000/api/health
+
+# Expected response:
+# {"status":"ok","database":"connected","redis":"connected"}
+```
+
+## Log Locations
+
+| Service | Log Path |
+|---------|----------|
+| Application | Console output / `logs/` directory |
+| PostgreSQL | `/var/log/postgresql/postgresql-14-main.log` |
+| Redis | `/var/log/redis/redis-server.log` |
+
+## Development Tips
+
+### Database Management
+
+```bash
+# Open Prisma Studio (GUI for database)
+npm run db:studio
+
+# Create a new migration after schema changes
+npx prisma migrate dev --name description_of_change
+```
+
+### Testing
+
+```bash
+# Run all tests
+npm run test
+
+# Run tests with coverage
+npm run test:coverage
+
+# Run specific test file
+npx vitest run path/to/test.test.ts
+```
+
+### Code Quality
+
+```bash
+# Run linter
+npm run lint
+
+# Fix auto-fixable issues
+npm run lint -- --fix
 ```
 
 ## Architecture Overview
 
 ```
-/home/meb/eccb.app/
-├── eccb-platform/          # Next.js 16 full-stack platform (port 3001)
-│   ├── app/                # Next.js App Router
-│   ├── prisma/             # Database schema & migrations
-│   ├── lib/                # Auth, storage, utilities
-│   └── .env                # Local service configuration
-│
-├── src/                    # React/Vite public website (port 5173)
-│   ├── sections/           # Hero, About, Events, etc.
-│   └── components/ui/      # Radix UI components
-│
-├── public/                 # Static assets
-└── package.json            # Root Vite app dependencies
-
-Local Services:
-├── PostgreSQL:5432         # Database
-├── Redis:6379              # Cache
-└── MinIO:9000/9001         # S3-compatible storage
+eccb.app/
+├── src/
+│   ├── app/                 # Next.js App Router
+│   │   ├── (admin)/         # Admin routes (requires auth + permissions)
+│   │   ├── (auth)/          # Authentication routes
+│   │   ├── (member)/        # Member portal routes (requires auth)
+│   │   ├── (public)/        # Public routes
+│   │   └── api/             # API routes
+│   ├── components/          # React components
+│   ├── lib/                 # Utilities and services
+│   └── workers/             # Background job workers
+├── prisma/
+│   ├── schema.prisma        # Database schema
+│   ├── migrations/          # Migration files
+│   └── seed.ts              # Database seed script
+├── public/                  # Static assets
+├── storage/                 # Local file storage
+└── scripts/                 # Utility scripts
 ```
 
-## Cost Comparison
+## Next Steps
 
-**Previous Plan (Cloud):** ~$800/year
-- Vercel Pro: $240/year
-- Supabase PostgreSQL: $300/year
-- Upstash Redis: $120/year
-- AWS S3: $144/year
-
-**Current Setup (Local):** $0/year
-- Uses existing Ubuntu 22.04 LTS server
-- All services self-hosted
-- No ongoing subscription costs
-- Full control and customization
-
-## Next DevTools Integration
-
-The project supports Next.js MCP (Model Context Protocol) for advanced development features.
-
-**Usage:**
-```bash
-# Discover running Next.js servers
-# (Use next-devtools MCP in Claude Desktop)
-
-# Access at: http://localhost:3001/_next/mcp
-```
-
-MCP provides:
-- Route inspection
-- Error diagnostics
-- Build status
-- Cache management
-- Component hierarchy
+1. Review [DEPLOYMENT.md](./DEPLOYMENT.md) for production deployment
+2. Review [ARCHITECTURE.md](./ARCHITECTURE.md) for system architecture
+3. Review [PERMISSIONS.md](./PERMISSIONS.md) for permission system details
 
 ---
 
-**Last Updated:** January 31, 2026
-**Status:** Development environment fully operational with local infrastructure
+**Last Updated:** February 2026
+**Status:** Production-ready for Ubuntu 22.04 LTS local hosting

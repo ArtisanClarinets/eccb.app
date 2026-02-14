@@ -4,6 +4,23 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import pg from 'pg';
 import bcrypt from 'bcryptjs';
 import { auth } from '@/lib/auth/config';
+import {
+  ALL_PERMISSIONS,
+  MUSIC_PERMISSIONS,
+  MEMBER_PERMISSIONS,
+  MUSIC_VIEW_ALL,
+  MUSIC_CREATE,
+  MUSIC_EDIT,
+  MUSIC_DELETE,
+  MUSIC_UPLOAD,
+  MUSIC_DOWNLOAD_ALL,
+  MUSIC_VIEW_ASSIGNED,
+  MUSIC_DOWNLOAD_ASSIGNED,
+  MEMBER_VIEW_OWN,
+  MEMBER_EDIT_OWN,
+  EVENT_VIEW_ALL,
+  ATTENDANCE_MARK_OWN,
+} from '@/lib/auth/permission-constants';
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
@@ -88,45 +105,15 @@ async function main() {
 
   console.log(`✅ Created ${roles.length} roles`);
 
-  // 2. Permissions
-  const permissions = [
-    // Music
-    { name: 'music.view.all', resource: 'music', action: 'view', scope: 'all' },
-    { name: 'music.view.assigned', resource: 'music', action: 'view', scope: 'assigned' },
-    { name: 'music.create', resource: 'music', action: 'create', scope: null },
-    { name: 'music.edit', resource: 'music', action: 'edit', scope: null },
-    { name: 'music.delete', resource: 'music', action: 'delete', scope: null },
-    { name: 'music.upload', resource: 'music', action: 'upload', scope: null },
-    { name: 'music.download.all', resource: 'music', action: 'download', scope: 'all' },
-    { name: 'music.download.assigned', resource: 'music', action: 'download', scope: 'assigned' },
-    
-    // Members
-    { name: 'member.view.all', resource: 'member', action: 'view', scope: 'all' },
-    { name: 'member.view.own', resource: 'member', action: 'view', scope: 'own' },
-    { name: 'member.edit.all', resource: 'member', action: 'edit', scope: 'all' },
-    { name: 'member.edit.own', resource: 'member', action: 'edit', scope: 'own' },
-    { name: 'member.create', resource: 'member', action: 'create', scope: null },
-    { name: 'member.delete', resource: 'member', action: 'delete', scope: null },
-    
-    // Events
-    { name: 'event.view.all', resource: 'event', action: 'view', scope: 'all' },
-    { name: 'event.create', resource: 'event', action: 'create', scope: null },
-    { name: 'event.edit', resource: 'event', action: 'edit', scope: null },
-    { name: 'event.delete', resource: 'event', action: 'delete', scope: null },
-    
-    // Attendance
-    { name: 'attendance.view.all', resource: 'attendance', action: 'view', scope: 'all' },
-    { name: 'attendance.mark.all', resource: 'attendance', action: 'mark', scope: 'all' },
-    { name: 'attendance.mark.own', resource: 'attendance', action: 'mark', scope: 'own' },
-    
-    // CMS
-    { name: 'cms.edit', resource: 'cms', action: 'edit', scope: null },
-    { name: 'cms.publish', resource: 'cms', action: 'publish', scope: null },
-    
-    // System
-    { name: 'system.config', resource: 'system', action: 'config', scope: null },
-    { name: 'system.audit', resource: 'system', action: 'audit', scope: null },
-  ];
+  // 2. Permissions - use constants from permission-constants.ts
+  // Build permissions array from ALL_PERMISSIONS constant
+  const permissions = ALL_PERMISSIONS.map((name) => {
+    const parts = name.split('.');
+    const resource = parts[0];
+    const action = parts[1];
+    const scope = parts[2] || null;
+    return { name, resource, action, scope };
+  });
 
   for (const perm of permissions) {
     await prisma.permission.upsert({
@@ -155,8 +142,8 @@ async function main() {
   }
 
   // Librarian music permissions
-  const librarianPermTypes = ['music.view.all', 'music.create', 'music.edit', 'music.delete', 'music.upload', 'music.download.all'];
-  for (const permName of librarianPermTypes) {
+  const librarianPermNames = [MUSIC_VIEW_ALL, MUSIC_CREATE, MUSIC_EDIT, MUSIC_DELETE, MUSIC_UPLOAD, MUSIC_DOWNLOAD_ALL];
+  for (const permName of librarianPermNames) {
     const perm = allPermissions.find((p: any) => p.name === permName);
     if (perm) {
       await prisma.rolePermission.upsert({
@@ -168,7 +155,7 @@ async function main() {
   }
 
   // Musician permissions
-  const musicianPermNames = ['music.view.assigned', 'music.download.assigned', 'member.view.own', 'member.edit.own', 'event.view.all', 'attendance.mark.own'];
+  const musicianPermNames = [MUSIC_VIEW_ASSIGNED, MUSIC_DOWNLOAD_ASSIGNED, MEMBER_VIEW_OWN, MEMBER_EDIT_OWN, EVENT_VIEW_ALL, ATTENDANCE_MARK_OWN];
   for (const permName of musicianPermNames) {
     const perm = allPermissions.find((p: any) => p.name === permName);
     if (perm) {
@@ -234,66 +221,88 @@ async function main() {
 
   console.log(`✅ Created ${sections.length} sections`);
 
-  // 6. Super Admin User
+  // 6. Super Admin User - IDEMPOTENT: Only create if doesn't exist
   const adminEmail = process.env.SUPER_ADMIN_EMAIL || 'admin@eccb.org';
-  const adminPassword = process.env.SUPER_ADMIN_PASSWORD || 'eccb_admin_2026!';
+  const adminPassword = process.env.SUPER_ADMIN_PASSWORD;
   
-  // Try to create user via Better Auth to ensure correct password hashing
-  let adminUser: any;
-  
-  try {
-    // Check if user exists first
-    const existingUser = await prisma.user.findUnique({ where: { email: adminEmail } });
+  if (!adminPassword) {
+    console.log('⚠️  SUPER_ADMIN_PASSWORD not set - skipping admin user creation');
+    console.log('   Set SUPER_ADMIN_PASSWORD environment variable to create admin user');
+  } else {
+    // Check if user already exists
+    const existingUser = await prisma.user.findUnique({ 
+      where: { email: adminEmail },
+      include: { roles: true }
+    });
     
     if (existingUser) {
-      console.log('Deleting existing admin user to ensure correct password hash...');
-      await prisma.member.deleteMany({ where: { userId: existingUser.id } });
-      await prisma.userRole.deleteMany({ where: { userId: existingUser.id } });
-      await prisma.session.deleteMany({ where: { userId: existingUser.id } });
-      await prisma.account.deleteMany({ where: { userId: existingUser.id } });
-      await prisma.user.delete({ where: { id: existingUser.id } });
+      console.log(`✅ Admin user already exists: ${adminEmail}`);
+      
+      // Ensure the user has the super admin role
+      const hasSuperAdminRole = existingUser.roles.some(
+        (ur: any) => ur.roleId === superAdminRole.id
+      );
+      
+      if (!hasSuperAdminRole) {
+        await prisma.userRole.create({
+          data: { userId: existingUser.id, roleId: superAdminRole.id },
+        });
+        console.log('✅ Added SUPER_ADMIN role to existing user');
+      }
+      
+      // Ensure member profile exists
+      const existingMember = await prisma.member.findUnique({
+        where: { userId: existingUser.id }
+      });
+      
+      if (!existingMember) {
+        await prisma.member.create({
+          data: {
+            userId: existingUser.id,
+            firstName: 'System',
+            lastName: 'Administrator',
+            email: adminEmail,
+            status: 'ACTIVE',
+            joinDate: new Date(),
+          },
+        });
+        console.log('✅ Created member profile for admin user');
+      }
+    } else {
+      // Create new admin user via Better Auth
+      try {
+        console.log('Creating admin user via Better Auth...');
+        const res = await auth.api.signUpEmail({
+          body: {
+            email: adminEmail,
+            password: adminPassword,
+            name: 'System Administrator',
+          },
+        });
+        
+        if (res.user) {
+          await prisma.userRole.create({
+            data: { userId: res.user.id, roleId: superAdminRole.id },
+          });
+
+          await prisma.member.create({
+            data: {
+              userId: res.user.id,
+              firstName: 'System',
+              lastName: 'Administrator',
+              email: adminEmail,
+              status: 'ACTIVE',
+              joinDate: new Date(),
+            },
+          });
+          
+          console.log(`✅ Created Super Admin user: ${adminEmail}`);
+        }
+      } catch (error) {
+        console.error('❌ Error creating admin user via Auth API:', error);
+        throw error;
+      }
     }
-
-    console.log('Creating admin user via Better Auth...');
-    const res = await auth.api.signUpEmail({
-      body: {
-        email: adminEmail,
-        password: adminPassword,
-        name: 'System Administrator',
-      },
-    });
-    adminUser = res.user;
-  } catch (error) {
-    console.error('Error creating admin user via Auth API:', error);
-    // Fallback? If auth api fails, we might have issues.
-    // Try to find user again in case it was created but threw
-    adminUser = await prisma.user.findUnique({ where: { email: adminEmail } });
-  }
-  
-  if (adminUser) {
-    await prisma.userRole.upsert({
-      where: { userId_roleId: { userId: adminUser.id, roleId: superAdminRole.id } },
-      update: {},
-      create: { userId: adminUser.id, roleId: superAdminRole.id },
-    });
-
-    // Create member profile for admin
-    await prisma.member.upsert({
-      where: { userId: adminUser.id },
-      update: {},
-      create: {
-        userId: adminUser.id,
-        firstName: 'System',
-        lastName: 'Administrator',
-        email: adminEmail,
-        status: 'ACTIVE',
-        joinDate: new Date(),
-      },
-    });
-    
-    console.log(`✅ Verified Super Admin user: ${adminEmail}`);
-  } else {
-    console.error('❌ Failed to create or find Super Admin user');
   }
 
   console.log('🎉 Seeding complete!');

@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db';
 import { requirePermission } from '@/lib/auth/permissions';
 import { auditLog } from '@/lib/services/audit';
 import { z } from 'zod';
+import { MUSIC_CREATE, MUSIC_EDIT, MUSIC_DELETE } from '@/lib/auth/permission-constants';
 
 const musicPieceSchema = z.object({
   title: z.string().min(1, 'Title is required'),
@@ -18,7 +19,7 @@ const musicPieceSchema = z.object({
 });
 
 export async function createMusicPiece(data: any) {
-  await requirePermission('music.create');
+  await requirePermission(MUSIC_CREATE);
 
   const validated = musicPieceSchema.parse(data);
 
@@ -37,7 +38,7 @@ export async function createMusicPiece(data: any) {
 }
 
 export async function updateMusicPiece(id: string, data: any) {
-  await requirePermission('music.edit');
+  await requirePermission(MUSIC_EDIT);
 
   const piece = await prisma.musicPiece.update({
     where: { id },
@@ -55,7 +56,7 @@ export async function updateMusicPiece(id: string, data: any) {
 }
 
 export async function deleteMusicPiece(id: string) {
-  await requirePermission('music.delete');
+  await requirePermission(MUSIC_DELETE);
 
   const piece = await prisma.musicPiece.delete({
     where: { id },

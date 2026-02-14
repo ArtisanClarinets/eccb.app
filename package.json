@@ -9,10 +9,18 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "node --import tsx scripts/start.ts",
+    "start:server": "next start",
+    "start:workers": "tsx src/workers/index.ts",
     "lint": "eslint",
     "test": "vitest",
-    "db:seed": "prisma db seed"
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:watch": "vitest watch",
+    "check-routes": "tsx scripts/check-routes.ts",
+    "db:seed": "prisma db seed",
+    "db:migrate": "prisma migrate dev",
+    "db:studio": "prisma studio"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.982.0",
@@ -49,6 +57,7 @@
     "@types/bcryptjs": "^2.4.6",
     "bcryptjs": "^3.0.3",
     "better-auth": "^1.4.18",
+    "bullmq": "^5.69.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",

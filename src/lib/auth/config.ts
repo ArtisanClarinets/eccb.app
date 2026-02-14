@@ -5,6 +5,20 @@ import { magicLink, twoFactor, admin, openAPI } from 'better-auth/plugins';
 import { sendEmail } from '@/lib/email';
 import { env } from '@/lib/env';
 
+// Session configuration constants
+const SESSION_CONFIG = {
+  // Session expiration: 7 days
+  EXPIRES_IN: 60 * 60 * 24 * 7,
+  // Session refresh interval: 1 day
+  UPDATE_AGE: 60 * 60 * 24,
+  // Cookie cache: 5 minutes
+  COOKIE_CACHE_MAX_AGE: 60 * 5,
+  // Password reset token expiration: 15 minutes
+  PASSWORD_RESET_EXPIRATION: 60 * 15,
+  // Email verification token expiration: 24 hours
+  EMAIL_VERIFICATION_EXPIRATION: 60 * 60 * 24,
+} as const;
+
 export const auth = betterAuth({
   database: prismaAdapter(prisma, {
     provider: 'postgresql',
@@ -12,6 +26,10 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: true,
+    minPasswordLength: 8,
+    maxPasswordLength: 128,
+    // Password reset token expiration (15 minutes)
+    resetPasswordTokenExpiresIn: SESSION_CONFIG.PASSWORD_RESET_EXPIRATION,
     sendResetPassword: async ({ user, url }: { user: { email: string; name?: string | null }; url: string }) => {
       await sendEmail({
         to: user.email,
@@ -19,13 +37,14 @@ export const auth = betterAuth({
         html: `
           <h2>Password Reset Request</h2>
           <p>Hi ${user.name || 'there'},</p>
-          <p>Click the link below to reset your password:</p>
+          <p>We received a request to reset your password. Click the link below to create a new password:</p>
           <p><a href="${url}" style="padding: 12px 24px; background: #0f766e; color: white; text-decoration: none; border-radius: 6px;">Reset Password</a></p>
           <p>Or copy this link: ${url}</p>
-          <p>This link will expire in 1 hour.</p>
-          <p>If you didn't request this, please ignore this email.</p>
+          <p><strong>This link will expire in 15 minutes.</strong></p>
+          <p>If you didn't request this password reset, please ignore this email. Your password will remain unchanged.</p>
+          <p>For security, this link can only be used once.</p>
         `,
-        text: `Reset your password by visiting: ${url}`,
+        text: `Reset your password by visiting: ${url}\n\nThis link expires in 15 minutes.`,
       });
     },
     sendVerificationEmail: async ({ user, url }: { user: { email: string; name?: string | null }; url: string }) => {
@@ -35,13 +54,25 @@ export const auth = betterAuth({
         html: `
           <h2>Welcome to ECCB Platform!</h2>
           <p>Hi ${user.name || 'there'},</p>
-          <p>Please verify your email address by clicking the link below:</p>
+          <p>Thank you for registering. Please verify your email address by clicking the link below:</p>
           <p><a href="${url}" style="padding: 12px 24px; background: #0f766e; color: white; text-decoration: none; border-radius: 6px;">Verify Email</a></p>
           <p>Or copy this link: ${url}</p>
+          <p><strong>This link will expire in 24 hours.</strong></p>
+          <p>If you didn't create an account, please ignore this email.</p>
         `,
-        text: `Verify your email by visiting: ${url}`,
+        text: `Verify your email by visiting: ${url}\n\nThis link expires in 24 hours.`,
       });
     },
+    // Callback after password reset for logging/security
+    onPasswordReset: async ({ user }: { user: { id: string; email: string } }) => {
+      // Log the password reset event
+      console.log(`Password reset completed for user: ${user.email}`);
+      // Could trigger session invalidation here if needed
+    },
+  },
+  emailVerification: {
+    // Auto sign in after verification
+    autoSignInAfterVerification: true,
   },
   socialProviders: {
     google: {
@@ -58,14 +89,17 @@ export const auth = betterAuth({
           subject: 'Sign in to ECCB Platform',
           html: `
             <h2>Magic Link Sign In</h2>
-            <p>Click the link below to sign in:</p>
+            <p>Click the link below to sign in to your account:</p>
             <p><a href="${url}" style="padding: 12px 24px; background: #0f766e; color: white; text-decoration: none; border-radius: 6px;">Sign In</a></p>
             <p>Or copy this link: ${url}</p>
-            <p>This link will expire in 15 minutes.</p>
+            <p><strong>This link will expire in 15 minutes.</strong></p>
+            <p>If you didn't request this sign in link, please ignore this email.</p>
           `,
-          text: `Click the link below to sign in:\n\n${url}`,
+          text: `Click the link below to sign in:\n\n${url}\n\nThis link expires in 15 minutes.`,
         });
       },
+      // Magic link expiration: 15 minutes
+      expiresIn: SESSION_CONFIG.PASSWORD_RESET_EXPIRATION,
     }),
     twoFactor({
       issuer: env.NEXT_PUBLIC_APP_NAME,
@@ -74,16 +108,99 @@ export const auth = betterAuth({
     openAPI(),
   ],
   session: {
-    expiresIn: 60 * 60 * 24 * 7, // 7 days
-    updateAge: 60 * 60 * 24, // 1 day
+    // Session expiration: 7 days
+    expiresIn: SESSION_CONFIG.EXPIRES_IN,
+    // Session refresh interval: 1 day (how often to update session)
+    updateAge: SESSION_CONFIG.UPDATE_AGE,
+    // Cookie caching for performance
     cookieCache: {
       enabled: true,
-      maxAge: 60 * 5, // 5 minutes
+      maxAge: SESSION_CONFIG.COOKIE_CACHE_MAX_AGE,
     },
+    // Store sessions in database for persistence and management
+    storeSessionInDatabase: true,
   },
   secret: env.BETTER_AUTH_SECRET,
   baseURL: env.BETTER_AUTH_URL,
   trustedOrigins: [env.NEXT_PUBLIC_APP_URL],
+  // Secure cookie configuration
+  cookies: {
+    sessionToken: {
+      name: 'better-auth.session_token',
+      attributes: {
+        httpOnly: true,
+        sameSite: env.NODE_ENV === 'production' ? 'lax' : 'lax',
+        path: '/',
+        secure: env.NODE_ENV === 'production',
+        // Set domain in production for subdomain sharing if needed
+        ...(env.NODE_ENV === 'production' && {
+          domain: new URL(env.NEXT_PUBLIC_APP_URL).hostname,
+        }),
+      },
+    },
+    csrfToken: {
+      name: 'better-auth.csrf_token',
+      attributes: {
+        httpOnly: true,
+        sameSite: env.NODE_ENV === 'production' ? 'strict' : 'lax',
+        path: '/',
+        secure: env.NODE_ENV === 'production',
+      },
+    },
+    state: {
+      name: 'better-auth.state',
+      attributes: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: env.NODE_ENV === 'production',
+        maxAge: SESSION_CONFIG.PASSWORD_RESET_EXPIRATION, // 15 minutes
+      },
+    },
+    pkceCodeVerifier: {
+      name: 'better-auth.pkce_code_verifier',
+      attributes: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: env.NODE_ENV === 'production',
+        maxAge: SESSION_CONFIG.PASSWORD_RESET_EXPIRATION, // 15 minutes
+      },
+    },
+    dontRememberToken: {
+      name: 'better-auth.dont_remember',
+      attributes: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: env.NODE_ENV === 'production',
+        maxAge: 60 * 60 * 24 * 365, // 1 year
+      },
+    },
+  },
+  // Advanced security settings
+  advanced: {
+    // Use secure cookies in production
+    useSecureCookies: env.NODE_ENV === 'production',
+    // Disable debug in production
+    debug: env.NODE_ENV === 'development',
+    // Cross-subdomain cookies in production
+    crossSubDomainCookies: {
+      enabled: env.NODE_ENV === 'production',
+      domain: env.NODE_ENV === 'production' 
+        ? new URL(env.NEXT_PUBLIC_APP_URL).hostname 
+        : undefined,
+    },
+  },
+  // Rate limiting configuration (handled at API level, but Better Auth has built-in)
+  rateLimit: {
+    // Enable built-in rate limiting
+    enabled: true,
+    // Window for rate limiting (in seconds)
+    window: 60,
+    // Max requests per window
+    max: 10,
+  },
 });
 
 export type Session = typeof auth.$Infer.Session;

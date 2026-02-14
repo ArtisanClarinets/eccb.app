@@ -15,7 +15,8 @@ const envSchema = z.object({
   
   // Super Admin Credentials
   SUPER_ADMIN_EMAIL: z.string().email().default('admin@eccb.org'),
-  SUPER_ADMIN_PASSWORD: z.string().min(8).default('eccb_admin_2026!'),
+  // No default password - must be explicitly set, especially in production
+  SUPER_ADMIN_PASSWORD: z.string().min(8, 'SUPER_ADMIN_PASSWORD must be at least 8 characters').optional(),
 
   // OAuth (optional)
   GOOGLE_CLIENT_ID: z.string().optional(),
@@ -24,18 +25,20 @@ const envSchema = z.object({
   // Storage Configuration
   STORAGE_DRIVER: z.enum(['LOCAL', 'S3']).default('LOCAL'),
   LOCAL_STORAGE_PATH: z.string().default('./storage'),
+  MAX_FILE_SIZE: z.coerce.number().default(52428800), // 50MB default
 
-  // S3/MinIO Storage
-  S3_ENDPOINT: z.string().url().default('http://localhost:9000'),
-  S3_BUCKET_NAME: z.string().default('eccb-music'),
-  S3_REGION: z.string().default('us-east-1'),
-  S3_ACCESS_KEY_ID: z.string().min(1, 'S3_ACCESS_KEY_ID is required'),
-  S3_SECRET_ACCESS_KEY: z.string().min(1, 'S3_SECRET_ACCESS_KEY is required'),
+  // S3/MinIO Storage (optional when using LOCAL storage)
+  S3_ENDPOINT: z.string().optional(),
+  S3_BUCKET_NAME: z.string().optional(),
+  S3_REGION: z.string().optional(),
+  S3_ACCESS_KEY_ID: z.string().optional(),
+  S3_SECRET_ACCESS_KEY: z.string().optional(),
   S3_FORCE_PATH_STYLE: z.string().default('true').transform(val => val === 'true'),
   
-  // Email
-  SMTP_HOST: z.string().default('localhost'),
-  SMTP_PORT: z.coerce.number().default(25),
+  // Email Configuration
+  EMAIL_DRIVER: z.enum(['SMTP', 'LOG', 'NONE']).default('LOG'),
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().optional(),
   SMTP_USER: z.string().optional(),
   SMTP_PASSWORD: z.string().optional(),
   SMTP_FROM: z.string().email().default('noreply@eccb.app'),
@@ -67,7 +70,39 @@ function validateEnv() {
     throw new Error('Invalid environment variables');
   }
   
-  return parsed.data;
+  const data = parsed.data;
+  
+  // Validate S3 credentials when using S3 storage
+  if (data.STORAGE_DRIVER === 'S3') {
+    if (!data.S3_ACCESS_KEY_ID || !data.S3_SECRET_ACCESS_KEY) {
+      console.error('❌ S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY are required when STORAGE_DRIVER is S3');
+      throw new Error('S3 credentials required for S3 storage driver');
+    }
+    if (!data.S3_ENDPOINT || !data.S3_BUCKET_NAME) {
+      console.error('❌ S3_ENDPOINT and S3_BUCKET_NAME are required when STORAGE_DRIVER is S3');
+      throw new Error('S3 endpoint and bucket required for S3 storage driver');
+    }
+  }
+  
+  // Validate SMTP credentials when using SMTP email driver
+  if (data.EMAIL_DRIVER === 'SMTP') {
+    if (!data.SMTP_HOST) {
+      console.error('❌ SMTP_HOST is required when EMAIL_DRIVER is SMTP');
+      throw new Error('SMTP host required for SMTP email driver');
+    }
+    if (!data.SMTP_PORT) {
+      console.error('❌ SMTP_PORT is required when EMAIL_DRIVER is SMTP');
+      throw new Error('SMTP port required for SMTP email driver');
+    }
+  }
+  
+  // Require SUPER_ADMIN_PASSWORD in production
+  if (data.NODE_ENV === 'production' && !data.SUPER_ADMIN_PASSWORD) {
+    console.error('❌ SUPER_ADMIN_PASSWORD is required in production');
+    throw new Error('SUPER_ADMIN_PASSWORD must be set in production environment');
+  }
+  
+  return data;
 }
 
 export const env = validateEnv();

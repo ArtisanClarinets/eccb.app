@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getSession } from '@/lib/auth/guards';
+import { validateCSRF } from '@/lib/csrf';
+import { applyRateLimit } from '@/lib/rate-limit';
 
 export async function GET(request: NextRequest) {
+  // Apply rate limiting
+  const rateLimitResponse = await applyRateLimit(request, 'api');
+  if (rateLimitResponse) {
+    return rateLimitResponse;
+  }
+
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -16,6 +24,7 @@ export async function GET(request: NextRequest) {
   const page = parseInt(searchParams.get('page') || '1');
   const limit = parseInt(searchParams.get('limit') || '50');
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where: any = {};
 
   if (status) {
@@ -99,6 +108,126 @@ export async function GET(request: NextRequest) {
     console.error('Failed to fetch members:', error);
     return NextResponse.json(
       { error: 'Failed to fetch members' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(request: NextRequest) {
+  // Apply rate limiting
+  const rateLimitResponse = await applyRateLimit(request, 'api');
+  if (rateLimitResponse) {
+    return rateLimitResponse;
+  }
+
+  // Validate CSRF
+  const csrfResult = validateCSRF(request);
+  if (!csrfResult.valid) {
+    return NextResponse.json(
+      { error: 'CSRF validation failed', reason: csrfResult.reason },
+      { status: 403 }
+    );
+  }
+
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  try {
+    const body = await request.json();
+    
+    // Create member logic would go here
+    // This is a placeholder - actual implementation would validate and create
+    
+    return NextResponse.json({ 
+      message: 'Member creation endpoint - implement with proper validation',
+    });
+  } catch (error) {
+    console.error('Failed to create member:', error);
+    return NextResponse.json(
+      { error: 'Failed to create member' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PUT(request: NextRequest) {
+  // Apply rate limiting
+  const rateLimitResponse = await applyRateLimit(request, 'api');
+  if (rateLimitResponse) {
+    return rateLimitResponse;
+  }
+
+  // Validate CSRF
+  const csrfResult = validateCSRF(request);
+  if (!csrfResult.valid) {
+    return NextResponse.json(
+      { error: 'CSRF validation failed', reason: csrfResult.reason },
+      { status: 403 }
+    );
+  }
+
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  try {
+    const body = await request.json();
+    
+    // Update member logic would go here
+    
+    return NextResponse.json({ 
+      message: 'Member update endpoint - implement with proper validation',
+    });
+  } catch (error) {
+    console.error('Failed to update member:', error);
+    return NextResponse.json(
+      { error: 'Failed to update member' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  // Apply rate limiting
+  const rateLimitResponse = await applyRateLimit(request, 'api');
+  if (rateLimitResponse) {
+    return rateLimitResponse;
+  }
+
+  // Validate CSRF
+  const csrfResult = validateCSRF(request);
+  if (!csrfResult.valid) {
+    return NextResponse.json(
+      { error: 'CSRF validation failed', reason: csrfResult.reason },
+      { status: 403 }
+    );
+  }
+
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  try {
+    const searchParams = request.nextUrl.searchParams;
+    const id = searchParams.get('id');
+    
+    if (!id) {
+      return NextResponse.json({ error: 'Member ID required' }, { status: 400 });
+    }
+    
+    // Delete member logic would go here
+    
+    return NextResponse.json({ 
+      message: 'Member delete endpoint - implement with proper validation',
+    });
+  } catch (error) {
+    console.error('Failed to delete member:', error);
+    return NextResponse.json(
+      { error: 'Failed to delete member' },
       { status: 500 }
     );
   }
