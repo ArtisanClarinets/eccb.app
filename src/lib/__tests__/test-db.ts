@@ -20,9 +20,7 @@ let prisma: PrismaClient | null = null;
  */
 export function getTestPrisma(): PrismaClient {
   if (!prisma) {
-    prisma = new PrismaClient({
-      datasourceUrl: process.env.DATABASE_URL,
-    });
+    prisma = new PrismaClient();
   }
   return prisma;
 }
@@ -307,7 +305,7 @@ export function createMockDatabase() {
     
     // User-Role operations
     userRole: {
-      findMany: vi.fn(({ where, include }: { where?: { userId?: string }; include?: Record<string, boolean> }) => {
+      findMany: vi.fn(({ where, include }: { where?: { userId?: string }; include?: { role?: { include?: { permissions?: boolean } } } }) => {
         const results: Array<Record<string, unknown>> = [];
         
         for (const [id, ur] of data.userRoles.entries()) {
@@ -391,10 +389,12 @@ export function createMockDatabase() {
     },
     
     musicFile: {
-      findFirst: vi.fn(({ where, include }: { 
+      findFirst: vi.fn((args?: { 
         where?: { storageKey?: string };
         include?: { piece?: { include?: { assignments?: boolean } } };
       }) => {
+        const where = args?.where;
+        const include = args?.include;
         for (const file of data.musicFiles.values()) {
           if (!where || !where.storageKey || file.storageKey === where.storageKey) {
             if (include?.piece) {

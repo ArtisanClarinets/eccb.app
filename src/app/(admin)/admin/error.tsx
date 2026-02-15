@@ -13,6 +13,28 @@ export default function AdminError({ error, reset }: ErrorProps) {
   useEffect(() => {
     // Log the error to an error reporting service
     console.error('Admin panel error:', error);
+    
+    // Track error with monitoring service
+    fetch('/api/admin/monitoring', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'client_error',
+        error: {
+          name: error.name,
+          message: error.message,
+          stack: error.stack,
+          digest: error.digest,
+        },
+        context: {
+          component: 'AdminErrorBoundary',
+          url: window.location.href,
+          timestamp: new Date().toISOString(),
+        },
+      }),
+    }).catch(() => {
+      // Silently fail - don't cause infinite error loops
+    });
   }, [error]);
 
   return (

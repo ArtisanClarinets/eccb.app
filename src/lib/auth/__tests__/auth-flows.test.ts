@@ -170,7 +170,7 @@ describe('Authentication Flows', () => {
     it('should generate valid TOTP secret format', () => {
       // TOTP secrets should be base32 encoded
       const isValidBase32 = (str: string): boolean => {
-        return /^[A-Z2-7]+=*$/.test(str.toUpperCase());
+        return /^[A-Z2-7]+$/.test(str.toUpperCase());
       };
 
       // Mock secret generation
@@ -359,20 +359,24 @@ describe('Authentication Flows', () => {
 
   describe('Social Providers', () => {
     it('should disable Google OAuth when credentials are not configured', () => {
+      const clientId: string | undefined = undefined;
+      const clientSecret: string | undefined = undefined;
       const googleConfig = {
-        clientId: undefined,
-        clientSecret: undefined,
-        enabled: !!(undefined && undefined), // Both must be set
+        clientId: clientId,
+        clientSecret: clientSecret,
+        enabled: !!(clientId && clientSecret), // Both must be set
       };
 
       expect(googleConfig.enabled).toBe(false);
     });
 
     it('should enable Google OAuth when credentials are configured', () => {
+      const clientId = 'test-client-id';
+      const clientSecret = 'test-client-secret';
       const googleConfig = {
-        clientId: 'test-client-id',
-        clientSecret: 'test-client-secret',
-        enabled: !!('test-client-id' && 'test-client-secret'),
+        clientId: clientId,
+        clientSecret: clientSecret,
+        enabled: !!(clientId && clientSecret),
       };
 
       expect(googleConfig.enabled).toBe(true);

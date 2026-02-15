@@ -5,28 +5,37 @@
  * mocks, and configurations.
  */
 
-import { vi } from 'vitest';
+import { vi, afterEach } from 'vitest';
+import '@testing-library/jest-dom/vitest';
 
 // Set environment variables BEFORE any modules are imported
-process.env.NODE_ENV = 'test';
-process.env.DATABASE_URL = 'postgresql://test:test@localhost:5432/eccb_test';
-process.env.REDIS_URL = 'redis://localhost:6379/15'; // Use Redis DB 15 for tests
-process.env.AUTH_SECRET = 'test-secret-key-for-testing-min-32-chars';
-process.env.BETTER_AUTH_SECRET = 'test-secret-key-for-testing-min-32-chars';
-process.env.BETTER_AUTH_URL = 'http://localhost:3000';
-process.env.AUTH_URL = 'http://localhost:3000';
-process.env.NEXT_PUBLIC_APP_URL = 'http://localhost:3000';
-process.env.NEXT_PUBLIC_APP_NAME = 'ECCB Test';
-process.env.STORAGE_DRIVER = 'LOCAL';
-process.env.LOCAL_STORAGE_PATH = './storage/test';
-process.env.S3_ENDPOINT = '';
-process.env.S3_ACCESS_KEY_ID = '';
-process.env.S3_SECRET_ACCESS_KEY = '';
-process.env.S3_BUCKET_NAME = '';
-process.env.S3_REGION = 'us-east-1';
-process.env.S3_FORCE_PATH_STYLE = 'true';
-process.env.EMAIL_DRIVER = 'LOG';
-process.env.SMTP_FROM = 'noreply@eccb.app';
+// Use Object.defineProperty for NODE_ENV since it's read-only
+Object.defineProperty(process, 'env', {
+  value: {
+    ...process.env,
+    NODE_ENV: 'test',
+    DATABASE_URL: 'postgresql://test:test@localhost:5432/eccb_test',
+    REDIS_URL: 'redis://localhost:6379/15',
+    AUTH_SECRET: 'test-secret-key-for-testing-min-32-chars',
+    BETTER_AUTH_SECRET: 'test-secret-key-for-testing-min-32-chars',
+    BETTER_AUTH_URL: 'http://localhost:3000',
+    AUTH_URL: 'http://localhost:3000',
+    NEXT_PUBLIC_APP_URL: 'http://localhost:3000',
+    NEXT_PUBLIC_APP_NAME: 'ECCB Test',
+    STORAGE_DRIVER: 'LOCAL',
+    LOCAL_STORAGE_PATH: './storage/test',
+    S3_ENDPOINT: '',
+    S3_ACCESS_KEY_ID: '',
+    S3_SECRET_ACCESS_KEY: '',
+    S3_BUCKET_NAME: '',
+    S3_REGION: 'us-east-1',
+    S3_FORCE_PATH_STYLE: 'true',
+    EMAIL_DRIVER: 'LOG',
+    SMTP_FROM: 'noreply@eccb.app',
+  },
+  writable: true,
+  configurable: true,
+});
 
 // Mock the env module to avoid validation at import time
 vi.mock('@/lib/env', () => ({

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { prisma } from '@/lib/db';
 import { requirePermission } from '@/lib/auth/guards';
-import { formatDate, formatRelativeTime } from '@/lib/date';
+import { formatDate } from '@/lib/date';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -26,12 +26,14 @@ import {
   Plus,
   MoreHorizontal,
   Edit,
-  Trash2,
   Pin,
   AlertTriangle,
   Info,
   Calendar,
+  Send,
+  Archive,
 } from 'lucide-react';
+import { DeleteAnnouncementButton } from './delete-button';
 
 export default async function AdminAnnouncementsPage() {
   await requirePermission('content:read');
@@ -226,6 +228,50 @@ export default async function AdminAnnouncementsPage() {
                                 <Edit className="mr-2 h-4 w-4" />
                                 Edit
                               </Link>
+                            </DropdownMenuItem>
+                            {announcement.status === 'DRAFT' && (
+                              <DropdownMenuItem asChild>
+                                <form action={async () => {
+                                  'use server';
+                                  const { publishAnnouncement } = await import('./actions');
+                                  await publishAnnouncement(announcement.id);
+                                }}>
+                                  <button type="submit" className="flex w-full items-center">
+                                    <Send className="mr-2 h-4 w-4" />
+                                    Publish Now
+                                  </button>
+                                </form>
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem asChild>
+                              <form action={async () => {
+                                'use server';
+                                const { toggleAnnouncementPin } = await import('./actions');
+                                await toggleAnnouncementPin(announcement.id);
+                              }}>
+                                <button type="submit" className="flex w-full items-center">
+                                  <Pin className="mr-2 h-4 w-4" />
+                                  {announcement.isPinned ? 'Unpin' : 'Pin'}
+                                </button>
+                              </form>
+                            </DropdownMenuItem>
+                            {announcement.status !== 'ARCHIVED' && (
+                              <DropdownMenuItem asChild>
+                                <form action={async () => {
+                                  'use server';
+                                  const { archiveAnnouncement } = await import('./actions');
+                                  await archiveAnnouncement(announcement.id);
+                                }}>
+                                  <button type="submit" className="flex w-full items-center">
+                                    <Archive className="mr-2 h-4 w-4" />
+                                    Archive
+                                  </button>
+                                </form>
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem asChild className="text-destructive focus:text-destructive">
+                              <DeleteAnnouncementButton id={announcement.id} title={announcement.title} />
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>

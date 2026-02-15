@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/db';
 import { requirePermission, getSession } from '@/lib/auth/guards';
 import { auditLog } from '@/lib/services/audit';
+import { invalidatePageCache, invalidateAnnouncementCache } from '@/lib/cache';
 import { z } from 'zod';
 import { ContentStatus, Prisma, AnnouncementType, AnnouncementAudience } from '@prisma/client';
 import {
@@ -84,6 +85,9 @@ export async function createPage(formData: FormData) {
       entityId: page.id,
       newValues: { title: page.title, slug: page.slug },
     });
+
+    // Invalidate Redis cache for this page
+    await invalidatePageCache(page.slug);
 
     revalidatePath('/admin/pages');
     revalidatePath(`/${page.slug}`);
@@ -166,6 +170,12 @@ export async function updatePage(id: string, formData: FormData) {
       newValues: { title: page.title, slug: page.slug },
     });
 
+    // Invalidate Redis cache for both old and new slugs
+    await invalidatePageCache(page.slug);
+    if (currentPage?.slug && currentPage.slug !== page.slug) {
+      await invalidatePageCache(currentPage.slug);
+    }
+
     revalidatePath('/admin/pages');
     revalidatePath(`/admin/pages/${id}`);
     revalidatePath(`/${page.slug}`);
@@ -197,6 +207,9 @@ export async function deletePage(id: string) {
       entityId: id,
       newValues: { title: page.title, slug: page.slug },
     });
+
+    // Invalidate Redis cache for this page
+    await invalidatePageCache(page.slug);
 
     revalidatePath('/admin/pages');
     revalidatePath(`/${page.slug}`);
@@ -258,6 +271,9 @@ export async function createAnnouncement(formData: FormData) {
       newValues: { title: announcement.title },
     });
 
+    // Invalidate announcement cache
+    await invalidateAnnouncementCache();
+
     revalidatePath('/admin/announcements');
     revalidatePath('/member');
 
@@ -309,6 +325,9 @@ export async function updateAnnouncement(id: string, formData: FormData) {
       newValues: { title: announcement.title },
     });
 
+    // Invalidate announcement cache
+    await invalidateAnnouncementCache();
+
     revalidatePath('/admin/announcements');
     revalidatePath(`/admin/announcements/${id}`);
     revalidatePath('/member');
@@ -337,6 +356,9 @@ export async function deleteAnnouncement(id: string) {
       entityId: id,
       newValues: { title: announcement.title },
     });
+
+    // Invalidate announcement cache
+    await invalidateAnnouncementCache();
 
     revalidatePath('/admin/announcements');
     revalidatePath('/member');

@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { prisma } from '@/lib/db';
-import { requirePermission } from '@/lib/auth/guards';
+import { requirePermission, getMemberSectionFilter, getSession } from '@/lib/auth/guards';
 import { formatDate } from '@/lib/date';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -38,14 +38,26 @@ import {
   Edit,
   Mail,
   Music,
+  Download,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Lock,
 } from 'lucide-react';
 
 interface SearchParams {
   search?: string;
   status?: string;
   section?: string;
-  page?: string;
+  instrument?: string;
+  role?: string;
+  sort?: string;
+  order?: string;
+  page?: string | number;
 }
+
+type SortField = 'name' | 'joinDate' | 'status' | 'createdAt';
+type SortOrder = 'asc' | 'desc';
 
 export default async function AdminMembersPage({
   searchParams,
@@ -55,13 +67,24 @@ export default async function AdminMembersPage({
   await requirePermission('members:read');
   const params = await searchParams;
 
+  // Get the current session to check for section leader scoping
+  const session = await getSession();
+  const sectionFilterId = await getMemberSectionFilter();
+  const isSectionLeaderScoped = sectionFilterId !== null;
+
   const search = params.search || '';
   const status = params.status || '';
-  const sectionId = params.section || '';
-  const page = parseInt(params.page || '1');
+  // If user is a section leader, always filter to their section
+  const sectionId = sectionFilterId || params.section || '';
+  const instrumentId = params.instrument || '';
+  const roleId = params.role || '';
+  const sortField = (params.sort as SortField) || 'name';
+  const sortOrder = (params.order as SortOrder) || 'asc';
+  const page = typeof params.page === 'number' ? params.page : parseInt(params.page || '1');
   const limit = 20;
 
-  const where: any = {};
+  // Build where clause
+  const where: Record<string, unknown> = {};
 
   if (status) {
     where.status = status;
@@ -73,17 +96,71 @@ export default async function AdminMembersPage({
     };
   }
 
-  if (search) {
-    where.OR = [
-      { firstName: { contains: search } },
-      { lastName: { contains: search } },
-      { email: { contains: search } },
-      { user: { name: { contains: search } } },
-      { user: { email: { contains: search } } },
-    ];
+  if (instrumentId) {
+    where.instruments = {
+      some: { instrumentId },
+    };
   }
 
-  const [members, total, sections, stats] = await Promise.all([
+  if (roleId) {
+    where.user = {
+      roles: {
+        some: { roleId },
+      },
+    };
+  }
+
+  if (search) {
+    const searchConditions = [
+      { firstName: { contains: search, mode: 'insensitive' } },
+      { lastName: { contains: search, mode: 'insensitive' } },
+      { email: { contains: search, mode: 'insensitive' } },
+    ];
+    
+    // If there's already a user filter from role, merge with AND
+    if (roleId) {
+      where.user = {
+        ...where.user as object,
+        AND: [
+          where.user as object,
+          {
+            OR: [
+              { name: { contains: search, mode: 'insensitive' } },
+              { email: { contains: search, mode: 'insensitive' } },
+            ],
+          },
+        ],
+      };
+    } else {
+      (where as Record<string, unknown>).OR = [
+        ...searchConditions,
+        { user: { name: { contains: search, mode: 'insensitive' } } },
+        { user: { email: { contains: search, mode: 'insensitive' } } },
+      ];
+    }
+  }
+
+  // Build orderBy clause
+  const orderBy: Record<string, unknown> = {};
+  switch (sortField) {
+    case 'name':
+      orderBy.lastName = sortOrder;
+      orderBy.firstName = sortOrder;
+      break;
+    case 'joinDate':
+      orderBy.joinDate = sortOrder;
+      break;
+    case 'status':
+      orderBy.status = sortOrder;
+      break;
+    case 'createdAt':
+      orderBy.createdAt = sortOrder;
+      break;
+    default:
+      orderBy.lastName = 'asc';
+  }
+
+  const [members, total, sections, instruments, roles, stats] = await Promise.all([
     prisma.member.findMany({
       where,
       include: {
@@ -102,7 +179,7 @@ export default async function AdminMembersPage({
           include: { section: true },
         },
       },
-      orderBy: { lastName: 'asc' },
+      orderBy,
       skip: (page - 1) * limit,
       take: limit,
     }),
@@ -110,6 +187,14 @@ export default async function AdminMembersPage({
     prisma.section.findMany({
       select: { id: true, name: true },
       orderBy: { sortOrder: 'asc' },
+    }),
+    prisma.instrument.findMany({
+      select: { id: true, name: true, family: true },
+      orderBy: [{ family: 'asc' }, { name: 'asc' }],
+    }),
+    prisma.role.findMany({
+      select: { id: true, name: true, displayName: true },
+      orderBy: { name: 'asc' },
     }),
     prisma.member.groupBy({
       by: ['status'],
@@ -136,6 +221,54 @@ export default async function AdminMembersPage({
     ALUMNI: 'secondary',
   };
 
+  // Helper to build filter URL
+  const buildFilterUrl = (overrides: Partial<SearchParams> = {}) => {
+    const params = new URLSearchParams();
+    const newSearch = overrides.search !== undefined ? overrides.search : search;
+    const newStatus = overrides.status !== undefined ? overrides.status : status;
+    const newSection = overrides.section !== undefined ? overrides.section : sectionId;
+    const newInstrument = overrides.instrument !== undefined ? overrides.instrument : instrumentId;
+    const newRole = overrides.role !== undefined ? overrides.role : roleId;
+    const newSort = overrides.sort !== undefined ? overrides.sort : sortField;
+    const newOrder = overrides.order !== undefined ? overrides.order : sortOrder;
+    const newPage = typeof overrides.page === 'number' ? overrides.page : (overrides.page ? parseInt(overrides.page) : 1);
+
+    if (newSearch) params.set('search', newSearch);
+    if (newStatus) params.set('status', newStatus);
+    if (newSection) params.set('section', newSection);
+    if (newInstrument) params.set('instrument', newInstrument);
+    if (newRole) params.set('role', newRole);
+    if (newSort !== 'name') params.set('sort', newSort);
+    if (newOrder !== 'asc') params.set('order', newOrder);
+    if (newPage > 1) params.set('page', newPage.toString());
+
+    const queryString = params.toString();
+    return `/admin/members${queryString ? `?${queryString}` : ''}`;
+  };
+
+  // Helper to build export API URL
+  const buildExportUrl = () => {
+    const params = new URLSearchParams();
+    if (search) params.set('search', search);
+    if (status) params.set('status', status);
+    if (sectionId) params.set('section', sectionId);
+    if (instrumentId) params.set('instrument', instrumentId);
+    if (roleId) params.set('role', roleId);
+
+    const queryString = params.toString();
+    return `/api/admin/members/export${queryString ? `?${queryString}` : ''}`;
+  };
+
+  // Helper to render sort icon
+  const getSortIcon = (field: SortField) => {
+    if (sortField !== field) return <ArrowUpDown className="ml-1 h-4 w-4" />;
+    return sortOrder === 'asc' ? (
+      <ArrowUp className="ml-1 h-4 w-4" />
+    ) : (
+      <ArrowDown className="ml-1 h-4 w-4" />
+    );
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -145,12 +278,20 @@ export default async function AdminMembersPage({
             Manage band members, sections, and instruments
           </p>
         </div>
-        <Link href="/admin/members/new">
-          <Button>
-            <UserPlus className="mr-2 h-4 w-4" />
-            Add Member
-          </Button>
-        </Link>
+        <div className="flex gap-2">
+          <a href={buildExportUrl()}>
+            <Button variant="outline" type="button">
+              <Download className="mr-2 h-4 w-4" />
+              Export CSV
+            </Button>
+          </a>
+          <Link href="/admin/members/new">
+            <Button>
+              <UserPlus className="mr-2 h-4 w-4" />
+              Add Member
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Stats */}
@@ -198,8 +339,18 @@ export default async function AdminMembersPage({
       {/* Filters */}
       <Card>
         <CardHeader>
-          <CardTitle>Member Directory</CardTitle>
-          <CardDescription>Search and filter band members</CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Member Directory</CardTitle>
+              <CardDescription>Search and filter band members</CardDescription>
+            </div>
+            {isSectionLeaderScoped && (
+              <div className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-500 bg-amber-50 dark:bg-amber-950/30 px-3 py-1.5 rounded-md">
+                <Lock className="h-4 w-4" />
+                <span>Scoped to your section only</span>
+              </div>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           <form className="flex flex-col sm:flex-row gap-4 mb-6">
@@ -207,7 +358,7 @@ export default async function AdminMembersPage({
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 name="search"
-                placeholder="Search by name or email..."
+                placeholder="Search by name, email, or instrument..."
                 defaultValue={search}
                 className="pl-9"
               />
@@ -226,8 +377,8 @@ export default async function AdminMembersPage({
                 <SelectItem value="ALUMNI">Alumni</SelectItem>
               </SelectContent>
             </Select>
-            <Select name="section" defaultValue={sectionId}>
-              <SelectTrigger className="w-[180px]">
+            <Select name="section" defaultValue={sectionId} disabled={isSectionLeaderScoped}>
+              <SelectTrigger className={`w-[180px] ${isSectionLeaderScoped ? 'opacity-60 cursor-not-allowed' : ''}`}>
                 <SelectValue placeholder="All Sections" />
               </SelectTrigger>
               <SelectContent>
@@ -235,6 +386,32 @@ export default async function AdminMembersPage({
                 {sections.map((section) => (
                   <SelectItem key={section.id} value={section.id}>
                     {section.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select name="instrument" defaultValue={instrumentId}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="All Instruments" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">All Instruments</SelectItem>
+                {instruments.map((instrument) => (
+                  <SelectItem key={instrument.id} value={instrument.id}>
+                    {instrument.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select name="role" defaultValue={roleId}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue placeholder="All Roles" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">All Roles</SelectItem>
+                {roles.map((role) => (
+                  <SelectItem key={role.id} value={role.id}>
+                    {role.displayName || role.name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -247,7 +424,7 @@ export default async function AdminMembersPage({
               <Users className="mx-auto h-12 w-12 text-muted-foreground" />
               <h3 className="mt-4 text-lg font-semibold">No members found</h3>
               <p className="text-muted-foreground">
-                {search || status || sectionId
+                {search || status || sectionId || instrumentId || roleId
                   ? 'Try adjusting your search or filters'
                   : 'Add your first member to get started'}
               </p>
@@ -257,12 +434,24 @@ export default async function AdminMembersPage({
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Name</TableHead>
+                    <TableHead>
+                      <Link href={buildFilterUrl({ sort: 'name', order: sortField === 'name' && sortOrder === 'asc' ? 'desc' : 'asc' })} className="flex items-center hover:text-foreground">
+                        Name {getSortIcon('name')}
+                      </Link>
+                    </TableHead>
                     <TableHead>Section</TableHead>
                     <TableHead>Instrument</TableHead>
                     <TableHead>Role</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Joined</TableHead>
+                    <TableHead>
+                      <Link href={buildFilterUrl({ sort: 'status', order: sortField === 'status' && sortOrder === 'asc' ? 'desc' : 'asc' })} className="flex items-center hover:text-foreground">
+                        Status {getSortIcon('status')}
+                      </Link>
+                    </TableHead>
+                    <TableHead>
+                      <Link href={buildFilterUrl({ sort: 'joinDate', order: sortField === 'joinDate' && sortOrder === 'asc' ? 'desc' : 'asc' })} className="flex items-center hover:text-foreground">
+                        Joined {getSortIcon('joinDate')}
+                      </Link>
+                    </TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -356,7 +545,7 @@ export default async function AdminMembersPage({
                   </p>
                   <div className="flex items-center gap-2">
                     <Link
-                      href={`/admin/members?page=${page - 1}&search=${search}&status=${status}&section=${sectionId}`}
+                      href={buildFilterUrl({ page: page - 1 })}
                     >
                       <Button variant="outline" size="sm" disabled={page <= 1}>
                         Previous
@@ -366,7 +555,7 @@ export default async function AdminMembersPage({
                       Page {page} of {totalPages}
                     </span>
                     <Link
-                      href={`/admin/members?page=${page + 1}&search=${search}&status=${status}&section=${sectionId}`}
+                      href={buildFilterUrl({ page: page + 1 })}
                     >
                       <Button
                         variant="outline"

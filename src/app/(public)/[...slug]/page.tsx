@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { prisma } from '@/lib/db';
+import { CmsService } from '@/lib/services/cms.service';
 import { formatDate } from '@/lib/date';
 import Link from 'next/link';
 import { Card, CardContent } from '@/components/ui/card';
@@ -37,14 +37,7 @@ export async function generateMetadata({ params }: PageProps) {
   const resolvedParams = await params;
   const slug = resolvedParams.slug.join('/');
 
-  const page = await prisma.page.findUnique({
-    where: { slug },
-    select: {
-      title: true,
-      metaTitle: true,
-      metaDescription: true,
-    },
-  });
+  const page = await CmsService.getPageMetaBySlug(slug);
 
   if (!page) {
     return {
@@ -67,9 +60,7 @@ export default async function DynamicPage({ params }: PageProps) {
     notFound();
   }
 
-  const page = await prisma.page.findUnique({
-    where: { slug },
-  });
+  const page = await CmsService.getPageBySlug(slug, true);
 
   if (!page || page.status !== 'PUBLISHED') {
     notFound();

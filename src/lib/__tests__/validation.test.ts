@@ -26,8 +26,8 @@ const memberUpdateSchema = memberCreateSchema.partial();
 const eventBaseSchema = z.object({
   title: z.string().min(1, 'Title is required').max(200, 'Title too long'),
   description: z.string().max(5000, 'Description too long').optional(),
-  startTime: z.coerce.date({ required_error: 'Start time is required' }),
-  endTime: z.coerce.date({ required_error: 'End time is required' }),
+  startTime: z.coerce.date(),
+  endTime: z.coerce.date(),
   location: z.string().max(200, 'Location too long').optional(),
   eventType: z.enum(['REHEARSAL', 'CONCERT', 'MEETING', 'OTHER']),
   status: z.enum(['SCHEDULED', 'CANCELLED', 'COMPLETED', 'POSTPONED']).default('SCHEDULED'),

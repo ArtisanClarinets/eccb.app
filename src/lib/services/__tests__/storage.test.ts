@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { validateAndResolvePath, uploadFile, downloadFile, deleteFile, fileExists, validateFileMagicBytes } from '../storage';
+import { uploadFile, downloadFile, deleteFile, fileExists, validateFileMagicBytes } from '../storage';
 import { env } from '@/lib/env';
 import fs from 'fs/promises';
 import path from 'path';

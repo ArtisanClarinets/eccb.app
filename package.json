@@ -20,7 +20,12 @@
     "check-routes": "tsx scripts/check-routes.ts",
     "db:seed": "prisma db seed",
     "db:migrate": "prisma migrate dev",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "security:audit": "bash scripts/security-audit.sh",
+    "security:check": "npm audit --audit-level=moderate",
+    "security:fix": "npm audit fix",
+    "deps:check": "tsx scripts/dependency-check.ts",
+    "deps:update": "npm outdated && npm update --interactive"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.982.0",
@@ -89,6 +94,8 @@
   "devDependencies": {
     "@playwright/test": "^1.58.0",
     "@tailwindcss/postcss": "^4",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/node": "^20",
     "@types/nodemailer": "^7.0.9",
     "@types/pg": "^8.16.0",
@@ -98,6 +105,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "eslint-plugin-react-refresh": "^0.5.0",
+    "jsdom": "^28.1.0",
     "playwright": "^1.58.0",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",

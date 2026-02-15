@@ -28,10 +28,12 @@ export const RATE_LIMIT_CONFIGS = {
   emailVerification: { limit: 5, window: 3600 },
   // Email verification per IP - 10 requests per IP per hour
   emailVerificationIp: { limit: 10, window: 3600 },
-  // Sign up - 5 per IP per hour
-  signUp: { limit: 5, window: 3600 },
-  // Sign in - 10 per minute per IP
-  signIn: { limit: 10, window: 60 },
+  // Sign up - 3 per IP per hour (prevent spam accounts)
+  signUp: { limit: 3, window: 3600 },
+  // Sign in - 5 per minute per IP (prevent brute force)
+  signIn: { limit: 5, window: 60 },
+  // Admin actions - sensitive operations like ban, delete, impersonate
+  adminAction: { limit: 20, window: 60 }, // 20 per minute
 } as const;
 
 export type RateLimitType = keyof typeof RATE_LIMIT_CONFIGS;

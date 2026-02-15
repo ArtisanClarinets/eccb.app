@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/db';
-import { requireAuth, getUserWithProfile } from '@/lib/auth/guards';
+import { requireAuth } from '@/lib/auth/guards';
 import { formatDate } from '@/lib/date';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';

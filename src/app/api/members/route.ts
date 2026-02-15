@@ -3,6 +3,46 @@ import { prisma } from '@/lib/db';
 import { getSession } from '@/lib/auth/guards';
 import { validateCSRF } from '@/lib/csrf';
 import { applyRateLimit } from '@/lib/rate-limit';
+import { z } from 'zod';
+
+// =============================================================================
+// VALIDATION SCHEMAS
+// =============================================================================
+
+const memberQuerySchema = z.object({
+  status: z.string().optional(),
+  sectionId: z.string().optional(),
+  instrumentId: z.string().optional(),
+  search: z.string().optional(),
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().max(100).default(50),
+});
+
+const memberCreateSchema = z.object({
+  firstName: z.string().min(1, 'First name is required'),
+  lastName: z.string().min(1, 'Last name is required'),
+  email: z.string().email('Valid email is required'),
+  phone: z.string().optional(),
+  status: z.enum(['ACTIVE', 'INACTIVE', 'PENDING', 'SUSPENDED']).default('PENDING'),
+  joinDate: z.string().optional(),
+  sectionIds: z.array(z.string()).optional(),
+  instrumentIds: z.array(z.string()).optional(),
+});
+
+const memberUpdateSchema = z.object({
+  id: z.string().min(1, 'Member ID is required'),
+  firstName: z.string().min(1, 'First name is required').optional(),
+  lastName: z.string().min(1, 'Last name is required').optional(),
+  email: z.string().email('Valid email is required').optional(),
+  phone: z.string().optional(),
+  status: z.enum(['ACTIVE', 'INACTIVE', 'PENDING', 'SUSPENDED']).optional(),
+  sectionIds: z.array(z.string()).optional(),
+  instrumentIds: z.array(z.string()).optional(),
+});
+
+const memberDeleteSchema = z.object({
+  id: z.string().min(1, 'Member ID is required'),
+});
 
 export async function GET(request: NextRequest) {
   // Apply rate limiting

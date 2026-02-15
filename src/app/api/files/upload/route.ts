@@ -4,6 +4,7 @@ import { getSession } from '@/lib/auth/guards';
 import { checkUserPermission } from '@/lib/auth/permissions';
 import { uploadFile, validateFileMagicBytes } from '@/lib/services/storage';
 import { applyRateLimit } from '@/lib/rate-limit';
+import { validateCSRF } from '@/lib/csrf';
 import { logger } from '@/lib/logger';
 import { MUSIC_UPLOAD } from '@/lib/auth/permission-constants';
 import { env } from '@/lib/env';
@@ -145,6 +146,15 @@ export async function POST(request: NextRequest) {
   const rateLimitResponse = await applyRateLimit(request, 'upload');
   if (rateLimitResponse) {
     return rateLimitResponse;
+  }
+
+  // Validate CSRF
+  const csrfResult = validateCSRF(request);
+  if (!csrfResult.valid) {
+    return NextResponse.json(
+      { error: 'CSRF validation failed', reason: csrfResult.reason },
+      { status: 403 }
+    );
   }
 
   // Check authentication

@@ -178,3 +178,180 @@ export async function isLibrarian() {
   
   return !!userRole;
 }
+
+// =============================================================================
+// SECTION LEADER HELPERS
+// =============================================================================
+
+/**
+ * Get the section that a user is a leader of.
+ * Returns null if the user is not a section leader or has no section assignment.
+ */
+export async function getSectionLeaderSection(userId: string): Promise<{
+  id: string;
+  name: string;
+} | null> {
+  // First, get the member record for this user
+  const member = await prisma.member.findUnique({
+    where: { userId },
+    include: {
+      sections: {
+        where: { isLeader: true },
+        include: { section: true },
+      },
+    },
+  });
+
+  if (!member || member.sections.length === 0) {
+    return null;
+  }
+
+  // Return the first section they lead (typically only one)
+  const sectionLead = member.sections[0];
+  return {
+    id: sectionLead.section.id,
+    name: sectionLead.section.name,
+  };
+}
+
+/**
+ * Check if the current user is a section leader.
+ * A section leader has the SECTION_LEADER role type and is marked as isLeader in a section.
+ */
+export async function isSectionLeader(): Promise<boolean> {
+  const session = await getSession();
+  
+  if (!session?.user) {
+    return false;
+  }
+
+  // Check if user has SECTION_LEADER role type
+  const userRole = await prisma.userRole.findFirst({
+    where: {
+      userId: session.user.id,
+      role: {
+        type: 'SECTION_LEADER',
+      },
+      OR: [
+        { expiresAt: null },
+        { expiresAt: { gt: new Date() } },
+      ],
+    },
+  });
+
+  if (!userRole) {
+    return false;
+  }
+
+  // Verify they are actually a leader of a section
+  const section = await getSectionLeaderSection(session.user.id);
+  return section !== null;
+}
+
+/**
+ * Require the user to be a section leader.
+ * Returns the section they lead, or redirects to forbidden if not a section leader.
+ */
+export async function requireSectionLeader(): Promise<{
+  session: NonNullable<Awaited<ReturnType<typeof getSession>>>;
+  section: { id: string; name: string };
+}> {
+  const session = await requireAuth();
+
+  const section = await getSectionLeaderSection(session.user.id);
+
+  if (!section) {
+    redirect('/forbidden');
+  }
+
+  // Verify they have the SECTION_LEADER role
+  const hasRole = await isSectionLeader();
+  if (!hasRole) {
+    redirect('/forbidden');
+  }
+
+  return { session, section };
+}
+
+/**
+ * Check if a user can access a specific member's data.
+ * - Admins and staff can access all members
+ * - Section leaders can access members in their section
+ * - Members can access their own data
+ */
+export async function canAccessMember(
+  targetMemberId: string,
+  options: { allowOwn?: boolean } = { allowOwn: true }
+): Promise<{ canAccess: boolean; scope: 'all' | 'section' | 'own' | 'none' }> {
+  const session = await getSession();
+
+  if (!session?.user) {
+    return { canAccess: false, scope: 'none' };
+  }
+
+  // Check if admin/staff (full access)
+  const adminAccess = await isAdmin();
+  if (adminAccess) {
+    return { canAccess: true, scope: 'all' };
+  }
+
+  // Check if section leader
+  const sectionLeaderSection = await getSectionLeaderSection(session.user.id);
+  
+  if (sectionLeaderSection) {
+    // Check if target member is in the same section
+    const targetMember = await prisma.member.findUnique({
+      where: { id: targetMemberId },
+      include: {
+        sections: {
+          where: { sectionId: sectionLeaderSection.id },
+        },
+      },
+    });
+
+    if (targetMember && targetMember.sections.length > 0) {
+      return { canAccess: true, scope: 'section' };
+    }
+  }
+
+  // Check if accessing own data
+  if (options.allowOwn) {
+    const ownMember = await prisma.member.findUnique({
+      where: { userId: session.user.id },
+    });
+
+    if (ownMember && ownMember.id === targetMemberId) {
+      return { canAccess: true, scope: 'own' };
+    }
+  }
+
+  return { canAccess: false, scope: 'none' };
+}
+
+/**
+ * Get the section filter for the current user.
+ * Returns the section ID if the user is a section leader and should be filtered.
+ * Returns null if the user has full access (admin/staff) or no section filter applies.
+ */
+export async function getMemberSectionFilter(): Promise<string | null> {
+  const session = await getSession();
+
+  if (!session?.user) {
+    return null;
+  }
+
+  // Admins and staff have full access
+  const adminAccess = await isAdmin();
+  const staffAccess = await isStaff();
+  if (adminAccess || staffAccess) {
+    return null;
+  }
+
+  // Section leaders are filtered to their section
+  const section = await getSectionLeaderSection(session.user.id);
+  if (section) {
+    return section.id;
+  }
+
+  return null;
+}

@@ -213,11 +213,11 @@ describe('Permission System - Enhanced Tests', () => {
 
     it('should filter out expired role assignments', async () => {
       vi.mocked(redis.get).mockResolvedValue(null);
-      vi.mocked(prisma.userRole.findMany).mockImplementation(async ({ where }) => {
+      (prisma.userRole.findMany as any).mockImplementation(async (args: any) => {
         // The actual implementation filters by expiresAt
         // This tests that the query is correct
-        expect(where.OR).toContainEqual({ expiresAt: null });
-        expect(where.OR).toContainEqual({ expiresAt: { gt: expect.any(Date) } });
+        expect(args.where.OR).toContainEqual({ expiresAt: null });
+        expect(args.where.OR).toContainEqual({ expiresAt: { gt: expect.any(Date) } });
         return [];
       });
 

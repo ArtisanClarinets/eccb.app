@@ -30,43 +30,52 @@ export default async function MusicDetailPage({ params }: PageProps) {
   await requirePermission('music:read');
   const { id } = await params;
 
-  const piece = await prisma.musicPiece.findUnique({
-    where: { id },
-    include: {
-      composer: true,
-      arranger: true,
-      publisher: true,
-      files: {
-        include: {
-          parts: {
-            include: { instrument: true },
+  const [piece, instruments] = await Promise.all([
+    prisma.musicPiece.findUnique({
+      where: { id },
+      include: {
+        composer: true,
+        arranger: true,
+        publisher: true,
+        files: {
+          include: {
+            parts: {
+              include: { instrument: true },
+            },
+            versions: {
+              orderBy: { version: 'desc' },
+              take: 10,
+            },
           },
+          orderBy: { uploadedAt: 'asc' },
         },
-        orderBy: { uploadedAt: 'asc' },
-      },
-      assignments: {
-        include: {
-          member: {
-            include: {
-              user: true,
-              instruments: {
-                where: { isPrimary: true },
-                include: { instrument: true },
+        assignments: {
+          include: {
+            member: {
+              include: {
+                user: true,
+                instruments: {
+                  where: { isPrimary: true },
+                  include: { instrument: true },
+                },
               },
             },
           },
+          orderBy: { assignedAt: 'desc' },
         },
-        orderBy: { assignedAt: 'desc' },
-      },
-      eventMusic: {
-        include: {
-          event: true,
+        eventMusic: {
+          include: {
+            event: true,
+          },
+          take: 10,
+          orderBy: { event: { startTime: 'desc' } },
         },
-        take: 10,
-        orderBy: { event: { startTime: 'desc' } },
       },
-    },
-  });
+    }),
+    prisma.instrument.findMany({
+      orderBy: [{ family: 'asc' }, { sortOrder: 'asc' }],
+    }),
+  ]);
 
   if (!piece) {
     notFound();
@@ -233,7 +242,7 @@ export default async function MusicDetailPage({ params }: PageProps) {
         </TabsList>
 
         <TabsContent value="files">
-          <MusicFilesList pieceId={piece.id} files={piece.files} />
+          <MusicFilesList pieceId={piece.id} files={piece.files} instruments={instruments} />
         </TabsContent>
 
         <TabsContent value="assignments">

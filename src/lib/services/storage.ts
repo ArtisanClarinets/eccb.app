@@ -6,6 +6,7 @@ import { createReadStream, createWriteStream } from 'fs';
 import { pipeline } from 'stream/promises';
 import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
+import { generateSignedUrl as generateLocalSignedUrl } from '@/lib/signed-url';
 
 // =============================================================================
 // Types
@@ -290,6 +291,44 @@ export async function getSignedDownloadUrl(key: string, expiresIn: number = 3600
   // For local storage, return the API route URL
   // The route will handle auth and stream the file
   return `/api/files/${key}`;
+}
+
+/**
+ * Generate a secure, time-limited download URL.
+ * For S3: generates a presigned URL
+ * For LOCAL: generates a signed URL with token validation
+ * 
+ * @param key - Storage key (path) for the file
+ * @param options - Options including expiration time and user ID
+ * @returns Secure download URL
+ */
+export interface SecureUrlOptions {
+  expiresIn?: number; // seconds, default 3600 (1 hour)
+  userId?: string;
+}
+
+export async function generateSecureDownloadUrl(
+  key: string,
+  options: SecureUrlOptions = {}
+): Promise<string> {
+  const expiresIn = options.expiresIn || 3600;
+  
+  if (env.STORAGE_DRIVER === 'S3') {
+    const client = getS3Client();
+    
+    const command = new GetObjectCommand({
+      Bucket: env.S3_BUCKET_NAME,
+      Key: key,
+    });
+    
+    return getSignedUrl(client, command, { expiresIn });
+  }
+  
+  // For local storage, generate a signed URL with token
+  return generateLocalSignedUrl(key, {
+    expiresIn,
+    userId: options.userId,
+  });
 }
 
 /**

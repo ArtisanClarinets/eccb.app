@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/db';
-import { requirePermission } from '@/lib/auth/guards';
+import { requirePermission, canAccessMember, getMemberSectionFilter } from '@/lib/auth/guards';
 import { auditLog } from '@/lib/services/audit';
 import { z } from 'zod';
 import { MemberStatus } from '@prisma/client';
@@ -10,6 +10,7 @@ import {
   MEMBER_CREATE,
   MEMBER_EDIT_ALL,
   MEMBER_DELETE,
+  MEMBER_VIEW_SECTION,
 } from '@/lib/auth/permission-constants';
 
 const memberSchema = z.object({
@@ -118,6 +119,12 @@ export async function createMember(formData: FormData) {
 }
 
 export async function updateMember(id: string, formData: FormData) {
+  // Check if user can access this member (section scoping)
+  const access = await canAccessMember(id, { allowOwn: false });
+  if (!access.canAccess) {
+    return { success: false, error: 'You do not have permission to update this member' };
+  }
+
   const session = await requirePermission(MEMBER_EDIT_ALL);
 
   try {
@@ -210,6 +217,12 @@ export async function updateMember(id: string, formData: FormData) {
 }
 
 export async function deleteMember(id: string) {
+  // Check if user can access this member (section scoping)
+  const access = await canAccessMember(id, { allowOwn: false });
+  if (!access.canAccess) {
+    return { success: false, error: 'You do not have permission to delete this member' };
+  }
+
   const session = await requirePermission(MEMBER_DELETE);
 
   try {
@@ -531,5 +544,172 @@ export async function unlinkMemberFromUser(memberId: string) {
   } catch (error) {
     console.error('Failed to unlink member from user:', error);
     return { success: false, error: 'Failed to unlink member from user' };
+  }
+}
+
+// =============================================================================
+// EXPORT FUNCTIONALITY
+// =============================================================================
+
+export interface MemberExportFilters {
+  search?: string;
+  status?: string;
+  sectionId?: string;
+  instrumentId?: string;
+  roleId?: string;
+}
+
+export async function exportMembersToCSV(filters: MemberExportFilters = {}) {
+  await requirePermission('members:read');
+
+  const sectionFilter = await getMemberSectionFilter();
+
+  try {
+    // Build where clause (same logic as page)
+    const where: Record<string, unknown> = {};
+
+    if (sectionFilter) {
+      where.sections = {
+        some: { sectionId: sectionFilter },
+      };
+    } else if (filters.sectionId) {
+      where.sections = {
+        some: { sectionId: filters.sectionId },
+      };
+    }
+
+    if (filters.status) {
+      where.status = filters.status;
+    }
+
+    if (filters.instrumentId) {
+      where.instruments = {
+        some: { instrumentId: filters.instrumentId },
+      };
+    }
+
+    if (filters.roleId) {
+      where.user = {
+        roles: {
+          some: { roleId: filters.roleId },
+        },
+      };
+    }
+
+    if (filters.search) {
+      const searchConditions = [
+        { firstName: { contains: filters.search, mode: 'insensitive' } },
+        { lastName: { contains: filters.search, mode: 'insensitive' } },
+        { email: { contains: filters.search, mode: 'insensitive' } },
+      ];
+      
+      if (filters.roleId) {
+        where.user = {
+          ...where.user as object,
+          AND: [
+            where.user as object,
+            {
+              OR: [
+                { name: { contains: filters.search, mode: 'insensitive' } },
+                { email: { contains: filters.search, mode: 'insensitive' } },
+              ],
+            },
+          ],
+        };
+      } else {
+        (where as Record<string, unknown>).OR = [
+          ...searchConditions,
+          { user: { name: { contains: filters.search, mode: 'insensitive' } } },
+          { user: { email: { contains: filters.search, mode: 'insensitive' } } },
+        ];
+      }
+    }
+
+    const members = await prisma.member.findMany({
+      where,
+      include: {
+        user: {
+          include: {
+            roles: {
+              include: { role: true },
+            },
+          },
+        },
+        instruments: {
+          where: { isPrimary: true },
+          include: { instrument: true },
+        },
+        sections: {
+          include: { section: true },
+        },
+      },
+      orderBy: { lastName: 'asc' },
+    });
+
+    // Generate CSV
+    const headers = [
+      'First Name',
+      'Last Name',
+      'Email',
+      'Phone',
+      'Status',
+      'Section',
+      'Instrument',
+      'Role',
+      'Join Date',
+      'Emergency Contact',
+      'Emergency Phone',
+      'Emergency Email',
+    ];
+
+    const rows = members.map((member) => {
+      const primarySection = member.sections[0]?.section;
+      const primaryInstrument = member.instruments[0]?.instrument;
+      const primaryRole = member.user?.roles[0]?.role;
+
+      return [
+        member.firstName,
+        member.lastName,
+        member.email || member.user?.email || '',
+        member.phone || '',
+        member.status,
+        primarySection?.name || '',
+        primaryInstrument?.name || '',
+        primaryRole ? (primaryRole.displayName || primaryRole.name) : '',
+        member.joinDate ? member.joinDate.toISOString().split('T')[0] : '',
+        member.emergencyName || '',
+        member.emergencyPhone || '',
+        member.emergencyEmail || '',
+      ];
+    });
+
+    // Escape CSV fields
+    const escapeCSV = (field: string) => {
+      if (field.includes(',') || field.includes('"') || field.includes('\n')) {
+        return `"${field.replace(/"/g, '""')}"`;
+      }
+      return field;
+    };
+
+    const csvContent = [
+      headers.map(escapeCSV).join(','),
+      ...rows.map((row) => row.map(escapeCSV).join(',')),
+    ].join('\n');
+
+    await auditLog({
+      action: 'member.export',
+      entityType: 'Member',
+      newValues: { count: members.length, filters },
+    });
+
+    return {
+      success: true,
+      data: csvContent,
+      filename: `members-export-${new Date().toISOString().split('T')[0]}.csv`,
+      count: members.length,
+    };
+  } catch (error) {
+    console.error('Failed to export members:', error);
+    return { success: false, error: 'Failed to export members' };
   }
 }

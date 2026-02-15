@@ -1,23 +1,17 @@
 import { createAuthClient } from 'better-auth/react';
 import { magicLinkClient, twoFactorClient, adminClient } from 'better-auth/client/plugins';
 
-// Get the base URL for the auth client
-// Falls back to window.location.origin for client-side when env var is not set
-const getBaseURL = (): string => {
-  const envUrl = process.env.NEXT_PUBLIC_APP_URL;
-  if (envUrl) {
-    return envUrl;
-  }
-  // Fallback to window.location.origin in browser context
-  if (typeof window !== 'undefined') {
-    return window.location.origin;
-  }
-  // Empty string as last resort (will cause errors, but indicates misconfiguration)
-  return '';
-};
-
+/**
+ * Better Auth client for React/Next.js
+ * 
+ * Note: baseURL is intentionally NOT set here because the Better Auth server
+ * is running on the same Next.js app at /api/auth/[...all]. When the server
+ * is on the same origin at /api/auth, the client will automatically discover
+ * and use the correct endpoint without explicit baseURL configuration.
+ * 
+ * See: https://www.better-auth.com/docs/integrations/next
+ */
 export const authClient = createAuthClient({
-  baseURL: getBaseURL(),
   plugins: [
     magicLinkClient(),
     twoFactorClient(),

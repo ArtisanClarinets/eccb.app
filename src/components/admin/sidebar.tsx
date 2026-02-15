@@ -15,6 +15,8 @@ import {
   Bell,
   X,
   Menu,
+  ImageIcon,
+  Activity,
 } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -22,6 +24,15 @@ import { Button } from '@/components/ui/button';
 // Updated navigation - removed dead links, fixed CMS paths to match actual routes
 const navigation = [
   { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
+  {
+    name: 'Users',
+    href: '/admin/users',
+    icon: Users,
+    children: [
+      { name: 'All Users', href: '/admin/users' },
+      { name: 'Create User', href: '/admin/users/new' },
+    ],
+  },
   {
     name: 'Members',
     href: '/admin/members',
@@ -55,12 +66,23 @@ const navigation = [
     icon: FileText,
     children: [
       { name: 'Pages', href: '/admin/pages' },
+      { name: 'Media Assets', href: '/admin/assets' },
       { name: 'Announcements', href: '/admin/announcements' },
     ],
   },
   { name: 'Communications', href: '/admin/communications', icon: Bell },
   { name: 'Reports', href: '/admin/reports', icon: BarChart3 },
   { name: 'Settings', href: '/admin/settings', icon: Settings },
+  {
+    name: 'Roles',
+    href: '/admin/roles',
+    icon: Shield,
+    children: [
+      { name: 'Role Assignments', href: '/admin/roles' },
+      { name: 'Custom Permissions', href: '/admin/roles/permissions' },
+    ],
+  },
+  { name: 'Audit Logs', href: '/admin/audit', icon: Activity },
 ];
 
 export function AdminSidebar() {

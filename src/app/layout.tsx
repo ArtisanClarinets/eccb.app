@@ -4,6 +4,7 @@ import './globals.css';
 import { Toaster } from 'sonner';
 import { ThemeProvider } from '@/components/providers/theme-provider';
 import { ServiceWorkerRegistration } from '@/components/providers/service-worker-provider';
+import { SkipToContent } from '@/components/ui/skip-to-content';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -79,6 +80,7 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
+          <SkipToContent />
           <ServiceWorkerRegistration />
           {children}
           <Toaster

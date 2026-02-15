@@ -222,6 +222,14 @@ export default async function AdminReportsPage() {
         </TabsList>
 
         <TabsContent value="attendance" className="space-y-4">
+          <div className="flex justify-end">
+            <Button asChild>
+              <a href="/admin/reports/attendance">
+                <BarChart3 className="mr-2 h-4 w-4" />
+                Full Attendance Reports
+              </a>
+            </Button>
+          </div>
           <div className="grid gap-4 md:grid-cols-2">
             {/* Attendance Breakdown */}
             <Card>

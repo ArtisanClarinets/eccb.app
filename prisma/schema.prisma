@@ -39,6 +39,7 @@ model User {
   notifications UserNotification[]
   emailLogs     EmailLog[]
   announcements Announcement[]
+  customPermissions UserPermission[]
   
   @@index([email])
   @@index([deletedAt])
@@ -149,6 +150,7 @@ model Permission {
   createdAt   DateTime @default(now())
   
   roles       RolePermission[]
+  userPermissions UserPermission[]
   
   @@index([resource, action])
 }
@@ -163,6 +165,22 @@ model RolePermission {
   
   @@unique([roleId, permissionId])
   @@index([roleId])
+  @@index([permissionId])
+}
+
+model UserPermission {
+  id           String   @id @default(cuid())
+  userId       String
+  permissionId String
+  grantedAt    DateTime @default(now())
+  grantedBy    String?
+  expiresAt    DateTime?
+  
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, permissionId])
+  @@index([userId])
   @@index([permissionId])
 }
 
@@ -340,28 +358,49 @@ model MusicFile {
   version     Int      @default(1)
   description String?
   isPublic    Boolean  @default(false)
+  isArchived  Boolean  @default(false)
   uploadedAt  DateTime @default(now())
   uploadedBy  String?
   
   piece       MusicPiece @relation(fields: [pieceId], references: [id], onDelete: Cascade)
   parts       MusicPart[]
   downloads   FileDownload[]
+  versions    MusicFileVersion[]
   
   @@index([pieceId])
   @@index([fileType])
 }
 
+model MusicFileVersion {
+  id            String   @id @default(cuid())
+  fileId        String
+  version       Int
+  fileName      String
+  storageKey    String
+  fileSize      Int
+  mimeType      String
+  changeNote    String?
+  uploadedAt    DateTime @default(now())
+  uploadedBy    String?
+  
+  file          MusicFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  
+  @@unique([fileId, version])
+  @@index([fileId])
+  @@index([uploadedAt])
+}
+
 model MusicPart {
-  id           String     @id @default(cuid())
-  pieceId      String
+  id          String  @id @default(cuid())
+  pieceId     String
   instrumentId String
   partName     String
-  fileId       String?
-  isOptional   Boolean    @default(false)
-  notes        String?
+  fileId      String?
+  isOptional  Boolean @default(false)
+  notes       String?
   
-  piece        MusicPiece @relation(fields: [pieceId], references: [id], onDelete: Cascade)
-  instrument   Instrument @relation(fields: [instrumentId], references: [id])
+  piece        MusicPiece  @relation(fields: [pieceId], references: [id], onDelete: Cascade)
+  instrument   Instrument  @relation(fields: [instrumentId], references: [id])
   file         MusicFile? @relation(fields: [fileId], references: [id])
   
   @@index([pieceId])
@@ -397,22 +436,59 @@ model Publisher {
 }
 
 model MusicAssignment {
-  id          String     @id @default(cuid())
-  pieceId     String
-  memberId    String
-  partName    String?
-  priority    Int?
-  notes       String?
-  assignedAt  DateTime   @default(now())
-  assignedBy  String?
-  dueDate     DateTime?
+  id           String           @id @default(cuid())
+  pieceId      String
+  memberId     String
+  partName     String?
+  partId       String?          // Link to specific MusicPart
+  copyNumber   Int?             // For tracking multiple copies of same part
+  priority     Int?
+  notes        String?
+  status       AssignmentStatus @default(ASSIGNED)
+  assignedAt   DateTime         @default(now())
+  assignedBy   String?
+  pickedUpAt   DateTime?
+  pickedUpBy   String?
+  dueDate      DateTime?
+  returnedAt   DateTime?
+  returnedTo   String?
+  condition    String?          // Condition notes when returned
+  missingSince DateTime?        // When the part was reported missing
+  missingNotes String?          // Notes about missing/lost parts
   
-  piece       MusicPiece @relation(fields: [pieceId], references: [id], onDelete: Cascade)
-  member      Member     @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  piece        MusicPiece       @relation(fields: [pieceId], references: [id], onDelete: Cascade)
+  member       Member           @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  history      MusicAssignmentHistory[]
   
   @@index([pieceId])
   @@index([memberId])
   @@index([dueDate])
+  @@index([status])
+}
+
+model MusicAssignmentHistory {
+  id           String   @id @default(cuid())
+  assignmentId String
+  action       String   // ASSIGNED, PICKED_UP, RETURNED, MARKED_OVERDUE, MARKED_LOST, etc.
+  fromStatus   String?
+  toStatus     String?
+  notes        String?
+  performedBy  String
+  performedAt  DateTime @default(now())
+  
+  assignment   MusicAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  
+  @@index([assignmentId])
+  @@index([performedAt])
+}
+
+enum AssignmentStatus {
+  ASSIGNED      // Music assigned to member, waiting for pickup
+  PICKED_UP     // Member has picked up the music
+  RETURNED      // Member has returned the music
+  OVERDUE       // Return is past due date
+  LOST          // Music reported as lost
+  DAMAGED       // Music returned in damaged condition
 }
 
 model FileDownload {
@@ -664,6 +740,34 @@ model MediaAsset {
 // ====================================
 // Communications
 // ====================================
+
+enum EmailTemplateType {
+  WELCOME
+  PASSWORD_RESET
+  EVENT_REMINDER
+  ANNOUNCEMENT
+  ATTENDANCE_SUMMARY
+  CUSTOM
+}
+
+model EmailTemplate {
+  id          String           @id @default(cuid())
+  name        String           @unique
+  type        EmailTemplateType @default(CUSTOM)
+  subject     String
+  body        String           // HTML body with {{variable}} placeholders
+  textBody    String?          // Plain text version
+  description String?          // Description of when to use this template
+  variables   Json?            // Array of variable names this template uses
+  isActive    Boolean          @default(true)
+  isDefault   Boolean          @default(false)  // Default template for this type
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  createdBy   String?
+  
+  @@index([type])
+  @@index([isActive])
+}
 
 enum NotificationType {
   ANNOUNCEMENT

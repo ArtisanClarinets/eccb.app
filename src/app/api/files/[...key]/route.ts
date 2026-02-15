@@ -30,6 +30,17 @@ async function isAdminUser(userId: string): Promise<boolean> {
 }
 
 /**
+ * Check if a file is public (can be downloaded without authentication).
+ */
+async function isFilePublic(storageKey: string): Promise<boolean> {
+  const file = await prisma.musicFile.findFirst({
+    where: { storageKey },
+    select: { isPublic: true },
+  });
+  return file?.isPublic ?? false;
+}
+
+/**
  * Check if user is authorized to download a specific file.
  */
 async function checkDownloadAuthorization(
@@ -88,6 +99,17 @@ async function checkDownloadAuthorization(
   if (!file) {
     logger.warn('Download denied: file not found', { userId, storageKey });
     return { authorized: false, reason: 'file_not_found' };
+  }
+  
+  // Check if file is public
+  if (file.isPublic) {
+    logger.info('Download authorized: public file', { userId, storageKey });
+    return { 
+      authorized: true, 
+      reason: 'public_file',
+      userId,
+      memberId: user.member?.id,
+    };
   }
   
   // Check if user has music.download.assigned permission
@@ -181,33 +203,42 @@ export async function GET(
     return rateLimitResponse;
   }
 
-  // Check authentication
-  const session = await getSession();
-  if (!session?.user?.id) {
-    logger.warn('Download denied: not authenticated');
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
   // Get storage key from path
   const { key } = await params;
   const storageKey = key.join('/');
   
   // Validate storage key format (prevent obvious attacks)
   if (storageKey.includes('..') || storageKey.includes('\0')) {
-    logger.warn('Download denied: invalid storage key', { 
-      userId: session.user.id, 
-      storageKey,
-    });
+    logger.warn('Download denied: invalid storage key', { storageKey });
     return NextResponse.json({ error: 'Invalid file path' }, { status: 400 });
   }
 
+  // Check if file is public (can be accessed without authentication)
+  const isPublic = await isFilePublic(storageKey);
+  
+  // Check authentication
+  const session = await getSession();
+  
+  // If not authenticated and file is not public, deny access
+  if (!session?.user?.id && !isPublic) {
+    logger.warn('Download denied: not authenticated');
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   try {
-    // Check authorization
-    const authResult = await checkDownloadAuthorization(session.user.id, storageKey);
+    let authResult: AuthResult;
+    
+    if (session?.user?.id) {
+      // User is authenticated, check full authorization
+      authResult = await checkDownloadAuthorization(session.user.id, storageKey);
+    } else {
+      // User is not authenticated but file is public
+      authResult = { authorized: true, reason: 'public_file_anonymous' };
+    }
     
     if (!authResult.authorized) {
       logger.warn('Download denied', { 
-        userId: session.user.id, 
+        userId: session?.user?.id, 
         storageKey,
         reason: authResult.reason,
       });
@@ -229,7 +260,7 @@ export async function GET(
     if (typeof result === 'string') {
       // S3: redirect to presigned URL
       logger.info('Redirecting to S3 presigned URL', { 
-        userId: session.user.id, 
+        userId: session?.user?.id, 
         storageKey,
       });
       
@@ -263,7 +294,7 @@ export async function GET(
     headers.set('Access-Control-Allow-Origin', 'same-origin');
     
     logger.info('Streaming file', { 
-      userId: session.user.id, 
+      userId: session?.user?.id, 
       storageKey,
       contentType: metadata.contentType,
       size: metadata.size,
@@ -276,7 +307,7 @@ export async function GET(
   } catch (error) {
     logger.error('Failed to download file', { 
       error, 
-      userId: session.user.id, 
+      userId: session?.user?.id, 
       storageKey,
     });
     

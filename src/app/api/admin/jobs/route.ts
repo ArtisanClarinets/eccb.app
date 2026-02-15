@@ -19,6 +19,7 @@ import {
 } from '@/lib/jobs/queue';
 import { auth } from '@/lib/auth/config';
 import { checkUserPermission } from '@/lib/auth/permissions';
+import { validateCSRF } from '@/lib/csrf';
 import { logger } from '@/lib/logger';
 import { z } from 'zod';
 
@@ -115,6 +116,15 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    // Validate CSRF
+    const csrfResult = validateCSRF(request);
+    if (!csrfResult.valid) {
+      return NextResponse.json(
+        { error: 'CSRF validation failed', reason: csrfResult.reason },
+        { status: 403 }
+      );
+    }
+
     // Check authentication
     const session = await auth.api.getSession({ headers: request.headers });
     if (!session?.user?.id) {
@@ -199,6 +209,15 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    // Validate CSRF
+    const csrfResult = validateCSRF(request);
+    if (!csrfResult.valid) {
+      return NextResponse.json(
+        { error: 'CSRF validation failed', reason: csrfResult.reason },
+        { status: 403 }
+      );
+    }
+
     // Check authentication
     const session = await auth.api.getSession({ headers: request.headers });
     if (!session?.user?.id) {
