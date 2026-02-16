@@ -28,11 +28,9 @@ function ResetPasswordFormInner() {
   const hasNumber = /[0-9]/.test(password);
   const passwordsMatch = password === confirmPassword && confirmPassword !== '';
 
-  useEffect(() => {
-    if (!token) {
-      setError('Invalid or missing reset token. Please request a new password reset link.');
-    }
-  }, [token]);
+  if (!token) {
+    setError('Invalid or missing reset token. Please request a new password reset link.');
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

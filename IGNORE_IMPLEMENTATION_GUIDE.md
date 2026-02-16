@@ -92,6 +92,8 @@ eccb-platform/
 
 ### 1.3 Environment Setup
 
+Recommended: use the interactive setup helper to populate `.env` quickly — run `npm run setup` and follow the prompts (the script will backup any existing `.env` and auto-generate secrets).
+
 Create `.env` file:
 
 ```env

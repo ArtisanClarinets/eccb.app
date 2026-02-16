@@ -198,6 +198,7 @@ If you discover a security vulnerability, please report it responsibly:
 
 - [ ] Run `npm run security:audit` - no critical/high vulnerabilities
 - [ ] Run `npm run deps:check` - review outdated packages
+- [ ] Run `npm run setup` to configure and verify environment variables (recommended). Note: `npm run build` executes `scripts/setup-admin.sh` (prebuild) which validates required env vars and writes a masked summary to `./build/env-variables-check.txt`.
 - [ ] Verify all environment variables are set
 - [ ] Confirm HTTPS is enabled
 - [ ] Test rate limiting is working

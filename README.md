@@ -52,9 +52,16 @@ cd eccb.app
 # Install dependencies
 npm ci
 
-# Configure environment
-cp .env.example .env
-# Edit .env with your settings
+# Interactive environment setup (recommended)
+
+# Interactive (recommended)
+npm run setup
+
+# Non-interactive (accept defaults)
+# Use in scripts or CI to accept defaults: npm run setup -- --yes
+
+# Or manual setup:
+# cp .env.example .env && nano .env
 
 # Setup database
 npm run db:migrate
@@ -63,6 +70,16 @@ npm run db:seed
 # Start development server
 npm run dev
 ```
+
+The `npm run setup` command opens an interactive, guided wizard that:
+- prompts for every environment variable (database, auth, storage, email, etc.) and shows current values / safe defaults,
+- auto-generates strong secrets if left blank (AUTH_SECRET, BETTER_AUTH_SECRET),
+- conditionally prompts S3/SMTP/ClamAV/VAPID values only when required,
+- creates a timestamped backup of any existing `.env` before overwriting it,
+- writes the completed `.env` and is safe to re-run (idempotent).
+
+For production builds, `npm run build` executes `scripts/setup-admin.sh` (npm `prebuild`) to validate required variables; a masked summary is written to `./build/env-variables-check.txt` and the check is strict for non-CI production builds.
+
 
 Access the application at http://localhost:3000
 
@@ -77,6 +94,7 @@ For detailed setup instructions, see [LOCAL_SETUP.md](./LOCAL_SETUP.md).
 | `npm start` | Start production server |
 | `npm run lint` | Run ESLint on codebase |
 | `npm run test` | Run test suite |
+| `npm run setup` | Interactive environment configuration (`--yes` for non-interactive) |
 | `npm run db:migrate` | Run database migrations |
 | `npm run db:seed` | Seed database with initial data |
 | `npm run db:studio` | Open Prisma Studio GUI |

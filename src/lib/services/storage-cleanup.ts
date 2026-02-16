@@ -337,10 +337,9 @@ export async function cleanupTempFiles(): Promise<number> {
   }
   
   const storagePath = path.resolve(env.LOCAL_STORAGE_PATH);
-  let deletedCount = 0;
   
   try {
-    await cleanupTempFilesRecursive(storagePath);
+    const deletedCount = await cleanupTempFilesRecursive(storagePath);
     logger.info('Temp file cleanup complete', { deletedCount });
     return deletedCount;
   } catch (error) {

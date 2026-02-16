@@ -206,7 +206,7 @@ export function TrackPerformance(operationName?: string, threshold?: number) {
     descriptor.value = async function (this: unknown, ...args: unknown[]) {
       const timer = new PerformanceTimer(name, undefined, threshold);
       try {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+         
         return await originalMethod.apply(this, args);
       } finally {
         timer.end();
