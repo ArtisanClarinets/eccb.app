@@ -21,6 +21,7 @@ import {
   EVENT_VIEW_ALL,
   ATTENDANCE_MARK_OWN,
 } from '@/lib/auth/permission-constants';
+import { ensureSuperAdminAssignedToUser } from '@/lib/seeding';
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
@@ -228,6 +229,10 @@ async function main() {
   if (!adminPassword) {
     console.log('⚠️  SUPER_ADMIN_PASSWORD not set - skipping admin user creation');
     console.log('   Set SUPER_ADMIN_PASSWORD environment variable to create admin user');
+
+    // If an admin user already exists, ensure they still receive SUPER_ADMIN role
+    // (idempotent and safe — does not change passwords)
+    await ensureSuperAdminAssignedToUser(adminEmail);
   } else {
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({ 
