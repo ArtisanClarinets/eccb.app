@@ -23,7 +23,7 @@ import {
   EVENT_VIEW_ALL,
   ATTENDANCE_MARK_OWN,
 } from '@/lib/auth/permission-constants';
-import { ensureSuperAdminAssignedToUser } from '@/lib/seeding';
+import { ensureSuperAdminAssignedToUser, assertSuperAdminPasswordPresentForSeed } from '@/lib/seeding';
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
@@ -227,63 +227,79 @@ async function main() {
   // 6. Super Admin User - IDEMPOTENT: Only create if doesn't exist
   const adminEmail = process.env.SUPER_ADMIN_EMAIL || 'admin@eccb.org';
   const adminPassword = process.env.SUPER_ADMIN_PASSWORD;
+
+  // Require explicit SUPER_ADMIN credentials for seeding to avoid accidental/default admin passwords.
+  try {
+    assertSuperAdminPasswordPresentForSeed();
+  } catch (err: any) {
+    console.error('❌ SUPER_ADMIN_PASSWORD is not set. For security, you must provide a password for the root SUPER_ADMIN user before running `npm run db:seed`.');
+    console.error('   Add the following to your `.env` file (do NOT commit real passwords):');
+    console.error('     SUPER_ADMIN_EMAIL="admin@eccb.org"');
+    console.error('     SUPER_ADMIN_PASSWORD="your-secure-admin-password"');
+    console.error('\n   Example (generate a strong password):');
+    console.error('     openssl rand -base64 32');
+    process.exit(1);
+  }
+
+  // Check if user already exists
+  const existingUser = await prisma.user.findUnique({ 
+    where: { email: adminEmail },
+    include: { roles: true }
+  });
   
-  if (!adminPassword) {
-    console.log('⚠️  SUPER_ADMIN_PASSWORD not set - creating/ensuring admin user with a development default login');
-
-    if (process.env.NODE_ENV === 'production') {
-      console.log('   SUPER_ADMIN_PASSWORD is required in production - skipping automatic login creation');
-    } else {
-      // In non-production, create user + set a generated/default password so root can sign in immediately.
-      const defaultFromEnv = process.env.SUPER_ADMIN_DEFAULT_PASSWORD;
-      const generated = await ensureSuperAdminAssignedToUser(adminEmail, { setPassword: true, password: defaultFromEnv });
-
-      if (generated) {
-        console.log('✅ Default SUPER_ADMIN login created (development):');
-        console.log(`   email: ${adminEmail}`);
-        console.log(`   password: ${generated}`);
-        try {
-          const credPath = path.resolve(process.cwd(), 'seed-admin-credentials.txt');
-          fs.writeFileSync(credPath, `email: ${adminEmail}\npassword: ${generated}\n`);
-          console.log(`   Credentials written to ${credPath}`);
-        } catch (err) {
-          console.warn('   Failed to write credentials file:', err);
-        }
-      } else {
-        console.log('✅ SUPER_ADMIN role ensured for existing admin user; password unchanged.');
-      }
+  if (existingUser) {
+    console.log(`✅ Admin user already exists: ${adminEmail}`);
+    
+    // Ensure the user has the super admin role
+    const hasSuperAdminRole = existingUser.roles.some(
+      (ur: any) => ur.roleId === superAdminRole.id
+    );
+    
+    if (!hasSuperAdminRole) {
+      await prisma.userRole.create({
+        data: { userId: existingUser.id, roleId: superAdminRole.id },
+      });
+      console.log('✅ Added SUPER_ADMIN role to existing user');
     }
-  } else {
-    // Check if user already exists
-    const existingUser = await prisma.user.findUnique({ 
-      where: { email: adminEmail },
-      include: { roles: true }
+    
+    // Ensure member profile exists
+    const existingMember = await prisma.member.findUnique({
+      where: { userId: existingUser.id }
     });
     
-    if (existingUser) {
-      console.log(`✅ Admin user already exists: ${adminEmail}`);
-      
-      // Ensure the user has the super admin role
-      const hasSuperAdminRole = existingUser.roles.some(
-        (ur: any) => ur.roleId === superAdminRole.id
-      );
-      
-      if (!hasSuperAdminRole) {
-        await prisma.userRole.create({
-          data: { userId: existingUser.id, roleId: superAdminRole.id },
-        });
-        console.log('✅ Added SUPER_ADMIN role to existing user');
-      }
-      
-      // Ensure member profile exists
-      const existingMember = await prisma.member.findUnique({
-        where: { userId: existingUser.id }
+    if (!existingMember) {
+      await prisma.member.create({
+        data: {
+          userId: existingUser.id,
+          firstName: 'System',
+          lastName: 'Administrator',
+          email: adminEmail,
+          status: 'ACTIVE',
+          joinDate: new Date(),
+        },
+      });
+      console.log('✅ Created member profile for admin user');
+    }
+  } else {
+    // Create new admin user via Better Auth
+    try {
+      console.log('Creating admin user via Better Auth...');
+      const res = await auth.api.signUpEmail({
+        body: {
+          email: adminEmail,
+          password: adminPassword,
+          name: 'System Administrator',
+        },
       });
       
-      if (!existingMember) {
+      if (res.user) {
+        await prisma.userRole.create({
+          data: { userId: res.user.id, roleId: superAdminRole.id },
+        });
+
         await prisma.member.create({
           data: {
-            userId: existingUser.id,
+            userId: res.user.id,
             firstName: 'System',
             lastName: 'Administrator',
             email: adminEmail,
@@ -291,42 +307,12 @@ async function main() {
             joinDate: new Date(),
           },
         });
-        console.log('✅ Created member profile for admin user');
-      }
-    } else {
-      // Create new admin user via Better Auth
-      try {
-        console.log('Creating admin user via Better Auth...');
-        const res = await auth.api.signUpEmail({
-          body: {
-            email: adminEmail,
-            password: adminPassword,
-            name: 'System Administrator',
-          },
-        });
         
-        if (res.user) {
-          await prisma.userRole.create({
-            data: { userId: res.user.id, roleId: superAdminRole.id },
-          });
-
-          await prisma.member.create({
-            data: {
-              userId: res.user.id,
-              firstName: 'System',
-              lastName: 'Administrator',
-              email: adminEmail,
-              status: 'ACTIVE',
-              joinDate: new Date(),
-            },
-          });
-          
-          console.log(`✅ Created Super Admin user: ${adminEmail}`);
-        }
-      } catch (error) {
-        console.error('❌ Error creating admin user via Auth API:', error);
-        throw error;
+        console.log(`✅ Created Super Admin user: ${adminEmail}`);
       }
+    } catch (error) {
+      console.error('❌ Error creating admin user via Auth API:', error);
+      throw error;
     }
   }
 

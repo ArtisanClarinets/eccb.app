@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { prisma } from '@/lib/db';
-import { ensureSuperAdminAssignedToUser } from '@/lib/seeding';
+import { ensureSuperAdminAssignedToUser, assertSuperAdminPasswordPresentForSeed } from '@/lib/seeding';
 
 describe('seeding helper — ensureSuperAdminAssignedToUser', () => {
   beforeEach(async () => {
@@ -85,5 +85,24 @@ describe('seeding helper — ensureSuperAdminAssignedToUser', () => {
     const bcrypt = await (await import('bcryptjs')).default;
     const isMatch = await bcrypt.compare(plaintext, createdUser!.password!);
     expect(isMatch).toBe(true);
+  });
+
+  // New: require explicit SUPER_ADMIN_PASSWORD for seeding validation
+  it('assertSuperAdminPasswordPresentForSeed throws when SUPER_ADMIN_PASSWORD is not set', () => {
+    const prev = process.env.SUPER_ADMIN_PASSWORD;
+    delete process.env.SUPER_ADMIN_PASSWORD;
+
+    expect(() => assertSuperAdminPasswordPresentForSeed()).toThrow('SUPER_ADMIN_PASSWORD is required');
+
+    if (prev !== undefined) process.env.SUPER_ADMIN_PASSWORD = prev;
+  });
+
+  it('assertSuperAdminPasswordPresentForSeed does not throw when SUPER_ADMIN_PASSWORD is set', () => {
+    const prev = process.env.SUPER_ADMIN_PASSWORD;
+    process.env.SUPER_ADMIN_PASSWORD = 'dev-pass-xyz';
+
+    expect(() => assertSuperAdminPasswordPresentForSeed()).not.toThrow();
+
+    if (prev !== undefined) process.env.SUPER_ADMIN_PASSWORD = prev; else delete process.env.SUPER_ADMIN_PASSWORD;
   });
 });

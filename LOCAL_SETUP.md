@@ -162,6 +162,28 @@ npm ci
 
 ### Environment Configuration
 
+The easiest way to configure your environment is to use the interactive setup script (recommended):
+
+```bash
+# Interactive setup (guided through all variables)
+npm run setup
+
+# Non-interactive (accept defaults) — useful for CI or automation
+npm run setup -- --yes
+```
+
+Interactive setup features:
+- Prompts for all required and optional variables and shows current values / safe defaults
+- Auto-generates secure secrets when left blank (AUTH_SECRET, BETTER_AUTH_SECRET)
+- Conditionally prompts S3 / SMTP / ClamAV / VAPID variables only when needed
+- Backs up an existing `.env` to `.env.backup.<timestamp>` before writing
+- Validates key lengths (secrets ≥32 chars, SUPER_ADMIN_PASSWORD ≥8 chars)
+- Idempotent — safe to re-run and preserves existing values
+
+If you prefer manual setup, continue with the steps below:
+
+Alternatively, for manual setup:
+
 ```bash
 # Copy example environment file
 cp .env.example .env
@@ -194,6 +216,10 @@ LOCAL_STORAGE_PATH="./storage"
 
 # Email (log to console for development)
 EMAIL_DRIVER="LOG"
+
+# Super Admin Credentials (REQUIRED before seeding)
+SUPER_ADMIN_EMAIL="admin@eccb.org"
+SUPER_ADMIN_PASSWORD="your-secure-admin-password"
 ```
 
 Generate auth secrets:
@@ -216,10 +242,14 @@ npx prisma generate
 
 ### Seed Database
 
+> Security: the seed process requires explicit SUPER_ADMIN credentials. Set `SUPER_ADMIN_EMAIL` and `SUPER_ADMIN_PASSWORD` in your `.env` before running `db:seed` — the script will fail if the password is missing.
+
 ```bash
-# Seed with initial data (admin user, roles, permissions)
+# Ensure SUPER_ADMIN_PASSWORD is set in .env, then seed with initial data (admin user, roles, permissions)
 npm run db:seed
 ```
+
+> Note: `npm run build` now runs `scripts/setup-admin.sh` (via npm's `prebuild`) to validate/capture required environment variables before building. The script writes a masked summary to `./build/env-variables-check.txt`.
 
 ### Create Storage Directory
 
@@ -267,12 +297,12 @@ npm start
 
 ## Default Login Credentials
 
-After seeding, a super admin account is created:
+After seeding, the seeder ensures a `SUPER_ADMIN` account exists. Behavior is idempotent: if a user with `SUPER_ADMIN_EMAIL` already exists the seeder will assign the `SUPER_ADMIN` role to that user; otherwise the seeder will create the admin user.
 
 - **Email:** `admin@eccb.org` (or value of `SUPER_ADMIN_EMAIL`)
 - **Password:** Value of `SUPER_ADMIN_PASSWORD` in `.env`
 
-**Important:** Change the default password immediately after first login.
+**Important:** You must set `SUPER_ADMIN_PASSWORD` before running `npm run db:seed` — the seeder will refuse to run without it. Change the password immediately after first login and never commit credentials to version control.
 
 ## Troubleshooting
 

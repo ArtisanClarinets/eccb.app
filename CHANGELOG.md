@@ -99,6 +99,8 @@ This release marks the completion of a comprehensive production readiness overha
 - Implemented required variable validation
 - Added production-specific validation rules
 - Created detailed `.env.example` with documentation
+- Added interactive environment setup wizard (`scripts/setup-interactive.sh`) and `npm run setup` (auto-generates secrets, conditionally prompts for optional drivers, and backs up existing `.env`).
+- Added `scripts/setup-admin.sh` and configured `prebuild` to run it during `npm run build` to validate environment variables; the script writes a masked summary to `./build/env-variables-check.txt` and enforces stricter checks for non-CI production builds.
 
 #### Health Check Endpoint
 - Created health check API at [`/api/health`](src/app/api/health/route.ts)
@@ -111,6 +113,7 @@ This release marks the completion of a comprehensive production readiness overha
 #### Security Improvements
 - Removed hardcoded default password for super admin
 - Made `SUPER_ADMIN_PASSWORD` required in production
+- `prisma db:seed` now requires `SUPER_ADMIN_PASSWORD` to be set in the environment; the seeder will refuse to run without explicit root credentials (prevents accidental default/admin passwords)
 - Added production environment validation
 - Improved session security with Better Auth
 - Enhanced file upload security

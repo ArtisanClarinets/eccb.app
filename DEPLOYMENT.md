@@ -110,8 +110,21 @@ chmod 755 storage
 
 ### 5. Environment Configuration
 
+For a guided setup experience, run the interactive configuration script:
+
 ```bash
-# Copy example environment
+# Interactive setup (recommended)
+npm run setup
+```
+
+The interactive wizard prompts for every environment variable (database, auth, storage, email, etc.), auto-generates secrets when left blank, conditionally asks for S3/SMTP/VAPID/ClamAV details, and creates a timestamped `.env` backup before writing. It validates important values (secret lengths, required production fields) and is safe to re-run.
+
+Note: `npm run build` executes `scripts/setup-admin.sh` via the `prebuild` lifecycle — that script validates required variables and writes a masked summary to `./build/env-variables-check.txt`. In non-CI production builds the validation is strict and will abort the build if required variables (for example `SUPER_ADMIN_PASSWORD`) are missing.
+
+Alternatively, for manual configuration:
+
+```bash
+# Copy example environment file
 cp .env.example .env
 
 # Edit with production values
@@ -139,6 +152,8 @@ NEXT_PUBLIC_APP_URL="https://your-domain.com"
 # Super Admin (REQUIRED in production)
 SUPER_ADMIN_EMAIL="admin@your-domain.com"
 SUPER_ADMIN_PASSWORD="your-secure-admin-password"
+
+> Note: `npm run db:seed` requires `SUPER_ADMIN_PASSWORD` to be set and will fail if it is missing. This ensures root credentials are explicitly chosen during deployment.
 
 # Storage
 STORAGE_DRIVER="LOCAL"

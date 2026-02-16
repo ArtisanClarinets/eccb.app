@@ -75,6 +75,17 @@ export async function ensureSuperAdminAssignedToUser(
   return undefined;
 }
 
+/**
+ * Validate that a SUPER_ADMIN password has been explicitly provided for seeding.
+ * Throws an error if not set. Used by `prisma/seed.ts` to ensure the operator
+ * explicitly chooses the root credentials instead of relying on defaults.
+ */
+export function assertSuperAdminPasswordPresentForSeed() {
+  if (!process.env.SUPER_ADMIN_PASSWORD) {
+    throw new Error('SUPER_ADMIN_PASSWORD is required before running `prisma db seed`');
+  }
+}
+
 function generateRandomPassword(length = 12) {
   return crypto.randomBytes(Math.ceil(length * 0.75)).toString('base64').slice(0, length);
 }
