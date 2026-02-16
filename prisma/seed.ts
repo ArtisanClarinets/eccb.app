@@ -3,6 +3,8 @@ import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import pg from 'pg';
 import bcrypt from 'bcryptjs';
+import fs from 'fs';
+import path from 'path';
 import { auth } from '@/lib/auth/config';
 import {
   ALL_PERMISSIONS,
@@ -227,12 +229,30 @@ async function main() {
   const adminPassword = process.env.SUPER_ADMIN_PASSWORD;
   
   if (!adminPassword) {
-    console.log('⚠️  SUPER_ADMIN_PASSWORD not set - skipping admin user creation');
-    console.log('   Set SUPER_ADMIN_PASSWORD environment variable to create admin user');
+    console.log('⚠️  SUPER_ADMIN_PASSWORD not set - creating/ensuring admin user with a development default login');
 
-    // If an admin user already exists, ensure they still receive SUPER_ADMIN role
-    // (idempotent and safe — does not change passwords)
-    await ensureSuperAdminAssignedToUser(adminEmail);
+    if (process.env.NODE_ENV === 'production') {
+      console.log('   SUPER_ADMIN_PASSWORD is required in production - skipping automatic login creation');
+    } else {
+      // In non-production, create user + set a generated/default password so root can sign in immediately.
+      const defaultFromEnv = process.env.SUPER_ADMIN_DEFAULT_PASSWORD;
+      const generated = await ensureSuperAdminAssignedToUser(adminEmail, { setPassword: true, password: defaultFromEnv });
+
+      if (generated) {
+        console.log('✅ Default SUPER_ADMIN login created (development):');
+        console.log(`   email: ${adminEmail}`);
+        console.log(`   password: ${generated}`);
+        try {
+          const credPath = path.resolve(process.cwd(), 'seed-admin-credentials.txt');
+          fs.writeFileSync(credPath, `email: ${adminEmail}\npassword: ${generated}\n`);
+          console.log(`   Credentials written to ${credPath}`);
+        } catch (err) {
+          console.warn('   Failed to write credentials file:', err);
+        }
+      } else {
+        console.log('✅ SUPER_ADMIN role ensured for existing admin user; password unchanged.');
+      }
+    }
   } else {
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({ 
