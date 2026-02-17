@@ -1,6 +1,19 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
+  output: 'standalone',
+
+  images: {
+    remotePatterns: [
+      { protocol: 'https', hostname: '**.s3.amazonaws.com' },
+      { protocol: 'https', hostname: '**.storage.googleapis.com' },
+    ],
+  },
+
+  experimental: {
+    optimizePackageImports: ['lucide-react', 'recharts', 'gsap'],
+  },
+
   // Security headers configuration
   async headers() {
     const isProduction = process.env.NODE_ENV === 'production';

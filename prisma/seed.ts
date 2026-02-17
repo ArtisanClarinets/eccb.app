@@ -2,14 +2,9 @@ import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import pg from 'pg';
-import bcrypt from 'bcryptjs';
-import fs from 'fs';
-import path from 'path';
 import { auth } from '@/lib/auth/config';
 import {
   ALL_PERMISSIONS,
-  MUSIC_PERMISSIONS,
-  MEMBER_PERMISSIONS,
   MUSIC_VIEW_ALL,
   MUSIC_CREATE,
   MUSIC_EDIT,
@@ -23,8 +18,9 @@ import {
   EVENT_VIEW_ALL,
   ATTENDANCE_MARK_OWN,
 } from '@/lib/auth/permission-constants';
-import { ensureSuperAdminAssignedToUser, assertSuperAdminPasswordPresentForSeed } from '@/lib/seeding';
+import { assertSuperAdminPasswordPresentForSeed } from '@/lib/seeding';
 
+// Initialize Prisma with PG Adapter
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
@@ -37,88 +33,55 @@ async function main() {
     prisma.role.upsert({
       where: { name: 'SUPER_ADMIN' },
       update: {},
-      create: {
-        name: 'SUPER_ADMIN',
-        displayName: 'Super Administrator',
-        type: 'SUPER_ADMIN',
-        description: 'Full system access',
-      },
+      create: { name: 'SUPER_ADMIN', displayName: 'Super Administrator', type: 'SUPER_ADMIN', description: 'Full system access' },
     }),
     prisma.role.upsert({
       where: { name: 'ADMIN' },
       update: {},
-      create: {
-        name: 'ADMIN',
-        displayName: 'Administrator',
-        type: 'ADMIN',
-        description: 'Band operations management',
-      },
+      create: { name: 'ADMIN', displayName: 'Administrator', type: 'ADMIN', description: 'Band operations management' },
     }),
     prisma.role.upsert({
       where: { name: 'DIRECTOR' },
       update: {},
-      create: {
-        name: 'DIRECTOR',
-        displayName: 'Director/Staff',
-        type: 'DIRECTOR',
-        description: 'Musical and operational leadership',
-      },
+      create: { name: 'DIRECTOR', displayName: 'Director/Staff', type: 'DIRECTOR', description: 'Musical and operational leadership' },
     }),
     prisma.role.upsert({
       where: { name: 'LIBRARIAN' },
       update: {},
-      create: {
-        name: 'LIBRARIAN',
-        displayName: 'Librarian',
-        type: 'LIBRARIAN',
-        description: 'Music library management',
-      },
+      create: { name: 'LIBRARIAN', displayName: 'Librarian', type: 'LIBRARIAN', description: 'Music library management' },
     }),
     prisma.role.upsert({
       where: { name: 'SECTION_LEADER' },
       update: {},
-      create: {
-        name: 'SECTION_LEADER',
-        displayName: 'Section Leader',
-        type: 'SECTION_LEADER',
-        description: 'Musical leadership for a section',
-      },
+      create: { name: 'SECTION_LEADER', displayName: 'Section Leader', type: 'SECTION_LEADER', description: 'Musical leadership for a section' },
     }),
     prisma.role.upsert({
       where: { name: 'MUSICIAN' },
       update: {},
-      create: {
-        name: 'MUSICIAN',
-        displayName: 'Musician',
-        type: 'MUSICIAN',
-        description: 'Band member',
-      },
+      create: { name: 'MUSICIAN', displayName: 'Musician', type: 'MUSICIAN', description: 'Band member' },
     }),
     prisma.role.upsert({
       where: { name: 'PUBLIC' },
       update: {},
-      create: {
-        name: 'PUBLIC',
-        displayName: 'Public User',
-        type: 'PUBLIC',
-        description: 'Limited access for public users',
-      },
+      create: { name: 'PUBLIC', displayName: 'Public User', type: 'PUBLIC', description: 'Limited access for public users' },
     }),
   ]);
 
   console.log(`✅ Created ${roles.length} roles`);
 
-  // 2. Permissions - use constants from permission-constants.ts
-  // Build permissions array from ALL_PERMISSIONS constant
-  const permissions = ALL_PERMISSIONS.map((name) => {
+  // 2. Permissions
+  const permissionsData = ALL_PERMISSIONS.map((name) => {
     const parts = name.split('.');
-    const resource = parts[0];
-    const action = parts[1];
-    const scope = parts[2] || null;
-    return { name, resource, action, scope };
+    return { 
+      name, 
+      resource: parts[0], 
+      action: parts[1], 
+      scope: parts[2] || null 
+    };
   });
 
-  for (const perm of permissions) {
+  // Execute sequentially to avoid connection pool exhaustion
+  for (const perm of permissionsData) {
     await prisma.permission.upsert({
       where: { name: perm.name },
       update: {},
@@ -126,13 +89,16 @@ async function main() {
     });
   }
 
-  console.log(`✅ Created ${permissions.length} permissions`);
+  console.log(`✅ Created ${permissionsData.length} permissions`);
 
   // 3. Assign permissions to roles
-  const superAdminRole = roles.find((r: any) => r.name === 'SUPER_ADMIN')!;
-  const adminRole = roles.find((r: any) => r.name === 'ADMIN')!;
-  const librarianRole = roles.find((r: any) => r.name === 'LIBRARIAN')!;
-  const musicianRole = roles.find((r: any) => r.name === 'MUSICIAN')!;
+  const superAdminRole = roles.find((r) => r.name === 'SUPER_ADMIN');
+  const librarianRole = roles.find((r) => r.name === 'LIBRARIAN');
+  const musicianRole = roles.find((r) => r.name === 'MUSICIAN');
+
+  if (!superAdminRole || !librarianRole || !musicianRole) {
+    throw new Error('❌ Required roles failed to generate during seeding.');
+  }
 
   // Super admin gets everything
   const allPermissions = await prisma.permission.findMany();
@@ -147,7 +113,7 @@ async function main() {
   // Librarian music permissions
   const librarianPermNames = [MUSIC_VIEW_ALL, MUSIC_CREATE, MUSIC_EDIT, MUSIC_DELETE, MUSIC_UPLOAD, MUSIC_DOWNLOAD_ALL];
   for (const permName of librarianPermNames) {
-    const perm = allPermissions.find((p: any) => p.name === permName);
+    const perm = allPermissions.find((p) => p.name === permName);
     if (perm) {
       await prisma.rolePermission.upsert({
         where: { roleId_permissionId: { roleId: librarianRole.id, permissionId: perm.id } },
@@ -160,7 +126,7 @@ async function main() {
   // Musician permissions
   const musicianPermNames = [MUSIC_VIEW_ASSIGNED, MUSIC_DOWNLOAD_ASSIGNED, MEMBER_VIEW_OWN, MEMBER_EDIT_OWN, EVENT_VIEW_ALL, ATTENDANCE_MARK_OWN];
   for (const permName of musicianPermNames) {
-    const perm = allPermissions.find((p: any) => p.name === permName);
+    const perm = allPermissions.find((p) => p.name === permName);
     if (perm) {
       await prisma.rolePermission.upsert({
         where: { roleId_permissionId: { roleId: musicianRole.id, permissionId: perm.id } },
@@ -224,20 +190,17 @@ async function main() {
 
   console.log(`✅ Created ${sections.length} sections`);
 
-  // 6. Super Admin User - IDEMPOTENT: Only create if doesn't exist
+  // 6. Super Admin User
   const adminEmail = process.env.SUPER_ADMIN_EMAIL || 'admin@eccb.org';
-  const adminPassword = process.env.SUPER_ADMIN_PASSWORD;
+  const adminPassword = process.env.SUPER_ADMIN_PASSWORD as string;
 
-  // Require explicit SUPER_ADMIN credentials for seeding to avoid accidental/default admin passwords.
   try {
     assertSuperAdminPasswordPresentForSeed();
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('❌ SUPER_ADMIN_PASSWORD is not set. For security, you must provide a password for the root SUPER_ADMIN user before running `npm run db:seed`.');
     console.error('   Add the following to your `.env` file (do NOT commit real passwords):');
     console.error('     SUPER_ADMIN_EMAIL="admin@eccb.org"');
     console.error('     SUPER_ADMIN_PASSWORD="your-secure-admin-password"');
-    console.error('\n   Example (generate a strong password):');
-    console.error('     openssl rand -base64 32');
     process.exit(1);
   }
 
@@ -251,9 +214,7 @@ async function main() {
     console.log(`✅ Admin user already exists: ${adminEmail}`);
     
     // Ensure the user has the super admin role
-    const hasSuperAdminRole = existingUser.roles.some(
-      (ur: any) => ur.roleId === superAdminRole.id
-    );
+    const hasSuperAdminRole = existingUser.roles.some((ur) => ur.roleId === superAdminRole.id);
     
     if (!hasSuperAdminRole) {
       await prisma.userRole.create({
@@ -263,9 +224,7 @@ async function main() {
     }
     
     // Ensure member profile exists
-    const existingMember = await prisma.member.findUnique({
-      where: { userId: existingUser.id }
-    });
+    const existingMember = await prisma.member.findUnique({ where: { userId: existingUser.id } });
     
     if (!existingMember) {
       await prisma.member.create({
@@ -281,7 +240,6 @@ async function main() {
       console.log('✅ Created member profile for admin user');
     }
   } else {
-    // Create new admin user via Better Auth
     try {
       console.log('Creating admin user via Better Auth...');
       const res = await auth.api.signUpEmail({

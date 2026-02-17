@@ -25,8 +25,11 @@ export async function ensureSuperAdminAssignedToUser(
     },
   });
 
-  // Find existing user by email
-  let user = await prisma.user.findUnique({ where: { email: adminEmail }, include: { roles: true } });
+  // Find existing user by email, strictly including roles
+  let user = await prisma.user.findUnique({ 
+    where: { email: adminEmail }, 
+    include: { roles: true } 
+  });
 
   // If user does not exist, create a minimal user record
   if (!user) {
@@ -36,6 +39,8 @@ export async function ensureSuperAdminAssignedToUser(
         name: 'System Administrator',
         emailVerified: true,
       },
+      // FIX: Ensure the returned type matches the inferred type of `let user`
+      include: { roles: true },
     });
   }
 
@@ -48,6 +53,7 @@ export async function ensureSuperAdminAssignedToUser(
 
   // Ensure member profile exists for the admin user
   const existingMember = await prisma.member.findUnique({ where: { userId: user.id } });
+  
   if (!existingMember) {
     await prisma.member.create({
       data: {
@@ -80,12 +86,15 @@ export async function ensureSuperAdminAssignedToUser(
  * Throws an error if not set. Used by `prisma/seed.ts` to ensure the operator
  * explicitly chooses the root credentials instead of relying on defaults.
  */
-export function assertSuperAdminPasswordPresentForSeed() {
+export function assertSuperAdminPasswordPresentForSeed(): void {
   if (!process.env.SUPER_ADMIN_PASSWORD) {
     throw new Error('SUPER_ADMIN_PASSWORD is required before running `prisma db seed`');
   }
 }
 
-function generateRandomPassword(length = 12) {
+/**
+ * Generates a cryptographically secure random password.
+ */
+function generateRandomPassword(length: number = 12): string {
   return crypto.randomBytes(Math.ceil(length * 0.75)).toString('base64').slice(0, length);
 }

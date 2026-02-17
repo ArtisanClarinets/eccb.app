@@ -7,10 +7,10 @@
     "seed": "tsx prisma/seed.ts"
   },
   "scripts": {
+    "postinstall": "prisma generate",
     "dev": "next dev",
-    "prebuild": "bash ./scripts/setup-admin.sh",
     "build": "next build",
-    "start": "node --import tsx scripts/start.ts",
+    "build:production": "npm run db:generate && next build",
     "start:server": "next start",
     "start:workers": "tsx src/workers/index.ts",
     "lint": "eslint",
@@ -19,10 +19,12 @@
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest watch",
     "check-routes": "tsx scripts/check-routes.ts",
+    "db:generate": "prisma generate",
     "db:seed": "prisma db seed",
+    "db:seed:production": "prisma db seed",
     "db:migrate": "prisma migrate dev",
+    "db:migrate:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
-    "setup": "bash ./scripts/setup-interactive.sh",
     "security:audit": "bash scripts/security-audit.sh",
     "security:check": "npm audit --audit-level=moderate",
     "security:fix": "npm audit fix",
@@ -34,7 +36,7 @@
     "@aws-sdk/s3-request-presigner": "^3.982.0",
     "@hookform/resolvers": "^5.2.2",
     "@prisma/adapter-pg": "^7.3.0",
-    "@prisma/client": "^7.4.0",
+    "@prisma/client": "^7.3.0",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-aspect-ratio": "^1.1.8",
@@ -73,7 +75,7 @@
     "embla-carousel-react": "^8.6.0",
     "gsap": "^3.14.2",
     "input-otp": "^1.4.2",
-    "ioredis": "^5.9.2",
+    "ioredis": "^5.9.3",
     "lucide-react": "^0.563.0",
     "next": "16.1.6",
     "next-themes": "^0.4.6",
@@ -113,5 +115,10 @@
     "tsx": "^4.21.0",
     "typescript": "^5",
     "vitest": "^4.0.18"
+  },
+  "overrides": {
+    "bullmq": {
+      "ioredis": "5.9.3"
+    }
   }
 }
