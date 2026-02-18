@@ -8,6 +8,8 @@ import {
 } from '@/components/ui/accordion';
 import { FileText, HelpCircle, Scale, Shield } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata = {
   title: 'Policies & FAQ | Emerald Coast Community Band',
   description: 'Band policies, frequently asked questions, and important information for members and the public',

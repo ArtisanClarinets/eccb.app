@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { Music, Calendar, Users, Heart } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 export default function Home() {
   return (
     <div className="flex min-h-screen flex-col">

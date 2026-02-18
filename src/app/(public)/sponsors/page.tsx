@@ -5,6 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Heart, ExternalLink, Building2 } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata = {
   title: 'Our Sponsors | Emerald Coast Community Band',
   description: 'Thank you to our generous sponsors who support the Emerald Coast Community Band',

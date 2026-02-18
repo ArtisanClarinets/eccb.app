@@ -386,7 +386,7 @@ describe('Librarian Workflow Actions', () => {
         expect.objectContaining({
           where: expect.objectContaining({
             OR: expect.arrayContaining([
-              { piece: { title: { contains: 'flute', mode: 'insensitive' } } },
+              { piece: { title: { contains: 'flute' } } },
             ]),
           }),
         })

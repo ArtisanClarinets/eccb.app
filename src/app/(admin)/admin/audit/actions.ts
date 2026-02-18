@@ -47,11 +47,11 @@ export async function getAuditLogs(
   }
 
   if (filters.userName) {
-    where.userName = { contains: filters.userName, mode: 'insensitive' };
+    where.userName = { contains: filters.userName };
   }
 
   if (filters.action) {
-    where.action = { contains: filters.action, mode: 'insensitive' };
+    where.action = { contains: filters.action };
   }
 
   if (filters.entityType) {

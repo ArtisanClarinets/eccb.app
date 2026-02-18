@@ -12,6 +12,10 @@ const nextConfig: NextConfig = {
 
   experimental: {
     optimizePackageImports: ['lucide-react', 'recharts', 'gsap'],
+    // Limit the number of worker threads used during `next build` so that
+    // the total number of concurrent MariaDB connections stays within the
+    // server's connection limit (each worker opens its own pool).
+    cpus: 4,
   },
 
   // Security headers configuration

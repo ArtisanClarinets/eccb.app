@@ -597,13 +597,13 @@ export async function searchUsersForPermissions(
     ? {
         deletedAt: null,
         OR: [
-          { name: { contains: query, mode: 'insensitive' as const } },
-          { email: { contains: query, mode: 'insensitive' as const } },
+          { name: { contains: query } },
+          { email: { contains: query } },
           {
             member: {
               OR: [
-                { firstName: { contains: query, mode: 'insensitive' as const } },
-                { lastName: { contains: query, mode: 'insensitive' as const } },
+                { firstName: { contains: query } },
+                { lastName: { contains: query } },
               ],
             },
           },

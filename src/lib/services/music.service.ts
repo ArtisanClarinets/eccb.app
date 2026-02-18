@@ -151,11 +151,11 @@ export class MusicLibraryService {
 
         if (filters.search) {
           where.OR = [
-            { title: { contains: filters.search, mode: 'insensitive' } },
-            { subtitle: { contains: filters.search, mode: 'insensitive' } },
-            { composer: { fullName: { contains: filters.search, mode: 'insensitive' } } },
-            { arranger: { fullName: { contains: filters.search, mode: 'insensitive' } } },
-            { catalogNumber: { contains: filters.search, mode: 'insensitive' } },
+            { title: { contains: filters.search } },
+            { subtitle: { contains: filters.search } },
+            { composer: { fullName: { contains: filters.search } } },
+            { arranger: { fullName: { contains: filters.search } } },
+            { catalogNumber: { contains: filters.search } },
           ];
         }
 

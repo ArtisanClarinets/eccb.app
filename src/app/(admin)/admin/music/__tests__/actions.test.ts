@@ -421,7 +421,7 @@ describe('Music Export Functionality', () => {
         expect.objectContaining({
           where: expect.objectContaining({
             OR: expect.arrayContaining([
-              { title: { contains: 'Test Piece 1', mode: 'insensitive' } },
+              { title: { contains: 'Test Piece 1' } },
             ]),
           }),
         })

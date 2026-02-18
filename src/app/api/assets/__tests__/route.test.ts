@@ -158,8 +158,8 @@ describe('Assets API', () => {
         expect.objectContaining({
           where: expect.objectContaining({
             OR: expect.arrayContaining([
-              { fileName: { contains: 'test', mode: 'insensitive' } },
-              { title: { contains: 'test', mode: 'insensitive' } },
+              { fileName: { contains: 'test' } },
+              { title: { contains: 'test' } },
             ]),
           }),
         })

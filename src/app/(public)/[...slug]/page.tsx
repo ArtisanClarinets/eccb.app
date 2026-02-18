@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Calendar } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 interface PageProps {
   params: Promise<{ slug: string[] }>;
 }
@@ -139,7 +141,6 @@ export default async function DynamicPage({ params }: PageProps) {
                   const imgCaption = block.caption as string | undefined;
                   return (
                     <figure key={index} className="my-6">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img 
                         src={imgUrl} 
                         alt={imgAlt} 

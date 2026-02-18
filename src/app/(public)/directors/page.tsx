@@ -1,16 +1,32 @@
 import { prisma } from '@/lib/db';
+import type { User, UserRole, Role, Member } from '@prisma/client';
 import Image from 'next/image';
 import { Card, CardContent } from '@/components/ui/card';
 import { Music, Users, Award } from 'lucide-react';
+
+export const dynamic = 'force-dynamic';
 
 export const metadata = {
   title: 'Our Directors | Emerald Coast Community Band',
   description: 'Meet the talented directors and leadership team of the Emerald Coast Community Band',
 };
 
+// Define the shape of user with roles and member included
+type UserWithRoles = User & {
+  roles: (UserRole & { role: Role })[];
+  member: Member | null;
+};
+
 export default async function DirectorsPage() {
-  // Get users with director or board roles
-  const leadershipUsers = await prisma.user.findMany({
+  console.log('[DirectorsPage] Starting prerender at:', new Date().toISOString());
+  
+  let leadershipUsers: UserWithRoles[] = [];
+  try {
+    console.log('[DirectorsPage] Fetching leadership users from database...');
+    const startTime = Date.now();
+    
+    // Get users with director or board roles
+    leadershipUsers = await prisma.user.findMany({
     where: {
       roles: {
         some: {
@@ -28,14 +44,21 @@ export default async function DirectorsPage() {
       member: true,
     },
     orderBy: { name: 'asc' },
-  });
+    });
+
+    const elapsed = Date.now() - startTime;
+    console.log(`[DirectorsPage] Query completed in ${elapsed}ms, fetched ${leadershipUsers.length} users`);
+  } catch (error) {
+    console.error('[DirectorsPage] Database error:', error);
+    leadershipUsers = [];
+  }
 
   // Separate directors from board members
   const directors = leadershipUsers.filter((u) =>
-    u.roles.some((r) => r.role.name === 'DIRECTOR')
+    u.roles.some((r: UserRole & { role: Role }) => r.role.name === 'DIRECTOR')
   );
   const boardMembers = leadershipUsers.filter((u) =>
-    u.roles.some((r) => r.role.name === 'BOARD_MEMBER')
+    u.roles.some((r: UserRole & { role: Role }) => r.role.name === 'BOARD_MEMBER')
   );
 
   return (

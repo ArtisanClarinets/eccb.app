@@ -1,7 +1,5 @@
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
-import { PrismaPg } from '@prisma/adapter-pg';
-import pg from 'pg';
 import { auth } from '@/lib/auth/config';
 import {
   ALL_PERMISSIONS,
@@ -20,10 +18,28 @@ import {
 } from '@/lib/auth/permission-constants';
 import { assertSuperAdminPasswordPresentForSeed } from '@/lib/seeding';
 
-// Initialize Prisma with PG Adapter
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
-const adapter = new PrismaPg(pool);
-const prisma = new PrismaClient({ adapter });
+// If DATABASE_URL points to MySQL/MariaDB, provide a driver adapter required by the "client" (WASM) engine.
+function _parseDbUrl(url?: string) {
+  if (!url) return null;
+  const regex = /^mysql:\/\/([^:]+):([^@]+)@([^:/]+)(?::(\d+))?\/(.+)$/;
+  const match = url.match(regex);
+  if (!match) return null;
+  return {
+    user: decodeURIComponent(match[1]),
+    password: decodeURIComponent(match[2]),
+    host: match[3],
+    port: match[4] ? Number(match[4]) : 3306,
+    database: match[5],
+  };
+}
+
+const _cfg = _parseDbUrl(process.env.DATABASE_URL);
+const _adapter = _cfg ? new (await import('@prisma/adapter-mariadb')).PrismaMariaDb({ host: _cfg.host, user: _cfg.user, password: _cfg.password, database: _cfg.database }) : undefined;
+
+const prisma = new PrismaClient({
+  ...( _adapter ? { adapter: _adapter } : {} ),
+  log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+});
 
 async function main() {
   console.log('🌱 Seeding database...');

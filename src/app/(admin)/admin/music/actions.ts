@@ -624,16 +624,16 @@ export async function getAssignmentsForLibrarian(filters?: {
 
     if (filters?.search) {
       where.OR = [
-        { piece: { title: { contains: filters.search, mode: 'insensitive' } } },
+        { piece: { title: { contains: filters.search } } },
         { 
           member: { 
             OR: [
-              { firstName: { contains: filters.search, mode: 'insensitive' } },
-              { lastName: { contains: filters.search, mode: 'insensitive' } },
+              { firstName: { contains: filters.search } },
+              { lastName: { contains: filters.search } },
             ],
           } 
         },
-        { partName: { contains: filters.search, mode: 'insensitive' } },
+        { partName: { contains: filters.search } },
       ];
     }
 
@@ -1301,11 +1301,11 @@ export async function exportMusicToCSV(filters: MusicExportFilters = {}) {
 
     if (filters.search) {
       where.OR = [
-        { title: { contains: filters.search, mode: 'insensitive' } },
-        { subtitle: { contains: filters.search, mode: 'insensitive' } },
-        { composer: { fullName: { contains: filters.search, mode: 'insensitive' } } },
-        { arranger: { fullName: { contains: filters.search, mode: 'insensitive' } } },
-        { catalogNumber: { contains: filters.search, mode: 'insensitive' } },
+        { title: { contains: filters.search } },
+        { subtitle: { contains: filters.search } },
+        { composer: { fullName: { contains: filters.search } } },
+        { arranger: { fullName: { contains: filters.search } } },
+        { catalogNumber: { contains: filters.search } },
       ];
     }
 

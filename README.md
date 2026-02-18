@@ -39,8 +39,8 @@ This platform provides:
 ### Prerequisites
 
 - Node.js 20.x LTS
-- PostgreSQL 14+
-- Redis 6.0+
+- PostgreSQL 14+ (or SQLite for development)
+- Redis 6.0+ (optional)
 
 ### Installation
 
@@ -53,8 +53,6 @@ cd eccb.app
 npm ci
 
 # Interactive environment setup (recommended)
-
-# Interactive (recommended)
 npm run setup
 
 # Non-interactive (accept defaults)
@@ -78,8 +76,26 @@ The `npm run setup` command opens an interactive, guided wizard that:
 - creates a timestamped backup of any existing `.env` before overwriting it,
 - writes the completed `.env` and is safe to re-run (idempotent).
 
-For production builds, `npm run build` executes `scripts/setup-admin.sh` (npm `prebuild`) to validate required variables; a masked summary is written to `./build/env-variables-check.txt` and the check is strict for non-CI production builds.
+### Setup and Repair System
 
+The platform includes a comprehensive **Setup and Repair System** for database maintenance:
+
+- **Interactive Setup Wizard**: Navigate to `/setup` to configure your database connection and initialize the system
+- **Repair Endpoint**: `POST /api/setup/repair` - Repair broken database connections and fix setup issues
+- **Status Endpoint**: `GET /api/setup/status` - Check current setup state and health
+
+#### Repair API Actions
+
+| Action | Description |
+|--------|-------------|
+| `reset` | Reset and reapply database migrations |
+| `migrate` | Run database migrations only |
+| `seed` | Seed database with initial data |
+| `full` | Run complete repair (reset + migrate + seed) |
+
+The `force` parameter (optional, defaults to `false`) can be used to bypass confirmation prompts during repair operations.
+
+ For production builds, `npm run build` executes `scripts/setup-admin.sh` (npm `prebuild`) to validate required variables; a masked summary is written to `./build/env-variables-check.txt` and the check is strict for non-CI production builds.
 
 Access the application at http://localhost:3000
 

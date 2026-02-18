@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { CalendarDays, MapPin, Clock, Users, ArrowLeft, Music, Navigation, Car } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 interface EventPageProps {
   params: Promise<{ id: string }>;
 }

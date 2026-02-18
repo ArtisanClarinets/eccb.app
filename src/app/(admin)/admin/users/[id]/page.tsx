@@ -18,11 +18,9 @@ import {
 import {
   ArrowLeft,
   Edit,
-  Mail,
   Shield,
   ShieldOff,
   Key,
-  Trash2,
   UserCheck,
   UserX,
   AlertCircle,
@@ -32,7 +30,7 @@ import {
   LogOut,
   Users,
 } from 'lucide-react';
-import { getUserDetails, getUserStats } from '../actions';
+import { getUserDetails, getUserStats, revokeAllSessions, revokeSession } from '../actions';
 import { UserActions } from './user-actions';
 
 export default async function UserDetailPage({
@@ -289,7 +287,7 @@ export default async function UserDetailPage({
         </Card>
       </div>
 
-      {/* Sessions */}
+      /*Sessions */
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -300,7 +298,6 @@ export default async function UserDetailPage({
             {user._count.sessions > 0 && (
               <form action={async () => {
                 'use server';
-                const { revokeAllSessions } = require('../actions');
                 await revokeAllSessions(user.id);
               }}>
                 <Button variant="destructive" size="sm" type="submit">
@@ -352,7 +349,6 @@ export default async function UserDetailPage({
                     <TableCell className="text-right">
                       <form action={async () => {
                         'use server';
-                        const { revokeSession } = require('../actions');
                         await revokeSession(session.id);
                       }}>
                         <Button variant="ghost" size="sm" type="submit">

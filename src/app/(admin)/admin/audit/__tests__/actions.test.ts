@@ -100,7 +100,7 @@ describe('Audit Log Actions', () => {
       expect(mockPrisma.auditLog.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
-            action: { contains: 'user.delete', mode: 'insensitive' },
+            action: { contains: 'user.delete' },
           }),
         })
       );

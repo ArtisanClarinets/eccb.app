@@ -6,6 +6,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Newspaper, ArrowRight, Calendar } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata = {
   title: 'News | Emerald Coast Community Band',
   description: 'Latest news and updates from the Emerald Coast Community Band',
