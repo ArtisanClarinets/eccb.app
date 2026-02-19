@@ -41,6 +41,10 @@ describe('seeding helper — ensureSuperAdminAssignedToUser', () => {
     expect(member).toBeTruthy();
     expect(member?.firstName).toBe('System');
     expect(member?.lastName).toBe('Administrator');
+
+    // Email should be verified for the SUPER_ADMIN user
+    const updatedUser = await prisma.user.findUnique({ where: { id: user.id } });
+    expect(updatedUser?.emailVerified).toBe(true);
   });
 
   it('creates admin user + SUPER_ADMIN role + member when user is missing', async () => {
@@ -54,6 +58,7 @@ describe('seeding helper — ensureSuperAdminAssignedToUser', () => {
     const createdUser = await prisma.user.findUnique({ where: { email: 'admin@eccb.org' } });
     expect(createdUser).toBeTruthy();
     expect(createdUser?.email).toBe('admin@eccb.org');
+    expect(createdUser?.emailVerified).toBe(true);
 
     const role = await prisma.role.findUnique({ where: { name: 'SUPER_ADMIN' } });
     expect(role).toBeTruthy();
@@ -80,6 +85,7 @@ describe('seeding helper — ensureSuperAdminAssignedToUser', () => {
     const createdUser = await prisma.user.findUnique({ where: { email: 'admin@eccb.org' } });
     expect(createdUser).toBeTruthy();
     expect(createdUser?.password).toBeTruthy();
+    expect(createdUser?.emailVerified).toBe(true);
 
     // Verify the stored hash matches the plaintext
     const bcrypt = await (await import('bcryptjs')).default;

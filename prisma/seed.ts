@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcryptjs';
 import { auth } from '@/lib/auth/config';
 import {
   ALL_PERMISSIONS,
@@ -159,24 +160,34 @@ async function main() {
     { name: 'Piccolo', family: 'Woodwind', sortOrder: 1 },
     { name: 'Flute', family: 'Woodwind', sortOrder: 2 },
     { name: 'Oboe', family: 'Woodwind', sortOrder: 3 },
-    { name: 'Bassoon', family: 'Woodwind', sortOrder: 4 },
-    { name: 'Eb Clarinet', family: 'Woodwind', sortOrder: 5 },
-    { name: 'Bb Clarinet', family: 'Woodwind', sortOrder: 6 },
-    { name: 'Alto Clarinet', family: 'Woodwind', sortOrder: 7 },
-    { name: 'Bass Clarinet', family: 'Woodwind', sortOrder: 8 },
-    { name: 'Alto Saxophone', family: 'Woodwind', sortOrder: 9 },
-    { name: 'Tenor Saxophone', family: 'Woodwind', sortOrder: 10 },
-    { name: 'Baritone Saxophone', family: 'Woodwind', sortOrder: 11 },
-    { name: 'Bb Trumpet', family: 'Brass', sortOrder: 20 },
-    { name: 'Cornet', family: 'Brass', sortOrder: 21 },
-    { name: 'French Horn', family: 'Brass', sortOrder: 22 },
-    { name: 'Trombone', family: 'Brass', sortOrder: 23 },
-    { name: 'Bass Trombone', family: 'Brass', sortOrder: 24 },
-    { name: 'Euphonium', family: 'Brass', sortOrder: 25 },
-    { name: 'Tuba', family: 'Brass', sortOrder: 26 },
+    { name: 'English Horn', family: 'Woodwind', sortOrder: 4 },
+    { name: 'Bassoon', family: 'Woodwind', sortOrder: 5 },
+    { name: 'Contrabassoon', family: 'Woodwind', sortOrder: 6 },
+    { name: 'E♭ Clarinet', family: 'Woodwind', sortOrder: 7 },
+    { name: 'B♭ Clarinet', family: 'Woodwind', sortOrder: 8 },
+    { name: 'Alto Clarinet', family: 'Woodwind', sortOrder: 9 },
+    { name: 'Bass Clarinet', family: 'Woodwind', sortOrder: 10 },
+    { name: 'Contra-alto Clarinet', family: 'Woodwind', sortOrder: 11 },
+    { name: 'Contrabass Clarinet', family: 'Woodwind', sortOrder: 12 },
+    { name: 'Soprano Saxophone', family: 'Woodwind', sortOrder: 13 },
+    { name: 'Alto Saxophone', family: 'Woodwind', sortOrder: 14 },
+    { name: 'Tenor Saxophone', family: 'Woodwind', sortOrder: 15 },
+    { name: 'Baritone Saxophone', family: 'Woodwind', sortOrder: 16 },
+    { name: 'Cornet', family: 'Brass', sortOrder: 20 },
+    { name: 'Trumpet', family: 'Brass', sortOrder: 21 },
+    { name: 'Flugelhorn', family: 'Brass', sortOrder: 22 },
+    { name: 'French Horn', family: 'Brass', sortOrder: 23 },
+    { name: 'Trombone', family: 'Brass', sortOrder: 24 },
+    { name: 'Bass Trombone', family: 'Brass', sortOrder: 25 },
+    { name: 'Euphonium', family: 'Brass', sortOrder: 26 },
+    { name: 'Baritone', family: 'Brass', sortOrder: 27 },
+    { name: 'Tuba', family: 'Brass', sortOrder: 28 },
     { name: 'Percussion', family: 'Percussion', sortOrder: 30 },
     { name: 'Timpani', family: 'Percussion', sortOrder: 31 },
+    { name: 'Mallets', family: 'Percussion', sortOrder: 32 },
+    { name: 'Drum Set', family: 'Percussion', sortOrder: 33 },
     { name: 'String Bass', family: 'String', sortOrder: 40 },
+    { name: 'Piano', family: 'Keyboard', sortOrder: 41 },
   ];
 
   for (const inst of instruments) {
@@ -228,7 +239,20 @@ async function main() {
   
   if (existingUser) {
     console.log(`✅ Admin user already exists: ${adminEmail}`);
-    
+
+    // Ensure email is verified so admin can sign in immediately
+    if (!existingUser.emailVerified) {
+      await prisma.user.update({ where: { id: existingUser.id }, data: { emailVerified: true } });
+      console.log(`✅ Marked admin user email as verified: ${adminEmail}`);
+    }
+
+    // Ensure password exists (use SUPER_ADMIN_PASSWORD when present) — idempotent and safe for development
+    if (!existingUser.password && adminPassword) {
+      const hashed = await bcrypt.hash(adminPassword, 10);
+      await prisma.user.update({ where: { id: existingUser.id }, data: { password: hashed } });
+      console.log(`✅ Set password for existing admin user from SUPER_ADMIN_PASSWORD`);
+    }
+
     // Ensure the user has the super admin role
     const hasSuperAdminRole = existingUser.roles.some((ur) => ur.roleId === superAdminRole.id);
     
@@ -267,6 +291,18 @@ async function main() {
       });
       
       if (res.user) {
+        // Mark email verified so the seeded admin can sign in immediately
+        await prisma.user.update({ where: { id: res.user.id }, data: { emailVerified: true } });
+
+        // As a fallback, ensure a password is present in the DB (Better Auth should handle this,
+        // but this guarantees the seeded admin can login with SUPER_ADMIN_PASSWORD)
+        const createdUser = await prisma.user.findUnique({ where: { id: res.user.id } });
+        if (createdUser && !createdUser.password && adminPassword) {
+          const hashed = await bcrypt.hash(adminPassword, 10);
+          await prisma.user.update({ where: { id: res.user.id }, data: { password: hashed } });
+          console.log('✅ Set password for newly-created admin user from SUPER_ADMIN_PASSWORD');
+        }
+
         await prisma.userRole.create({
           data: { userId: res.user.id, roleId: superAdminRole.id },
         });

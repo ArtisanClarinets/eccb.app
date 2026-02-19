@@ -212,7 +212,7 @@ export default async function AdminUsersPage({
                 <SelectValue placeholder="All Status" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Status</SelectItem>
+                <SelectItem value="all">All Status</SelectItem>
                 <SelectItem value="active">Active</SelectItem>
                 <SelectItem value="banned">Banned</SelectItem>
                 <SelectItem value="unverified">Unverified</SelectItem>
@@ -223,7 +223,7 @@ export default async function AdminUsersPage({
                 <SelectValue placeholder="All Roles" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Roles</SelectItem>
+                <SelectItem value="all">All Roles</SelectItem>
                 {roles.map((role) => (
                   <SelectItem key={role.id} value={role.id}>
                     {role.displayName || role.name}

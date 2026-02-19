@@ -69,9 +69,9 @@ export default async function AdminEventsPage({
   const where: any = {};
 
   if (view === 'upcoming') {
-    where.startDate = { gte: now };
+    where.startTime = { gte: now };
   } else if (view === 'past') {
-    where.startDate = { lt: now };
+    where.startTime = { lt: now };
   }
 
   if (type) {
@@ -227,7 +227,7 @@ export default async function AdminEventsPage({
                 <SelectValue placeholder="All Types" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Types</SelectItem>
+                <SelectItem value="all">All Types</SelectItem>
                 <SelectItem value="REHEARSAL">Rehearsal</SelectItem>
                 <SelectItem value="CONCERT">Concert</SelectItem>
                 <SelectItem value="MEETING">Meeting</SelectItem>
@@ -240,7 +240,7 @@ export default async function AdminEventsPage({
                 <SelectValue placeholder="All Status" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Status</SelectItem>
+                <SelectItem value="all">All Status</SelectItem>
                 <SelectItem value="SCHEDULED">Scheduled</SelectItem>
                 <SelectItem value="CANCELLED">Cancelled</SelectItem>
                 <SelectItem value="COMPLETED">Completed</SelectItem>

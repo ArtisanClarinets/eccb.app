@@ -248,7 +248,7 @@ export default async function AdminAuditPage({
                 <SelectValue placeholder="All Actions" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Actions</SelectItem>
+                <SelectItem value="all">All Actions</SelectItem>
                 {uniqueActions.map((action) => (
                   <SelectItem key={action} value={action}>
                     {formatAction(action)}
@@ -261,7 +261,7 @@ export default async function AdminAuditPage({
                 <SelectValue placeholder="All Entities" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Entities</SelectItem>
+                <SelectItem value="all">All Entities</SelectItem>
                 {uniqueEntityTypes.map((type) => (
                   <SelectItem key={type} value={type}>
                     {type}

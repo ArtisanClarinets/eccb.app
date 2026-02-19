@@ -106,7 +106,7 @@ export function AttendanceReportClient({
               <SelectValue placeholder="All Sections" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All Sections</SelectItem>
+              <SelectItem value="all">All Sections</SelectItem>
               {sections.map((section) => (
                 <SelectItem key={section.id} value={section.id}>
                   {section.name}
@@ -123,7 +123,7 @@ export function AttendanceReportClient({
               <SelectValue placeholder="All Types" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All Types</SelectItem>
+              <SelectItem value="all">All Types</SelectItem>
               {eventTypes.map((type) => (
                 <SelectItem key={type.value} value={type.value}>
                   {type.label}

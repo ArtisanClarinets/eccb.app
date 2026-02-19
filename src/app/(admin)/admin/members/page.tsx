@@ -141,23 +141,22 @@ export default async function AdminMembersPage({
   }
 
   // Build orderBy clause
-  const orderBy: Record<string, unknown> = {};
+  const orderBy: Record<string, unknown>[] = [];
   switch (sortField) {
     case 'name':
-      orderBy.lastName = sortOrder;
-      orderBy.firstName = sortOrder;
+      orderBy.push({ lastName: sortOrder }, { firstName: sortOrder });
       break;
     case 'joinDate':
-      orderBy.joinDate = sortOrder;
+      orderBy.push({ joinDate: sortOrder });
       break;
     case 'status':
-      orderBy.status = sortOrder;
+      orderBy.push({ status: sortOrder });
       break;
     case 'createdAt':
-      orderBy.createdAt = sortOrder;
+      orderBy.push({ createdAt: sortOrder });
       break;
     default:
-      orderBy.lastName = 'asc';
+      orderBy.push({ lastName: 'asc' });
   }
 
   const [members, total, sections, instruments, roles, stats] = await Promise.all([
@@ -368,7 +367,7 @@ export default async function AdminMembersPage({
                 <SelectValue placeholder="All Status" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Status</SelectItem>
+                <SelectItem value="all">All Status</SelectItem>
                 <SelectItem value="ACTIVE">Active</SelectItem>
                 <SelectItem value="INACTIVE">Inactive</SelectItem>
                 <SelectItem value="LEAVE_OF_ABSENCE">On Leave</SelectItem>
@@ -382,7 +381,7 @@ export default async function AdminMembersPage({
                 <SelectValue placeholder="All Sections" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Sections</SelectItem>
+                <SelectItem value="all">All Sections</SelectItem>
                 {sections.map((section) => (
                   <SelectItem key={section.id} value={section.id}>
                     {section.name}
@@ -395,7 +394,7 @@ export default async function AdminMembersPage({
                 <SelectValue placeholder="All Instruments" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Instruments</SelectItem>
+                <SelectItem value="all">All Instruments</SelectItem>
                 {instruments.map((instrument) => (
                   <SelectItem key={instrument.id} value={instrument.id}>
                     {instrument.name}
@@ -408,7 +407,7 @@ export default async function AdminMembersPage({
                 <SelectValue placeholder="All Roles" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Roles</SelectItem>
+                <SelectItem value="all">All Roles</SelectItem>
                 {roles.map((role) => (
                   <SelectItem key={role.id} value={role.id}>
                     {role.displayName || role.name}

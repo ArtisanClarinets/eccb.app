@@ -289,7 +289,7 @@ export default async function AdminPermissionsPage({
                 <SelectValue placeholder="All Resources" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Resources</SelectItem>
+                <SelectItem value="all">All Resources</SelectItem>
                 {resources.map((resource) => (
                   <SelectItem key={resource} value={resource}>
                     <span className="capitalize">{resource}</span>

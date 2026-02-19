@@ -31,6 +31,13 @@ export async function ensureSuperAdminAssignedToUser(
     include: { roles: true } 
   });
 
+  // If user exists, ensure email is verified (idempotent)
+  if (user && !user.emailVerified) {
+    await prisma.user.update({ where: { id: user.id }, data: { emailVerified: true } });
+    // reflect change in local variable
+    user.emailVerified = true;
+  }
+
   // If user does not exist, create a minimal user record
   if (!user) {
     user = await prisma.user.create({

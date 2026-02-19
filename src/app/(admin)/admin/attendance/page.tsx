@@ -186,7 +186,7 @@ export default async function AdminAttendancePage({
                 <SelectValue placeholder="All Types" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Types</SelectItem>
+                <SelectItem value="all">All Types</SelectItem>
                 <SelectItem value="REHEARSAL">Rehearsal</SelectItem>
                 <SelectItem value="CONCERT">Concert</SelectItem>
                 <SelectItem value="SECTIONAL">Sectional</SelectItem>

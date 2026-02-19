@@ -22,6 +22,11 @@ export async function checkUserPermission(
   userId: string,
   permission: string
 ): Promise<boolean> {
+  // SUPER_ADMIN bypasses all permission checks
+  const userRoles = await getUserRoles(userId);
+  if (userRoles.includes('SUPER_ADMIN')) {
+    return true;
+  }
   const userPermissions = await getUserPermissions(userId);
   return userPermissions.includes(permission);
 }
@@ -87,7 +92,8 @@ export async function requireRole(roleName: string): Promise<void> {
   }
 
   const userRoles = await getUserRoles(session.user.id);
-  if (!userRoles.includes(roleName)) {
+  // SUPER_ADMIN bypasses all role checks
+  if (!userRoles.includes(roleName) && !userRoles.includes('SUPER_ADMIN')) {
     throw new Error(`Forbidden: Missing role ${roleName}`);
   }
 }

@@ -331,7 +331,7 @@ export default async function AdminMusicPage({
                 <SelectValue placeholder="All Genres" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Genres</SelectItem>
+                <SelectItem value="all">All Genres</SelectItem>
                 {uniqueGenres.map((g) => (
                   <SelectItem key={g} value={g}>
                     {g}
@@ -344,7 +344,7 @@ export default async function AdminMusicPage({
                 <SelectValue placeholder="All Levels" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Levels</SelectItem>
+                <SelectItem value="all">All Levels</SelectItem>
                 {Object.entries(difficultyLabels).map(([value, label]) => (
                   <SelectItem key={value} value={value}>
                     {label}
