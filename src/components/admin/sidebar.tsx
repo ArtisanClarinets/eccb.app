@@ -18,6 +18,7 @@ import {
   ImageIcon,
   Activity,
   Upload,
+  Sparkles,
 } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -51,6 +52,7 @@ const navigation = [
       { name: 'All Music', href: '/admin/music' },
       { name: 'Add Music', href: '/admin/music/new' },
       { name: 'Smart Upload', href: '/admin/music/smart-upload' },
+      { name: 'Smart Upload Settings', href: '/admin/music/smart-upload/settings' },
     ],
   },
   {

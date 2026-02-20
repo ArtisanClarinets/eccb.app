@@ -20,6 +20,7 @@ import {
   ATTENDANCE_MARK_OWN,
 } from '@/lib/auth/permission-constants';
 import { assertSuperAdminPasswordPresentForSeed } from '@/lib/seeding';
+import { seedDefaultProviders } from '@/lib/services/smart-upload-settings';
 
 // If DATABASE_URL points to MySQL/MariaDB, provide a driver adapter required by the "client" (WASM) engine.
 function _parseDbUrl(url?: string) {
@@ -327,6 +328,10 @@ async function main() {
       throw error;
     }
   }
+
+  // 7. Seed AI Providers
+  await seedDefaultProviders();
+  console.log('✅ Seeded AI providers');
 
   console.log('🎉 Seeding complete!');
 }

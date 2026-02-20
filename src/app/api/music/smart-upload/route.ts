@@ -18,6 +18,7 @@ import { logger } from '@/lib/logger';
 import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { isAdmin } from '@/lib/auth/guards';
+import { isSmartUploadEnabled } from '@/lib/services/smart-upload-settings';
 
 // =============================================================================
 // Validation Schemas
@@ -52,6 +53,14 @@ async function canAccessBatch(batchId: string, userId: string): Promise<boolean>
   return admin;
 }
 
+/**
+ * Check if feature is enabled (database with env fallback)
+ */
+async function checkFeatureEnabled(): Promise<boolean> {
+  const dbEnabled = await isSmartUploadEnabled();
+  return dbEnabled ?? env.SMART_UPLOAD_ENABLED;
+}
+
 // =============================================================================
 // POST /api/music/smart-upload
 // Create a new Smart Upload batch
@@ -79,8 +88,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // Check feature flag
-  if (!env.SMART_UPLOAD_ENABLED) {
+  // Check feature flag from database (with fallback to env)
+  const isFeatureEnabled = await checkFeatureEnabled();
+  if (!isFeatureEnabled) {
     logger.warn('Smart Upload access denied: feature disabled', {
       userId: session.user.id,
     });
@@ -170,8 +180,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // Check feature flag
-  if (!env.SMART_UPLOAD_ENABLED) {
+  // Check feature flag from database (with fallback to env)
+  const isFeatureEnabled = await checkFeatureEnabled();
+  if (!isFeatureEnabled) {
     return NextResponse.json(
       { error: 'Feature not available', code: 'FEATURE_DISABLED' },
       { status: 403 }

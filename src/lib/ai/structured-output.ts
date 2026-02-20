@@ -57,6 +57,7 @@ export function repairJson(raw: string): string {
   repaired = repaired.replace(/:\s*([a-zA-Z][a-zA-Z0-9_]*)\s*([,}])/g, ':"$1"$2');
 
   // Remove control characters using unicode ranges
+  // eslint-disable-next-line no-control-regex
   repaired = repaired.replace(/[\x00-\x1F\x7F]/g, '');
 
   // Try to fix unclosed strings

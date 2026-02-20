@@ -645,6 +645,170 @@ model SmartUploadProposal {
   @@index([isApproved])
 }
 
+// ====================================
+// Smart Upload Settings & AI Configuration
+// ====================================
+
+// Smart Upload Feature Settings (key-value approach for flexibility)
+model SmartUploadSetting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String
+  description String?
+  category    String   @default("general") // general, feature, limits
+  isPublic    Boolean  @default(false) // whether visible to non-admins
+  updatedAt   DateTime @updatedAt
+  updatedBy   String?
+
+  @@index([key])
+  @@index([category])
+}
+
+// AI Provider Configuration
+model AIProvider {
+  id           String    @id @default(cuid())
+  providerId   String    @unique // openai, anthropic, gemini, etc.
+  displayName  String
+  description  String?
+  baseUrl      String?   // Custom endpoint URL
+  logoUrl      String?
+  isEnabled    Boolean   @default(false)
+  isDefault    Boolean   @default(false)
+  sortOrder    Int       @default(0)
+  capabilities Json?     // { vision: true, structuredOutput: true }
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relations
+  apiKeys      APIKey[]
+  models       AIModel[]
+
+  @@index([isEnabled])
+  @@index([sortOrder])
+}
+
+// API Keys (encrypted at rest)
+model APIKey {
+  id              String    @id @default(cuid())
+  providerId      String
+  keyName         String?   // Optional name for identification
+  encryptedKey    String    // AES-256 encrypted API key
+  keyHash         String    // SHA-256 hash for validation (never decrypted)
+  isValid         Boolean   @default(false)
+  validationError String?   // Last validation error
+  lastValidated   DateTime?
+  expiresAt       DateTime? // Optional expiration
+  isActive        Boolean   @default(true)
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  createdBy       String?
+
+  // Relations
+  provider        AIProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([providerId])
+  @@index([isActive])
+}
+
+// Available Models per Provider
+model AIModel {
+  id                      String    @id @default(cuid())
+  providerId              String
+  modelId                 String    // Provider's model identifier (e.g., gpt-4o-mini)
+  displayName             String
+  description             String?
+
+  // Capabilities
+  supportsVision          Boolean   @default(false)
+  supportsStructuredOutput Boolean  @default(false)
+  supportsStreaming       Boolean   @default(false)
+  maxTokens              Int?
+  contextWindow           Int?
+
+  // Cache management
+  lastFetched             DateTime? // When model list was last fetched
+  isAvailable            Boolean   @default(true)
+
+  // Default selection
+  isDefault              Boolean   @default(false)
+  isPreferred            Boolean   @default(false) // User preference
+
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  // Relations
+  provider               AIProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  parameters             ModelParameter[]
+
+  @@unique([providerId, modelId])
+  @@index([providerId])
+  @@index([isDefault])
+}
+
+// Configurable Parameters per Model
+model ModelParameter {
+  id            String    @id @default(cuid())
+  modelId       String
+
+  // Parameter definition
+  name          String    // temperature, max_tokens, top_p, etc.
+  displayName   String
+  description   String?
+  paramType     String    // float, int, string, boolean
+
+  // Constraints
+  defaultValue  Float?    // For numeric types
+  minValue      Float?
+  maxValue      Float?
+  stringDefault String?   // For string types
+  allowedValues Json?     // For enum-like params
+
+  // User override
+  userValue     Float?
+  userStringValue String?
+
+  // Metadata
+  isAdvanced    Boolean   @default(false)
+  isVisible     Boolean   @default(true)
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  model         AIModel   @relation(fields: [modelId], references: [id], onDelete: Cascade)
+
+  @@unique([modelId, name])
+  @@index([modelId])
+}
+
+// Settings Change Audit Log
+model SettingsAuditLog {
+  id            String    @id @default(cuid())
+
+  // What changed
+  entityType    String    // SmartUploadSetting, AIProvider, APIKey, AIModel, ModelParameter
+  entityId      String
+  action        String    // CREATE, UPDATE, DELETE, VALIDATE, ENABLE, DISABLE
+
+  // Value changes
+  fieldName     String?   // Which field changed (null for entity-level actions)
+  oldValue      String?   // JSON serialized
+  newValue      String?   // JSON serialized
+
+  // Who made the change
+  changedBy     String?   // User ID
+  ipAddress     String?
+  userAgent     String?
+
+  timestamp     DateTime  @default(now())
+
+  @@index([entityType, entityId])
+  @@index([timestamp])
+  @@index([changedBy])
+}
+
 enum AssignmentStatus {
   ASSIGNED      // Music assigned to member, waiting for pickup
   PICKED_UP     // Member has picked up the music
@@ -956,7 +1120,10 @@ model UserNotification {
   
   user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   announcement   Announcement?    @relation(fields: [announcementId], references: [id])
-  
+
+  updatedBy String?
+  updatedAt DateTime?      @updatedAt
+
   @@index([userId])
   @@index([isRead])
   @@index([createdAt])
@@ -997,7 +1164,10 @@ model EmailLog {
   sentAt         DateTime?
   errorMessage   String?
   createdAt      DateTime    @default(now())
-  
+
+  updatedBy String?
+  updatedAt DateTime? @updatedAt
+
   sentBy         User?       @relation(fields: [sentById], references: [id])
   
   @@index([sentById])

@@ -1,12 +1,15 @@
 import { Metadata } from 'next';
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
 import { prisma } from '@/lib/db';
 import { requirePermission } from '@/lib/auth/guards';
 import { formatDate } from '@/lib/date';
 import { env } from '@/lib/env';
+import { isSmartUploadEnabled } from '@/lib/services/smart-upload-settings';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Settings, ArrowLeft } from 'lucide-react';
 import { SmartUploadClient } from './smart-upload-client';
 
 export const metadata: Metadata = {
@@ -25,8 +28,11 @@ export default async function SmartUploadPage({
   // Check permission
   await requirePermission('music:smart_upload:read');
 
-  // Check feature flag
-  if (!env.SMART_UPLOAD_ENABLED) {
+  // Check feature flag from database (with fallback to env)
+  const dbEnabled = await isSmartUploadEnabled();
+  const isFeatureEnabled = dbEnabled ?? env.SMART_UPLOAD_ENABLED;
+
+  if (!isFeatureEnabled) {
     return (
       <div className="space-y-6">
         <div>
@@ -59,6 +65,14 @@ export default async function SmartUploadPage({
                 Smart Upload is not currently enabled. Please contact your administrator
                 to enable this feature.
               </p>
+              <div className="pt-4">
+                <Button asChild>
+                  <Link href="/admin/music/smart-upload/settings">
+                    <Settings className="h-4 w-4 mr-2" />
+                    Configure Smart Upload
+                  </Link>
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -95,15 +109,27 @@ export default async function SmartUploadPage({
   const totalPages = Math.ceil(total / limit);
 
   return (
-    <SmartUploadClient
-      batches={batches}
-      total={total}
-      page={page}
-      totalPages={totalPages}
-      isEnabled={env.SMART_UPLOAD_ENABLED}
-      maxFiles={env.SMART_UPLOAD_MAX_FILES}
-      maxSize={env.SMART_UPLOAD_MAX_TOTAL_BYTES}
-      aiProvider={env.AI_PROVIDER}
-    />
+    <>
+      {/* Settings Link for Admins */}
+      <div className="mb-4">
+        <Button variant="ghost" size="sm" asChild>
+          <Link href="/admin/music/smart-upload/settings">
+            <Settings className="h-4 w-4 mr-2" />
+            Smart Upload Settings
+          </Link>
+        </Button>
+      </div>
+
+      <SmartUploadClient
+        batches={batches}
+        total={total}
+        page={page}
+        totalPages={totalPages}
+        isEnabled={isFeatureEnabled}
+        maxFiles={env.SMART_UPLOAD_MAX_FILES}
+        maxSize={env.SMART_UPLOAD_MAX_TOTAL_BYTES}
+        aiProvider={env.AI_PROVIDER}
+      />
+    </>
   );
 }

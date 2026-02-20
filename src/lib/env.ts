@@ -95,6 +95,13 @@ const envSchema = z.object({
 
   // KiloCode Provider
   KILO_API_KEY: z.string().optional(),
+
+  // =============================================================================
+  // Encryption
+  // =============================================================================
+
+  // Encryption key for sensitive data (32 bytes / 64 hex characters for AES-256)
+  ENCRYPTION_KEY: z.string().optional(),
 });
 
 function validateEnv() {

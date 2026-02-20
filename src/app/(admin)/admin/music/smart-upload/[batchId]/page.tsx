@@ -1,8 +1,13 @@
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+import Link from 'next/link';
 import { prisma } from '@/lib/db';
 import { requirePermission } from '@/lib/auth/guards';
 import { env } from '@/lib/env';
+import { isSmartUploadEnabled } from '@/lib/services/smart-upload-settings';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Settings, ArrowLeft } from 'lucide-react';
 import { BatchDetailClient } from './batch-detail-client';
 
 export const metadata: Metadata = {
@@ -17,19 +22,10 @@ export default async function BatchDetailPage({ params }: PageProps) {
   // Check permission
   await requirePermission('music:smart_upload:read');
 
-  // Check feature flag
-  if (!env.SMART_UPLOAD_ENABLED) {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold">Batch Details</h1>
-          <p className="text-muted-foreground">
-            Smart Upload is currently disabled
-          </p>
-        </div>
-      </div>
-    );
-  }
+  // Check feature flag from database (with fallback to env)
+  // Note: We allow access to existing batches even when feature is disabled
+  const dbEnabled = await isSmartUploadEnabled();
+  const isFeatureEnabled = dbEnabled ?? env.SMART_UPLOAD_ENABLED;
 
   const { batchId } = await params;
 
@@ -109,11 +105,44 @@ export default async function BatchDetailPage({ params }: PageProps) {
       : 0;
 
   return (
-    <BatchDetailClient
-      batch={transformedBatch}
-      items={transformedItems}
-      proposals={transformedProposals}
-      progress={progress}
-    />
+    <>
+      {/* Back link and settings link */}
+      <div className="flex items-center justify-between mb-4">
+        <Button variant="ghost" size="sm" asChild>
+          <Link href="/admin/music/smart-upload">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Smart Upload
+          </Link>
+        </Button>
+        <Button variant="ghost" size="sm" asChild>
+          <Link href="/admin/music/smart-upload/settings">
+            <Settings className="h-4 w-4 mr-2" />
+            Settings
+          </Link>
+        </Button>
+      </div>
+
+      {/* Feature disabled warning for existing batches */}
+      {!isFeatureEnabled && (
+        <Card className="mb-4 border-amber-200 bg-amber-50">
+          <CardContent className="py-3">
+            <div className="flex items-center gap-2 text-amber-800">
+              <Settings className="h-4 w-4" />
+              <span className="text-sm">
+                Smart Upload is currently disabled. You can view and review existing batches,
+                but cannot create new uploads.
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <BatchDetailClient
+        batch={transformedBatch}
+        items={transformedItems}
+        proposals={transformedProposals}
+        progress={progress}
+      />
+    </>
   );
 }
