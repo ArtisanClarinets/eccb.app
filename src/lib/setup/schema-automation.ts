@@ -78,8 +78,8 @@ function executePrismaCommand(
       env.DATABASE_URL = databaseUrl;
     }
 
-
-    const result = execSync( // nosemgrep
+    // nosemgrep
+    const result = execSync(
       `npx prisma ${command}`,
       {
         stdio,
