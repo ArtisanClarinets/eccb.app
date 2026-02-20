@@ -39,6 +39,7 @@ import {
 } from 'lucide-react';
 import { EmailTemplateType, EmailTemplate } from '@prisma/client';
 import { extractTemplateVariables } from '@/lib/email-template-utils';
+import DOMPurify from 'dompurify';
 
 const templateSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
@@ -123,7 +124,7 @@ export function EmailTemplateForm({ template, onSubmit, isSubmitting }: EmailTem
     if (newVars.length > 0) {
       setVariables((prev) => [...prev, ...newVars]);
     }
-  }, [watchedSubject, watchedBody, watchedTextBody, variables]); // Added variables to dependency
+  }, [watchedSubject, watchedBody, watchedTextBody, variables]);
 
   // Generate preview
   useEffect(() => {
@@ -139,7 +140,8 @@ export function EmailTemplateForm({ template, onSubmit, isSubmitting }: EmailTem
       text = text.replace(regex, value);
     });
 
-    setPreviewHtml(html);
+    // Sanitize HTML
+    setPreviewHtml(DOMPurify.sanitize(html));
     setPreviewSubject(subject);
     setPreviewText(text);
   }, [watchedBody, watchedSubject, watchedTextBody, previewVars]);
@@ -443,6 +445,7 @@ export function EmailTemplateForm({ template, onSubmit, isSubmitting }: EmailTem
                 <ScrollArea className="h-[300px] rounded-md border">
                   <div 
                     className="p-4 prose prose-sm max-w-none"
+                    // semgrep-ignore: react-dangerously-set-inner-html
                     dangerouslySetInnerHTML={{ __html: previewHtml }}
                   />
                 </ScrollArea>

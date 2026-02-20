@@ -53,12 +53,24 @@ function executePrismaCommand(
   const { databaseUrl, stdio = 'pipe' } = options;
 
   try {
+    // Basic command validation to prevent injection
+    if (!/^[a-zA-Z0-9\s\-_]+$/.test(command) && !command.includes('--name') && !command.includes('--create-only')) {
+        throw new Error('Invalid command format');
+    }
+
+    // Prepare environment variables properly
+    const env = { ...process.env };
+    if (databaseUrl) {
+      env.DATABASE_URL = databaseUrl;
+    }
+
     const result = execSync(
-      databaseUrl ? `DATABASE_URL=${databaseUrl} npx prisma ${command}` : `npx prisma ${command}`,
+      `npx prisma ${command}`,
       {
         stdio,
         encoding: 'utf-8',
         maxBuffer: 50 * 1024 * 1024, // 50MB buffer
+        env, // Pass env via options instead of inline string concatenation
       },
     );
 
@@ -146,6 +158,10 @@ export class SchemaAutomationService {
       // Run migrations
       let command = 'migrate deploy';
       if (name) {
+        // Validate name to prevent injection
+        if (!/^[a-zA-Z0-9\-_]+$/.test(name)) {
+            throw new Error('Invalid migration name');
+        }
         command = `migrate dev --name ${name}`;
       } else if (createOnly) {
         command = 'migrate dev --create-only';
@@ -176,6 +192,11 @@ export class SchemaAutomationService {
    */
   createMigration(name: string): MigrationResult {
     try {
+      // Validate name
+      if (!/^[a-zA-Z0-9\-_]+$/.test(name)) {
+        throw new Error('Invalid migration name');
+      }
+
       executePrismaCommand(`migrate dev --name ${name}`, {
         databaseUrl: this.databaseUrl,
         stdio: 'inherit',
