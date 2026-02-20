@@ -68,6 +68,7 @@ interface SmartUploadReviewFormProps {
   isSaving?: boolean;
   isApproving?: boolean;
   disabled?: boolean;
+  showOcrText?: boolean;
 }
 
 const DIFFICULTY_LEVELS = [
@@ -116,6 +117,7 @@ export function SmartUploadReviewForm({
   isSaving = false,
   isApproving = false,
   disabled = false,
+  showOcrText = true,
 }: SmartUploadReviewFormProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState<Record<string, string>>({
@@ -523,6 +525,21 @@ export function SmartUploadReviewForm({
             </div>
           )}
         </div>
+
+        {/* OCR Text Display */}
+        {showOcrText && proposal.ocrText && (
+          <div className="space-y-2">
+            <Label>Extracted Text (OCR)</Label>
+            <div className="bg-muted/30 rounded-md p-3 max-h-48 overflow-y-auto">
+              <p className="text-sm whitespace-pre-wrap font-mono">
+                {proposal.ocrText}
+              </p>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              This is the text extracted from the PDF using OCR. Review to verify extraction quality.
+            </p>
+          </div>
+        )}
 
         {/* Action Buttons */}
         <div className="flex items-center gap-3 pt-4 border-t">

@@ -63,16 +63,16 @@ export class OpenAIProvider implements AIProvider {
           async () => {
             const result = await this.client.chat.completions.create({
               model: request.model || this.config.model,
-              messages: request.messages,
+              messages: request.messages as any[],
               temperature: request.temperature ?? this.config.temperature,
               max_tokens: request.max_tokens || this.config.maxTokens,
               top_p: request.top_p,
               frequency_penalty: request.frequency_penalty,
               presence_penalty: request.presence_penalty,
               stop: request.stop,
-              tools: request.tools as OpenAI.Chat.CompletionTool[],
-              tool_choice: request.tool_choice as OpenAI.Chat.CompletionToolChoiceOption,
-              response_format: request.response_format as OpenAI.Chat.CompletionCreateParams.ResponseFormat,
+              tools: request.tools as any[],
+              tool_choice: request.tool_choice as any,
+              response_format: request.response_format as any,
               stream: false,
             });
 
@@ -97,14 +97,14 @@ export class OpenAIProvider implements AIProvider {
           async () => {
             const stream = await this.client.chat.completions.create({
               model: request.model || this.config.model,
-              messages: request.messages,
+              messages: request.messages as any[],
               temperature: request.temperature ?? this.config.temperature,
               max_tokens: request.max_tokens || this.config.maxTokens,
               top_p: request.top_p,
               frequency_penalty: request.frequency_penalty,
               presence_penalty: request.presence_penalty,
               stop: request.stop,
-              response_format: request.response_format as OpenAI.Chat.CompletionCreateParams.ResponseFormat,
+              response_format: request.response_format as any,
               stream: true,
             });
 

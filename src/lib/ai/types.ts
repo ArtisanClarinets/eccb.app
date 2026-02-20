@@ -136,7 +136,7 @@ export interface StructuredExtractionResult<T> {
 /**
  * Zod schema type for structured output validation
  */
-export type ZodSchema<T> = z.ZodType<T, z.ZodTypeDef, T>;
+export type ZodSchema<T> = z.ZodType<T>;
 
 // =============================================================================
 // Provider Configuration Types

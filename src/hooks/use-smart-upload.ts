@@ -48,6 +48,10 @@ export interface SmartUploadItem {
   errorMessage: string | null;
   ocrText: string | null;
   extractedMeta: Record<string, unknown> | null;
+  // Split tracking (for packet PDFs)
+  isPacket: boolean;
+  splitPages: number | null;
+  splitFiles: Record<string, unknown> | null;
   createdAt: Date | string;
   completedAt: Date | string | null;
 }
@@ -74,6 +78,7 @@ export interface SmartUploadProposal {
   matchedPieceId: string | null;
   isNewPiece: boolean;
   corrections: Record<string, unknown> | null;
+  ocrText: string | null;
   createdAt: Date | string;
 }
 

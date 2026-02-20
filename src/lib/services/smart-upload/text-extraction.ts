@@ -237,8 +237,8 @@ export function shouldUseOcr(text: string, pageCount: number): {
 /**
  * Perform OCR on a PDF buffer.
  *
- * This is a stub implementation that throws clear errors for unimplemented OCR modes.
- * Full implementation would integrate with Tesseract, OCRmyPDF, or Vision API.
+ * Uses Tesseract.js to perform OCR on image-based PDFs.
+ * Converts PDF pages to images first using pdf2pic, then runs OCR.
  *
  * @param buffer - PDF file buffer
  * @param mode - OCR mode to use
@@ -249,13 +249,82 @@ export async function performOcr(buffer: Buffer, mode: OcrMode): Promise<string>
   logger.info('OCR requested', { mode, bufferSize: buffer.length });
 
   switch (mode) {
-    case 'tesseract':
-      throw new Error(
-        'Tesseract OCR is not yet implemented. ' +
-        'To enable OCR, either:\n' +
-        '1. Set SMART_UPLOAD_OCR_MODE=pdf_text to skip OCR\n' +
-        '2. Implement Tesseract integration in src/lib/services/smart-upload/text-extraction.ts'
-      );
+    case 'tesseract': {
+      try {
+        // Import dependencies dynamically
+        const Tesseract = await import('tesseract.js');
+        const { fromBuffer } = await import('pdf2pic');
+        
+        // Initialize pdf2pic converter
+        const converter = fromBuffer(buffer, {
+          density: 200, // 200 DPI for good OCR quality
+          saveFilename: 'temp_ocr',
+          savePath: '/tmp',
+          format: 'png',
+          width: 0, // Use original size
+          height: 0,
+        });
+        
+        // Get page count
+        const pageCount = converter.pageCount;
+        
+        logger.info('Converting PDF pages to images for OCR', { pageCount });
+        
+        const texts: string[] = [];
+        let totalConfidence = 0;
+        
+        // Process each page
+        for (let pageIndex = 1; pageIndex <= pageCount; pageIndex++) {
+          logger.debug('Processing page for OCR', { pageIndex, totalPages: pageCount });
+          
+          // Convert page to image
+          const imageResult = await converter(pageIndex);
+          
+          if (!imageResult || !imageResult.path) {
+            throw new Error(`Failed to convert page ${pageIndex} to image`);
+          }
+          
+          // Run Tesseract OCR on the image
+          const result = await Tesseract.recognize(imageResult.path, 'eng', {
+            logger: (m) => {
+              if (m.status === 'recognizing text') {
+                logger.debug('Tesseract OCR progress', {
+                  page: pageIndex,
+                  progress: Math.round(m.progress * 100),
+                });
+              }
+            },
+          });
+          
+          texts.push(result.data.text.trim());
+          totalConfidence += result.data.confidence;
+          
+          logger.debug('Page OCR completed', {
+            pageIndex,
+            confidence: result.data.confidence,
+            textLength: result.data.text.length,
+          });
+        }
+        
+        const avgConfidence = pageCount > 0 ? totalConfidence / pageCount : 0;
+        
+        // Join all text with page separators
+        const fullText = texts.join('\n\n--- Page Break ---\n\n');
+        
+        logger.info('OCR completed', {
+          pageCount,
+          totalTextLength: fullText.length,
+          avgConfidence,
+        });
+        
+        return fullText;
+      } catch (error) {
+        logger.error('Tesseract OCR failed', { error });
+        throw new Error(
+          `Tesseract OCR failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+        );
+      }
+    }
 
     case 'ocrmypdf':
       throw new Error(

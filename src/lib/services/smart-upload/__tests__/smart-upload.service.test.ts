@@ -84,6 +84,7 @@ const createMockBatch = (overrides = {}) => ({
   id: 'batch-123',
   userId: 'user-123',
   status: SmartUploadStatus.CREATED,
+  currentStep: null,
   totalFiles: 0,
   processedFiles: 0,
   successFiles: 0,

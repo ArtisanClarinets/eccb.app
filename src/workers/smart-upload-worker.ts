@@ -142,7 +142,7 @@ async function handleLlmExtractMetadata(job: Job<SmartUploadLlmPayload>): Promis
 
     await job.updateProgress(60);
 
-    if (!metadataResult.success) {
+    if (!metadataResult.data) {
       throw new Error(metadataResult.error || 'Failed to extract metadata');
     }
 
@@ -203,7 +203,7 @@ async function handleClassifyAndPlan(job: Job<SmartUploadLlmPayload>): Promise<v
       where: { id: itemId },
       data: {
         status: SmartUploadStatus.PROCESSING,
-        currentStep: SmartUploadStep.CLASSIFIED,
+        currentStep: SmartUploadStep.SPLIT_PLANNED,
       },
     });
 
@@ -214,7 +214,7 @@ async function handleClassifyAndPlan(job: Job<SmartUploadLlmPayload>): Promise<v
 
     await job.updateProgress(60);
 
-    if (!classificationResult.success) {
+    if (!classificationResult.data) {
       throw new Error(classificationResult.error || 'Failed to classify parts');
     }
 
@@ -236,8 +236,8 @@ async function handleClassifyAndPlan(job: Job<SmartUploadLlmPayload>): Promise<v
         isPacket,
         splitPages: splitPlan?.pages.length || null,
         splitFiles: splitPlan as object,
-        status: SmartUploadStatus.PENDING_APPROVAL,
-        currentStep: SmartUploadStep.CLASSIFIED,
+        status: SmartUploadStatus.NEEDS_REVIEW,
+        currentStep: SmartUploadStep.SPLIT_PLANNED,
       },
     });
 
@@ -245,7 +245,7 @@ async function handleClassifyAndPlan(job: Job<SmartUploadLlmPayload>): Promise<v
     await prisma.smartUploadBatch.update({
       where: { id: batchId },
       data: {
-        status: SmartUploadStatus.PENDING_APPROVAL,
+        status: SmartUploadStatus.NEEDS_REVIEW,
       },
     });
 
@@ -286,7 +286,7 @@ async function handleSplitPdf(job: Job<SmartUploadSplitPayload>): Promise<void> 
       where: { id: itemId },
       data: {
         status: SmartUploadStatus.PROCESSING,
-        currentStep: SmartUploadStep.SPLIT,
+        currentStep: SmartUploadStep.SPLIT_PLANNED,
       },
     });
 
@@ -327,7 +327,7 @@ async function handleSplitPdf(job: Job<SmartUploadSplitPayload>): Promise<void> 
       data: {
         splitFiles: splitFileInfos as object,
         status: SmartUploadStatus.PROCESSING,
-        currentStep: SmartUploadStep.SPLIT,
+        currentStep: SmartUploadStep.SPLIT_COMPLETE,
       },
     });
 
@@ -388,58 +388,62 @@ async function handleIngest(job: Job<SmartUploadIngestPayload>): Promise<void> {
     let successCount = 0;
     let failCount = 0;
 
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
+    // Wrap all ingest operations in a transaction to ensure atomicity
+    // If any item fails, all changes will be rolled back
+    await prisma.$transaction(async (tx) => {
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
 
-      try {
-        // Create music library entry
-        // Note: This is a simplified version - actual implementation would create
-        // Music and MusicAssignment records
-        await prisma.music.create({
-          data: {
-            title: (item.extractedMeta as { title?: string })?.title || item.fileName,
-            composer: (item.extractedMeta as { composer?: string })?.composer || 'Unknown',
-            arrangement: (item.extractedMeta as { arrangement?: string })?.arrangement || '',
-            publisher: (item.extractedMeta as { publisher?: string })?.publisher || '',
-            storageKey: item.storageKey || '',
-            source: 'smart_upload',
-            originalUploadId: item.id,
-          },
-        });
+        try {
+          // Create music library entry
+          // Note: This is a simplified version - actual implementation would create
+          // Music and MusicAssignment records
+          await tx.music.create({
+            data: {
+              title: (item.extractedMeta as { title?: string })?.title || item.fileName,
+              composer: (item.extractedMeta as { composer?: string })?.composer || 'Unknown',
+              arrangement: (item.extractedMeta as { arrangement?: string })?.arrangement || '',
+              publisher: (item.extractedMeta as { publisher?: string })?.publisher || '',
+              storageKey: item.storageKey || '',
+              source: 'smart_upload',
+              originalUploadId: item.id,
+            },
+          });
 
-        // Update item status
-        await prisma.smartUploadItem.update({
-          where: { id: item.id },
-          data: {
-            status: SmartUploadStatus.COMPLETED,
-            currentStep: SmartUploadStep.INGESTED,
-            completedAt: new Date(),
-          },
-        });
+          // Update item status
+          await tx.smartUploadItem.update({
+            where: { id: item.id },
+            data: {
+              status: SmartUploadStatus.COMPLETE,
+              currentStep: SmartUploadStep.INGESTED,
+              completedAt: new Date(),
+            },
+          });
 
-        successCount++;
-      } catch (error) {
-        logger.error('Failed to ingest item', { itemId: item.id, error });
-        failCount++;
+          successCount++;
+        } catch (error) {
+          logger.error('Failed to ingest item', { itemId: item.id, error });
+          failCount++;
 
-        // Update item with error
-        await prisma.smartUploadItem.update({
-          where: { id: item.id },
-          data: {
-            status: SmartUploadStatus.FAILED,
-            errorMessage: error instanceof Error ? error.message : 'Ingestion failed',
-          },
-        });
+          // Update item with error
+          await tx.smartUploadItem.update({
+            where: { id: item.id },
+            data: {
+              status: SmartUploadStatus.FAILED,
+              errorMessage: error instanceof Error ? error.message : 'Ingestion failed',
+            },
+          });
+        }
+
+        await job.updateProgress(Math.round((i + 1) / items.length * 90));
       }
-
-      await job.updateProgress(Math.round((i + 1) / items.length * 90));
-    }
+    });
 
     // Update batch with final counts
     await prisma.smartUploadBatch.update({
       where: { id: batchId },
       data: {
-        status: failCount === 0 ? SmartUploadStatus.COMPLETED : SmartUploadStatus.PROCESSING,
+        status: failCount === 0 ? SmartUploadStatus.COMPLETE : SmartUploadStatus.PROCESSING,
         currentStep: SmartUploadStep.INGESTED,
         successFiles: successCount,
         failedFiles: failCount,

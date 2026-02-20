@@ -56,11 +56,12 @@ describe('normalizeInstrumentName', () => {
 });
 
 describe('fuzzyMatchInstrument', () => {
+  const now = new Date();
   const mockInstruments = [
-    { id: 'inst-1', name: 'Flute', family: 'Woodwind', sortOrder: 1 },
-    { id: 'inst-2', name: 'Clarinet', family: 'Woodwind', sortOrder: 2 },
-    { id: 'inst-5', name: 'Alto Saxophone', family: 'Woodwind', sortOrder: 5 },
-    { id: 'inst-7', name: 'Trumpet', family: 'Brass', sortOrder: 1 },
+    { id: 'inst-1', name: 'Flute', family: 'Woodwind', sortOrder: 1, createdAt: now, updatedAt: now },
+    { id: 'inst-2', name: 'Clarinet', family: 'Woodwind', sortOrder: 2, createdAt: now, updatedAt: now },
+    { id: 'inst-5', name: 'Alto Saxophone', family: 'Woodwind', sortOrder: 5, createdAt: now, updatedAt: now },
+    { id: 'inst-7', name: 'Trumpet', family: 'Brass', sortOrder: 1, createdAt: now, updatedAt: now },
   ];
 
   it('should return exact match for direct instrument name', () => {

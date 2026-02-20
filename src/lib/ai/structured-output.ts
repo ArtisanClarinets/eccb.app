@@ -45,7 +45,7 @@ export function repairJson(raw: string): string {
   let repaired = raw.trim();
 
   // Remove trailing commas before closing braces/brackets
-  repaired = repaired.replace(/,\s*([\}])/g, '$1');
+  repaired = repaired.replace(/,\s*([}\]])/g, '$1');
 
   // Fix unquoted property names
   repaired = repaired.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, '$1"$2":');
@@ -57,7 +57,7 @@ export function repairJson(raw: string): string {
   repaired = repaired.replace(/:\s*([a-zA-Z][a-zA-Z0-9_]*)\s*([,}])/g, ':"$1"$2');
 
   // Remove control characters using unicode ranges
-  repaired = repaired.replace(/[\u0000-\u001F\u007F]/g, '');
+  repaired = repaired.replace(/[\x00-\x1F\x7F]/g, '');
 
   // Try to fix unclosed strings
   const openQuotes = (repaired.match(/"/g) || []).length;

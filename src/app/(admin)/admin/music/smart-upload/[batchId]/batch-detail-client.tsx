@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { SmartUploadProgress } from '@/components/admin/music/smart-upload/smart-upload-progress';
 import { SmartUploadReviewForm } from '@/components/admin/music/smart-upload/smart-upload-review-form';
+import { PartMappingEditor } from '@/components/admin/music/smart-upload/part-mapping-editor';
 import {
   useSmartUpload,
   useSmartUploadPoll,
@@ -70,6 +71,7 @@ export function BatchDetailClient({
   const [selectedItemId, setSelectedItemId] = useState<string | null>(
     initialItems[0]?.id || null
   );
+  const [partMappings, setPartMappings] = useState<Record<string, Array<{ id: string; instrument: string; pages: number[] }>>>({});
 
   // Start polling when batch is in progress
   useEffect(() => {
@@ -392,17 +394,34 @@ export function BatchDetailClient({
               {/* Review Form */}
               <div>
                 {selectedProposal ? (
-                  <SmartUploadReviewForm
-                    proposal={selectedProposal}
-                    onSave={async (corrections) => {
-                      await handleApprove(selectedProposal.id, corrections);
-                    }}
-                    onApprove={async () => {
-                      await handleApprove(selectedProposal.id);
-                    }}
-                    isApproving={isApproving}
-                    disabled={isLoading}
-                  />
+                  <div className="space-y-6">
+                    <SmartUploadReviewForm
+                      proposal={selectedProposal}
+                      onSave={async (corrections) => {
+                        await handleApprove(selectedProposal.id, corrections);
+                      }}
+                      onApprove={async () => {
+                        await handleApprove(selectedProposal.id);
+                      }}
+                      isApproving={isApproving}
+                      disabled={isLoading}
+                    />
+
+                    {/* Part Mapping Editor for packet files */}
+                    {selectedItem && selectedItem.isPacket && selectedItem.splitFiles && (
+                      <PartMappingEditor
+                        parts={partMappings[selectedItem.id] || []}
+                        totalPages={selectedItem.splitPages || 0}
+                        onChange={(parts) => {
+                          setPartMappings((prev) => ({
+                            ...prev,
+                            [selectedItem.id]: parts,
+                          }));
+                        }}
+                        disabled={isLoading}
+                      />
+                    )}
+                  </div>
                 ) : (
                   <Card>
                     <CardContent className="py-12 text-center text-muted-foreground">
