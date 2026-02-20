@@ -33,7 +33,7 @@ interface RepairResponse {
   progress: number;
   message?: string;
   error?: string;
-  details?: Record<string, any>;
+  details?: Record<string, unknown>;
 }
 
 // =============================================================================
