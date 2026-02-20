@@ -37,11 +37,19 @@ import {
   MusicMetadataSchema,
   MUSIC_METADATA_PROMPT,
 } from './prompts/music-metadata';
+
+import { classifyExtractedText } from './document-classification';
 import {
   PartClassification,
   PartClassificationSchema,
   PART_CLASSIFICATION_PROMPT,
 } from './prompts/part-classification';
+
+import {
+  DocumentClassification,
+  DocumentClassificationSchema,
+  DOCUMENT_CLASSIFICATION_PROMPT,
+} from './prompts/document-classification';
 
 // =============================================================================
 // Public API
@@ -213,6 +221,10 @@ export type { MusicMetadata } from './prompts/music-metadata';
 
 export { PartClassificationSchema, PART_CLASSIFICATION_PROMPT } from './prompts/part-classification';
 export type { PartClassification } from './prompts/part-classification';
+
+export { classifyExtractedText } from './document-classification';
+export { DocumentClassificationSchema, DOCUMENT_CLASSIFICATION_PROMPT } from './prompts/document-classification';
+export type { DocumentClassification } from './prompts/document-classification';
 
 // =============================================================================
 // Constants

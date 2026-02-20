@@ -27,7 +27,7 @@ import { logger } from '@/lib/logger';
 import { downloadFile, uploadFile, deleteFile } from '@/lib/services/storage';
 import { extractTextFromPdf } from '@/lib/services/smart-upload/text-extraction';
 import { splitPdf, createSplitPlanFromClassification } from '@/lib/services/smart-upload/pdf-splitter';
-import { extractMusicMetadata, classifyParts } from '@/lib/ai';
+import { extractMusicMetadata, classifyParts, classifyExtractedText } from '@/lib/ai';
 import { SmartUploadStatus, SmartUploadStep } from '@prisma/client';
 
 // =============================================================================
@@ -72,6 +72,12 @@ async function handleExtractText(job: Job<SmartUploadExtractTextPayload>): Promi
 
     await job.updateProgress(70);
 
+    // Get existing extractedMeta before updating
+    const existingItem = await prisma.smartUploadItem.findUnique({
+      where: { id: itemId },
+      select: { extractedMeta: true },
+    });
+
     // Update item with extracted text
     await prisma.smartUploadItem.update({
       where: { id: itemId },
@@ -81,6 +87,40 @@ async function handleExtractText(job: Job<SmartUploadExtractTextPayload>): Promi
         currentStep: SmartUploadStep.TEXT_EXTRACTED,
       },
     });
+
+    await job.updateProgress(80);
+
+    // Classify the document
+    const classificationResult = await classifyExtractedText(
+      extractionResult.text,
+      extractionResult.pageCount
+    );
+
+    // Update item with classification if successful
+    if (classificationResult.success && classificationResult.data) {
+      await prisma.smartUploadItem.update({
+        where: { id: itemId },
+        data: {
+          extractedMeta: {
+            ...(existingItem?.extractedMeta as Record<string, unknown> || {}),
+            documentClassification: classificationResult.data,
+          },
+        },
+      });
+
+      logger.info('Document classification completed', {
+        jobId: job.id,
+        itemId,
+        documentType: classificationResult.data.documentType,
+        confidence: classificationResult.data.confidence,
+      });
+    } else {
+      logger.warn('Document classification failed', {
+        jobId: job.id,
+        itemId,
+        error: classificationResult.error,
+      });
+    }
 
     await job.updateProgress(100);
 
