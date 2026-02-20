@@ -1,3 +1,7 @@
+import { execSync } from 'child_process';
+import { existsSync, readdirSync, readFileSync, statSync } from 'fs';
+import { join } from 'path';
+
 /**
  * Schema Automation Service
  *
@@ -10,56 +14,23 @@
  * Supports both SQLite (development) and MySQL/MariaDB (production).
  */
 
-import { execSync } from 'child_process';
-import { existsSync, readdirSync, readFileSync } from 'fs';
-import { join } from 'path';
-
-import { SetupError } from './types';
-
-// =============================================================================
-// Constants
-// =============================================================================
-
-const PRISMA_MIGRATIONS_DIR = join(process.cwd(), 'prisma', 'migrations');
 const PRISMA_SCHEMA_PATH = join(process.cwd(), 'prisma', 'schema.prisma');
+const PRISMA_MIGRATIONS_DIR = join(process.cwd(), 'prisma', 'migrations');
 
-// =============================================================================
-// Types (local definitions to avoid import conflicts)
-// =============================================================================
-
-/**
- * Migration information
- */
-export interface MigrationInfo {
-  name: string;
-  appliedAt?: Date;
-  status: 'applied' | 'pending' | 'failed';
+interface SchemaMigrationStatus {
+  applied: boolean;
+  pendingCount: number;
+  error?: string;
 }
 
-/**
- * Migration execution result
- */
-export interface MigrationResult {
+interface MigrationResult {
   success: boolean;
   appliedMigrations: string[];
   failedMigrations: string[];
   error?: string;
 }
 
-/**
- * Migration status
- */
-export interface SchemaMigrationStatus {
-  applied: boolean;
-  pendingCount: number;
-  lastMigration?: string;
-  error?: string;
-}
-
-/**
- * Database seeding result
- */
-export interface SeedingResult {
+interface SeedingResult {
   success: boolean;
   tablesSeeded: number;
   error?: string;
@@ -108,7 +79,7 @@ function getMigrationFiles(): string[] {
 
   return readdirSync(PRISMA_MIGRATIONS_DIR).filter((item) => {
     const itemPath = join(PRISMA_MIGRATIONS_DIR, item);
-    const stat = require('fs').statSync(itemPath);
+    const stat = statSync(itemPath);
     return stat.isDirectory() && !item.startsWith('.');
   });
 }
@@ -137,8 +108,6 @@ export class SchemaAutomationService {
    */
   getMigrationStatus(): SchemaMigrationStatus {
     try {
-      const env = this.databaseUrl ? { DATABASE_URL: this.databaseUrl } : {};
-
       const output = executePrismaCommand('migrate status', { databaseUrl: this.databaseUrl });
 
       // Parse the output
@@ -174,8 +143,6 @@ export class SchemaAutomationService {
     const { name, skipSeed = false, createOnly = false } = options;
 
     try {
-      const env = this.databaseUrl ? { DATABASE_URL: this.databaseUrl } : {};
-
       // Run migrations
       let command = 'migrate deploy';
       if (name) {
@@ -191,7 +158,7 @@ export class SchemaAutomationService {
 
       return {
         success: true,
-        appliedMigrations: status.applied ? [] : [],
+        appliedMigrations: status.applied ? [] : [], // Simplified for this implementation
         failedMigrations: [],
       };
     } catch (error) {
@@ -209,8 +176,6 @@ export class SchemaAutomationService {
    */
   createMigration(name: string): MigrationResult {
     try {
-      const env = this.databaseUrl ? { DATABASE_URL: this.databaseUrl } : {};
-
       executePrismaCommand(`migrate dev --name ${name}`, {
         databaseUrl: this.databaseUrl,
         stdio: 'inherit',
@@ -241,8 +206,6 @@ export class SchemaAutomationService {
     const { skipSeed = false, force = false } = options;
 
     try {
-      const env = this.databaseUrl ? { DATABASE_URL: this.databaseUrl } : {};
-
       // Reset the database
       const resetCommand = force ? 'migrate reset --force' : 'migrate reset';
       executePrismaCommand(resetCommand, {
@@ -290,8 +253,6 @@ export class SchemaAutomationService {
    */
   seedDatabase(): SeedingResult {
     try {
-      const env = this.databaseUrl ? { DATABASE_URL: this.databaseUrl } : {};
-
       executePrismaCommand('db seed', {
         databaseUrl: this.databaseUrl,
         stdio: 'inherit',
@@ -363,8 +324,6 @@ export class SchemaAutomationService {
    */
   pullSchema(): boolean {
     try {
-      const env = this.databaseUrl ? { DATABASE_URL: this.databaseUrl } : {};
-
       executePrismaCommand('db pull', {
         databaseUrl: this.databaseUrl,
         stdio: 'inherit',

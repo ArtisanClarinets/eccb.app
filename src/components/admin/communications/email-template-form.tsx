@@ -38,16 +38,7 @@ import {
   FileText,
 } from 'lucide-react';
 import { EmailTemplateType, EmailTemplate } from '@prisma/client';
-import { extractTemplateVariables, TemplateVariable } from '@/lib/email-template-utils';
-
-const templateTypes: { value: EmailTemplateType; label: string }[] = [
-  { value: 'WELCOME', label: 'Welcome' },
-  { value: 'PASSWORD_RESET', label: 'Password Reset' },
-  { value: 'EVENT_REMINDER', label: 'Event Reminder' },
-  { value: 'ANNOUNCEMENT', label: 'Announcement' },
-  { value: 'ATTENDANCE_SUMMARY', label: 'Attendance Summary' },
-  { value: 'CUSTOM', label: 'Custom' },
-];
+import { extractTemplateVariables } from '@/lib/email-template-utils';
 
 const templateSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
@@ -110,6 +101,9 @@ export function EmailTemplateForm({ template, onSubmit, isSubmitting }: EmailTem
   const watchedBody = watch('body');
   const watchedSubject = watch('subject');
   const watchedTextBody = watch('textBody');
+  const watchedType = watch('type');
+  const watchedIsActive = watch('isActive');
+  const watchedIsDefault = watch('isDefault');
 
   // Detect variables from template content
   useEffect(() => {
@@ -118,90 +112,81 @@ export function EmailTemplateForm({ template, onSubmit, isSubmitting }: EmailTem
     setDetectedVars(detected);
 
     // Auto-add detected variables that aren't already in the list
-    const existingNames = variables.map(v => v.name);
-    const newVars = detected.filter(v => !existingNames.includes(v));
+    const newVars = detected
+      .filter((v) => !variables.some((existing) => existing.name === v))
+      .map((v) => ({
+        name: v,
+        description: '',
+        required: true,
+      }));
+
     if (newVars.length > 0) {
-      setVariables(prev => [
-        ...prev,
-        ...newVars.map(name => ({
-          name,
-          description: '',
-          required: true,
-        })),
-      ]);
+      setVariables((prev) => [...prev, ...newVars]);
     }
-  }, [watchedBody, watchedSubject, watchedTextBody]);
+  }, [watchedSubject, watchedBody, watchedTextBody, variables]); // Added variables to dependency
+
+  // Generate preview
+  useEffect(() => {
+    let html = watchedBody;
+    let subject = watchedSubject;
+    let text = watchedTextBody || '';
+
+    // Replace variables in preview
+    Object.entries(previewVars).forEach(([key, value]) => {
+      const regex = new RegExp(`{{\s*${key}\s*}}`, 'g');
+      html = html.replace(regex, value);
+      subject = subject.replace(regex, value);
+      text = text.replace(regex, value);
+    });
+
+    setPreviewHtml(html);
+    setPreviewSubject(subject);
+    setPreviewText(text);
+  }, [watchedBody, watchedSubject, watchedTextBody, previewVars]);
+
+  const handleFormSubmit = (data: TemplateFormData) => {
+    onSubmit({ ...data, variables });
+  };
 
   const addVariable = () => {
-    setVariables(prev => [
-      ...prev,
-      { name: '', description: '', required: true },
-    ]);
+    setVariables([...variables, { name: '', description: '', required: false }]);
   };
 
   const removeVariable = (index: number) => {
-    setVariables(prev => prev.filter((_, i) => i !== index));
+    const newVars = [...variables];
+    newVars.splice(index, 1);
+    setVariables(newVars);
   };
 
   const updateVariable = (index: number, field: keyof Variable, value: string | boolean) => {
-    setVariables(prev =>
-      prev.map((v, i) => (i === index ? { ...v, [field]: value } : v))
-    );
-  };
-
-  const generatePreview = () => {
-    let html = watchedBody || '';
-    let subject = watchedSubject || '';
-    let text = watchedTextBody || '';
-
-    // Replace conditionals
-    const conditionalRegex = /\{\{#if\s+(\w+)\}\}([\s\S]*?)\{\{\/if\}\}/g;
-    const replaceConditionals = (content: string) => {
-      return content.replace(conditionalRegex, (_match, varName, innerContent) => {
-        const value = previewVars[varName];
-        if (value && value !== '' && value !== 'false') {
-          return innerContent;
-        }
-        return '';
-      });
-    };
-
-    html = replaceConditionals(html);
-    subject = replaceConditionals(subject);
-    text = replaceConditionals(text);
-
-    // Replace variables
-    const variableRegex = /\{\{(\w+)\}\}/g;
-    const replaceVars = (content: string) => {
-      return content.replace(variableRegex, (_match, varName) => {
-        return previewVars[varName] || `{{${varName}}}`;
-      });
-    };
-
-    setPreviewHtml(replaceVars(html));
-    setPreviewSubject(replaceVars(subject));
-    setPreviewText(replaceVars(text));
-  };
-
-  useEffect(() => {
-    generatePreview();
-  }, [previewVars, watchedBody, watchedSubject, watchedTextBody]);
-
-  const onFormSubmit = async (data: TemplateFormData) => {
-    await onSubmit({ ...data, variables });
+    const newVars = [...variables];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (newVars[index] as any)[field] = value;
+    setVariables(newVars);
   };
 
   return (
-    <form onSubmit={handleSubmit(onFormSubmit)} className="space-y-6">
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Left Column - Form */}
+    <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-8">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">
+            {template ? 'Edit Email Template' : 'New Email Template'}
+          </h1>
+          <p className="text-muted-foreground">
+            {template
+              ? 'Update existing email template configuration'
+              : 'Create a new email template for system notifications'}
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-8 lg:grid-cols-2">
+        {/* Left Column - Configuration */}
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Template Details</CardTitle>
-              <CardDescription>
-                Basic information about this email template
-              </CardDescription>
+              <CardTitle>Template Settings</CardTitle>
+              <CardDescription>Basic configuration for this template</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
@@ -217,9 +202,18 @@ export function EmailTemplateForm({ template, onSubmit, isSubmitting }: EmailTem
               </div>
 
               <div className="space-y-2">
+                <Label htmlFor="description">Description</Label>
+                <Input
+                  id="description"
+                  {...register('description')}
+                  placeholder="Internal description of when this email is sent"
+                />
+              </div>
+
+              <div className="space-y-2">
                 <Label htmlFor="type">Template Type</Label>
                 <Select
-                  value={watch('type')}
+                  value={watchedType}
                   onValueChange={(value) => setValue('type', value as EmailTemplateType)}
                 >
                   <SelectTrigger>
@@ -235,20 +229,11 @@ export function EmailTemplateForm({ template, onSubmit, isSubmitting }: EmailTem
                 </Select>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
-                <Input
-                  id="description"
-                  {...register('description')}
-                  placeholder="When should this template be used?"
-                />
-              </div>
-
               <div className="flex items-center gap-4">
                 <div className="flex items-center space-x-2">
                   <Switch
                     id="isActive"
-                    checked={watch('isActive')}
+                    checked={watchedIsActive}
                     onCheckedChange={(checked) => setValue('isActive', checked)}
                   />
                   <Label htmlFor="isActive">Active</Label>
@@ -256,7 +241,7 @@ export function EmailTemplateForm({ template, onSubmit, isSubmitting }: EmailTem
                 <div className="flex items-center space-x-2">
                   <Switch
                     id="isDefault"
-                    checked={watch('isDefault')}
+                    checked={watchedIsDefault}
                     onCheckedChange={(checked) => setValue('isDefault', checked)}
                   />
                   <Label htmlFor="isDefault">Default for Type</Label>
