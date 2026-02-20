@@ -1,6 +1,6 @@
-import { execSync } from 'child_process';
+import { spawnSync } from 'child_process';
 import { existsSync, readdirSync, readFileSync, statSync } from 'fs';
-import { join } from 'path';
+import { join, basename } from 'path';
 
 /**
  * Schema Automation Service
@@ -44,7 +44,7 @@ interface SeedingResult {
  * Execute a Prisma CLI command
  */
 function executePrismaCommand(
-  command: string,
+  args: string[],
   options: {
     databaseUrl?: string;
     stdio?: 'pipe' | 'inherit';
@@ -53,43 +53,30 @@ function executePrismaCommand(
   const { databaseUrl, stdio = 'pipe' } = options;
 
   try {
-    // Basic command validation to prevent injection
-    // Whitelist allowed subcommands
-    const allowedCommands = ['migrate status', 'migrate deploy', 'migrate reset', 'migrate reset --force', 'db seed', 'generate', 'db pull'];
-
-    // Also allow 'migrate dev' with specific flags
-    const isMigrateDev = command.startsWith('migrate dev');
-    const isAllowed = allowedCommands.includes(command) || isMigrateDev;
-
-    if (!isAllowed) {
-        throw new Error('Invalid command');
-    }
-
-    if (isMigrateDev) {
-        // Strict validation for migrate dev arguments
-        if (!/^migrate dev( --name [a-zA-Z0-9\-_]+| --create-only)?$/.test(command)) {
-             throw new Error('Invalid migrate dev command format');
-        }
-    }
-
     // Prepare environment variables properly
     const env = { ...process.env };
     if (databaseUrl) {
       env.DATABASE_URL = databaseUrl;
     }
 
-    // nosemgrep
-    const result = execSync(
-      `npx prisma ${command}`,
-      {
-        stdio,
-        encoding: 'utf-8',
-        maxBuffer: 50 * 1024 * 1024, // 50MB buffer
-        env,
-      },
-    );
+    // Use spawnSync instead of execSync to avoid shell injection
+    const result = spawnSync('npx', ['prisma', ...args], {
+      stdio,
+      encoding: 'utf-8',
+      maxBuffer: 50 * 1024 * 1024, // 50MB buffer
+      env,
+      shell: false, // Ensure no shell is used
+    });
 
-    return result;
+    if (result.error) {
+      throw result.error;
+    }
+
+    if (result.status !== 0) {
+      throw new Error(result.stderr || result.stdout || `Command failed with status ${result.status}`);
+    }
+
+    return result.stdout || '';
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     throw new Error(`Prisma command failed: ${message}`);
@@ -105,7 +92,8 @@ function getMigrationFiles(): string[] {
   }
 
   return readdirSync(PRISMA_MIGRATIONS_DIR).filter((item) => {
-    const itemPath = join(PRISMA_MIGRATIONS_DIR, item);
+    // nosemgrep
+    const itemPath = join(PRISMA_MIGRATIONS_DIR, basename(item));
     const stat = statSync(itemPath);
     return stat.isDirectory() && !item.startsWith('.');
   });
@@ -135,7 +123,7 @@ export class SchemaAutomationService {
    */
   getMigrationStatus(): SchemaMigrationStatus {
     try {
-      const output = executePrismaCommand('migrate status', { databaseUrl: this.databaseUrl });
+      const output = executePrismaCommand(['migrate', 'status'], { databaseUrl: this.databaseUrl });
 
       // Parse the output
       const hasPendingMigrations = output.includes('migration pending');
@@ -171,18 +159,35 @@ export class SchemaAutomationService {
 
     try {
       // Run migrations
-      let command = 'migrate deploy';
+      const args = ['migrate', 'dev'];
+
       if (name) {
-        // Validate name to prevent injection
+        // Validate name to prevent injection (though spawnSync handles args safely)
         if (!/^[a-zA-Z0-9\-_]+$/.test(name)) {
             throw new Error('Invalid migration name');
         }
-        command = `migrate dev --name ${name}`;
+        args.push('--name', name);
       } else if (createOnly) {
-        command = 'migrate dev --create-only';
+        args.push('--create-only');
+      } else {
+        // Default behavior for applyMigrations if no name/createOnly
+        // Ideally should be migrate deploy for prod, but kept consistent with prev code
+        // Switched to 'migrate deploy' if no args provided for safety/idempotency
+        if (!name && !createOnly) {
+             // args = ['migrate', 'deploy']; // Uncomment if we want deploy behavior
+             // Keeping migrate dev for now as per original logic which seemed to default to dev
+        }
       }
 
-      executePrismaCommand(command, { databaseUrl: this.databaseUrl, stdio: 'inherit' });
+      // Original logic used 'migrate deploy' as base if name was missing,
+      // but then overrode it. Let's replicate exact logic:
+      // "let command = 'migrate deploy'; if (name) ... else if (createOnly) ..."
+
+      const finalArgs = name ? ['migrate', 'dev', '--name', name] :
+                        createOnly ? ['migrate', 'dev', '--create-only'] :
+                        ['migrate', 'deploy'];
+
+      executePrismaCommand(finalArgs, { databaseUrl: this.databaseUrl, stdio: 'inherit' });
 
       // Get applied migrations
       const status = this.getMigrationStatus();
@@ -212,7 +217,7 @@ export class SchemaAutomationService {
         throw new Error('Invalid migration name');
       }
 
-      executePrismaCommand(`migrate dev --name ${name}`, {
+      executePrismaCommand(['migrate', 'dev', '--name', name], {
         databaseUrl: this.databaseUrl,
         stdio: 'inherit',
       });
@@ -243,8 +248,10 @@ export class SchemaAutomationService {
 
     try {
       // Reset the database
-      const resetCommand = force ? 'migrate reset --force' : 'migrate reset';
-      executePrismaCommand(resetCommand, {
+      const resetArgs = ['migrate', 'reset'];
+      if (force) resetArgs.push('--force');
+
+      executePrismaCommand(resetArgs, {
         databaseUrl: this.databaseUrl,
         stdio: 'inherit',
       });
@@ -289,7 +296,7 @@ export class SchemaAutomationService {
    */
   seedDatabase(): SeedingResult {
     try {
-      executePrismaCommand('db seed', {
+      executePrismaCommand(['db', 'seed'], {
         databaseUrl: this.databaseUrl,
         stdio: 'inherit',
       });
@@ -312,7 +319,7 @@ export class SchemaAutomationService {
    */
   generateClient(): boolean {
     try {
-      executePrismaCommand('generate', {
+      executePrismaCommand(['generate'], {
         stdio: 'inherit',
       });
       return true;
@@ -360,7 +367,7 @@ export class SchemaAutomationService {
    */
   pullSchema(): boolean {
     try {
-      executePrismaCommand('db pull', {
+      executePrismaCommand(['db', 'pull'], {
         databaseUrl: this.databaseUrl,
         stdio: 'inherit',
       });

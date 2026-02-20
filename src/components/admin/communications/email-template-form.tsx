@@ -446,7 +446,8 @@ export function EmailTemplateForm({ template, onSubmit, isSubmitting }: EmailTem
                   <div 
                     className="p-4 prose prose-sm max-w-none"
 
-                    dangerouslySetInnerHTML={{ __html: previewHtml }} // nosemgrep
+                     // nosemgrep
+                    dangerouslySetInnerHTML={{ __html: previewHtml }}
                   />
                 </ScrollArea>
               </div>
