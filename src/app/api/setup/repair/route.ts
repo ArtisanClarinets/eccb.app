@@ -137,7 +137,7 @@ export async function POST(request: Request): Promise<NextResponse<RepairRespons
 
     // Handle different repair actions
     switch (action) {
-      case 'reset':
+      case 'reset': {
         logger.info('Resetting database');
         const resetResult = repairDatabase({ force });
 
@@ -147,6 +147,7 @@ export async function POST(request: Request): Promise<NextResponse<RepairRespons
           progress: resetResult.success ? 100 : 50,
           error: resetResult.error,
         });
+        }
 
       case 'migrate':
         logger.info('Running migrations');
@@ -157,6 +158,7 @@ export async function POST(request: Request): Promise<NextResponse<RepairRespons
           phase: migrationResult.success ? SetupPhase.COMPLETE : SetupPhase.MIGRATING,
           progress: migrationResult.success ? 100 : 50,
           error: migrationResult.error,
+        }
         });
 
       case 'seed':
@@ -174,6 +176,7 @@ export async function POST(request: Request): Promise<NextResponse<RepairRespons
               tablesSeeded: seedResult.tablesSeeded,
             },
           },
+        }
         });
 
       case 'full':
