@@ -47,6 +47,9 @@ export async function POST(request: NextRequest) {
         id: memberId,
         userId: session.user.id,
       },
+      include: {
+        instruments: true, // Need instruments for sub matching
+      },
     });
 
     if (!member) {
@@ -81,6 +84,38 @@ export async function POST(request: NextRequest) {
         markedAt: new Date(),
       },
     });
+
+    // Check if we need to notify subs
+    if (status === 'ABSENT' && event.type === 'CONCERT') {
+      // Find subs who play the same instruments
+      const instrumentIds = member.instruments.map(i => i.instrumentId);
+
+      if (instrumentIds.length > 0) {
+        const potentialSubs = await prisma.member.findMany({
+          where: {
+            isSubstitute: true,
+            instruments: {
+              some: {
+                instrumentId: {
+                  in: instrumentIds
+                }
+              }
+            }
+          },
+          select: {
+            email: true,
+            firstName: true,
+            lastName: true
+          }
+        });
+
+        if (potentialSubs.length > 0) {
+          // In a real app, send emails here via a queue or service
+          console.log(`[SubFinder] Notify ${potentialSubs.length} subs for ${member.firstName} ${member.lastName} at ${event.title}`);
+          // await sendSubNotifications(potentialSubs, event, member);
+        }
+      }
+    }
 
     return NextResponse.json({ success: true, attendance });
   } catch (error) {
