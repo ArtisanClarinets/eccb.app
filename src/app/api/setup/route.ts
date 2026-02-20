@@ -211,10 +211,10 @@ export async function POST(request: Request): Promise<NextResponse<SetupResponse
           phase: migrationResult.success ? SetupPhase.COMPLETE : SetupPhase.MIGRATING,
           progress: migrationResult.success ? 100 : 50,
           error: migrationResult.error,
-        }
         });
+      }
 
-      case 'seed':
+      case 'seed': {
         logger.info('Seeding database');
         const seedResult = seedDatabase();
 
@@ -222,9 +222,9 @@ export async function POST(request: Request): Promise<NextResponse<SetupResponse
           success: seedResult.success,
           phase: seedResult.success ? SetupPhase.COMPLETE : SetupPhase.SEEDING,
           progress: seedResult.success ? 100 : 80,
-        }
           error: seedResult.error,
         });
+      }
 
       case 'full':
         return NextResponse.json(await runFullSetup());
