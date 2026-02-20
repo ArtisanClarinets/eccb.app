@@ -345,27 +345,59 @@ enum FileType {
   OTHER
 }
 
+// ====================================
+// Smart Upload Enums
+// ====================================
+
+enum SmartUploadStatus {
+  CREATED
+  UPLOADING
+  PROCESSING
+  NEEDS_REVIEW
+  APPROVED
+  INGESTING
+  COMPLETE
+  FAILED
+  CANCELLED
+}
+
+enum SmartUploadStep {
+  VALIDATED
+  TEXT_EXTRACTED
+  METADATA_EXTRACTED
+  SPLIT_PLANNED
+  SPLIT_COMPLETE
+  INGESTED
+}
+
 model MusicFile {
-  id          String   @id @default(cuid())
-  pieceId     String
-  fileName    String
-  fileType    FileType
-  fileSize    Int
-  mimeType    String
-  storageKey  String
-  storageUrl  String?
-  version     Int      @default(1)
-  description String?
-  isPublic    Boolean  @default(false)
-  isArchived  Boolean  @default(false)
-  uploadedAt  DateTime @default(now())
-  uploadedBy  String?
-  
+  id                String   @id @default(cuid())
+  pieceId           String
+  fileName          String
+  fileType          FileType
+  fileSize          Int
+  mimeType          String
+  storageKey        String
+  storageUrl        String?
+  version           Int      @default(1)
+  description       String?
+  isPublic          Boolean  @default(false)
+  isArchived        Boolean  @default(false)
+  uploadedAt        DateTime @default(now())
+  uploadedBy        String?
+
+  // Smart Upload extended fields
+  contentHash          String?   // For deduplication
+  extractedMetadata    Json?     // LLM-extracted metadata
+  ocrText              String?   @db.Text // OCR-extracted text
+  source               String?   // Original source (e.g., "smart_upload", "manual")
+  originalUploadId     String?   // Link to SmartUploadItem if uploaded via smart upload
+
   piece       MusicPiece @relation(fields: [pieceId], references: [id], onDelete: Cascade)
   parts       MusicPart[]
   downloads   FileDownload[]
   versions    MusicFileVersion[]
-  
+
   @@index([pieceId])
   @@index([fileType])
 }
@@ -474,11 +506,143 @@ model MusicAssignmentHistory {
   notes        String?
   performedBy  String
   performedAt  DateTime @default(now())
-  
+
   assignment   MusicAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
-  
+
   @@index([assignmentId])
   @@index([performedAt])
+}
+
+// ====================================
+// Smart Upload Models
+// ====================================
+
+/**
+ * SmartUploadBatch - Top-level batch owned by a user
+ * Represents a single drag-and-drop upload session
+ */
+model SmartUploadBatch {
+  id              String           @id @default(cuid())
+  userId          String           // Owner of the batch
+  status          SmartUploadStatus @default(CREATED)
+  currentStep     SmartUploadStep?
+
+  // Summary counts
+  totalFiles      Int              @default(0)
+  processedFiles  Int              @default(0)
+  successFiles    Int              @default(0)
+  failedFiles     Int              @default(0)
+
+  // Timestamps
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  completedAt     DateTime?
+
+  // Error summary
+  errorSummary    String?
+
+  // Relations
+  items           SmartUploadItem[]
+  proposals       SmartUploadProposal[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+/**
+ * SmartUploadItem - Each uploaded file in a batch
+ * Tracks per-step status, errors, and derived artifacts
+ */
+model SmartUploadItem {
+  id              String           @id @default(cuid())
+  batchId         String
+
+  // File info
+  fileName        String
+  fileSize        Int
+  mimeType        String
+  storageKey      String?
+
+  // Processing status
+  status          SmartUploadStatus @default(CREATED)
+  currentStep     SmartUploadStep?
+
+  // Error tracking
+  errorMessage    String?
+  errorDetails    Json?
+
+  // Extracted content
+  ocrText         String?          @db.Text
+  extractedMeta   Json?            // Raw LLM-extracted metadata
+
+  // Split tracking (for packet PDFs)
+  isPacket        Boolean          @default(false)
+  splitPages      Int?             // Number of pages if split
+  splitFiles      Json?            // Array of split file info
+
+  // Timestamps
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  completedAt     DateTime?
+
+  // Relations
+  batch           SmartUploadBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  proposals       SmartUploadProposal[]
+
+  @@index([batchId])
+  @@index([status])
+}
+
+/**
+ * SmartUploadProposal - Normalized extracted metadata + mapping
+ * Represents the AI-generated proposal for review and approval
+ */
+model SmartUploadProposal {
+  id              String           @id @default(cuid())
+  itemId          String
+  batchId         String
+
+  // Proposed metadata
+  title           String?
+  composer        String?
+  arranger        String?
+  publisher       String?
+  difficulty      String?
+  genre           String?
+  style           String?
+  instrumentation String?
+  duration        Int?
+  notes           String?
+
+  // Confidence scores (0-1)
+  titleConfidence     Float?
+  composerConfidence  Float?
+  difficultyConfidence Float?
+
+  // Approval status
+  isApproved      Boolean          @default(false)
+  approvedAt      DateTime?
+  approvedBy      String?
+
+  // User corrections (JSON blob of field -> corrected value)
+  corrections     Json?
+
+  // Mapping to existing piece (if matched)
+  matchedPieceId  String?
+  isNewPiece     Boolean          @default(true)
+
+  // Timestamps
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  // Relations
+  item            SmartUploadItem  @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  batch           SmartUploadBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([itemId])
+  @@index([batchId])
+  @@index([isApproved])
 }
 
 enum AssignmentStatus {

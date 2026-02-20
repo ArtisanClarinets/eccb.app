@@ -59,6 +59,42 @@ const envSchema = z.object({
   CLAMAV_HOST: z.string().default('localhost'),
   CLAMAV_PORT: z.coerce.number().default(3310),
   ENABLE_VIRUS_SCAN: z.string().default('false').transform(val => val === 'true'),
+
+  // =============================================================================
+  // Smart Upload Feature
+  // =============================================================================
+
+  // Smart Upload Feature Flags
+  SMART_UPLOAD_ENABLED: z.string().default('false').transform(val => val === 'true'),
+  SMART_UPLOAD_MAX_FILES: z.coerce.number().default(20),
+  SMART_UPLOAD_MAX_TOTAL_BYTES: z.coerce.number().default(524288000), // 500MB
+  SMART_UPLOAD_OCR_MODE: z.enum(['pdf_text', 'tesseract', 'ocrmypdf', 'vision_api']).default('pdf_text'),
+
+  // =============================================================================
+  // AI Provider Configuration
+  // =============================================================================
+
+  // AI Provider
+  AI_PROVIDER: z.enum(['openai', 'anthropic', 'gemini', 'openrouter', 'openai_compat']).default('openai'),
+  AI_MODEL: z.string().optional(),
+  AI_TEMPERATURE: z.coerce.number().default(0.1),
+
+  // Provider API Keys (all optional - validation happens at runtime when feature is used)
+  OPENAI_API_KEY: z.string().optional(),
+  ANTHROPIC_API_KEY: z.string().optional(),
+  GEMINI_API_KEY: z.string().optional(),
+  OPENROUTER_API_KEY: z.string().optional(),
+
+  // OpenAI-Compatible Provider (for local models like Ollama, LM Studio, etc.)
+  OPENAI_COMPAT_BASE_URL: z.string().optional(),
+  OPENAI_COMPAT_API_KEY: z.string().optional(),
+
+  // Custom Provider Escape Hatch
+  CUSTOM_AI_BASE_URL: z.string().optional(),
+  CUSTOM_AI_HEADERS_JSON: z.string().optional(),
+
+  // KiloCode Provider
+  KILO_API_KEY: z.string().optional(),
 });
 
 function validateEnv() {
@@ -101,7 +137,35 @@ function validateEnv() {
     console.error('❌ SUPER_ADMIN_PASSWORD is required in production');
     throw new Error('SUPER_ADMIN_PASSWORD must be set in production environment');
   }
-  
+
+  // Validate AI provider credentials when Smart Upload is enabled
+  if (data.SMART_UPLOAD_ENABLED) {
+    const hasApiKey = data.OPENAI_API_KEY || data.ANTHROPIC_API_KEY ||
+      data.GEMINI_API_KEY || data.OPENROUTER_API_KEY ||
+      data.OPENAI_COMPAT_API_KEY || data.CUSTOM_AI_BASE_URL;
+
+    if (!hasApiKey && data.AI_PROVIDER !== 'openai_compat') {
+      console.warn('⚠️ Smart Upload is enabled but no AI provider API key is configured');
+      console.warn('   Set one of: OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, or OPENROUTER_API_KEY');
+    }
+
+    // Validate AI_TEMPERATURE is in valid range
+    if (data.AI_TEMPERATURE < 0 || data.AI_TEMPERATURE > 2) {
+      console.error('❌ AI_TEMPERATURE must be between 0 and 2');
+      throw new Error('AI_TEMPERATURE must be between 0 and 2');
+    }
+
+    // Validate CUSTOM_AI_HEADERS_JSON is valid JSON if provided
+    if (data.CUSTOM_AI_HEADERS_JSON) {
+      try {
+        JSON.parse(data.CUSTOM_AI_HEADERS_JSON);
+      } catch {
+        console.error('❌ CUSTOM_AI_HEADERS_JSON must be valid JSON');
+        throw new Error('CUSTOM_AI_HEADERS_JSON must be valid JSON');
+      }
+    }
+  }
+
   return data;
 }
 

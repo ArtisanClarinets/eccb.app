@@ -30,12 +30,12 @@ import { z } from 'zod';
 const retryJobSchema = z.object({
   action: z.literal('retry'),
   jobId: z.string(),
-  queueName: z.enum(['EMAIL', 'NOTIFICATION', 'SCHEDULED', 'CLEANUP', 'DEAD_LETTER']),
+  queueName: z.enum(['EMAIL', 'NOTIFICATION', 'SCHEDULED', 'CLEANUP', 'DEAD_LETTER', 'SMART_UPLOAD']),
 });
 
 const clearQueueSchema = z.object({
   action: z.literal('clear'),
-  queueName: z.enum(['EMAIL', 'NOTIFICATION', 'SCHEDULED', 'CLEANUP', 'DEAD_LETTER']),
+  queueName: z.enum(['EMAIL', 'NOTIFICATION', 'SCHEDULED', 'CLEANUP', 'DEAD_LETTER', 'SMART_UPLOAD']),
 });
 
 const actionSchema = z.discriminatedUnion('action', [

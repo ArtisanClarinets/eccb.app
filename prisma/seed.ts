@@ -9,6 +9,8 @@ import {
   MUSIC_EDIT,
   MUSIC_DELETE,
   MUSIC_UPLOAD,
+  MUSIC_SMART_UPLOAD,
+  MUSIC_SMART_UPLOAD_APPROVE,
   MUSIC_DOWNLOAD_ALL,
   MUSIC_VIEW_ASSIGNED,
   MUSIC_DOWNLOAD_ASSIGNED,
@@ -128,7 +130,7 @@ async function main() {
   }
 
   // Librarian music permissions
-  const librarianPermNames = [MUSIC_VIEW_ALL, MUSIC_CREATE, MUSIC_EDIT, MUSIC_DELETE, MUSIC_UPLOAD, MUSIC_DOWNLOAD_ALL];
+  const librarianPermNames = [MUSIC_VIEW_ALL, MUSIC_CREATE, MUSIC_EDIT, MUSIC_DELETE, MUSIC_UPLOAD, MUSIC_SMART_UPLOAD, MUSIC_SMART_UPLOAD_APPROVE, MUSIC_DOWNLOAD_ALL];
   for (const permName of librarianPermNames) {
     const perm = allPermissions.find((p) => p.name === permName);
     if (perm) {

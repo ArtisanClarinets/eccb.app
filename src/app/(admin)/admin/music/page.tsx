@@ -42,6 +42,7 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  Sparkles,
 } from 'lucide-react';
 import { MusicDifficulty } from '@prisma/client';
 
@@ -262,6 +263,12 @@ export default async function AdminMusicPage({
               Export CSV
             </Button>
           </a>
+          <Button asChild variant="outline">
+            <Link href="/admin/music/smart-upload">
+              <Sparkles className="mr-2 h-4 w-4" />
+              Smart Upload
+            </Link>
+          </Button>
           <Button asChild>
             <Link href="/admin/music/new">
               <Plus className="mr-2 h-4 w-4" />
