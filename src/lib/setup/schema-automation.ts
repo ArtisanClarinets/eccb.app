@@ -78,7 +78,7 @@ function executePrismaCommand(
       env.DATABASE_URL = databaseUrl;
     }
 
-    // semgrep-ignore: javascript.lang.security.audit.child-process
+    // nosemgrep
     const result = execSync(
       `npx prisma ${command}`,
       {

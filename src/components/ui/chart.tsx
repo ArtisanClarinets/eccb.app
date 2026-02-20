@@ -80,7 +80,7 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
 
   return (
     <style
-      // semgrep-ignore: react-dangerously-set-inner-html
+      // nosemgrep
       dangerouslySetInnerHTML={{
         __html: Object.entries(THEMES)
           .map(

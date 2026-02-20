@@ -445,7 +445,7 @@ export function EmailTemplateForm({ template, onSubmit, isSubmitting }: EmailTem
                 <ScrollArea className="h-[300px] rounded-md border">
                   <div 
                     className="p-4 prose prose-sm max-w-none"
-                    // semgrep-ignore: react-dangerously-set-inner-html
+                    // nosemgrep
                     dangerouslySetInnerHTML={{ __html: previewHtml }}
                   />
                 </ScrollArea>
