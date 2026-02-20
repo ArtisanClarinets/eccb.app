@@ -80,8 +80,8 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
 
   return (
     <style
-      // nosemgrep
-      dangerouslySetInnerHTML={{
+
+      dangerouslySetInnerHTML={{ // nosemgrep
         __html: Object.entries(THEMES)
           .map(
             ([theme, prefix]) => `

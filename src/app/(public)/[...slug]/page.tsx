@@ -103,8 +103,8 @@ export default async function DynamicPage({ params }: PageProps) {
         return (
           <div 
             className="prose prose-neutral dark:prose-invert max-w-none"
-            // nosemgrep
-            dangerouslySetInnerHTML={{ __html: cleanHtml }}
+
+            dangerouslySetInnerHTML={{ __html: cleanHtml }} // nosemgrep
           />
         );
       }
