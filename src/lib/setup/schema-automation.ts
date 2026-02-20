@@ -54,8 +54,22 @@ function executePrismaCommand(
 
   try {
     // Basic command validation to prevent injection
-    if (!/^[a-zA-Z0-9\s\-_]+$/.test(command) && !command.includes('--name') && !command.includes('--create-only')) {
-        throw new Error('Invalid command format');
+    // Whitelist allowed subcommands
+    const allowedCommands = ['migrate status', 'migrate deploy', 'migrate reset', 'migrate reset --force', 'db seed', 'generate', 'db pull'];
+
+    // Also allow 'migrate dev' with specific flags
+    const isMigrateDev = command.startsWith('migrate dev');
+    const isAllowed = allowedCommands.includes(command) || isMigrateDev;
+
+    if (!isAllowed) {
+        throw new Error('Invalid command');
+    }
+
+    if (isMigrateDev) {
+        // Strict validation for migrate dev arguments
+        if (!/^migrate dev( --name [a-zA-Z0-9\-_]+| --create-only)?$/.test(command)) {
+             throw new Error('Invalid migrate dev command format');
+        }
     }
 
     // Prepare environment variables properly
@@ -64,13 +78,14 @@ function executePrismaCommand(
       env.DATABASE_URL = databaseUrl;
     }
 
+    // semgrep-ignore: javascript.lang.security.audit.child-process
     const result = execSync(
       `npx prisma ${command}`,
       {
         stdio,
         encoding: 'utf-8',
         maxBuffer: 50 * 1024 * 1024, // 50MB buffer
-        env, // Pass env via options instead of inline string concatenation
+        env,
       },
     );
 

@@ -6,6 +6,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Calendar } from 'lucide-react';
+import DOMPurify from 'dompurify';
+import { JSDOM } from 'jsdom';
 
 export const dynamic = 'force-dynamic';
 
@@ -92,11 +94,17 @@ export default async function DynamicPage({ params }: PageProps) {
       const content = page.content as Record<string, unknown>;
       
       if (content.html) {
+        // Sanitize HTML on server side before rendering
+        const window = new JSDOM('').window;
+        const purify = DOMPurify(window);
+        const cleanHtml = purify.sanitize(content.html as string);
+
         // If content has HTML
         return (
           <div 
             className="prose prose-neutral dark:prose-invert max-w-none"
-            dangerouslySetInnerHTML={{ __html: content.html as string }}
+            // semgrep-ignore: react-dangerously-set-inner-html
+            dangerouslySetInnerHTML={{ __html: cleanHtml }}
           />
         );
       }
