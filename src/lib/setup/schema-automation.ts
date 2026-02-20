@@ -11,7 +11,7 @@
  */
 
 import { execSync } from 'child_process';
-import { existsSync, readdirSync, readFileSync } from 'fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'fs';
 import { join } from 'path';
 
 import { SetupError } from './types';
@@ -108,7 +108,7 @@ function getMigrationFiles(): string[] {
 
   return readdirSync(PRISMA_MIGRATIONS_DIR).filter((item) => {
     const itemPath = join(PRISMA_MIGRATIONS_DIR, item);
-    const stat = require('fs').statSync(itemPath);
+    const stat = statSync(itemPath);
     return stat.isDirectory() && !item.startsWith('.');
   });
 }
