@@ -16,9 +16,7 @@ export default async function AdminLayout({
       <div className="flex-1 flex flex-col lg:pl-64">
         <AdminHeader />
         <main className="flex-1 p-6 lg:p-8 bg-slate-50 dark:bg-slate-950">
-          <div className="max-w-7xl mx-auto w-full">
-            {children}
-          </div>
+          {children}
         </main>
       </div>
     </div>

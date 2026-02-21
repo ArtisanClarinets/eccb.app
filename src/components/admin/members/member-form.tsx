@@ -70,7 +70,7 @@ export function MemberForm({
     register,
     handleSubmit,
     setValue,
-    watch: _watch,
+    watch,
     formState: { errors },
   } = useForm<MemberFormData>({
     resolver: zodResolver(memberSchema),
@@ -103,7 +103,7 @@ export function MemberForm({
       } else {
         toast.error(result.error || 'Failed to save member');
       }
-    } catch (_error) {
+    } catch (error) {
       toast.error('Something went wrong');
     } finally {
       setIsSubmitting(false);

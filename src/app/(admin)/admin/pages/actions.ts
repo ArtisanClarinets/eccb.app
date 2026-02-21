@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/db';
-import { requirePermission } from '@/lib/auth/guards';
+import { requirePermission, getSession } from '@/lib/auth/guards';
 import { auditLog } from '@/lib/services/audit';
 import { invalidatePageCache, invalidateAnnouncementCache } from '@/lib/cache';
 import { z } from 'zod';
@@ -194,7 +194,7 @@ export async function updatePage(id: string, formData: FormData) {
 }
 
 export async function deletePage(id: string) {
-  const _session = await requirePermission(CMS_DELETE);
+  const session = await requirePermission(CMS_DELETE);
 
   try {
     const page = await prisma.page.delete({
@@ -288,7 +288,7 @@ export async function createAnnouncement(formData: FormData) {
 }
 
 export async function updateAnnouncement(id: string, formData: FormData) {
-  const _session = await requirePermission(CMS_EDIT);
+  const session = await requirePermission(CMS_EDIT);
 
   try {
     const data = {
@@ -343,7 +343,7 @@ export async function updateAnnouncement(id: string, formData: FormData) {
 }
 
 export async function deleteAnnouncement(id: string) {
-  const _session = await requirePermission(CMS_DELETE);
+  const session = await requirePermission(CMS_DELETE);
 
   try {
     const announcement = await prisma.announcement.delete({

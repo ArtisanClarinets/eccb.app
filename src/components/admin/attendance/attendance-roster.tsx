@@ -32,6 +32,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   Search,
   CheckCircle2,
@@ -41,6 +48,7 @@ import {
   ArrowRightLeft,
   Save,
   Users,
+  ChevronDown,
   Loader2,
   Filter,
 } from 'lucide-react';
@@ -124,13 +132,13 @@ const STATUS_CONFIG: Record<AttendanceStatus, { label: string; icon: React.React
 
 export function AttendanceRoster({
   eventId,
-  eventTitle: _eventTitle,
-  eventType: _eventType,
+  eventTitle,
+  eventType,
   members,
   existingAttendance,
 }: AttendanceRosterProps) {
   const router = useRouter();
-  const { isLoading: _isLoading, markBulkAttendance: _markBulk } = useAttendance();
+  const { isLoading, markBulkAttendance: markBulk } = useAttendance();
 
   // State
   const [searchQuery, setSearchQuery] = useState('');
@@ -195,7 +203,7 @@ export function AttendanceRoster({
     }))
   );
 
-  const _markedCount = useMemo(() => {
+  const markedCount = useMemo(() => {
     return Object.values(attendanceData).filter((a) => a.status !== 'ABSENT').length;
   }, [attendanceData]);
 
@@ -258,7 +266,7 @@ export function AttendanceRoster({
       } else {
         toast.error(result.error || 'Failed to initialize attendance');
       }
-    } catch (_error) {
+    } catch (error) {
       toast.error('Failed to initialize attendance');
     } finally {
       setIsInitializing(false);
@@ -285,7 +293,7 @@ export function AttendanceRoster({
       } else {
         toast.error(result.error || 'Failed to save attendance');
       }
-    } catch (_error) {
+    } catch (error) {
       toast.error('Failed to save attendance');
     } finally {
       setIsSaving(false);

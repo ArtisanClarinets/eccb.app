@@ -1,6 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
-import { Facebook, Instagram, Twitter, Mail, MapPin, Phone } from 'lucide-react';
+import { Music, Facebook, Instagram, Twitter, Mail, MapPin, Phone } from 'lucide-react';
 import { Logo } from '@/components/icons/logo';
 
 export function Footer() {

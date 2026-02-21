@@ -21,52 +21,10 @@ export default tseslint.config(
       ...reactHooks.configs.recommended.rules,
       'react-refresh/only-export-components': [
         'warn',
-        { 
-          allowConstantExport: true,
-          allowExportNames: [
-            // Next.js exports
-            'metadata',
-            'generateMetadata',
-            'generateStaticParams',
-            'viewport',
-            // UI component variant exports (shadcn/ui pattern)
-            'buttonVariants',
-            'badgeVariants',
-            'toggleVariants',
-            'sidebarVariants',
-            'navigationMenuTriggerStyle',
-            'formVariants',
-            'buttonGroupVariants',
-            // Type exports (acceptable pattern)
-            'EventFilterState',
-            // Hook exports (acceptable pattern)
-            'useEventFilters',
-            'useOnlineStatus',
-            'useFormField',
-            'useSidebar',
-          ],
-        },
+        { allowConstantExport: true },
       ],
       '@typescript-eslint/no-explicit-any': 'warn',
-      '@typescript-eslint/no-unused-vars': ['warn', { 
-        argsIgnorePattern: '^_',
-        varsIgnorePattern: '^_',
-        caughtErrorsIgnorePattern: '^_',
-      }],
-    },
-  },
-  // Allow `any` type in test files
-  {
-    files: ['**/*.test.ts', '**/*.test.tsx', '**/__tests__/**/*.{ts,tsx}'],
-    rules: {
-      '@typescript-eslint/no-explicit-any': 'off',
-    },
-  },
-  // Allow `any` type in scripts directory
-  {
-    files: ['scripts/**/*.ts'],
-    rules: {
-      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-unused-vars': 'warn',
     },
   },
 )

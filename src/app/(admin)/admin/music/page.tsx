@@ -2,6 +2,7 @@ import { Metadata } from 'next';
 import Link from 'next/link';
 import { prisma } from '@/lib/db';
 import { requirePermission } from '@/lib/auth/guards';
+import { formatDate } from '@/lib/date';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -41,8 +42,8 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
-  Sparkles,
 } from 'lucide-react';
+import { MusicDifficulty } from '@prisma/client';
 
 export const metadata: Metadata = {
   title: 'Music Library',
@@ -261,12 +262,6 @@ export default async function AdminMusicPage({
               Export CSV
             </Button>
           </a>
-          <Button asChild variant="outline">
-            <Link href="/admin/music/smart-upload">
-              <Sparkles className="mr-2 h-4 w-4" />
-              Smart Upload
-            </Link>
-          </Button>
           <Button asChild>
             <Link href="/admin/music/new">
               <Plus className="mr-2 h-4 w-4" />

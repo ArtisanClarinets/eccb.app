@@ -8,8 +8,8 @@ import {
   getLibrarianDashboardStats,
   getAssignments,
   markOverdueAssignments,
-} from '../actions';
-import * as authGuards from '@/lib/auth/guards';
+} from '../assignment-actions';
+import { getSession, requirePermission } from '@/lib/auth/guards';
 import { AssignmentStatus } from '@prisma/client';
 
 // Mock dependencies

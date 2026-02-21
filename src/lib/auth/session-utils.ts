@@ -9,6 +9,7 @@
  */
 
 import { prisma } from '@/lib/db';
+import { auth } from './config';
 import { logger } from '@/lib/logger';
 
 // Configuration constants

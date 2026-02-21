@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { requireAuth } from '@/lib/auth/guards';
 import { EventService } from '@/lib/services/event.service';
 import { formatDate, formatTime } from '@/lib/date';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -12,9 +12,10 @@ import {
   ChevronRight,
   CalendarDays,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 export default async function MemberEventsPage() {
-  const _session = await requireAuth();
+  const session = await requireAuth();
   const events = await EventService.listUpcomingEvents(false);
 
   const eventTypeColors: Record<string, 'default' | 'secondary' | 'outline'> = {
