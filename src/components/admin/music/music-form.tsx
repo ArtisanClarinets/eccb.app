@@ -77,7 +77,7 @@ export function MusicForm({
   composers,
   arrangers,
   publishers,
-  instruments: _instruments,
+  instruments,
   initialData,
 }: MusicFormProps) {
   const router = useRouter();
@@ -93,7 +93,7 @@ export function MusicForm({
     register,
     handleSubmit,
     setValue,
-    watch: _watch,
+    watch,
     formState: { errors },
   } = form;
 
@@ -121,7 +121,7 @@ export function MusicForm({
       } else {
         toast.error(result.error || 'Failed to create music piece');
       }
-    } catch (_error) {
+    } catch (error) {
       toast.error('Something went wrong');
     } finally {
       setIsSubmitting(false);

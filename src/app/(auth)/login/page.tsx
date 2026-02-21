@@ -3,7 +3,7 @@ import Image from 'next/image';
 import heroBg from '@/assets/hero_bg.jpg';
 import Link from 'next/link';
 import { Logo } from '@/components/icons/logo';
-import { ChevronLeft } from 'lucide-react';
+import { Music, ChevronLeft } from 'lucide-react';
 import { LoginForm } from '@/components/auth/login-form';
 import { Button } from '@/components/ui/button';
 

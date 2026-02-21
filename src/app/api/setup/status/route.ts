@@ -11,7 +11,7 @@ import { NextResponse } from 'next/server';
 
 import { prisma } from '@/lib/db';
 import { checkMigrationStatus } from '@/lib/setup/schema-automation';
-import { SetupPhase } from '@/lib/setup/types';
+import { SetupPhase, type SetupProgressStatus } from '@/lib/setup/types';
 import { logger } from '@/lib/logger';
 
 // =============================================================================

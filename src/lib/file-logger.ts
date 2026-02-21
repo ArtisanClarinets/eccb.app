@@ -255,7 +255,7 @@ export const combinedLogger = {
   },
   
   child: (context: LogContext) => {
-    const _childLogger = logger.child(context);
+    const childLogger = logger.child(context);
     return {
       info: (msg: string, ctx?: LogContext) => combinedLogger.info(msg, { ...context, ...ctx }),
       warn: (msg: string, ctx?: LogContext) => combinedLogger.warn(msg, { ...context, ...ctx }),

@@ -10,6 +10,7 @@ import {
   MEMBER_CREATE,
   MEMBER_EDIT_ALL,
   MEMBER_DELETE,
+  MEMBER_VIEW_SECTION,
 } from '@/lib/auth/permission-constants';
 
 const memberSchema = z.object({
@@ -29,7 +30,7 @@ const memberSchema = z.object({
 });
 
 export async function createMember(formData: FormData) {
-  const _session = await requirePermission(MEMBER_CREATE);
+  const session = await requirePermission(MEMBER_CREATE);
 
   try {
     const data = {
@@ -124,7 +125,7 @@ export async function updateMember(id: string, formData: FormData) {
     return { success: false, error: 'You do not have permission to update this member' };
   }
 
-  const _session = await requirePermission(MEMBER_EDIT_ALL);
+  const session = await requirePermission(MEMBER_EDIT_ALL);
 
   try {
     const data = {
@@ -222,7 +223,7 @@ export async function deleteMember(id: string) {
     return { success: false, error: 'You do not have permission to delete this member' };
   }
 
-  const _session = await requirePermission(MEMBER_DELETE);
+  const session = await requirePermission(MEMBER_DELETE);
 
   try {
     const member = await prisma.member.delete({
@@ -246,7 +247,7 @@ export async function deleteMember(id: string) {
 }
 
 export async function updateMemberStatus(id: string, status: string) {
-  const _session = await requirePermission(MEMBER_EDIT_ALL);
+  const session = await requirePermission(MEMBER_EDIT_ALL);
 
   try {
     const member = await prisma.member.update({
@@ -272,7 +273,7 @@ export async function updateMemberStatus(id: string, status: string) {
 }
 
 export async function assignMemberToSection(memberId: string, sectionId: string | null) {
-  const _session = await requirePermission(MEMBER_EDIT_ALL);
+  const session = await requirePermission(MEMBER_EDIT_ALL);
 
   try {
     // Remove existing section assignments
@@ -328,7 +329,7 @@ const bulkOperationSchema = z.object({
 });
 
 export async function bulkUpdateMemberStatus(memberIds: string[], status: MemberStatus) {
-  const _session = await requirePermission(MEMBER_EDIT_ALL);
+  const session = await requirePermission(MEMBER_EDIT_ALL);
 
   try {
     const validated = bulkOperationSchema.parse({ memberIds });
@@ -357,7 +358,7 @@ export async function bulkUpdateMemberStatus(memberIds: string[], status: Member
 }
 
 export async function bulkAssignSection(memberIds: string[], sectionId: string | null) {
-  const _session = await requirePermission(MEMBER_EDIT_ALL);
+  const session = await requirePermission(MEMBER_EDIT_ALL);
 
   try {
     const validated = bulkOperationSchema.parse({ memberIds });
@@ -458,7 +459,7 @@ export async function bulkAssignRole(memberIds: string[], roleId: string) {
 }
 
 export async function bulkDeleteMembers(memberIds: string[]) {
-  const _session = await requirePermission(MEMBER_DELETE);
+  const session = await requirePermission(MEMBER_DELETE);
 
   try {
     const validated = bulkOperationSchema.parse({ memberIds });
@@ -486,7 +487,7 @@ export async function bulkDeleteMembers(memberIds: string[]) {
 }
 
 export async function linkMemberToUser(memberId: string, userId: string) {
-  const _session = await requirePermission(MEMBER_EDIT_ALL);
+  const session = await requirePermission(MEMBER_EDIT_ALL);
 
   try {
     // Check if user already has a member profile
@@ -521,7 +522,7 @@ export async function linkMemberToUser(memberId: string, userId: string) {
 }
 
 export async function unlinkMemberFromUser(memberId: string) {
-  const _session = await requirePermission(MEMBER_EDIT_ALL);
+  const session = await requirePermission(MEMBER_EDIT_ALL);
 
   try {
     const member = await prisma.member.update({

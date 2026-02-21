@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/db';
-import { MemberStatus, Prisma } from '@prisma/client';
+import { MemberStatus } from '@prisma/client';
 import { auditLog } from './audit';
 
 export interface UpdateMemberData {
@@ -101,7 +101,7 @@ export class MemberService {
     sectionId?: string;
     status?: string;
   }) {
-    const where: Prisma.MemberWhereInput = {};
+    const where: any = {};
     
     if (filters?.instrumentId) {
       where.instruments = {
@@ -120,7 +120,7 @@ export class MemberService {
     }
 
     if (filters?.status) {
-      where.status = filters.status as MemberStatus;
+      where.status = filters.status;
     }
 
     return prisma.member.findMany({

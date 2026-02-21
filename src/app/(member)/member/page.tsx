@@ -1,9 +1,9 @@
 import { Metadata } from 'next';
 import Link from 'next/link';
-import { requireAuth } from '@/lib/auth/guards';
+import { requireAuth, getUserWithProfile } from '@/lib/auth/guards';
 import { prisma } from '@/lib/db';
-import { formatDate, formatRelativeTime } from '@/lib/date';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { formatDate, formatRelativeTime, getFriendlyDateLabel } from '@/lib/date';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {

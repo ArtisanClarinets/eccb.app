@@ -62,8 +62,8 @@ export function AssignMusicDialog({
         const data = await response.json();
         setMembers(data.members || []);
       }
-    } catch (_error) {
-      console.error('Failed to load members:', _error);
+    } catch (error) {
+      console.error('Failed to load members:', error);
     } finally {
       setIsLoading(false);
     }
@@ -112,7 +112,7 @@ export function AssignMusicDialog({
       } else {
         toast.error(result.error || 'Failed to assign members');
       }
-    } catch (_error) {
+    } catch (error) {
       toast.error('Assignment failed');
     } finally {
       setIsSubmitting(false);

@@ -1,9 +1,10 @@
 import { prisma } from '@/lib/db';
 import { deleteFile, uploadFile } from './storage';
 import { auditLog } from './audit';
-import { MusicDifficulty, FileType, AssignmentStatus, Prisma, MusicPiece, MusicFile, MusicPart } from '@prisma/client';
+import { MusicDifficulty, FileType, AssignmentStatus } from '@prisma/client';
 import {
   cacheGet,
+  cacheSet,
   cacheKeys,
   CACHE_CONFIG,
   invalidateMusicCache,
@@ -31,43 +32,6 @@ export interface CreatePartData {
   file?: Buffer;
   fileName?: string;
   contentType?: string;
-}
-
-// =============================================================================
-// Smart Upload Integration Types
-// =============================================================================
-
-export interface SmartUploadProposalData {
-  title?: string;
-  composer?: string;
-  arranger?: string;
-  publisher?: string;
-  difficulty?: MusicDifficulty;
-  genre?: string;
-  style?: string;
-  instrumentation?: string;
-  duration?: number;
-  notes?: string;
-  corrections?: Record<string, unknown>;
-}
-
-export interface MusicFileInput {
-  fileName: string;
-  fileType: FileType;
-  fileSize: number;
-  mimeType: string;
-  storageKey: string;
-  source?: string;
-  originalUploadId?: string;
-  extractedMetadata?: Record<string, unknown>;
-}
-
-export interface MusicPartInput {
-  instrumentId: string;
-  partName: string;
-  fileId?: string;
-  isOptional?: boolean;
-  notes?: string;
 }
 
 export interface MusicListFilters {
@@ -538,165 +502,5 @@ export class MusicLibraryService {
     await invalidateMusicCache();
     await invalidateMusicAssignmentCache();
     await invalidateMusicDashboardCache();
-  }
-
-  /**
-   * Create a music piece from a Smart Upload proposal
-   *
-   * This is used by the Smart Upload service to ingest approved proposals
-   * into the music library. It handles creating the piece, files, and parts
-   * in a transaction for data consistency.
-   */
-  static async createMusicPieceFromSmartUpload(
-    proposal: SmartUploadProposalData,
-    files: MusicFileInput[],
-    parts: MusicPartInput[]
-  ): Promise<MusicPiece> {
-    // Get final values (apply corrections if any)
-    const corrections = proposal.corrections || {};
-    const title = (corrections.title as string) || proposal.title || 'Untitled';
-    const _composer = (corrections.composer as string) || proposal.composer;
-    const _arranger = (corrections.arranger as string) || proposal.arranger;
-    const _publisher = (corrections.publisher as string) || proposal.publisher;
-    const difficulty = proposal.difficulty;
-    const genre = (corrections.genre as string) || proposal.genre;
-    const style = (corrections.style as string) || proposal.style;
-    const instrumentation = (corrections.instrumentation as string) || proposal.instrumentation;
-    const duration = (corrections.duration as number) || proposal.duration;
-    const notes = (corrections.notes as string) || proposal.notes;
-
-    // Create the piece in a transaction
-    const piece = await prisma.$transaction(async (tx) => {
-      // Create the music piece
-      const newPiece = await tx.musicPiece.create({
-        data: {
-          title,
-          subtitle: null,
-          composerId: null, // Would need to look up or create Person
-          arrangerId: null, // Would need to look up or create Person
-          publisherId: null, // Would need to look up or create Publisher
-          difficulty: difficulty || null,
-          duration: duration || null,
-          genre: genre || null,
-          style: style || null,
-          instrumentation: instrumentation || null,
-          notes: notes || null,
-        },
-      });
-
-      // Create music files
-      for (const fileInput of files) {
-        await tx.musicFile.create({
-          data: {
-            pieceId: newPiece.id,
-            fileName: fileInput.fileName,
-            fileType: fileInput.fileType,
-            fileSize: fileInput.fileSize,
-            mimeType: fileInput.mimeType,
-            storageKey: fileInput.storageKey,
-            source: fileInput.source || 'smart_upload',
-            originalUploadId: fileInput.originalUploadId || null,
-            extractedMetadata: fileInput.extractedMetadata as Prisma.JsonObject || Prisma.JsonNull,
-          },
-        });
-      }
-
-      // Create music parts
-      for (const partInput of parts) {
-        await tx.musicPart.create({
-          data: {
-            pieceId: newPiece.id,
-            instrumentId: partInput.instrumentId,
-            partName: partInput.partName,
-            fileId: partInput.fileId || null,
-            isOptional: partInput.isOptional || false,
-            notes: partInput.notes || null,
-          },
-        });
-      }
-
-      return newPiece;
-    });
-
-    await auditLog({
-      action: 'piece.create_from_smart_upload',
-      entityType: 'MusicPiece',
-      entityId: piece.id,
-      newValues: { title, source: 'smart_upload' },
-    });
-
-    // Invalidate caches
-    await invalidateMusicCache();
-
-    return piece;
-  }
-
-  /**
-   * Add multiple files to a music piece
-   */
-  static async addFiles(pieceId: string, files: MusicFileInput[]): Promise<MusicFile[]> {
-    const createdFiles: MusicFile[] = [];
-
-    for (const fileInput of files) {
-      const file = await prisma.musicFile.create({
-        data: {
-          pieceId,
-          fileName: fileInput.fileName,
-          fileType: fileInput.fileType,
-          fileSize: fileInput.fileSize,
-          mimeType: fileInput.mimeType,
-          storageKey: fileInput.storageKey,
-          source: fileInput.source || 'manual',
-          originalUploadId: fileInput.originalUploadId || null,
-          extractedMetadata: fileInput.extractedMetadata as Prisma.JsonObject || Prisma.JsonNull,
-        },
-      });
-      createdFiles.push(file);
-    }
-
-    await auditLog({
-      action: 'piece.add_files',
-      entityType: 'MusicPiece',
-      entityId: pieceId,
-      newValues: { fileCount: createdFiles.length },
-    });
-
-    // Invalidate piece cache
-    await invalidateMusicCache(pieceId);
-
-    return createdFiles;
-  }
-
-  /**
-   * Add multiple parts to a music piece
-   */
-  static async addParts(pieceId: string, parts: MusicPartInput[]): Promise<MusicPart[]> {
-    const createdParts: MusicPart[] = [];
-
-    for (const partInput of parts) {
-      const part = await prisma.musicPart.create({
-        data: {
-          pieceId,
-          instrumentId: partInput.instrumentId,
-          partName: partInput.partName,
-          fileId: partInput.fileId || null,
-          isOptional: partInput.isOptional || false,
-          notes: partInput.notes || null,
-        },
-      });
-      createdParts.push(part);
-    }
-
-    await auditLog({
-      action: 'piece.add_parts',
-      entityType: 'MusicPiece',
-      entityId: pieceId,
-      newValues: { partCount: createdParts.length },
-    });
-
-    // Invalidate piece cache
-    await invalidateMusicCache(pieceId);
-
-    return createdParts;
   }
 }

@@ -202,7 +202,7 @@ export async function POST(request: Request): Promise<NextResponse<SetupResponse
 
     // Handle different actions
     switch (action) {
-      case 'migrate': {
+      case 'migrate':
         logger.info('Running migrations');
         const migrationResult = runMigrations({ skipSeed: true });
 
@@ -212,9 +212,8 @@ export async function POST(request: Request): Promise<NextResponse<SetupResponse
           progress: migrationResult.success ? 100 : 50,
           error: migrationResult.error,
         });
-      }
 
-      case 'seed': {
+      case 'seed':
         logger.info('Seeding database');
         const seedResult = seedDatabase();
 
@@ -224,7 +223,6 @@ export async function POST(request: Request): Promise<NextResponse<SetupResponse
           progress: seedResult.success ? 100 : 80,
           error: seedResult.error,
         });
-      }
 
       case 'full':
         return NextResponse.json(await runFullSetup());

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NextRequest } from 'next/server';
 import { POST } from '../download-url/route';
 import { GET as downloadGET } from '../download/[...key]/route';
-import { generateSignedToken } from '@/lib/signed-url';
+import { generateSignedToken, validateSignedToken } from '@/lib/signed-url';
 
 // Mock dependencies
 vi.mock('@/lib/auth/guards', () => ({

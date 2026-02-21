@@ -20,6 +20,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
+  Mail,
   Plus,
   MoreHorizontal,
   Eye,

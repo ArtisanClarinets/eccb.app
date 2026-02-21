@@ -47,6 +47,12 @@ vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }));
 
+// Define types for mocks
+type MockSession = {
+  user: { id: string };
+  session: { id: string };
+};
+
 describe('Announcement Actions', () => {
   const mockUserId = 'user-123';
   const mockAnnouncement = {
@@ -152,7 +158,7 @@ describe('Announcement Actions', () => {
         type: 'URGENT',
       });
       vi.mocked(prisma.user.findMany).mockResolvedValueOnce([
-        { id: 'user-1', email: 'user1@example.com', name: 'User 1' } as any,
+        { id: 'user-1', email: 'user1@example.com', name: 'User 1' } as unknown as any,
       ]);
       vi.mocked(prisma.userNotification.createMany).mockResolvedValueOnce({ count: 1 });
 

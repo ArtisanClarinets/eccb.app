@@ -8,11 +8,22 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
   Music,
   ArrowLeft,
   Download,
   FileMusic,
+  User,
   Calendar,
+  Clock,
+  BarChart3,
 } from 'lucide-react';
 
 interface MusicDetailPageProps {

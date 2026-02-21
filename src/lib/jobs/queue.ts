@@ -17,6 +17,7 @@ import {
   QUEUE_NAMES,
   getJobOptions,
   getQueueNameForJob,
+  getConcurrencyForJob,
   type EmailSendJobData,
   type EmailBulkJobData,
 } from './definitions';
@@ -53,7 +54,6 @@ interface QueueInstances {
   scheduled: Queue | null;
   cleanup: Queue | null;
   deadLetter: Queue | null;
-  smartUpload: Queue | null;
 }
 
 const queues: QueueInstances = {
@@ -62,7 +62,6 @@ const queues: QueueInstances = {
   scheduled: null,
   cleanup: null,
   deadLetter: null,
-  smartUpload: null,
 };
 
 const queueEvents: Map<string, QueueEvents> = new Map();
@@ -93,10 +92,6 @@ export function initializeQueues(): void {
   queues.deadLetter = new Queue(QUEUE_NAMES.DEAD_LETTER, { connection });
   queueEvents.set(QUEUE_NAMES.DEAD_LETTER, new QueueEvents(QUEUE_NAMES.DEAD_LETTER, { connection }));
 
-  // Smart Upload queue
-  queues.smartUpload = new Queue(QUEUE_NAMES.SMART_UPLOAD, { connection });
-  queueEvents.set(QUEUE_NAMES.SMART_UPLOAD, new QueueEvents(QUEUE_NAMES.SMART_UPLOAD, { connection }));
-
   logger.info('All job queues initialized');
 }
 
@@ -115,8 +110,6 @@ export function getQueue(name: keyof typeof QUEUE_NAMES): Queue | null {
       return queues.cleanup;
     case 'DEAD_LETTER':
       return queues.deadLetter;
-    case 'SMART_UPLOAD':
-      return queues.smartUpload;
     default:
       return null;
   }
@@ -146,8 +139,7 @@ export async function addJob<T extends JobType>(
   const queue = getQueue(queueName === QUEUE_NAMES.EMAIL ? 'EMAIL' :
     queueName === QUEUE_NAMES.NOTIFICATION ? 'NOTIFICATION' :
     queueName === QUEUE_NAMES.SCHEDULED ? 'SCHEDULED' :
-    queueName === QUEUE_NAMES.CLEANUP ? 'CLEANUP' :
-    queueName === QUEUE_NAMES.SMART_UPLOAD ? 'SMART_UPLOAD' : 'DEAD_LETTER');
+    queueName === QUEUE_NAMES.CLEANUP ? 'CLEANUP' : 'DEAD_LETTER');
 
   if (!queue) {
     throw new Error(`Queue not initialized: ${queueName}`);

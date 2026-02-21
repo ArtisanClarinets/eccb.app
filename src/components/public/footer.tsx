@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Facebook, Instagram, Youtube, Mail, Phone, MapPin } from 'lucide-react';
+import { Music, Facebook, Instagram, Youtube, Mail, Phone, MapPin } from 'lucide-react';
 import { Logo } from '@/components/icons/logo';
 
 const footerNavigation = {
