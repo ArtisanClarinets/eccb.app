@@ -114,6 +114,12 @@ async function runFullRepair(force: boolean): Promise<RepairResponse> {
  * Run repair operations
  */
 export async function POST(request: Request): Promise<NextResponse<RepairResponse>> {
+  // Security Check
+  const guardResult = validateSetupRequest(request);
+  if (guardResult) {
+    return guardResult as NextResponse<RepairResponse>;
+  }
+
   try {
     // Validate request body
     const body = await request.json();

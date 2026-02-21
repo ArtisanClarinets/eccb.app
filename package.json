@@ -35,8 +35,8 @@
     "@aws-sdk/client-s3": "^3.992.0",
     "@aws-sdk/s3-request-presigner": "^3.992.0",
     "@hookform/resolvers": "^5.2.2",
-    "@prisma/adapter-mariadb": "^7.4.0",
-    "@prisma/client": "^7.3.0",
+    "@prisma/adapter-mariadb": "6.19.2",
+    "@prisma/client": "6.19.2",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-aspect-ratio": "^1.1.8",
@@ -99,6 +99,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.58.0",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^6.9.1",
@@ -111,11 +112,14 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "eslint-plugin-react-refresh": "^0.5.0",
+    "globals": "^17.3.0",
     "jsdom": "^28.1.0",
     "playwright": "^1.58.0",
+    "prisma": "6.19.2",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
     "typescript": "^5",
+    "typescript-eslint": "^8.56.0",
     "vitest": "^4.0.18"
   },
   "overrides": {

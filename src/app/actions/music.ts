@@ -18,7 +18,7 @@ const musicPieceSchema = z.object({
   catalogNumber: z.string().optional(),
 });
 
-export async function createMusicPiece(data: any) {
+export async function createMusicPiece(data: z.infer<typeof musicPieceSchema>) {
   await requirePermission(MUSIC_CREATE);
 
   const validated = musicPieceSchema.parse(data);
@@ -37,12 +37,14 @@ export async function createMusicPiece(data: any) {
   return piece;
 }
 
-export async function updateMusicPiece(id: string, data: any) {
+export async function updateMusicPiece(id: string, data: Partial<z.infer<typeof musicPieceSchema>>) {
   await requirePermission(MUSIC_EDIT);
+
+  const validated = musicPieceSchema.partial().parse(data);
 
   const piece = await prisma.musicPiece.update({
     where: { id },
-    data,
+    data: validated,
   });
 
   await auditLog({

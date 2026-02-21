@@ -45,8 +45,12 @@ const envSchema = z.object({
   SMTP_SECURE: z.string().default('false').transform(val => val === 'true'),
   
   // App Config
-  NEXT_PUBLIC_APP_URL: z.string().url().default('http://localhost:3000'),
-  NEXT_PUBLIC_APP_NAME: z.string().default('Emerald Coast Community Band'),
+  NEXT_PUBLIC_APP_URL: z.string().url().default("http://localhost:3000"),
+  NEXT_PUBLIC_APP_NAME: z.string().default("Emerald Coast Community Band"),
+
+  // Setup Configuration
+  SETUP_MODE: z.string().default("false").transform(val => val === "true"),
+  SETUP_TOKEN: z.string().optional(),
   
   // Environment
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),

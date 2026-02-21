@@ -85,7 +85,7 @@ export function MusicForm({
   const [files, setFiles] = useState<File[]>([]);
 
   const form = useForm<MusicFormData>({
-    resolver: zodResolver(musicSchema) as any,
+    resolver: zodResolver(musicSchema),
     defaultValues: initialData,
   });
 

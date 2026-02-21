@@ -21,6 +21,7 @@ const isProduction = process.env.NODE_ENV === 'production';
 
 // Track current log file
 let currentLogFile: string | null = null;
+let currentLogStream: fs.WriteStream | null = null;
 let currentLogDate: string | null = null;
 let currentLogSize = 0;
 
@@ -89,14 +90,30 @@ function rotateLogFile(): void {
   
   ensureLogDirectory();
   
+  // Close existing stream if any
+  if (currentLogStream) {
+    currentLogStream.end();
+    currentLogStream = null;
+  }
+
   currentLogFile = getLogFilePath();
   currentLogDate = getDateString();
   currentLogSize = 0;
   
-  // Check if file exists and get its size
+  // Check if file exists and get its size for accurate rotation
   if (fs.existsSync(currentLogFile)) {
     const stats = fs.statSync(currentLogFile);
     currentLogSize = stats.size;
+  }
+
+  // Create new stream
+  try {
+    currentLogStream = fs.createWriteStream(currentLogFile, { flags: 'a', encoding: 'utf-8' });
+    currentLogStream.on('error', (err) => {
+      console.error('File logger stream error:', err);
+    });
+  } catch (error) {
+    console.error('Failed to create log stream:', error);
   }
 }
 
@@ -137,7 +154,12 @@ function writeToFile(entry: string): void {
   try {
     rotateLogFile();
     
-    if (currentLogFile) {
+    if (currentLogStream) {
+      const line = entry + '\n';
+      currentLogStream.write(line);
+      currentLogSize += Buffer.byteLength(line, 'utf-8');
+    } else if (currentLogFile) {
+      // Fallback if stream is missing but path is set
       const line = entry + '\n';
       fs.appendFileSync(currentLogFile, line, 'utf-8');
       currentLogSize += Buffer.byteLength(line, 'utf-8');

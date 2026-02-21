@@ -2,23 +2,21 @@
 
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/db';
-import { requirePermission, getSession } from '@/lib/auth/guards';
+import { requirePermission } from '@/lib/auth/guards';
 import { uploadFile, deleteFile } from '@/lib/services/storage';
 import { auditLog } from '@/lib/services/audit';
-import { MusicDifficulty, FileType, AssignmentStatus } from '@prisma/client';
+import { MusicDifficulty, FileType, AssignmentStatus } from '@/lib/db';
 import {
   MUSIC_CREATE,
   MUSIC_EDIT,
   MUSIC_DELETE,
-  MUSIC_ASSIGN,
 } from '@/lib/auth/permission-constants';
 import {
   invalidateMusicCache,
-  invalidateMusicAssignmentCache,
-  invalidateMusicDashboardCache,
 } from '@/lib/cache';
 import { z } from 'zod';
 
+// Forced change to fix CI
 // =============================================================================
 // ZOD VALIDATION SCHEMAS
 // =============================================================================
@@ -930,7 +928,7 @@ export async function deleteMusicPiece(id: string) {
 
 export async function uploadMusicFile(musicPieceId: string, formData: FormData) {
   const session = await requirePermission(MUSIC_EDIT);
-  
+
   try {
     const file = formData.get('file') as File;
     const partType = formData.get('partType') as string | null;
@@ -1090,7 +1088,7 @@ export async function updateMusicFile(fileId: string, data: {
     await invalidateMusicCache(file.pieceId);
 
     revalidatePath(`/admin/music/${file.pieceId}`);
-    
+
     return { success: true };
   } catch (error) {
     console.error('Failed to update music file:', error);
@@ -1143,7 +1141,7 @@ export async function archiveMusicFile(fileId: string) {
     await invalidateMusicCache(file.pieceId);
 
     revalidatePath(`/admin/music/${file.pieceId}`);
-    
+
     return { success: true };
   } catch (error) {
     console.error('Failed to archive music file:', error);
@@ -1177,7 +1175,7 @@ export async function deleteMusicFile(fileId: string) {
     await invalidateMusicCache(file.pieceId);
 
     revalidatePath(`/admin/music/${file.pieceId}`);
-    
+
     return { success: true };
   } catch (error) {
     console.error('Failed to delete music file:', error);
@@ -1279,7 +1277,7 @@ export async function exportMusicToCSV(filters: MusicExportFilters = {}) {
   await requirePermission('music:read');
 
   try {
-    // Build where clause (same logic as page)
+    // Build where clause
     const where: Record<string, unknown> = {
       deletedAt: null,
     };
