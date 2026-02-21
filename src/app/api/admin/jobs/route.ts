@@ -14,6 +14,7 @@ import {
   getJobStatus, 
   getDeadLetterJobs,
   retryDeadLetterJob,
+  clearAllQueues,
   QUEUE_NAMES,
 } from '@/lib/jobs/queue';
 import { auth } from '@/lib/auth/config';
@@ -29,12 +30,12 @@ import { z } from 'zod';
 const retryJobSchema = z.object({
   action: z.literal('retry'),
   jobId: z.string(),
-  queueName: z.enum(['EMAIL', 'NOTIFICATION', 'SCHEDULED', 'CLEANUP', 'DEAD_LETTER', 'SMART_UPLOAD']),
+  queueName: z.enum(['EMAIL', 'NOTIFICATION', 'SCHEDULED', 'CLEANUP', 'DEAD_LETTER']),
 });
 
 const clearQueueSchema = z.object({
   action: z.literal('clear'),
-  queueName: z.enum(['EMAIL', 'NOTIFICATION', 'SCHEDULED', 'CLEANUP', 'DEAD_LETTER', 'SMART_UPLOAD']),
+  queueName: z.enum(['EMAIL', 'NOTIFICATION', 'SCHEDULED', 'CLEANUP', 'DEAD_LETTER']),
 });
 
 const actionSchema = z.discriminatedUnion('action', [

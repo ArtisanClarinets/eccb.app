@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { uploadFile, downloadFile, deleteFile, fileExists, validateFileMagicBytes } from '../storage';
+import { env } from '@/lib/env';
 import fs from 'fs/promises';
+import path from 'path';
 
 // Mock dependencies
 vi.mock('@/lib/env', () => ({

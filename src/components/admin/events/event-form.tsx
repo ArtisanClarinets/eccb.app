@@ -85,6 +85,7 @@ export function EventForm({
     register,
     handleSubmit,
     setValue,
+    watch,
     formState: { errors },
   } = useForm<EventFormData>({
     resolver: zodResolver(eventSchema),
@@ -122,7 +123,7 @@ export function EventForm({
       } else {
         toast.error(result.error || 'Failed to save event');
       }
-    } catch (_error) {
+    } catch (error) {
       toast.error('Something went wrong');
     } finally {
       setIsSubmitting(false);

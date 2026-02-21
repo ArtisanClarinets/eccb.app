@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/db';
-import { deleteFile } from '@/lib/services/storage';
+import { deleteFile, fileExists, getFileMetadata } from '@/lib/services/storage';
 import { logger } from '@/lib/logger';
 import fs from 'fs/promises';
 import path from 'path';

@@ -5,7 +5,11 @@ import { prisma } from '@/lib/db';
 import { requirePermission } from '@/lib/auth/guards';
 import { auditLog } from '@/lib/services/audit';
 import { z } from 'zod';
-import { isValidPermission } from '@/lib/auth/permission-constants';
+import {
+  ALL_PERMISSIONS,
+  isValidPermission,
+  type Permission,
+} from '@/lib/auth/permission-constants';
 
 // =============================================================================
 // TYPES

@@ -3,6 +3,7 @@ import { MusicLibraryService } from '../music.service';
 import {
   cacheGet,
   cacheSet,
+  cacheKeys,
   CACHE_CONFIG,
   invalidateMusicCache,
   invalidateMusicAssignmentCache,
@@ -73,7 +74,7 @@ vi.mock('../audit', () => ({
 }));
 
 const mockCacheGet = vi.mocked(cacheGet);
-const _mockCacheSet = vi.mocked(cacheSet);
+const mockCacheSet = vi.mocked(cacheSet);
 const mockInvalidateMusicCache = vi.mocked(invalidateMusicCache);
 const mockInvalidateMusicAssignmentCache = vi.mocked(invalidateMusicAssignmentCache);
 const mockInvalidateMusicDashboardCache = vi.mocked(invalidateMusicDashboardCache);
