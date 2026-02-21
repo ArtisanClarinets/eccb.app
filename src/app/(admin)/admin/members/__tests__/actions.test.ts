@@ -173,3 +173,25 @@ describe('Member Actions', () => {
     });
   });
 });
+
+    it('should search with case-insensitive mode', async () => {
+      (prisma.member.findMany as any).mockResolvedValue([]);
+
+      await exportMembersToCSV({ search: 'john' });
+
+      // Verify at least one condition uses insensitive mode
+      expect(prisma.member.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            OR: expect.arrayContaining([
+              expect.objectContaining({
+                firstName: expect.objectContaining({
+                  contains: 'john',
+                  mode: 'insensitive',
+                }),
+              }),
+            ]),
+          }),
+        })
+      );
+    });

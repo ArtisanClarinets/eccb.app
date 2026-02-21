@@ -598,9 +598,9 @@ export async function exportMembersToCSV(filters: MemberExportFilters = {}) {
 
     if (filters.search) {
       const searchConditions = [
-        { firstName: { contains: filters.search } },
-        { lastName: { contains: filters.search } },
-        { email: { contains: filters.search } },
+        { firstName: { contains: filters.search, mode: 'insensitive' } },
+        { lastName: { contains: filters.search, mode: 'insensitive' } },
+        { email: { contains: filters.search, mode: 'insensitive' } },
       ];
       
       if (filters.roleId) {
@@ -610,8 +610,8 @@ export async function exportMembersToCSV(filters: MemberExportFilters = {}) {
             where.user as object,
             {
               OR: [
-                { name: { contains: filters.search } },
-                { email: { contains: filters.search } },
+                { name: { contains: filters.search, mode: 'insensitive' } },
+                { email: { contains: filters.search, mode: 'insensitive' } },
               ],
             },
           ],
@@ -619,8 +619,8 @@ export async function exportMembersToCSV(filters: MemberExportFilters = {}) {
       } else {
         (where as Record<string, unknown>).OR = [
           ...searchConditions,
-          { user: { name: { contains: filters.search } } },
-          { user: { email: { contains: filters.search } } },
+          { user: { name: { contains: filters.search, mode: 'insensitive' } } },
+          { user: { email: { contains: filters.search, mode: 'insensitive' } } },
         ];
       }
     }
