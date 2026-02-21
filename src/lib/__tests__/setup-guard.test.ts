@@ -14,26 +14,28 @@ vi.mock('next/server', () => {
   };
 });
 
-// Mock env
-const mockEnvState = {
-  SETUP_MODE: false,
-  SETUP_TOKEN: undefined as string | undefined,
-};
+// Mock env with a factory function to avoid hoisting issues
+// We'll use a getter to control the state
+let mockSetupMode = false;
+let mockSetupToken: string | undefined = undefined;
 
 vi.mock('@/lib/env', () => ({
-  env: mockEnvState,
+  env: {
+    get SETUP_MODE() { return mockSetupMode; },
+    get SETUP_TOKEN() { return mockSetupToken; },
+  },
 }));
 
 import { validateSetupRequest } from '../setup/setup-guard';
 
 describe('validateSetupRequest', () => {
   beforeEach(() => {
-    mockEnvState.SETUP_MODE = false;
-    mockEnvState.SETUP_TOKEN = undefined;
+    mockSetupMode = false;
+    mockSetupToken = undefined;
   });
 
   it('should return 403 if SETUP_MODE is false', () => {
-    mockEnvState.SETUP_MODE = false;
+    mockSetupMode = false;
     const req = new Request('http://localhost');
     const res = validateSetupRequest(req) as any;
 
@@ -43,8 +45,8 @@ describe('validateSetupRequest', () => {
   });
 
   it('should return 401 if SETUP_MODE is true but token is missing and SETUP_TOKEN is configured', () => {
-    mockEnvState.SETUP_MODE = true;
-    mockEnvState.SETUP_TOKEN = 'secret';
+    mockSetupMode = true;
+    mockSetupToken = 'secret';
 
     const req = new Request('http://localhost');
     const res = validateSetupRequest(req) as any;
@@ -55,8 +57,8 @@ describe('validateSetupRequest', () => {
   });
 
   it('should return 401 if token is incorrect', () => {
-    mockEnvState.SETUP_MODE = true;
-    mockEnvState.SETUP_TOKEN = 'secret';
+    mockSetupMode = true;
+    mockSetupToken = 'secret';
 
     const req = new Request('http://localhost', {
       headers: { 'x-setup-token': 'wrong' },
@@ -68,8 +70,8 @@ describe('validateSetupRequest', () => {
   });
 
   it('should return null (success) if token is correct', () => {
-    mockEnvState.SETUP_MODE = true;
-    mockEnvState.SETUP_TOKEN = 'secret';
+    mockSetupMode = true;
+    mockSetupToken = 'secret';
 
     const req = new Request('http://localhost', {
       headers: { 'x-setup-token': 'secret' },
@@ -80,8 +82,8 @@ describe('validateSetupRequest', () => {
   });
 
   it('should return null (success) if SETUP_MODE is true and no token configured', () => {
-    mockEnvState.SETUP_MODE = true;
-    mockEnvState.SETUP_TOKEN = undefined;
+    mockSetupMode = true;
+    mockSetupToken = undefined;
 
     const req = new Request('http://localhost');
     const res = validateSetupRequest(req);
