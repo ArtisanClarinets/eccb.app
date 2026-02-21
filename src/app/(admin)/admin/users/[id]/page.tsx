@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { prisma } from '@/lib/db';
 import { requirePermission } from '@/lib/auth/guards';
 import { formatDate, formatDateTime } from '@/lib/date';
 import { Button } from '@/components/ui/button';
@@ -30,7 +29,7 @@ import {
   LogOut,
   Users,
 } from 'lucide-react';
-import { getUserDetails, getUserStats, revokeAllSessions, revokeSession } from '../actions';
+import { getUserDetails, revokeAllSessions, revokeSession } from '../actions';
 import { UserActions } from './user-actions';
 
 export default async function UserDetailPage({

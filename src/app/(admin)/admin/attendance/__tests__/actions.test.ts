@@ -1,46 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-
-// Mock dependencies before importing
-vi.mock('@/lib/db', () => ({
-  prisma: {
-    attendance: {
-      upsert: vi.fn(),
-      findMany: vi.fn(),
-      findUnique: vi.fn(),
-      deleteMany: vi.fn(),
-      createMany: vi.fn(),
-    },
-    event: {
-      findUnique: vi.fn(),
-    },
-    member: {
-      findFirst: vi.fn(),
-      findUnique: vi.fn(),
-      findMany: vi.fn(),
-    },
-  },
-}));
-
-vi.mock('@/lib/auth/guards', () => ({
-  requirePermission: vi.fn(),
-  requireAuth: vi.fn(),
-}));
-
-vi.mock('@/lib/auth/permissions', () => ({
-  checkUserPermission: vi.fn(),
-}));
-
-vi.mock('@/lib/services/audit', () => ({
-  auditLog: vi.fn(),
-}));
-
-vi.mock('next/cache', () => ({
-  revalidatePath: vi.fn(),
-}));
-
-import { prisma } from '@/lib/db';
-import { requirePermission, requireAuth } from '@/lib/auth/guards';
-import { checkUserPermission } from '@/lib/auth/permissions';
+import { describe, it, expect, vi } from 'vitest';
 import {
   markAttendance,
   markBulkAttendance,
@@ -50,30 +8,59 @@ import {
   getEventAttendanceStats,
   initializeEventAttendance,
 } from '../actions';
+import { prisma } from '@/lib/db';
+import { requireAuth } from '@/lib/auth/guards';
+import { requirePermission, checkUserPermission } from '@/lib/auth/permissions';
 
-describe('Attendance Server Actions', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    // Default: grant all attendance permissions
-    vi.mocked(checkUserPermission).mockResolvedValue(true);
-  });
+vi.mock('@/lib/db', () => ({
+  prisma: {
+    attendance: {
+      findUnique: vi.fn(),
+      findMany: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      upsert: vi.fn(),
+      deleteMany: vi.fn(),
+      createMany: vi.fn(),
+    },
+    event: {
+      findUnique: vi.fn(),
+    },
+    member: {
+      findUnique: vi.fn(),
+      findMany: vi.fn(),
+    },
+  },
+}));
 
+vi.mock('@/lib/auth/guards', () => ({
+  requireAuth: vi.fn(),
+}));
+
+vi.mock('@/lib/auth/permissions', () => ({
+  requirePermission: vi.fn(),
+  checkUserPermission: vi.fn(),
+}));
+
+// Define types for mocks
+interface MockSession {
+  user: { id: string };
+}
+
+describe('Attendance Actions', () => {
   describe('markAttendance', () => {
-    it('should mark attendance for own member', async () => {
-      const mockSession = { user: { id: 'user-1' } };
-      const mockMember = { id: 'member-1', userId: 'user-1' };
-      const mockEvent = { id: 'event-1', title: 'Rehearsal', type: 'REHEARSAL' };
+    it('should mark attendance successfully', async () => {
+      const mockSession: MockSession = { user: { id: 'user-1' } };
       const mockAttendance = {
         id: 'attendance-1',
         eventId: 'event-1',
         memberId: 'member-1',
         status: 'PRESENT',
-        markedAt: new Date(),
       };
 
       vi.mocked(requireAuth).mockResolvedValue(mockSession as any);
-      vi.mocked(prisma.member.findFirst).mockResolvedValue(mockMember as any);
-      vi.mocked(prisma.event.findUnique).mockResolvedValue(mockEvent as any);
+      vi.mocked(checkUserPermission).mockResolvedValue(true);
+      vi.mocked(prisma.event.findUnique).mockResolvedValue({ id: 'event-1' } as any);
       vi.mocked(prisma.attendance.upsert).mockResolvedValue(mockAttendance as any);
 
       const result = await markAttendance({
@@ -87,7 +74,7 @@ describe('Attendance Server Actions', () => {
     });
 
     it('should return error for invalid data', async () => {
-      const mockSession = { user: { id: 'user-1' } };
+      const mockSession: MockSession = { user: { id: 'user-1' } };
       vi.mocked(requireAuth).mockResolvedValue(mockSession as any);
 
       const result = await markAttendance({
@@ -101,7 +88,7 @@ describe('Attendance Server Actions', () => {
     });
 
     it('should return error when permission denied', async () => {
-      const mockSession = { user: { id: 'user-1' } };
+      const mockSession: MockSession = { user: { id: 'user-1' } };
 
       vi.mocked(requireAuth).mockResolvedValue(mockSession as any);
       vi.mocked(checkUserPermission).mockResolvedValue(false);
@@ -117,7 +104,7 @@ describe('Attendance Server Actions', () => {
     });
 
     it('should return error when event not found', async () => {
-      const mockSession = { user: { id: 'user-1' } };
+      const mockSession: MockSession = { user: { id: 'user-1' } };
 
       vi.mocked(requireAuth).mockResolvedValue(mockSession as any);
       vi.mocked(checkUserPermission).mockResolvedValue(true);
@@ -136,7 +123,7 @@ describe('Attendance Server Actions', () => {
 
   describe('markBulkAttendance', () => {
     it('should mark bulk attendance with ATTENDANCE_MARK_ALL permission', async () => {
-      const mockSession = { user: { id: 'user-1' } };
+      const mockSession: MockSession = { user: { id: 'user-1' } };
       const mockEvent = { id: 'event-1', title: 'Rehearsal' };
 
       vi.mocked(requirePermission).mockResolvedValue(mockSession as any);
@@ -162,7 +149,7 @@ describe('Attendance Server Actions', () => {
     });
 
     it('should return error when event not found', async () => {
-      const mockSession = { user: { id: 'user-1' } };
+      const mockSession: MockSession = { user: { id: 'user-1' } };
 
       vi.mocked(requirePermission).mockResolvedValue(mockSession as any);
       vi.mocked(prisma.event.findUnique).mockResolvedValue(null);
@@ -179,7 +166,7 @@ describe('Attendance Server Actions', () => {
 
   describe('getEventAttendance', () => {
     it('should get event attendance records', async () => {
-      const mockSession = { user: { id: 'user-1' } };
+      const mockSession: MockSession = { user: { id: 'user-1' } };
       const mockEvent = {
         id: 'event-1',
         title: 'Rehearsal',
@@ -204,7 +191,7 @@ describe('Attendance Server Actions', () => {
     });
 
     it('should return error when event not found', async () => {
-      const mockSession = { user: { id: 'user-1' } };
+      const mockSession: MockSession = { user: { id: 'user-1' } };
 
       vi.mocked(requireAuth).mockResolvedValue(mockSession as any);
       vi.mocked(prisma.event.findUnique).mockResolvedValue(null);
@@ -216,7 +203,7 @@ describe('Attendance Server Actions', () => {
     });
 
     it('should return error when permission denied', async () => {
-      const mockSession = { user: { id: 'user-1' } };
+      const mockSession: MockSession = { user: { id: 'user-1' } };
 
       vi.mocked(requireAuth).mockResolvedValue(mockSession as any);
       vi.mocked(checkUserPermission).mockResolvedValue(false);
@@ -230,7 +217,7 @@ describe('Attendance Server Actions', () => {
 
   describe('getMemberAttendance', () => {
     it('should get member attendance records', async () => {
-      const mockSession = { user: { id: 'user-1' } };
+      const mockSession: MockSession = { user: { id: 'user-1' } };
       const mockAttendance = [
         {
           id: 'attendance-1',
@@ -251,7 +238,7 @@ describe('Attendance Server Actions', () => {
     });
 
     it('should return error when permission denied', async () => {
-      const mockSession = { user: { id: 'user-1' } };
+      const mockSession: MockSession = { user: { id: 'user-1' } };
 
       vi.mocked(requireAuth).mockResolvedValue(mockSession as any);
       vi.mocked(checkUserPermission).mockResolvedValue(false);
@@ -265,7 +252,7 @@ describe('Attendance Server Actions', () => {
 
   describe('getMemberAttendanceStats', () => {
     it('should calculate member attendance statistics', async () => {
-      const mockSession = { user: { id: 'user-1' } };
+      const mockSession: MockSession = { user: { id: 'user-1' } };
       const mockAttendance = [
         { status: 'PRESENT' },
         { status: 'PRESENT' },
@@ -294,7 +281,7 @@ describe('Attendance Server Actions', () => {
 
   describe('getEventAttendanceStats', () => {
     it('should calculate event attendance statistics', async () => {
-      const mockSession = { user: { id: 'user-1' } };
+      const mockSession: MockSession = { user: { id: 'user-1' } };
       const mockAttendance = [
         { status: 'PRESENT' },
         { status: 'PRESENT' },
@@ -323,7 +310,7 @@ describe('Attendance Server Actions', () => {
 
   describe('initializeEventAttendance', () => {
     it('should initialize attendance for active members', async () => {
-      const mockSession = { user: { id: 'user-1' } };
+      const mockSession: MockSession = { user: { id: 'user-1' } };
       const mockEvent = { id: 'event-1', title: 'Rehearsal' };
       const mockActiveMembers = [
         { id: 'member-1' },
@@ -344,7 +331,7 @@ describe('Attendance Server Actions', () => {
     });
 
     it('should return 0 when all members already have attendance', async () => {
-      const mockSession = { user: { id: 'user-1' } };
+      const mockSession: MockSession = { user: { id: 'user-1' } };
       const mockEvent = { id: 'event-1', title: 'Rehearsal' };
       const mockActiveMembers = [{ id: 'member-1' }];
       const mockExistingAttendance = [{ memberId: 'member-1' }];
@@ -361,7 +348,7 @@ describe('Attendance Server Actions', () => {
     });
 
     it('should return error when event not found', async () => {
-      const mockSession = { user: { id: 'user-1' } };
+      const mockSession: MockSession = { user: { id: 'user-1' } };
 
       vi.mocked(requirePermission).mockResolvedValue(mockSession as any);
       vi.mocked(prisma.event.findUnique).mockResolvedValue(null);

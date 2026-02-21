@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { prisma } from '@/lib/db';
 import { requirePermission } from '@/lib/auth/guards';
-import { formatDate, formatTime, formatDuration } from '@/lib/date';
+import { formatDate, formatTime } from '@/lib/date';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';

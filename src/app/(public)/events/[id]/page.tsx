@@ -2,10 +2,10 @@ import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { prisma } from '@/lib/db';
-import { formatDate, formatTime, formatDateRange } from '@/lib/date';
+import { formatDate, formatTime } from '@/lib/date';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { CalendarDays, MapPin, Clock, Users, ArrowLeft, Music, Navigation, Car } from 'lucide-react';
+import { CalendarDays, MapPin, Clock, ArrowLeft, Music, Navigation, Car } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 

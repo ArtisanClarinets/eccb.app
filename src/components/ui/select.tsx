@@ -109,7 +109,7 @@ function SelectItem({
   // emit a dev-only console warning so the developer can fix the source.
   if (value === '') {
     if (process.env.NODE_ENV === 'development') {
-      // eslint-disable-next-line no-console
+       
       console.warn(
         '[SelectItem] received an empty string value — this is not allowed.\n' +
           'Change the SelectItem to use a non-empty value (e.g. "all") or remove it.'
