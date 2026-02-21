@@ -521,7 +521,7 @@ export async function batchGrantPermissions(
         permissionId: p.id,
         grantedBy: session.user.id,
       })),
-      skipDuplicates: true,
+
     });
 
     await auditLog({

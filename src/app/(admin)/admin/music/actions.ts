@@ -98,7 +98,7 @@ export async function assignMusicToSections(
         assignedBy: session.user.id,
         status: AssignmentStatus.ASSIGNED,
       })),
-      skipDuplicates: true,
+
     });
 
     // Create history entries for each assignment
@@ -1201,7 +1201,7 @@ export async function assignMusicToMembers(
         assignedBy: session.user.id,
         notes,
       })),
-      skipDuplicates: true,
+
     });
 
     await auditLog({

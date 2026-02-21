@@ -382,7 +382,7 @@ async function sendAnnouncementNotifications(announcementId: string) {
 
     await prisma.userNotification.createMany({
       data: notifications,
-      skipDuplicates: true,
+
     });
 
     // Send email notifications for urgent announcements

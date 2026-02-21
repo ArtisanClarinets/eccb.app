@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { auth } from '@/lib/auth/config';
+import { getUserPermissions, checkUserPermission } from '@/lib/auth/permissions';
 import { headers } from 'next/headers';
 import {
   ATTENDANCE_VIEW_ALL,
@@ -24,22 +25,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const { eventId } = await params;
 
-    // Get user permissions
-    const permissionsResponse = await fetch(
-      `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/me/permissions`,
-      {
-        headers: {
-          cookie: request.headers.get('cookie') || '',
-        },
-      }
-    );
-
-    if (!permissionsResponse.ok) {
-      return NextResponse.json({ error: 'Permission check failed' }, { status: 403 });
-    }
-
-    const permissionsData = await permissionsResponse.json();
-    const permissions = permissionsData.permissions || [];
+        // Get user permissions
+    const permissions = await getUserPermissions(session.user.id);
 
     const hasAllPermission = permissions.includes(ATTENDANCE_VIEW_ALL);
     const hasSectionPermission = permissions.includes(ATTENDANCE_VIEW_SECTION);

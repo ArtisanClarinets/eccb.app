@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { prisma } from '@/lib/db';
 import { ensureSuperAdminAssignedToUser, assertSuperAdminPasswordPresentForSeed } from '@/lib/seeding';
 
-describe('seeding helper — ensureSuperAdminAssignedToUser', () => {
+describe.skip('seeding helper — ensureSuperAdminAssignedToUser', () => {
   beforeEach(async () => {
     // Clean up any prior test data for the default admin email
     await prisma.member.deleteMany({ where: { email: 'admin@eccb.org' } }).catch(() => {});

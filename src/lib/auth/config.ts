@@ -21,7 +21,7 @@ const SESSION_CONFIG = {
 
 export const auth = betterAuth({
   database: prismaAdapter(prisma, {
-    provider: 'postgresql',
+    provider: 'mysql',
   }),
   emailAndPassword: {
     enabled: true,
@@ -30,7 +30,8 @@ export const auth = betterAuth({
     maxPasswordLength: 128,
     // Password reset token expiration (15 minutes)
     resetPasswordTokenExpiresIn: SESSION_CONFIG.PASSWORD_RESET_EXPIRATION,
-    sendResetPassword: async ({ user, url }: { user: { email: string; name?: string | null }; url: string }) => {
+    sendResetPassword: async (data: any) => {
+      const { user, url } = data;
       await sendEmail({
         to: user.email,
         subject: 'Reset your password - ECCB Platform',
@@ -47,7 +48,8 @@ export const auth = betterAuth({
         text: `Reset your password by visiting: ${url}\n\nThis link expires in 15 minutes.`,
       });
     },
-    sendVerificationEmail: async ({ user, url }: { user: { email: string; name?: string | null }; url: string }) => {
+    sendVerificationEmail: async (data: any) => {
+      const { user, url } = data;
       await sendEmail({
         to: user.email,
         subject: 'Verify your email - ECCB Platform',
@@ -63,12 +65,6 @@ export const auth = betterAuth({
         text: `Verify your email by visiting: ${url}\n\nThis link expires in 24 hours.`,
       });
     },
-    // Callback after password reset for logging/security
-    onPasswordReset: async ({ user }: { user: { id: string; email: string } }) => {
-      // Log the password reset event
-      console.log(`Password reset completed for user: ${user.email}`);
-      // Could trigger session invalidation here if needed
-    },
   },
   emailVerification: {
     // Auto sign in after verification
@@ -83,7 +79,8 @@ export const auth = betterAuth({
   },
   plugins: [
     magicLink({
-      sendMagicLink: async ({ email, url }) => {
+      sendMagicLink: async (data: any) => {
+        const { email, url } = data;
         await sendEmail({
           to: email,
           subject: 'Sign in to ECCB Platform',
@@ -182,8 +179,6 @@ export const auth = betterAuth({
   advanced: {
     // Use secure cookies in production
     useSecureCookies: env.NODE_ENV === 'production',
-    // Disable debug in production
-    debug: env.NODE_ENV === 'development',
     // Cross-subdomain cookies in production
     crossSubDomainCookies: {
       enabled: env.NODE_ENV === 'production',

@@ -14,7 +14,7 @@ Object.defineProperty(process, 'env', {
   value: {
     ...process.env,
     NODE_ENV: 'test',
-    DATABASE_URL: 'postgresql://test:test@localhost:5432/eccb_test',
+    DATABASE_URL: "mysql://test:test@localhost:3306/eccb_test",
     REDIS_URL: 'redis://localhost:6379/15',
     AUTH_SECRET: 'test-secret-key-for-testing-min-32-chars',
     BETTER_AUTH_SECRET: 'test-secret-key-for-testing-min-32-chars',
@@ -41,7 +41,7 @@ Object.defineProperty(process, 'env', {
 vi.mock('@/lib/env', () => ({
   env: {
     NODE_ENV: 'test',
-    DATABASE_URL: 'postgresql://test:test@localhost:5432/eccb_test',
+    DATABASE_URL: "mysql://test:test@localhost:3306/eccb_test",
     REDIS_URL: 'redis://localhost:6379/15',
     AUTH_SECRET: 'test-secret-key-for-testing-min-32-chars',
     BETTER_AUTH_SECRET: 'test-secret-key-for-testing-min-32-chars',

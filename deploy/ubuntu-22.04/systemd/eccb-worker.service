@@ -1,0 +1,16 @@
+[Unit]
+Description=ECCB Worker Service
+After=network.target
+
+[Service]
+Type=simple
+User=eccb
+Group=eccb
+WorkingDirectory=/var/www/eccb/current
+EnvironmentFile=/var/www/eccb/shared/.env
+ExecStart=/usr/bin/npm run start:workers
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

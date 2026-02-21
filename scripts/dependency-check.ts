@@ -87,18 +87,21 @@ function checkVulnerabilities(): { count: number; summary: string } {
       return { count: 0, summary: 'No vulnerabilities' };
     }
 
-    const audit = JSON.parse(output);
+    // Explicitly type the audit result
+    const audit = JSON.parse(output) as { metadata?: { vulnerabilities?: Record<string, number> } };
     const vulnerabilities = audit.metadata?.vulnerabilities || {};
-    const total = Object.values(vulnerabilities).reduce(
-      (sum: number, count) => sum + (count as number),
-      0
-    );
+
+    // Explicitly cast values to numbers to satisfy strict TS
+    const values: number[] = Object.values(vulnerabilities);
+    const total = values.reduce((sum, count) => sum + count, 0);
 
     const parts: string[] = [];
-    if (vulnerabilities.critical) parts.push(`${vulnerabilities.critical} critical`);
-    if (vulnerabilities.high) parts.push(`${vulnerabilities.high} high`);
-    if (vulnerabilities.moderate) parts.push(`${vulnerabilities.moderate} moderate`);
-    if (vulnerabilities.low) parts.push(`${vulnerabilities.low} low`);
+    // We access properties safely
+    const v = vulnerabilities as Record<string, number>;
+    if (v.critical) parts.push(`${v.critical} critical`);
+    if (v.high) parts.push(`${v.high} high`);
+    if (v.moderate) parts.push(`${v.moderate} moderate`);
+    if (v.low) parts.push(`${v.low} low`);
 
     return { count: total, summary: parts.join(', ') || 'No vulnerabilities' };
   } catch {
@@ -157,8 +160,9 @@ function main(): void {
     const patchUpdates: OutdatedPackage[] = [];
 
     for (const pkg of outdatedPackages) {
-      const currentMajor = parseInt(pkg.current.split('.')[0], 10);
-      const latestMajor = parseInt(pkg.latest.split('.')[0], 10);
+      if (!pkg.current) continue;
+      const currentMajor = parseInt(pkg.current.split('.')[0], 10) || 0;
+      const latestMajor = parseInt(pkg.latest.split('.')[0], 10) || 0;
 
       if (currentMajor !== latestMajor) {
         majorUpdates.push(pkg);

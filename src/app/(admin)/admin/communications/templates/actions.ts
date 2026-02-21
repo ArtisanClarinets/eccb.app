@@ -240,7 +240,7 @@ export async function validateVariablesAction(
     }
 
     // Parse variables from Json to TemplateVariable[]
-    const templateVariables = template.variables as TemplateVariable[] | null;
+    const templateVariables = template.variables as unknown as TemplateVariable[] | null;
     const result = validateTemplateVariables(templateVariables, variables);
     
     return { success: true, ...result };
