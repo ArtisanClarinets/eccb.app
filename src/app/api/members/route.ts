@@ -4,6 +4,14 @@ import { getSession } from '@/lib/auth/guards';
 import { validateCSRF } from '@/lib/csrf';
 import { applyRateLimit } from '@/lib/rate-limit';
 import { z } from 'zod';
+import { createMember, updateMember, deleteMember } from '@/app/(admin)/admin/members/actions';
+import { checkUserPermission } from '@/lib/auth/permissions';
+import {
+  MEMBER_VIEW_ALL,
+  MEMBER_CREATE,
+  MEMBER_EDIT_ALL,
+  MEMBER_DELETE,
+} from '@/lib/auth/permission-constants';
 
 // =============================================================================
 // VALIDATION SCHEMAS
@@ -52,8 +60,14 @@ export async function GET(request: NextRequest) {
   }
 
   const session = await getSession();
-  if (!session) {
+  if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // Check permission
+  const hasPermission = await checkUserPermission(session.user.id, MEMBER_VIEW_ALL);
+  if (!hasPermission) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   const searchParams = request.nextUrl.searchParams;
@@ -170,19 +184,47 @@ export async function POST(request: NextRequest) {
   }
 
   const session = await getSession();
-  if (!session) {
+  if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // Check permission
+  const hasPermission = await checkUserPermission(session.user.id, MEMBER_CREATE);
+  if (!hasPermission) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   try {
     const body = await request.json();
     
-    // Create member logic would go here
-    // This is a placeholder - actual implementation would validate and create
-    
-    return NextResponse.json({ 
-      message: 'Member creation endpoint - implement with proper validation',
+    // Validate request body
+    const validated = memberCreateSchema.safeParse(body);
+    if (!validated.success) {
+      return NextResponse.json(
+        { error: 'Invalid request data', details: validated.error.issues },
+        { status: 400 }
+      );
+    }
+
+    // Convert JSON body to FormData for the server action
+    const formData = new FormData();
+    Object.entries(validated.data).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        if (Array.isArray(value)) {
+          // Skip arrays for now as createMember action doesn't seem to handle them from FormData
+        } else {
+          formData.append(key, String(value));
+        }
+      }
     });
+
+    const result = await createMember(formData);
+
+    if (result.success) {
+      return NextResponse.json(result);
+    } else {
+      return NextResponse.json(result, { status: 400 });
+    }
   } catch (error) {
     console.error('Failed to create member:', error);
     return NextResponse.json(
@@ -209,18 +251,45 @@ export async function PUT(request: NextRequest) {
   }
 
   const session = await getSession();
-  if (!session) {
+  if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // Check permission
+  const hasPermission = await checkUserPermission(session.user.id, MEMBER_EDIT_ALL);
+  if (!hasPermission) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   try {
     const body = await request.json();
     
-    // Update member logic would go here
-    
-    return NextResponse.json({ 
-      message: 'Member update endpoint - implement with proper validation',
+    // Validate request body
+    const validated = memberUpdateSchema.safeParse(body);
+    if (!validated.success) {
+      return NextResponse.json(
+        { error: 'Invalid request data', details: validated.error.issues },
+        { status: 400 }
+      );
+    }
+
+    const { id, ...updateData } = validated.data;
+
+    // Convert JSON body to FormData for the server action
+    const formData = new FormData();
+    Object.entries(updateData).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        formData.append(key, String(value));
+      }
     });
+
+    const result = await updateMember(id, formData);
+
+    if (result.success) {
+      return NextResponse.json(result);
+    } else {
+      return NextResponse.json(result, { status: 400 });
+    }
   } catch (error) {
     console.error('Failed to update member:', error);
     return NextResponse.json(
@@ -247,8 +316,14 @@ export async function DELETE(request: NextRequest) {
   }
 
   const session = await getSession();
-  if (!session) {
+  if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // Check permission
+  const hasPermission = await checkUserPermission(session.user.id, MEMBER_DELETE);
+  if (!hasPermission) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   try {
@@ -259,11 +334,13 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Member ID required' }, { status: 400 });
     }
     
-    // Delete member logic would go here
+    const result = await deleteMember(id);
     
-    return NextResponse.json({ 
-      message: 'Member delete endpoint - implement with proper validation',
-    });
+    if (result.success) {
+      return NextResponse.json(result);
+    } else {
+      return NextResponse.json(result, { status: 400 });
+    }
   } catch (error) {
     console.error('Failed to delete member:', error);
     return NextResponse.json(
