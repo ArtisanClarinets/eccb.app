@@ -29,12 +29,17 @@ const memberQuerySchema = z.object({
 const memberCreateSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
   lastName: z.string().min(1, 'Last name is required'),
-  email: z.string().email('Valid email is required'),
+  email: z.string().email('Valid email is required').optional(),
   phone: z.string().optional(),
   status: z.enum(['ACTIVE', 'INACTIVE', 'PENDING', 'SUSPENDED']).default('PENDING'),
   joinDate: z.string().optional(),
-  sectionIds: z.array(z.string()).optional(),
-  instrumentIds: z.array(z.string()).optional(),
+  sectionId: z.string().optional(),
+  primaryInstrumentId: z.string().optional(),
+  userId: z.string().optional(),
+  emergencyName: z.string().optional(),
+  emergencyPhone: z.string().optional(),
+  emergencyEmail: z.string().optional(),
+  notes: z.string().optional(),
 });
 
 const memberUpdateSchema = z.object({
@@ -44,8 +49,12 @@ const memberUpdateSchema = z.object({
   email: z.string().email('Valid email is required').optional(),
   phone: z.string().optional(),
   status: z.enum(['ACTIVE', 'INACTIVE', 'PENDING', 'SUSPENDED']).optional(),
-  sectionIds: z.array(z.string()).optional(),
-  instrumentIds: z.array(z.string()).optional(),
+  sectionId: z.string().optional(),
+  primaryInstrumentId: z.string().optional(),
+  emergencyName: z.string().optional(),
+  emergencyPhone: z.string().optional(),
+  emergencyEmail: z.string().optional(),
+  notes: z.string().optional(),
 });
 
 const memberDeleteSchema = z.object({
@@ -158,8 +167,8 @@ export async function GET(request: NextRequest) {
       page,
       totalPages: Math.ceil(total / limit),
     });
-  } catch (error) {
-    console.error('Failed to fetch members:', error);
+  } catch (_error) {
+    console.error('Failed to fetch members:', _error);
     return NextResponse.json(
       { error: 'Failed to fetch members' },
       { status: 500 }
@@ -210,11 +219,7 @@ export async function POST(request: NextRequest) {
     const formData = new FormData();
     Object.entries(validated.data).forEach(([key, value]) => {
       if (value !== undefined && value !== null) {
-        if (Array.isArray(value)) {
-          // Skip arrays for now as createMember action doesn't seem to handle them from FormData
-        } else {
-          formData.append(key, String(value));
-        }
+        formData.append(key, String(value));
       }
     });
 
@@ -225,8 +230,8 @@ export async function POST(request: NextRequest) {
     } else {
       return NextResponse.json(result, { status: 400 });
     }
-  } catch (error) {
-    console.error('Failed to create member:', error);
+  } catch (_error) {
+    console.error('Failed to create member:', _error);
     return NextResponse.json(
       { error: 'Failed to create member' },
       { status: 500 }
@@ -290,8 +295,8 @@ export async function PUT(request: NextRequest) {
     } else {
       return NextResponse.json(result, { status: 400 });
     }
-  } catch (error) {
-    console.error('Failed to update member:', error);
+  } catch (_error) {
+    console.error('Failed to update member:', _error);
     return NextResponse.json(
       { error: 'Failed to update member' },
       { status: 500 }
@@ -331,6 +336,21 @@ export async function DELETE(request: NextRequest) {
     const id = searchParams.get('id');
     
     if (!id) {
+      // Try parsing from body if not in search params
+      try {
+        const body = await request.json();
+        const validated = memberDeleteSchema.safeParse(body);
+        if (validated.success) {
+          const result = await deleteMember(validated.data.id);
+          if (result.success) {
+            return NextResponse.json(result);
+          } else {
+            return NextResponse.json(result, { status: 400 });
+          }
+        }
+      } catch (_e) {
+        // Fall through
+      }
       return NextResponse.json({ error: 'Member ID required' }, { status: 400 });
     }
     
@@ -341,8 +361,8 @@ export async function DELETE(request: NextRequest) {
     } else {
       return NextResponse.json(result, { status: 400 });
     }
-  } catch (error) {
-    console.error('Failed to delete member:', error);
+  } catch (_error) {
+    console.error('Failed to delete member:', _error);
     return NextResponse.json(
       { error: 'Failed to delete member' },
       { status: 500 }
