@@ -12,6 +12,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { applyRateLimit } from '@/lib/rate-limit';
 import { auth } from '@/lib/auth/config';
 import { checkUserPermission } from '@/lib/auth/permissions';
 import { validateCSRF } from '@/lib/csrf';
@@ -164,6 +165,12 @@ async function getDatabaseStats(): Promise<DatabaseStats> {
 // ============================================================================
 
 export async function GET(request: NextRequest): Promise<NextResponse<MonitoringResponse | { error: string }>> {
+  // Apply rate limiting
+  const rateLimitResponse = await applyRateLimit(request, 'api');
+  if (rateLimitResponse) {
+    return rateLimitResponse;
+  }
+
   const timer = startTimer('admin:monitoring:get');
   
   try {
@@ -254,6 +261,12 @@ interface ClientErrorPayload {
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse<{ success: boolean } | { error: string }>> {
+  // Apply rate limiting
+  const rateLimitResponse = await applyRateLimit(request, 'api');
+  if (rateLimitResponse) {
+    return rateLimitResponse;
+  }
+
   try {
     // Validate CSRF
     const csrfResult = validateCSRF(request);
@@ -311,6 +324,12 @@ export async function POST(request: NextRequest): Promise<NextResponse<{ success
 // ============================================================================
 
 export async function DELETE(request: NextRequest): Promise<NextResponse<{ success: boolean } | { error: string }>> {
+  // Apply rate limiting for sensitive admin action
+  const rateLimitResponse = await applyRateLimit(request, 'adminAction');
+  if (rateLimitResponse) {
+    return rateLimitResponse;
+  }
+
   try {
     // Validate CSRF
     const csrfResult = validateCSRF(request);
