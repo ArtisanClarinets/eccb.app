@@ -48,21 +48,23 @@ export async function cleanupPieceFiles(pieceId: string): Promise<CleanupResult>
     
     logger.info('Starting piece file cleanup', { pieceId, fileCount: files.length });
     
-    // Delete each file from storage
-    for (const file of files) {
-      try {
-        await deleteFile(file.storageKey);
-        result.deletedFiles.push(file.storageKey);
-        logger.info('Deleted file from storage', { storageKey: file.storageKey });
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        result.errors.push({ key: file.storageKey, error: errorMessage });
-        logger.error('Failed to delete file', { 
-          storageKey: file.storageKey, 
-          error: errorMessage,
-        });
-      }
-    }
+    // Delete each file from storage in parallel
+    await Promise.all(
+      files.map(async (file) => {
+        try {
+          await deleteFile(file.storageKey);
+          result.deletedFiles.push(file.storageKey);
+          logger.info('Deleted file from storage', { storageKey: file.storageKey });
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          result.errors.push({ key: file.storageKey, error: errorMessage });
+          logger.error('Failed to delete file', {
+            storageKey: file.storageKey,
+            error: errorMessage,
+          });
+        }
+      })
+    );
     
     // Note: DB records are deleted via cascade when piece is deleted
     // This function is called before or after the piece deletion
@@ -206,32 +208,34 @@ async function scanDirectory(
 ): Promise<void> {
   const entries = await fs.readdir(currentPath, { withFileTypes: true });
   
-  for (const entry of entries) {
-    const fullPath = path.join(currentPath, entry.name);
-    
-    if (entry.isDirectory()) {
-      // Recurse into subdirectories
-      await scanDirectory(fullPath, basePath, dbKeys, orphanedFiles);
-    } else if (entry.isFile()) {
-      // Check if this file has a DB record
-      const relativePath = path.relative(basePath, fullPath);
-      const storageKey = relativePath.split(path.sep).join('/');
+  await Promise.all(
+    entries.map(async (entry) => {
+      const fullPath = path.join(currentPath, entry.name);
       
-      // Skip temp files
-      if (storageKey.includes('.tmp.')) {
-        continue;
+      if (entry.isDirectory()) {
+        // Recurse into subdirectories
+        await scanDirectory(fullPath, basePath, dbKeys, orphanedFiles);
+      } else if (entry.isFile()) {
+        // Check if this file has a DB record
+        const relativePath = path.relative(basePath, fullPath);
+        const storageKey = relativePath.split(path.sep).join('/');
+
+        // Skip temp files
+        if (storageKey.includes('.tmp.')) {
+          return;
+        }
+
+        if (!dbKeys.has(storageKey)) {
+          const stats = await fs.stat(fullPath);
+          orphanedFiles.push({
+            storageKey,
+            size: stats.size,
+            lastModified: stats.mtime,
+          });
+        }
       }
-      
-      if (!dbKeys.has(storageKey)) {
-        const stats = await fs.stat(fullPath);
-        orphanedFiles.push({
-          storageKey,
-          size: stats.size,
-          lastModified: stats.mtime,
-        });
-      }
-    }
-  }
+    })
+  );
 }
 
 /**
@@ -249,20 +253,22 @@ export async function cleanupOrphanedFiles(
     orphanedFiles: [],
   };
   
-  for (const file of orphanedFiles) {
-    try {
-      await deleteFile(file.storageKey);
-      result.deletedFiles.push(file.storageKey);
-      logger.info('Deleted orphaned file', { storageKey: file.storageKey });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      result.errors.push({ key: file.storageKey, error: errorMessage });
-      logger.error('Failed to delete orphaned file', { 
-        storageKey: file.storageKey, 
-        error: errorMessage,
-      });
-    }
-  }
+  await Promise.all(
+    orphanedFiles.map(async (file) => {
+      try {
+        await deleteFile(file.storageKey);
+        result.deletedFiles.push(file.storageKey);
+        logger.info('Deleted orphaned file', { storageKey: file.storageKey });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        result.errors.push({ key: file.storageKey, error: errorMessage });
+        logger.error('Failed to delete orphaned file', {
+          storageKey: file.storageKey,
+          error: errorMessage,
+        });
+      }
+    })
+  );
   
   return result;
 }
@@ -349,20 +355,22 @@ export async function cleanupTempFiles(): Promise<number> {
 }
 
 async function cleanupTempFilesRecursive(dirPath: string): Promise<number> {
-  let deletedCount = 0;
   const entries = await fs.readdir(dirPath, { withFileTypes: true });
   
-  for (const entry of entries) {
-    const fullPath = path.join(dirPath, entry.name);
-    
-    if (entry.isDirectory()) {
-      deletedCount += await cleanupTempFilesRecursive(fullPath);
-    } else if (entry.isFile() && entry.name.includes('.tmp.')) {
-      await fs.unlink(fullPath);
-      deletedCount++;
-      logger.info('Deleted temp file', { path: fullPath });
-    }
-  }
+  const counts = await Promise.all(
+    entries.map(async (entry) => {
+      const fullPath = path.join(dirPath, entry.name);
+
+      if (entry.isDirectory()) {
+        return await cleanupTempFilesRecursive(fullPath);
+      } else if (entry.isFile() && entry.name.includes('.tmp.')) {
+        await fs.unlink(fullPath);
+        logger.info('Deleted temp file', { path: fullPath });
+        return 1;
+      }
+      return 0;
+    })
+  );
   
-  return deletedCount;
+  return counts.reduce((sum, count) => sum + count, 0);
 }
