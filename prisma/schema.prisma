@@ -197,6 +197,10 @@ enum MemberStatus {
 }
 
 model Member {
+  isSubstitute Boolean @default(false)
+  sectionMessages SectionMessage[]
+  carpoolEntries CarpoolEntry[]
+
   id              String       @id @default(cuid())
   userId          String?      @unique
   firstName       String
@@ -257,6 +261,8 @@ model MemberInstrument {
 }
 
 model Section {
+  messages SectionMessage[]
+
   id          String   @id @default(cuid())
   name        String   @unique
   description String?
@@ -926,6 +932,9 @@ enum AttendanceStatus {
 }
 
 model Event {
+  gigChecklist Json?
+  carpoolEntries CarpoolEntry[]
+
   id              String       @id @default(cuid())
   title           String
   description     String?
@@ -1275,4 +1284,39 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([timestamp])
   @@index([action])
+}
+
+
+model SectionMessage {
+  id        String   @id @default(cuid())
+  sectionId String
+  memberId  String
+  content   String
+  createdAt DateTime @default(now())
+
+  section   Section  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  member    Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@index([sectionId])
+}
+
+enum CarpoolType {
+  OFFER
+  REQUEST
+}
+
+model CarpoolEntry {
+  id        String      @id @default(cuid())
+  eventId   String
+  memberId  String
+  type      CarpoolType
+  seats     Int?
+  location  String?
+  notes     String?
+  createdAt DateTime    @default(now())
+
+  event     Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  member    Member      @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
 }
