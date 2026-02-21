@@ -26,7 +26,7 @@ import {
 import { toast } from 'sonner';
 import { Users, UserPlus, Trash2, Loader2 } from 'lucide-react';
 import { formatDate } from '@/lib/date';
-import { unassignMusicFromMember } from '@/app/(admin)/admin/music/actions';
+import { unassignMusicFromMember } from '@/app/(admin)/admin/music/assignment-actions';
 import { AssignMusicDialog } from './assign-music-dialog';
 
 interface Assignment {

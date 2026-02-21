@@ -53,7 +53,7 @@ import {
   updateAssignmentStatus,
   processMusicReturn,
   reportMissingParts,
-} from '@/app/(admin)/admin/music/actions';
+} from '@/app/(admin)/admin/music/assignment-actions';
 import type { AssignmentStatus, MusicAssignment, Member, MusicPiece } from '@prisma/client';
 
 type AssignmentWithRelations = MusicAssignment & {

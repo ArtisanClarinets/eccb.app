@@ -21,7 +21,7 @@ import { toast } from 'sonner';
 import { CalendarIcon, Loader2, Users } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { assignMusicToSections } from '@/app/(admin)/admin/music/actions';
+import { assignMusicToSections } from '@/app/(admin)/admin/music/assignment-actions';
 
 interface Section {
   id: string;
