@@ -134,7 +134,8 @@ export function EmailTemplateForm({ template, onSubmit, isSubmitting }: EmailTem
 
     // Replace variables in preview
     Object.entries(previewVars).forEach(([key, value]) => {
-      const regex = new RegExp(`{{\s*${key}\s*}}`, 'g');
+  // Instead of building a dynamic RegExp, use .split().join() to safely substitute template variables
+  const placeholder = `{{${key}}}`;
       html = html.replace(regex, value);
       subject = subject.replace(regex, value);
       text = text.replace(regex, value);
