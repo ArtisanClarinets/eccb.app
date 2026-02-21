@@ -29,7 +29,7 @@ const eventSchema = z.object({
 });
 
 export async function createEvent(formData: FormData) {
-  const session = await requirePermission(EVENT_CREATE);
+  const _session = await requirePermission(EVENT_CREATE);
 
   try {
     const data = {
@@ -86,7 +86,7 @@ export async function createEvent(formData: FormData) {
 }
 
 export async function updateEvent(id: string, formData: FormData) {
-  const session = await requirePermission(EVENT_EDIT);
+  const _session = await requirePermission(EVENT_EDIT);
 
   try {
     const data = {
@@ -146,7 +146,7 @@ export async function updateEvent(id: string, formData: FormData) {
 }
 
 export async function deleteEvent(id: string) {
-  const session = await requirePermission(EVENT_DELETE);
+  const _session = await requirePermission(EVENT_DELETE);
 
   try {
     const event = await prisma.event.delete({
@@ -210,7 +210,7 @@ export async function recordAttendance(
 }
 
 export async function addMusicToEvent(eventId: string, pieceId: string, sortOrder?: number) {
-  const session = await requirePermission(EVENT_EDIT);
+  const _session = await requirePermission(EVENT_EDIT);
 
   try {
     const eventPiece = await prisma.eventMusic.create({
@@ -241,7 +241,7 @@ export async function addMusicToEvent(eventId: string, pieceId: string, sortOrde
 }
 
 export async function removeMusicFromEvent(eventId: string, eventPieceId: string) {
-  const session = await requirePermission(EVENT_EDIT);
+  const _session = await requirePermission(EVENT_EDIT);
 
   try {
     const eventPiece = await prisma.eventMusic.delete({
@@ -268,7 +268,7 @@ export async function removeMusicFromEvent(eventId: string, eventPieceId: string
 }
 
 export async function updateEventStatus(id: string, status: string) {
-  const session = await requirePermission(EVENT_EDIT);
+  const _session = await requirePermission(EVENT_EDIT);
 
   try {
     const event = await prisma.event.update({

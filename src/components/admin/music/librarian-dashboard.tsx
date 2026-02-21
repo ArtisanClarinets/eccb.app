@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -32,22 +32,11 @@ import {
   PackageCheck,
   RotateCcw,
   Search,
-  Users,
   XCircle,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
-import {
+
   Dialog,
   DialogContent,
   DialogDescription,
@@ -112,11 +101,26 @@ export function LibrarianDashboard() {
     loadDashboardData();
   }, []);
 
+  const loadAssignments = useCallback(async () => {
+    try {
+      const result = await getAssignmentsForLibrarian({
+        status: statusFilter !== 'all' ? (statusFilter as AssignmentStatus) : undefined,
+        search: searchQuery || undefined,
+      });
+
+      if (result.success && result.assignments) {
+        setAssignments(result.assignments);
+      }
+    } catch (_error) {
+      console.error('Failed to load assignments:', _error);
+    }
+  }, [statusFilter, searchQuery]);
+
   useEffect(() => {
     if (statusFilter || searchQuery) {
       loadAssignments();
     }
-  }, [statusFilter, searchQuery]);
+  }, [statusFilter, searchQuery, loadAssignments]);
 
   const loadDashboardData = async () => {
     setIsLoading(true);
@@ -128,26 +132,11 @@ export function LibrarianDashboard() {
       if (statsResult.success && statsResult.stats) {
         setStats(statsResult.stats);
       }
-    } catch (error) {
-      console.error('Failed to load dashboard:', error);
+    } catch (_error) {
+      console.error('Failed to load dashboard:', _error);
       toast.error('Failed to load dashboard data');
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const loadAssignments = async () => {
-    try {
-      const result = await getAssignmentsForLibrarian({
-        status: statusFilter !== 'all' ? (statusFilter as AssignmentStatus) : undefined,
-        search: searchQuery || undefined,
-      });
-
-      if (result.success && result.assignments) {
-        setAssignments(result.assignments);
-      }
-    } catch (error) {
-      console.error('Failed to load assignments:', error);
     }
   };
 
@@ -162,7 +151,7 @@ export function LibrarianDashboard() {
       } else {
         toast.error(result.error || 'Failed to update status');
       }
-    } catch (error) {
+    } catch (_error) {
       toast.error('Failed to update status');
     } finally {
       setIsProcessing(false);
@@ -190,7 +179,7 @@ export function LibrarianDashboard() {
       } else {
         toast.error(result.error || 'Failed to process return');
       }
-    } catch (error) {
+    } catch (_error) {
       toast.error('Failed to process return');
     } finally {
       setIsProcessing(false);
@@ -219,7 +208,7 @@ export function LibrarianDashboard() {
       } else {
         toast.error(result.error || 'Failed to report missing parts');
       }
-    } catch (error) {
+    } catch (_error) {
       toast.error('Failed to report missing parts');
     } finally {
       setIsProcessing(false);

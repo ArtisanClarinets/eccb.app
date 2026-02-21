@@ -114,7 +114,7 @@ describe('Signed URL Utilities', () => {
     it('should return null for tampered signature', () => {
       const key = 'music/test-piece.pdf';
       const token = generateSignedToken(key);
-      const [payload, signature] = token.split('.');
+      const [payload, _signature] = token.split('.');
       const tamperedToken = `${payload}.tampered_signature`;
 
       expect(validateSignedToken(tamperedToken)).toBeNull();

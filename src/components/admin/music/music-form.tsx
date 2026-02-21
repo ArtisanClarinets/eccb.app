@@ -93,7 +93,7 @@ export function MusicForm({
     register,
     handleSubmit,
     setValue,
-    watch,
+    watch: _watch,
     formState: { errors },
   } = form;
 
@@ -121,7 +121,7 @@ export function MusicForm({
       } else {
         toast.error(result.error || 'Failed to create music piece');
       }
-    } catch (error) {
+    } catch (_error) {
       toast.error('Something went wrong');
     } finally {
       setIsSubmitting(false);
