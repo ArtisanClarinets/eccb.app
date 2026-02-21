@@ -454,6 +454,127 @@ const DEVELOPMENT_VARS: EnvVariable[] = [
     sensitive: false,
     default: 'true',
   },
+
+  // =============================================================================
+  // Smart Upload (AI-Powered File Processing)
+  // =============================================================================
+
+  {
+    key: 'SMART_UPLOAD_ENABLED',
+    value: 'false',
+    required: false,
+    description: 'Enable Smart Upload feature',
+    sensitive: false,
+    default: 'false',
+  },
+  {
+    key: 'SMART_UPLOAD_MAX_FILES',
+    value: '20',
+    required: false,
+    description: 'Maximum files per upload',
+    sensitive: false,
+    default: '20',
+  },
+  {
+    key: 'SMART_UPLOAD_MAX_TOTAL_BYTES',
+    value: '524288000',
+    required: false,
+    description: 'Max total bytes for batch upload (500MB)',
+    sensitive: false,
+    default: '524288000',
+  },
+  {
+    key: 'SMART_UPLOAD_OCR_MODE',
+    value: 'pdf_text',
+    required: false,
+    description: 'OCR mode: pdf_text, tesseract, ocrmypdf, vision_api',
+    sensitive: false,
+    default: 'pdf_text',
+  },
+
+  // =============================================================================
+  // AI / LLM Provider Configuration
+  // =============================================================================
+
+  {
+    key: 'AI_PROVIDER',
+    value: 'openai',
+    required: false,
+    description: 'AI provider: openai, anthropic, gemini, openrouter, openai_compat',
+    sensitive: false,
+    default: 'openai',
+  },
+  {
+    key: 'AI_MODEL',
+    value: '',
+    required: false,
+    description: 'AI model override',
+    sensitive: false,
+  },
+  {
+    key: 'AI_TEMPERATURE',
+    value: '0.1',
+    required: false,
+    description: 'AI temperature (0-2)',
+    sensitive: false,
+    default: '0.1',
+  },
+  {
+    key: 'OPENAI_API_KEY',
+    value: '',
+    required: false,
+    description: 'OpenAI API key',
+    sensitive: true,
+  },
+  {
+    key: 'ANTHROPIC_API_KEY',
+    value: '',
+    required: false,
+    description: 'Anthropic API key',
+    sensitive: true,
+  },
+  {
+    key: 'GEMINI_API_KEY',
+    value: '',
+    required: false,
+    description: 'Google Gemini API key',
+    sensitive: true,
+  },
+  {
+    key: 'OPENROUTER_API_KEY',
+    value: '',
+    required: false,
+    description: 'OpenRouter API key',
+    sensitive: true,
+  },
+  {
+    key: 'OPENAI_COMPAT_BASE_URL',
+    value: '',
+    required: false,
+    description: 'OpenAI-compatible base URL (e.g., http://localhost:11434/v1)',
+    sensitive: false,
+  },
+  {
+    key: 'OPENAI_COMPAT_API_KEY',
+    value: '',
+    required: false,
+    description: 'OpenAI-compatible API key',
+    sensitive: true,
+  },
+  {
+    key: 'CUSTOM_AI_BASE_URL',
+    value: '',
+    required: false,
+    description: 'Custom AI provider base URL',
+    sensitive: false,
+  },
+  {
+    key: 'CUSTOM_AI_HEADERS_JSON',
+    value: '',
+    required: false,
+    description: 'Custom AI headers as JSON',
+    sensitive: true,
+  },
 ];
 
 /**
@@ -756,6 +877,8 @@ export class EnvironmentManager {
       { name: 'VIRUS SCANNING', keys: ['ENABLE_VIRUS_SCAN', 'CLAMAV_HOST', 'CLAMAV_PORT'] },
       { name: 'LOGGING', keys: ['LOG_DIR', 'LOG_RETENTION_DAYS', 'LOG_MAX_SIZE_MB', 'LOG_ROTATION'] },
       { name: 'WORKERS', keys: ['WORKER_HEALTH_PORT', 'PROCESS_MANAGER_HEALTH_PORT', 'RESTART_CRASHED_PROCESSES', 'SCHEDULER_INTERVAL_MS', 'CLEANUP_INTERVAL_MS', 'ENABLE_WORKER'] },
+      { name: 'SMART UPLOAD', keys: ['SMART_UPLOAD_ENABLED', 'SMART_UPLOAD_MAX_FILES', 'SMART_UPLOAD_MAX_TOTAL_BYTES', 'SMART_UPLOAD_OCR_MODE'] },
+      { name: 'AI PROVIDER', keys: ['AI_PROVIDER', 'AI_MODEL', 'AI_TEMPERATURE', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'GEMINI_API_KEY', 'OPENROUTER_API_KEY', 'OPENAI_COMPAT_BASE_URL', 'OPENAI_COMPAT_API_KEY', 'CUSTOM_AI_BASE_URL', 'CUSTOM_AI_HEADERS_JSON'] },
     ];
 
     for (const category of categories) {
@@ -832,6 +955,8 @@ export class EnvironmentManager {
         { name: 'VIRUS SCANNING (ClamAV)', keys: ['ENABLE_VIRUS_SCAN', 'CLAMAV_HOST', 'CLAMAV_PORT'] },
         { name: 'LOGGING', keys: ['LOG_DIR', 'LOG_RETENTION_DAYS', 'LOG_MAX_SIZE_MB', 'LOG_ROTATION'] },
         { name: 'WORKERS & PROCESS MANAGEMENT', keys: ['WORKER_HEALTH_PORT', 'PROCESS_MANAGER_HEALTH_PORT', 'RESTART_CRASHED_PROCESSES', 'SCHEDULER_INTERVAL_MS', 'CLEANUP_INTERVAL_MS', 'ENABLE_WORKER'] },
+        { name: 'SMART UPLOAD (AI-Powered File Processing)', keys: ['SMART_UPLOAD_ENABLED', 'SMART_UPLOAD_MAX_FILES', 'SMART_UPLOAD_MAX_TOTAL_BYTES', 'SMART_UPLOAD_OCR_MODE'] },
+        { name: 'AI / LLM PROVIDER CONFIGURATION', keys: ['AI_PROVIDER', 'AI_MODEL', 'AI_TEMPERATURE', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'GEMINI_API_KEY', 'OPENROUTER_API_KEY', 'OPENAI_COMPAT_BASE_URL', 'OPENAI_COMPAT_API_KEY', 'CUSTOM_AI_BASE_URL', 'CUSTOM_AI_HEADERS_JSON'] },
       ];
 
       for (const category of categories) {

@@ -23,7 +23,6 @@ export default async function DirectorsPage() {
   let leadershipUsers: UserWithRoles[] = [];
   try {
     console.log('[DirectorsPage] Fetching leadership users from database...');
-    const startTime = Date.now();
     
     // Get users with director or board roles
     leadershipUsers = await prisma.user.findMany({
@@ -46,8 +45,7 @@ export default async function DirectorsPage() {
     orderBy: { name: 'asc' },
     });
 
-    const elapsed = Date.now() - startTime;
-    console.log(`[DirectorsPage] Query completed in ${elapsed}ms, fetched ${leadershipUsers.length} users`);
+    console.log(`[DirectorsPage] Query completed, fetched ${leadershipUsers.length} users`);
   } catch (error) {
     console.error('[DirectorsPage] Database error:', error);
     leadershipUsers = [];
