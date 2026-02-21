@@ -19,6 +19,264 @@ import {
 } from '@/lib/cache';
 import { z } from 'zod';
 
+export async function uploadMusicFile(musicPieceId: string, formData: FormData) {
+  const session = await requirePermission(MUSIC_EDIT);
+
+  try {
+    const file = formData.get('file') as File;
+    const partType = formData.get('partType') as string | null;
+    const instrumentId = formData.get('instrumentId') as string | null;
+    const fileType = formData.get('fileType') as string | null;
+    const description = formData.get('description') as string | null;
+    const changeNote = formData.get('changeNote') as string | null;
+    const existingFileId = formData.get('existingFileId') as string | null;
+
+    if (!file || file.size === 0) {
+      return { success: false, error: 'No file provided' };
+    }
+
+    const buffer = await file.arrayBuffer();
+    const key = `music/${musicPieceId}/${Date.now()}-${file.name}`;
+    await uploadFile(key, Buffer.from(buffer), {
+      contentType: file.type,
+    });
+
+    // If updating an existing file (new version)
+    if (existingFileId) {
+      const existingFile = await prisma.musicFile.findUnique({
+        where: { id: existingFileId },
+        include: { versions: true },
+      });
+
+      if (!existingFile) {
+        return { success: false, error: 'Existing file not found' };
+      }
+
+      // Create version record for the old version
+      await prisma.musicFileVersion.create({
+        data: {
+          fileId: existingFile.id,
+          version: existingFile.version,
+          fileName: existingFile.fileName,
+          storageKey: existingFile.storageKey,
+          fileSize: existingFile.fileSize,
+          mimeType: existingFile.mimeType,
+          changeNote: changeNote || undefined,
+          uploadedBy: session.user.id,
+        },
+      });
+
+      // Update the main file record
+      const updatedFile = await prisma.musicFile.update({
+        where: { id: existingFileId },
+        data: {
+          fileName: file.name,
+          storageKey: key,
+          fileSize: file.size,
+          mimeType: file.type,
+          fileType: (fileType as FileType) || existingFile.fileType,
+          description: description || existingFile.description,
+          version: { increment: 1 },
+        },
+      });
+
+      await auditLog({
+        action: 'music.file.version',
+        entityType: 'MusicFile',
+        entityId: updatedFile.id,
+        newValues: { fileName: file.name, version: updatedFile.version, pieceId: musicPieceId },
+      });
+
+      // Invalidate caches
+      await invalidateMusicCache(musicPieceId);
+
+      revalidatePath(`/admin/music/${musicPieceId}`);
+
+      return { success: true, fileId: updatedFile.id, version: updatedFile.version };
+    }
+
+    // Create new file
+    const musicFile = await prisma.musicFile.create({
+      data: {
+        pieceId: musicPieceId,
+        fileName: file.name,
+        storageKey: key,
+        mimeType: file.type,
+        fileSize: file.size,
+        fileType: getFileType(file.type),
+        description: description || undefined,
+        uploadedBy: session.user.id,
+      },
+    });
+
+    // Link to part if specified
+    if (instrumentId && partType) {
+      await prisma.musicPart.create({
+        data: {
+          pieceId: musicPieceId,
+          instrumentId,
+          partName: partType,
+          fileId: musicFile.id,
+        },
+      });
+    }
+
+    await auditLog({
+      action: 'music.file.upload',
+      entityType: 'MusicFile',
+      entityId: musicFile.id,
+      newValues: { fileName: file.name, pieceId: musicPieceId },
+    });
+
+    // Invalidate caches
+    await invalidateMusicCache(musicPieceId);
+
+    revalidatePath(`/admin/music/${musicPieceId}`);
+
+    return { success: true, fileId: musicFile.id };
+  } catch (error) {
+    console.error('Failed to upload music file:', error);
+    return { success: false, error: 'Failed to upload file' };
+  }
+}
+
+export async function updateMusicFile(fileId: string, data: {
+  description?: string;
+  fileType?: FileType;
+  isPublic?: boolean;
+}) {
+  const session = await requirePermission(MUSIC_EDIT);
+
+  try {
+    const file = await prisma.musicFile.findUnique({
+      where: { id: fileId },
+    });
+
+    if (!file) {
+      return { success: false, error: 'File not found' };
+    }
+
+    const parsed = musicFileUpdateSchema.partial().safeParse(data);
+    if (!parsed.success) {
+      return { success: false, error: 'Invalid file update data', details: parsed.error.issues };
+    }
+    const updatedFile = await prisma.musicFile.update({
+      where: { id: fileId },
+      data: parsed.data,
+    });
+
+    await auditLog({
+      action: 'music.file.update',
+      entityType: 'MusicFile',
+      entityId: fileId,
+      oldValues: {
+        description: file.description,
+        fileType: file.fileType,
+        isPublic: file.isPublic
+      },
+      newValues: data,
+    });
+
+    // Invalidate caches
+    await invalidateMusicCache(file.pieceId);
+
+    revalidatePath(`/admin/music/${file.pieceId}`);
+
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to update music file:', error);
+    return { success: false, error: 'Failed to update file' };
+  }
+}
+
+export async function getFileVersionHistory(fileId: string) {
+  const session = await requirePermission('music:read');
+
+  try {
+    const versions = await prisma.musicFileVersion.findMany({
+      where: { fileId },
+      orderBy: { version: 'desc' },
+    });
+
+    return { success: true, versions };
+  } catch (error) {
+    console.error('Failed to get file version history:', error);
+    return { success: false, error: 'Failed to get version history' };
+  }
+}
+
+export async function archiveMusicFile(fileId: string) {
+  const session = await requirePermission(MUSIC_EDIT);
+
+  try {
+    const file = await prisma.musicFile.findUnique({
+      where: { id: fileId },
+    });
+
+    if (!file) {
+      return { success: false, error: 'File not found' };
+    }
+
+    // Soft delete by marking as archived (preserves version history)
+    await prisma.musicFile.update({
+      where: { id: fileId },
+      data: { isArchived: true },
+    });
+
+    await auditLog({
+      action: 'music.file.archive',
+      entityType: 'MusicFile',
+      entityId: fileId,
+      newValues: { fileName: file.fileName, pieceId: file.pieceId },
+    });
+
+    // Invalidate caches
+    await invalidateMusicCache(file.pieceId);
+
+    revalidatePath(`/admin/music/${file.pieceId}`);
+
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to archive music file:', error);
+    return { success: false, error: 'Failed to archive file' };
+  }
+}
+
+export async function deleteMusicFile(fileId: string) {
+  const session = await requirePermission(MUSIC_EDIT);
+
+  try {
+    const file = await prisma.musicFile.findUnique({
+      where: { id: fileId },
+    });
+
+    if (!file) {
+      return { success: false, error: 'File not found' };
+    }
+
+    await deleteFile(file.storageKey);
+    await prisma.musicFile.delete({ where: { id: file.id } });
+
+    await auditLog({
+      action: 'music.file.delete',
+      entityType: 'MusicFile',
+      entityId: fileId,
+      newValues: { fileName: file.fileName, pieceId: file.pieceId },
+    });
+
+    // Invalidate caches
+    await invalidateMusicCache(file.pieceId);
+
+    revalidatePath(`/admin/music/${file.pieceId}`);
+
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to delete music file:', error);
+    return { success: false, error: 'Failed to delete file' };
+  }
+}
+
+
 // =============================================================================
 // ZOD VALIDATION SCHEMAS
 // =============================================================================
@@ -918,12 +1176,17 @@ export async function deleteMusicPiece(id: string) {
   }
 }
 
+
+
+
+
+
 export async function assignMusicToMembers(
   pieceId: string,
   memberIds: string[],
   notes?: string
 ) {
-  const _session = await requirePermission(MUSIC_ASSIGN);
+  const session = await requirePermission(MUSIC_ASSIGN);
   
   try {
     // Create assignments
@@ -931,6 +1194,7 @@ export async function assignMusicToMembers(
       data: memberIds.map((memberId) => ({
         pieceId,
         memberId,
+        assignedBy: session.user.id,
         notes,
       })),
       skipDuplicates: true,
@@ -953,312 +1217,6 @@ export async function assignMusicToMembers(
   } catch (error) {
     console.error('Failed to assign music:', error);
     return { success: false, error: 'Failed to assign music' };
-  }
-}
-
-export async function unassignMusicFromMember(
-  pieceId: string,
-  memberId: string
-) {
-  const _session = await requirePermission(MUSIC_ASSIGN);
-  
-  try {
-    await prisma.musicAssignment.deleteMany({
-      where: {
-        pieceId,
-        memberId,
-      },
-    });
-
-    await auditLog({
-      action: 'music.unassign',
-      entityType: 'MusicPiece',
-      entityId: pieceId,
-      newValues: { memberId },
-    });
-
-    // Invalidate caches
-    await invalidateMusicAssignmentCache(pieceId, memberId);
-
-    revalidatePath(`/admin/music/${pieceId}`);
-    revalidatePath('/member/music');
-    
-    return { success: true };
-  } catch (error) {
-    console.error('Failed to unassign music:', error);
-    return { success: false, error: 'Failed to unassign music' };
-  }
-}
-
-function getFileType(mimeType: string): FileType {
-  if (mimeType.includes('pdf')) return FileType.FULL_SCORE;
-  if (mimeType.includes('audio')) return FileType.AUDIO;
-  return FileType.OTHER;
-}
-
-// =============================================================================
-// MUSIC FILE ACTIONS
-// =============================================================================
-
-/**
- * Upload a music file to a piece
- */
-export async function uploadMusicFile(pieceId: string, formData: FormData) {
-  const session = await requirePermission(MUSIC_EDIT);
-  
-  try {
-    const file = formData.get('file') as File | null;
-    const fileType = formData.get('fileType') as string;
-    const description = formData.get('description') as string | null;
-    const existingFileId = formData.get('existingFileId') as string | null;
-    const changeNote = formData.get('changeNote') as string | null;
-    const instrumentId = formData.get('instrumentId') as string | null;
-    const partType = formData.get('partType') as string | null;
-
-    if (!file || file.size === 0) {
-      return { success: false, error: 'No file provided' };
-    }
-
-    // If updating an existing file (new version)
-    if (existingFileId) {
-      const existingFile = await prisma.musicFile.findUnique({
-        where: { id: existingFileId },
-      });
-
-      if (!existingFile) {
-        return { success: false, error: 'Existing file not found' };
-      }
-
-      // Create version history entry for the old version
-      await prisma.musicFileVersion.create({
-        data: {
-          fileId: existingFileId,
-          version: existingFile.version,
-          fileName: existingFile.fileName,
-          storageKey: existingFile.storageKey,
-          fileSize: existingFile.fileSize,
-          mimeType: existingFile.mimeType,
-          changeNote: changeNote || null,
-          uploadedBy: session.user.id,
-        },
-      });
-
-      // Upload new file
-      const buffer = await file.arrayBuffer();
-      const newKey = `music/${pieceId}/${Date.now()}-${file.name}`;
-      await uploadFile(newKey, Buffer.from(buffer), {
-        contentType: file.type,
-      });
-
-      // Delete old file from storage
-      await deleteFile(existingFile.storageKey);
-
-      // Update the file record
-      const updatedFile = await prisma.musicFile.update({
-        where: { id: existingFileId },
-        data: {
-          fileName: file.name,
-          storageKey: newKey,
-          fileSize: file.size,
-          mimeType: file.type,
-          version: existingFile.version + 1,
-        },
-      });
-
-      await auditLog({
-        action: 'music.file.version',
-        entityType: 'MusicFile',
-        entityId: existingFileId,
-        newValues: { version: updatedFile.version, changeNote },
-      });
-
-      // Invalidate caches
-      await invalidateMusicCache(pieceId);
-
-      revalidatePath(`/admin/music/${pieceId}`);
-      
-      return { success: true, fileId: existingFileId, version: updatedFile.version };
-    }
-
-    // Upload new file
-    const buffer = await file.arrayBuffer();
-    const key = `music/${pieceId}/${Date.now()}-${file.name}`;
-    await uploadFile(key, Buffer.from(buffer), {
-      contentType: file.type,
-    });
-
-    const musicFile = await prisma.musicFile.create({
-      data: {
-        pieceId,
-        fileName: file.name,
-        storageKey: key,
-        mimeType: file.type,
-        fileSize: file.size,
-        fileType: (fileType as FileType) || getFileType(file.type),
-        description,
-        uploadedBy: session.user.id,
-      },
-    });
-
-    // Create part if instrument and part type are provided
-    if (instrumentId && partType) {
-      await prisma.musicPart.create({
-        data: {
-          pieceId,
-          instrumentId,
-          partName: partType,
-          fileId: musicFile.id,
-        },
-      });
-    }
-
-    await auditLog({
-      action: 'music.file.upload',
-      entityType: 'MusicFile',
-      entityId: musicFile.id,
-      newValues: { fileName: file.name, pieceId },
-    });
-
-    // Invalidate caches
-    await invalidateMusicCache(pieceId);
-
-    revalidatePath(`/admin/music/${pieceId}`);
-    
-    return { success: true, fileId: musicFile.id };
-  } catch (error) {
-    console.error('Failed to upload music file:', error);
-    return { success: false, error: 'Failed to upload music file' };
-  }
-}
-
-/**
- * Update music file metadata
- */
-export async function updateMusicFile(
-  fileId: string,
-  data: {
-    description?: string;
-    fileType?: FileType;
-    isPublic?: boolean;
-  }
-) {
-  const _session = await requirePermission(MUSIC_EDIT);
-  
-  try {
-    const file = await prisma.musicFile.findUnique({
-      where: { id: fileId },
-    });
-
-    if (!file) {
-      return { success: false, error: 'File not found' };
-    }
-
-    await prisma.musicFile.update({
-      where: { id: fileId },
-      data: {
-        description: data.description,
-        fileType: data.fileType,
-        isPublic: data.isPublic,
-      },
-    });
-
-    await auditLog({
-      action: 'music.file.update',
-      entityType: 'MusicFile',
-      entityId: fileId,
-      newValues: data,
-    });
-
-    // Invalidate caches
-    await invalidateMusicCache(file.pieceId);
-
-    revalidatePath(`/admin/music/${file.pieceId}`);
-    
-    return { success: true };
-  } catch (error) {
-    console.error('Failed to update music file:', error);
-    return { success: false, error: 'Failed to update music file' };
-  }
-}
-
-/**
- * Delete a music file
- */
-export async function deleteMusicFile(fileId: string) {
-  const _session = await requirePermission(MUSIC_DELETE);
-  
-  try {
-    const file = await prisma.musicFile.findUnique({
-      where: { id: fileId },
-    });
-
-    if (!file) {
-      return { success: false, error: 'File not found' };
-    }
-
-    // Delete from storage
-    await deleteFile(file.storageKey);
-
-    // Delete from database
-    await prisma.musicFile.delete({
-      where: { id: fileId },
-    });
-
-    await auditLog({
-      action: 'music.file.delete',
-      entityType: 'MusicFile',
-      entityId: fileId,
-      newValues: { fileName: file.fileName },
-    });
-
-    // Invalidate caches
-    await invalidateMusicCache(file.pieceId);
-
-    revalidatePath(`/admin/music/${file.pieceId}`);
-    
-    return { success: true };
-  } catch (error) {
-    console.error('Failed to delete music file:', error);
-    return { success: false, error: 'Failed to delete music file' };
-  }
-}
-
-/**
- * Archive a music file (soft delete)
- */
-export async function archiveMusicFile(fileId: string) {
-  const _session = await requirePermission(MUSIC_EDIT);
-  
-  try {
-    const file = await prisma.musicFile.findUnique({
-      where: { id: fileId },
-    });
-
-    if (!file) {
-      return { success: false, error: 'File not found' };
-    }
-
-    await prisma.musicFile.update({
-      where: { id: fileId },
-      data: { isArchived: true },
-    });
-
-    await auditLog({
-      action: 'music.file.archive',
-      entityType: 'MusicFile',
-      entityId: fileId,
-      newValues: { fileName: file.fileName },
-    });
-
-    // Invalidate caches
-    await invalidateMusicCache(file.pieceId);
-
-    revalidatePath(`/admin/music/${file.pieceId}`);
-    
-    return { success: true };
-  } catch (error) {
-    console.error('Failed to archive music file:', error);
-    return { success: false, error: 'Failed to archive music file' };
   }
 }
 
