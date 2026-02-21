@@ -21,7 +21,7 @@ import { toast } from 'sonner';
 import { CalendarIcon, Loader2, Users } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { assignMusicToSections } from '@/app/(admin)/admin/music/actions';
+import { assignMusicToSections } from '@/app/(admin)/admin/music/assignment-actions';
 
 interface Section {
   id: string;
@@ -64,8 +64,8 @@ export function BulkAssignDialog({
         const data = await response.json();
         setSections(data.sections || []);
       }
-    } catch (_error) {
-      console.error('Failed to load sections:', _error);
+    } catch (error) {
+      console.error('Failed to load sections:', error);
     } finally {
       setIsLoading(false);
     }
@@ -111,7 +111,7 @@ export function BulkAssignDialog({
       } else {
         toast.error(result.error || 'Failed to assign music');
       }
-    } catch (_error) {
+    } catch (error) {
       toast.error('Assignment failed');
     } finally {
       setIsSubmitting(false);

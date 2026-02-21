@@ -122,8 +122,6 @@ export default async function EventPage({ params }: PageProps) {
       <Badge variant={badgeVariant}>
         {event.type}
       </Badge>
-              {event.type}
-            </Badge>
             {event.isCancelled && (
               <Badge variant="destructive">Cancelled</Badge>
             )}

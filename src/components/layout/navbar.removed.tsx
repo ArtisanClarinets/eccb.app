@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { Menu, X, Music } from 'lucide-react';
+import { Menu, X, Music, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 const navLinks = [

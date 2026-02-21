@@ -13,6 +13,17 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -59,7 +70,7 @@ import {
   updateMusicFile,
   archiveMusicFile,
   getFileVersionHistory,
-} from '@/app/(admin)/admin/music/actions';
+} from '@/app/(admin)/admin/music/file-actions';
 
 interface MusicFile {
   id: string;
@@ -130,7 +141,7 @@ const PART_TYPES = [
 
 export function MusicFilesList({ pieceId, files, instruments }: MusicFilesListProps) {
   const [isUploading, setIsUploading] = useState(false);
-  const [_deletingId, setDeletingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showVersionDialog, setShowVersionDialog] = useState(false);
@@ -180,7 +191,7 @@ export function MusicFilesList({ pieceId, files, instruments }: MusicFilesListPr
       } else {
         toast.error(result.error || 'Failed to upload file');
       }
-    } catch (_error) {
+    } catch (error) {
       toast.error('Upload failed');
     } finally {
       setIsUploading(false);
@@ -196,7 +207,7 @@ export function MusicFilesList({ pieceId, files, instruments }: MusicFilesListPr
       } else {
         toast.error('Failed to delete file');
       }
-    } catch (_error) {
+    } catch (error) {
       toast.error('Delete failed');
     } finally {
       setDeletingId(null);
@@ -211,7 +222,7 @@ export function MusicFilesList({ pieceId, files, instruments }: MusicFilesListPr
       } else {
         toast.error('Failed to archive file');
       }
-    } catch (_error) {
+    } catch (error) {
       toast.error('Archive failed');
     }
   };
@@ -222,7 +233,6 @@ export function MusicFilesList({ pieceId, files, instruments }: MusicFilesListPr
     try {
       const result = await updateMusicFile(editingFile.id, {
         description: editingFile.description || undefined,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         fileType: editingFile.fileType as any,
         isPublic: editingFile.isPublic,
       });
@@ -234,7 +244,7 @@ export function MusicFilesList({ pieceId, files, instruments }: MusicFilesListPr
       } else {
         toast.error('Failed to update file');
       }
-    } catch (_error) {
+    } catch (error) {
       toast.error('Update failed');
     }
   };
@@ -248,7 +258,7 @@ export function MusicFilesList({ pieceId, files, instruments }: MusicFilesListPr
       } else {
         toast.error('Failed to load version history');
       }
-    } catch (_error) {
+    } catch (error) {
       toast.error('Failed to load version history');
     }
   };

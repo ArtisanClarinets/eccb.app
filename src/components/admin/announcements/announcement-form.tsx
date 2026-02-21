@@ -127,7 +127,7 @@ export function AnnouncementForm({ initialData, onSubmit }: AnnouncementFormProp
       } else {
         setError(result.error ?? 'Failed to save announcement');
       }
-    } catch (_err) {
+    } catch (err) {
       setError('An unexpected error occurred');
     } finally {
       setIsSubmitting(false);

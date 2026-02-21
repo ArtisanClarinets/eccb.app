@@ -1,5 +1,4 @@
 import { Metadata } from 'next';
-import { 'next/navigation';
 import { prisma } from '@/lib/db';
 import { auth } from '@/lib/auth/config';
 import { headers } from 'next/headers';

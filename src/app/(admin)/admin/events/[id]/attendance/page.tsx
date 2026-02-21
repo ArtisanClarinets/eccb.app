@@ -1,10 +1,10 @@
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
 import { prisma } from '@/lib/db';
 import { requirePermission } from '@/lib/auth/guards';
 import { formatDate, formatTime } from '@/lib/date';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { AttendanceRoster } from '@/components/admin/attendance/attendance-roster';
 import {

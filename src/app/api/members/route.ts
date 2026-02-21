@@ -4,12 +4,20 @@ import { getSession } from '@/lib/auth/guards';
 import { validateCSRF } from '@/lib/csrf';
 import { applyRateLimit } from '@/lib/rate-limit';
 import { z } from 'zod';
+import { createMember, updateMember, deleteMember } from '@/app/(admin)/admin/members/actions';
+import { checkUserPermission } from '@/lib/auth/permissions';
+import {
+  MEMBER_VIEW_ALL,
+  MEMBER_CREATE,
+  MEMBER_EDIT_ALL,
+  MEMBER_DELETE,
+} from '@/lib/auth/permission-constants';
 
 // =============================================================================
 // VALIDATION SCHEMAS
 // =============================================================================
 
-const _memberQuerySchema = z.object({
+const memberQuerySchema = z.object({
   status: z.string().optional(),
   sectionId: z.string().optional(),
   instrumentId: z.string().optional(),
@@ -18,29 +26,38 @@ const _memberQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(100).default(50),
 });
 
-const _memberCreateSchema = z.object({
+const memberCreateSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
   lastName: z.string().min(1, 'Last name is required'),
-  email: z.string().email('Valid email is required'),
+  email: z.string().email('Valid email is required').optional(),
   phone: z.string().optional(),
   status: z.enum(['ACTIVE', 'INACTIVE', 'PENDING', 'SUSPENDED']).default('PENDING'),
   joinDate: z.string().optional(),
-  sectionIds: z.array(z.string()).optional(),
-  instrumentIds: z.array(z.string()).optional(),
+  sectionId: z.string().optional(),
+  primaryInstrumentId: z.string().optional(),
+  userId: z.string().optional(),
+  emergencyName: z.string().optional(),
+  emergencyPhone: z.string().optional(),
+  emergencyEmail: z.string().optional(),
+  notes: z.string().optional(),
 });
 
-const _memberUpdateSchema = z.object({
+const memberUpdateSchema = z.object({
   id: z.string().min(1, 'Member ID is required'),
   firstName: z.string().min(1, 'First name is required').optional(),
   lastName: z.string().min(1, 'Last name is required').optional(),
   email: z.string().email('Valid email is required').optional(),
   phone: z.string().optional(),
   status: z.enum(['ACTIVE', 'INACTIVE', 'PENDING', 'SUSPENDED']).optional(),
-  sectionIds: z.array(z.string()).optional(),
-  instrumentIds: z.array(z.string()).optional(),
+  sectionId: z.string().optional(),
+  primaryInstrumentId: z.string().optional(),
+  emergencyName: z.string().optional(),
+  emergencyPhone: z.string().optional(),
+  emergencyEmail: z.string().optional(),
+  notes: z.string().optional(),
 });
 
-const _memberDeleteSchema = z.object({
+const memberDeleteSchema = z.object({
   id: z.string().min(1, 'Member ID is required'),
 });
 
@@ -52,8 +69,14 @@ export async function GET(request: NextRequest) {
   }
 
   const session = await getSession();
-  if (!session) {
+  if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // Check permission
+  const hasPermission = await checkUserPermission(session.user.id, MEMBER_VIEW_ALL);
+  if (!hasPermission) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   const searchParams = request.nextUrl.searchParams;
@@ -144,8 +167,8 @@ export async function GET(request: NextRequest) {
       page,
       totalPages: Math.ceil(total / limit),
     });
-  } catch (error) {
-    console.error('Failed to fetch members:', error);
+  } catch (_error) {
+    console.error('Failed to fetch members:', _error);
     return NextResponse.json(
       { error: 'Failed to fetch members' },
       { status: 500 }
@@ -170,21 +193,45 @@ export async function POST(request: NextRequest) {
   }
 
   const session = await getSession();
-  if (!session) {
+  if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  // Check permission
+  const hasPermission = await checkUserPermission(session.user.id, MEMBER_CREATE);
+  if (!hasPermission) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   try {
-    const _body = await request.json();
+    const body = await request.json();
     
-    // Create member logic would go here
-    // This is a placeholder - actual implementation would validate and create
-    
-    return NextResponse.json({ 
-      message: 'Member creation endpoint - implement with proper validation',
+    // Validate request body
+    const validated = memberCreateSchema.safeParse(body);
+    if (!validated.success) {
+      return NextResponse.json(
+        { error: 'Invalid request data', details: validated.error.issues },
+        { status: 400 }
+      );
+    }
+
+    // Convert JSON body to FormData for the server action
+    const formData = new FormData();
+    Object.entries(validated.data).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        formData.append(key, String(value));
+      }
     });
-  } catch (error) {
-    console.error('Failed to create member:', error);
+
+    const result = await createMember(formData);
+
+    if (result.success) {
+      return NextResponse.json(result);
+    } else {
+      return NextResponse.json(result, { status: 400 });
+    }
+  } catch (_error) {
+    console.error('Failed to create member:', _error);
     return NextResponse.json(
       { error: 'Failed to create member' },
       { status: 500 }
@@ -209,20 +256,47 @@ export async function PUT(request: NextRequest) {
   }
 
   const session = await getSession();
-  if (!session) {
+  if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  // Check permission
+  const hasPermission = await checkUserPermission(session.user.id, MEMBER_EDIT_ALL);
+  if (!hasPermission) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   try {
-    const _body = await request.json();
+    const body = await request.json();
     
-    // Update member logic would go here
-    
-    return NextResponse.json({ 
-      message: 'Member update endpoint - implement with proper validation',
+    // Validate request body
+    const validated = memberUpdateSchema.safeParse(body);
+    if (!validated.success) {
+      return NextResponse.json(
+        { error: 'Invalid request data', details: validated.error.issues },
+        { status: 400 }
+      );
+    }
+
+    const { id, ...updateData } = validated.data;
+
+    // Convert JSON body to FormData for the server action
+    const formData = new FormData();
+    Object.entries(updateData).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        formData.append(key, String(value));
+      }
     });
-  } catch (error) {
-    console.error('Failed to update member:', error);
+
+    const result = await updateMember(id, formData);
+
+    if (result.success) {
+      return NextResponse.json(result);
+    } else {
+      return NextResponse.json(result, { status: 400 });
+    }
+  } catch (_error) {
+    console.error('Failed to update member:', _error);
     return NextResponse.json(
       { error: 'Failed to update member' },
       { status: 500 }
@@ -247,8 +321,14 @@ export async function DELETE(request: NextRequest) {
   }
 
   const session = await getSession();
-  if (!session) {
+  if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // Check permission
+  const hasPermission = await checkUserPermission(session.user.id, MEMBER_DELETE);
+  if (!hasPermission) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   try {
@@ -256,16 +336,33 @@ export async function DELETE(request: NextRequest) {
     const id = searchParams.get('id');
     
     if (!id) {
+      // Try parsing from body if not in search params
+      try {
+        const body = await request.json();
+        const validated = memberDeleteSchema.safeParse(body);
+        if (validated.success) {
+          const result = await deleteMember(validated.data.id);
+          if (result.success) {
+            return NextResponse.json(result);
+          } else {
+            return NextResponse.json(result, { status: 400 });
+          }
+        }
+      } catch (_e) {
+        // Fall through
+      }
       return NextResponse.json({ error: 'Member ID required' }, { status: 400 });
     }
     
-    // Delete member logic would go here
+    const result = await deleteMember(id);
     
-    return NextResponse.json({ 
-      message: 'Member delete endpoint - implement with proper validation',
-    });
-  } catch (error) {
-    console.error('Failed to delete member:', error);
+    if (result.success) {
+      return NextResponse.json(result);
+    } else {
+      return NextResponse.json(result, { status: 400 });
+    }
+  } catch (_error) {
+    console.error('Failed to delete member:', _error);
     return NextResponse.json(
       { error: 'Failed to delete member' },
       { status: 500 }

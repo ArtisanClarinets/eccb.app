@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/db';
-import { deleteFile } from '@/lib/services/storage';
+import { deleteFile, fileExists, getFileMetadata } from '@/lib/services/storage';
 import { logger } from '@/lib/logger';
 import fs from 'fs/promises';
 import path from 'path';
@@ -82,7 +82,7 @@ export async function cleanupPieceFiles(pieceId: string): Promise<CleanupResult>
  * @param fileId - The ID of the music file
  * @returns True if deleted successfully
  */
-export async function deleteMusicFile(fileId: string): Promise<boolean> {
+export async function deleteMusicFileInternal(fileId: string): Promise<boolean> {
   try {
     // Get file info
     const file = await prisma.musicFile.findUnique({
@@ -208,34 +208,39 @@ async function scanDirectory(
 ): Promise<void> {
   const entries = await fs.readdir(currentPath, { withFileTypes: true });
   
-  await Promise.all(
-    entries.map(async (entry) => {
-      const fullPath = path.join(currentPath, entry.name);
-      
-      if (entry.isDirectory()) {
-        // Recurse into subdirectories
-        await scanDirectory(fullPath, basePath, dbKeys, orphanedFiles);
-      } else if (entry.isFile()) {
-        // Check if this file has a DB record
-        const relativePath = path.relative(basePath, fullPath);
-        const storageKey = relativePath.split(path.sep).join('/');
+  const filesToStat: { fullPath: string; storageKey: string }[] = [];
+  const directories: string[] = [];
 
-        // Skip temp files
-        if (storageKey.includes('.tmp.')) {
-          return;
-        }
+  for (const entry of entries) {
+    const fullPath = path.join(currentPath, entry.name);
+    if (entry.isDirectory()) {
+      directories.push(fullPath);
+    } else if (entry.isFile()) {
+      const relativePath = path.relative(basePath, fullPath);
+      const storageKey = relativePath.split(path.sep).join('/');
 
-        if (!dbKeys.has(storageKey)) {
-          const stats = await fs.stat(fullPath);
-          orphanedFiles.push({
-            storageKey,
-            size: stats.size,
-            lastModified: stats.mtime,
-          });
-        }
+      if (!storageKey.includes('.tmp.') && !dbKeys.has(storageKey)) {
+        filesToStat.push({ fullPath, storageKey });
       }
+    }
+  }
+
+  // Parallelize stats for files in this directory
+  await Promise.all(
+    filesToStat.map(async ({ fullPath, storageKey }) => {
+      const stats = await fs.stat(fullPath);
+      orphanedFiles.push({
+        storageKey,
+        size: stats.size,
+        lastModified: stats.mtime,
+      });
     })
   );
+
+  // Recurse into subdirectories sequentially
+  for (const dir of directories) {
+    await scanDirectory(dir, basePath, dbKeys, orphanedFiles);
+  }
 }
 
 /**
@@ -357,20 +362,33 @@ export async function cleanupTempFiles(): Promise<number> {
 async function cleanupTempFilesRecursive(dirPath: string): Promise<number> {
   const entries = await fs.readdir(dirPath, { withFileTypes: true });
   
-  const counts = await Promise.all(
-    entries.map(async (entry) => {
-      const fullPath = path.join(dirPath, entry.name);
+  let deletedCount = 0;
+  const filesToUnlink: string[] = [];
+  const directories: string[] = [];
 
-      if (entry.isDirectory()) {
-        return await cleanupTempFilesRecursive(fullPath);
-      } else if (entry.isFile() && entry.name.includes('.tmp.')) {
-        await fs.unlink(fullPath);
-        logger.info('Deleted temp file', { path: fullPath });
-        return 1;
-      }
-      return 0;
+  for (const entry of entries) {
+    const fullPath = path.join(dirPath, entry.name);
+    if (entry.isDirectory()) {
+      directories.push(fullPath);
+    } else if (entry.isFile() && entry.name.includes('.tmp.')) {
+      filesToUnlink.push(fullPath);
+    }
+  }
+
+  // Parallelize unlinking in this directory
+  await Promise.all(
+    filesToUnlink.map(async (fullPath) => {
+      await fs.unlink(fullPath);
+      logger.info('Deleted temp file', { path: fullPath });
     })
   );
+
+  deletedCount += filesToUnlink.length;
+
+  // Recurse into subdirectories sequentially
+  for (const dir of directories) {
+    deletedCount += await cleanupTempFilesRecursive(dir);
+  }
   
-  return counts.reduce((sum, count) => sum + count, 0);
+  return deletedCount;
 }

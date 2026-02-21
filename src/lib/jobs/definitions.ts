@@ -18,13 +18,7 @@ export type JobType =
   | 'publish.scheduled'
   | 'cleanup.sessions'
   | 'cleanup.files'
-  | 'reminder.event'
-  | 'smartUpload.extractText'
-  | 'smartUpload.llmExtractMetadata'
-  | 'smartUpload.classifyAndPlanSplit'
-  | 'smartUpload.splitPdf'
-  | 'smartUpload.ingest'
-  | 'smartUpload.cleanup';
+  | 'reminder.event';
 
 export interface JobTypeNameMap {
   'email.send': EmailSendJobData;
@@ -34,12 +28,6 @@ export interface JobTypeNameMap {
   'cleanup.sessions': CleanupSessionsJobData;
   'cleanup.files': CleanupFilesJobData;
   'reminder.event': EventReminderJobData;
-  'smartUpload.extractText': SmartUploadExtractTextPayload;
-  'smartUpload.llmExtractMetadata': SmartUploadLlmPayload;
-  'smartUpload.classifyAndPlanSplit': SmartUploadLlmPayload;
-  'smartUpload.splitPdf': SmartUploadSplitPayload;
-  'smartUpload.ingest': SmartUploadIngestPayload;
-  'smartUpload.cleanup': SmartUploadCleanupPayload;
 }
 
 // ============================================================================
@@ -137,77 +125,6 @@ export interface EventReminderJobData {
   customMessage?: string;
   /** Member IDs to send reminder to (if empty, sends to all RSVP'd) */
   memberIds?: string[];
-}
-
-// ============================================================================
-// Smart Upload Job Data Interfaces
-// ============================================================================
-
-/**
- * Smart Upload job names
- */
-export const SMART_UPLOAD_JOBS = {
-  EXTRACT_TEXT: 'smartUpload.extractText',
-  LLM_EXTRACT_METADATA: 'smartUpload.llmExtractMetadata',
-  CLASSIFY_AND_PLAN: 'smartUpload.classifyAndPlanSplit',
-  SPLIT_PDF: 'smartUpload.splitPdf',
-  INGEST: 'smartUpload.ingest',
-  CLEANUP: 'smartUpload.cleanup',
-} as const;
-
-/**
- * Payload for extracting text from PDF
- */
-export interface SmartUploadExtractTextPayload {
-  batchId: string;
-  itemId: string;
-  storageKey: string;
-}
-
-/**
- * Payload for LLM metadata extraction (reused for classification)
- */
-export interface SmartUploadLlmPayload {
-  batchId: string;
-  itemId: string;
-}
-
-/**
- * Payload for splitting PDF
- */
-export interface SmartUploadSplitPayload {
-  batchId: string;
-  itemId: string;
-  storageKey: string;
-  splitPlan: SplitPlan;
-}
-
-/**
- * Payload for ingesting into music library
- */
-export interface SmartUploadIngestPayload {
-  batchId: string;
-  approvedBy: string;
-}
-
-/**
- * Payload for cleanup on cancel/failure
- */
-export interface SmartUploadCleanupPayload {
-  batchId: string;
-  itemId: string;
-  reason: 'cancelled' | 'failed';
-}
-
-/**
- * Split plan interface (imported from smart-upload types)
- */
-interface SplitPlan {
-  pages: Array<{
-    start: number;
-    end: number;
-    instrument: string;
-  }>;
 }
 
 // ============================================================================
@@ -313,73 +230,6 @@ export const JOB_CONFIGS: Record<JobType, JobConfig> = {
     removeOnFail: 100,
     concurrency: 3,
   },
-  // Smart Upload jobs
-  'smartUpload.extractText': {
-    priority: 10,
-    attempts: 3,
-    backoff: {
-      type: 'exponential',
-      delay: 2000,
-    },
-    removeOnComplete: 100,
-    removeOnFail: 50,
-    concurrency: 3,
-  },
-  'smartUpload.llmExtractMetadata': {
-    priority: 8,
-    attempts: 3,
-    backoff: {
-      type: 'exponential',
-      delay: 5000,
-    },
-    removeOnComplete: 100,
-    removeOnFail: 50,
-    concurrency: 2,
-  },
-  'smartUpload.classifyAndPlanSplit': {
-    priority: 8,
-    attempts: 3,
-    backoff: {
-      type: 'exponential',
-      delay: 5000,
-    },
-    removeOnComplete: 100,
-    removeOnFail: 50,
-    concurrency: 2,
-  },
-  'smartUpload.splitPdf': {
-    priority: 7,
-    attempts: 3,
-    backoff: {
-      type: 'exponential',
-      delay: 3000,
-    },
-    removeOnComplete: 100,
-    removeOnFail: 50,
-    concurrency: 2,
-  },
-  'smartUpload.ingest': {
-    priority: 5,
-    attempts: 3,
-    backoff: {
-      type: 'exponential',
-      delay: 2000,
-    },
-    removeOnComplete: 100,
-    removeOnFail: 50,
-    concurrency: 1,
-  },
-  'smartUpload.cleanup': {
-    priority: 1,
-    attempts: 1,
-    backoff: {
-      type: 'fixed',
-      delay: 1000,
-    },
-    removeOnComplete: 10,
-    removeOnFail: 5,
-    concurrency: 2,
-  },
 };
 
 // ============================================================================
@@ -392,7 +242,6 @@ export const QUEUE_NAMES = {
   SCHEDULED: 'eccb:scheduled',
   CLEANUP: 'eccb:cleanup',
   DEAD_LETTER: 'eccb:dead-letter',
-  SMART_UPLOAD: 'eccb:smart_upload',
 } as const;
 
 export type QueueName = typeof QUEUE_NAMES[keyof typeof QUEUE_NAMES];
@@ -431,14 +280,6 @@ export function getQueueNameForJob(jobType: JobType): QueueName {
     case 'cleanup.sessions':
     case 'cleanup.files':
       return QUEUE_NAMES.CLEANUP;
-    // Smart Upload jobs
-    case 'smartUpload.extractText':
-    case 'smartUpload.llmExtractMetadata':
-    case 'smartUpload.classifyAndPlanSplit':
-    case 'smartUpload.splitPdf':
-    case 'smartUpload.ingest':
-    case 'smartUpload.cleanup':
-      return QUEUE_NAMES.SMART_UPLOAD;
     default:
       return QUEUE_NAMES.EMAIL;
   }

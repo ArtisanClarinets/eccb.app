@@ -38,7 +38,7 @@ export default function SignupPage() {
         router.push("/dashboard")
         router.refresh()
       }
-    } catch (_err) {
+    } catch (err) {
       toast.error("An unexpected error occurred")
     } finally {
       setIsLoading(false)
