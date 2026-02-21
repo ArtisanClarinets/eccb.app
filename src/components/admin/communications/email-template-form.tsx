@@ -447,9 +447,9 @@ export function EmailTemplateForm({ template, onSubmit, isSubmitting }: EmailTem
                     className="p-4 prose prose-sm max-w-none"
                     dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(previewHtml) }}
                   />
-                </ScrollArea>
-              </div>
+      </ScrollArea>
 
+              </div>
               {previewText && (
                 <div className="space-y-2">
                   <Label className="text-sm font-medium">Plain Text Preview</Label>
