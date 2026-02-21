@@ -168,7 +168,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<Monitoring
   // Apply rate limiting
   const rateLimitResponse = await applyRateLimit(request, 'api');
   if (rateLimitResponse) {
-    return rateLimitResponse as NextResponse<MonitoringResponse | { error: string }>;
+    return rateLimitResponse as unknown as NextResponse<MonitoringResponse | { error: string }>;
   }
 
   const timer = startTimer('admin:monitoring:get');
@@ -264,7 +264,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<{ success
   // Apply rate limiting
   const rateLimitResponse = await applyRateLimit(request, 'api');
   if (rateLimitResponse) {
-    return rateLimitResponse as NextResponse<{ success: boolean } | { error: string }>;
+    return rateLimitResponse as unknown as NextResponse<{ success: boolean } | { error: string }>;
   }
 
   try {
@@ -327,7 +327,7 @@ export async function DELETE(request: NextRequest): Promise<NextResponse<{ succe
   // Apply rate limiting for sensitive admin action
   const rateLimitResponse = await applyRateLimit(request, 'adminAction');
   if (rateLimitResponse) {
-    return rateLimitResponse as NextResponse<{ success: boolean } | { error: string }>;
+    return rateLimitResponse as unknown as NextResponse<{ success: boolean } | { error: string }>;
   }
 
   try {

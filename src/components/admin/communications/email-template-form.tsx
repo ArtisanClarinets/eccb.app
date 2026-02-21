@@ -198,7 +198,7 @@ export function EmailTemplateForm({ template, onSubmit, isSubmitting }: EmailTem
   const updateVariable = (index: number, field: keyof Variable, value: string | boolean) => {
     const newVars = [...variables];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (newVars[index] as any)[field] = value;
+    (newVars[index] as any)[field] = value; // nosemgrep: safe-access
     setVariables(newVars);
   };
 

@@ -21,6 +21,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { AttendanceReportClient } from './attendance-report-client';
+import { getSectionAttendanceStats } from '@/lib/services/attendance-report.service';
 
 export const metadata = {
   title: 'Attendance Reports | Admin',
@@ -94,45 +95,11 @@ export default async function AttendanceReportsPage({
     ? Math.round((totals.present / totalRecords) * 100)
     : 0;
 
-  // Get attendance by section
-  const attendanceBySection = await prisma.section.findMany({
-    select: {
-      id: true,
-      name: true,
-      _count: {
-        select: { members: true },
-      },
-    },
-    orderBy: { name: 'asc' },
-  });
-
-  // Get section attendance counts
-  const sectionAttendanceData = await Promise.all(
-    attendanceBySection.map(async (section) => {
-      const sectionWhere = {
-        ...attendanceWhere,
-        member: { sections: { some: { sectionId: section.id } } },
-      };
-
-      const stats = await prisma.attendance.groupBy({
-        by: ['status'],
-        where: sectionWhere,
-        _count: true,
-      });
-
-      const present = stats.find((a) => a.status === 'PRESENT')?._count || 0;
-      const total = stats.reduce((sum, s) => sum + s._count, 0);
-      const rate = total > 0 ? Math.round((present / total) * 100) : 0;
-
-      return {
-        id: section.id,
-        name: section.name,
-        memberCount: section._count.members,
-        present,
-        total,
-        rate,
-      };
-    })
+    // Get section attendance counts (optimized)
+  const sectionAttendanceData = await getSectionAttendanceStats(
+    new Date(startDate),
+    new Date(endDate),
+    eventType
   );
 
   // Get attendance by event type

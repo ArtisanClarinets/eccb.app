@@ -387,7 +387,7 @@ function mapNotificationType(type: NotificationJobData['type']): 'ANNOUNCEMENT' 
       return 'SYSTEM';
     default:
       return 'SYSTEM';
-  }
+    }
 }
 
 // ============================================================================
