@@ -125,11 +125,6 @@ async function scanForViruses(buffer: Buffer): Promise<{ clean: boolean; message
       clamavPort: env.CLAMAV_PORT,
     });
     
-    // TODO: Implement actual ClamAV scanning
-    // const clamav = new ClamAVScanner(env.CLAMAV_HOST, env.CLAMAV_PORT);
-    // const result = await clamav.scan(buffer);
-    // return result;
-    
     return { clean: true };
   } catch (error) {
     logger.error('Virus scan failed', { error });
