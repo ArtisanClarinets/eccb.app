@@ -28,7 +28,6 @@ import {
   Mail,
   Shield,
   ShieldOff,
-  Key,
   Trash2,
   UserRound,
   LogOut,

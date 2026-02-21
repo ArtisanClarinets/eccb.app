@@ -1,6 +1,9 @@
-import { prisma } from '@/lib/db';
+import { prisma, Prisma } from '@/lib/db';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+
+const userInclude = { roles: true } as const;
+type UserWithRoles = Prisma.UserGetPayload<{ include: typeof userInclude }>;
 
 /**
  * Ensure the `SUPER_ADMIN` role is assigned to the admin user.
@@ -26,9 +29,9 @@ export async function ensureSuperAdminAssignedToUser(
   });
 
   // Find existing user by email, strictly including roles
-  let user = await prisma.user.findUnique({ 
+  let user: UserWithRoles | null = await prisma.user.findUnique({
     where: { email: adminEmail }, 
-    include: { roles: true } 
+    include: userInclude
   });
 
   // If user exists, ensure email is verified (idempotent)
@@ -46,8 +49,7 @@ export async function ensureSuperAdminAssignedToUser(
         name: 'System Administrator',
         emailVerified: true,
       },
-      // FIX: Ensure the returned type matches the inferred type of `let user`
-      include: { roles: true },
+      include: userInclude,
     });
   }
 

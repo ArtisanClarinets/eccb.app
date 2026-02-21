@@ -38,6 +38,12 @@ export const MUSIC_DOWNLOAD_ASSIGNED = 'music.download.assigned';
 /** Upload music files to the library */
 export const MUSIC_UPLOAD = 'music.upload';
 
+/** Use Smart Upload feature for batch processing */
+export const MUSIC_SMART_UPLOAD = 'music.smart_upload';
+
+/** Approve Smart Upload proposals */
+export const MUSIC_SMART_UPLOAD_APPROVE = 'music.smart_upload.approve';
+
 // =============================================================================
 // MEMBER MANAGEMENT PERMISSIONS
 // =============================================================================
@@ -176,6 +182,8 @@ export type Permission =
   | typeof MUSIC_DOWNLOAD_ALL
   | typeof MUSIC_DOWNLOAD_ASSIGNED
   | typeof MUSIC_UPLOAD
+  | typeof MUSIC_SMART_UPLOAD
+  | typeof MUSIC_SMART_UPLOAD_APPROVE
   | typeof MEMBER_VIEW_ALL
   | typeof MEMBER_VIEW_SECTION
   | typeof MEMBER_VIEW_OWN
@@ -224,6 +232,8 @@ export const MUSIC_PERMISSIONS = [
   MUSIC_DOWNLOAD_ALL,
   MUSIC_DOWNLOAD_ASSIGNED,
   MUSIC_UPLOAD,
+  MUSIC_SMART_UPLOAD,
+  MUSIC_SMART_UPLOAD_APPROVE,
 ] as const;
 
 /** All member-related permissions */

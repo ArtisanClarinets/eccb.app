@@ -1,11 +1,9 @@
 import { Metadata } from 'next';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/db';
-import { formatDate, formatTime, formatDateRange } from '@/lib/date';
-import { Button } from '@/components/ui/button';
+import { formatDate, formatTime } from '@/lib/date';
 import { Badge } from '@/components/ui/badge';
-import { CalendarDays, MapPin, Clock, Users, ArrowLeft, Music } from 'lucide-react';
+import { CalendarDays, MapPin, Clock, Music } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 

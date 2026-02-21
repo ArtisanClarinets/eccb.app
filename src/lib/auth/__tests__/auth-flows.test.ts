@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { auth } from '../config';
 
 // Mock dependencies
 vi.mock('@/lib/email', () => ({

@@ -1,6 +1,4 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { prisma } from '@/lib/db';
-import { requirePermission } from '@/lib/auth/guards';
 import {
   createAnnouncement,
   updateAnnouncement,
@@ -10,7 +8,8 @@ import {
   archiveAnnouncement,
   getAnnouncement,
 } from '../actions';
-import type { AnnouncementType, AnnouncementAudience, ContentStatus } from '@prisma/client';
+import { prisma } from '@/lib/db';
+import { AnnouncementType, AnnouncementAudience, ContentStatus } from '@prisma/client';
 
 // Mock dependencies
 vi.mock('@/lib/db', () => ({
@@ -20,7 +19,6 @@ vi.mock('@/lib/db', () => ({
       update: vi.fn(),
       delete: vi.fn(),
       findUnique: vi.fn(),
-      findMany: vi.fn(),
     },
     user: {
       findMany: vi.fn(),
@@ -31,16 +29,18 @@ vi.mock('@/lib/db', () => ({
   },
 }));
 
+// Mock auth guards
 vi.mock('@/lib/auth/guards', () => ({
   requirePermission: vi.fn(),
 }));
 
-vi.mock('@/lib/services/audit', () => ({
-  auditLog: vi.fn(),
+vi.mock('@/lib/services/email', () => ({
+  sendEmail: vi.fn(),
 }));
 
-vi.mock('@/lib/email', () => ({
-  sendEmail: vi.fn(),
+// Mock audit log to prevent header/auth issues
+vi.mock('@/lib/services/audit', () => ({
+  auditLog: vi.fn(),
 }));
 
 vi.mock('next/cache', () => ({
@@ -49,10 +49,6 @@ vi.mock('next/cache', () => ({
 
 describe('Announcement Actions', () => {
   const mockUserId = 'user-123';
-  const mockSession = {
-    user: { id: mockUserId },
-    session: { id: 'session-123' },
-  };
   const mockAnnouncement = {
     id: 'announcement-123',
     title: 'Test Announcement',
@@ -74,7 +70,6 @@ describe('Announcement Actions', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(requirePermission).mockResolvedValue(mockSession as any);
   });
 
   afterEach(() => {

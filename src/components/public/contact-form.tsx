@@ -66,7 +66,7 @@ export function ContactForm() {
           description: result.error || 'Please try again later.',
         });
       }
-    } catch (error) {
+    } catch (_error) {
       toast.error('Something went wrong', {
         description: 'Please try again later.',
       });

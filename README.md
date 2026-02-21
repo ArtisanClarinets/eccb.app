@@ -13,6 +13,7 @@ This platform provides:
 ## Key Features
 
 - 🎵 **Music Library Management**: Upload, organize, and distribute sheet music and audio files
+- 🚀 **Smart Upload**: AI-powered batch upload with automatic metadata extraction, PDF splitting, and part classification
 - 📅 **Event Management**: Create events, track RSVPs, and manage attendance
 - 👥 **Member Management**: Member profiles, sections, and role assignments
 - 📧 **Communications**: Bulk email sending and announcement management
@@ -156,6 +157,8 @@ eccb.app/
 | [PERMISSIONS.md](./PERMISSIONS.md) | Permission system documentation |
 | [DATABASE_SCHEMA.md](./DATABASE_SCHEMA.md) | Database schema reference |
 | [CHANGELOG.md](./CHANGELOG.md) | Version history and changes |
+| [SMART_UPLOAD.md](./docs/SMART_UPLOAD.md) | Smart Upload feature documentation |
+| [AI_PROVIDERS.md](./docs/AI_PROVIDERS.md) | AI provider configuration guide |
 
 ## Deployment
 

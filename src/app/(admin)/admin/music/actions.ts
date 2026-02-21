@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/db';
-import { requirePermission, getSession } from '@/lib/auth/guards';
+import { requirePermission } from '@/lib/auth/guards';
 import { uploadFile, deleteFile } from '@/lib/services/storage';
 import { auditLog } from '@/lib/services/audit';
 import { MusicDifficulty, FileType, AssignmentStatus } from '@/lib/db';
@@ -10,12 +10,9 @@ import {
   MUSIC_CREATE,
   MUSIC_EDIT,
   MUSIC_DELETE,
-  MUSIC_ASSIGN,
 } from '@/lib/auth/permission-constants';
 import {
   invalidateMusicCache,
-  invalidateMusicAssignmentCache,
-  invalidateMusicDashboardCache,
 } from '@/lib/cache';
 import { z } from 'zod';
 
@@ -931,7 +928,7 @@ export async function deleteMusicPiece(id: string) {
 
 export async function uploadMusicFile(musicPieceId: string, formData: FormData) {
   const session = await requirePermission(MUSIC_EDIT);
-  
+
   try {
     const file = formData.get('file') as File;
     const partType = formData.get('partType') as string | null;
@@ -1001,7 +998,7 @@ export async function uploadMusicFile(musicPieceId: string, formData: FormData) 
       await invalidateMusicCache(musicPieceId);
 
       revalidatePath(`/admin/music/${musicPieceId}`);
-      
+
       return { success: true, fileId: updatedFile.id, version: updatedFile.version };
     }
 
@@ -1042,7 +1039,7 @@ export async function uploadMusicFile(musicPieceId: string, formData: FormData) 
     await invalidateMusicCache(musicPieceId);
 
     revalidatePath(`/admin/music/${musicPieceId}`);
-    
+
     return { success: true, fileId: musicFile.id };
   } catch (error) {
     console.error('Failed to upload music file:', error);
@@ -1056,7 +1053,7 @@ export async function updateMusicFile(fileId: string, data: {
   isPublic?: boolean;
 }) {
   const session = await requirePermission(MUSIC_EDIT);
-  
+
   try {
     const file = await prisma.musicFile.findUnique({
       where: { id: fileId },
@@ -1079,10 +1076,10 @@ export async function updateMusicFile(fileId: string, data: {
       action: 'music.file.update',
       entityType: 'MusicFile',
       entityId: fileId,
-      oldValues: { 
-        description: file.description, 
-        fileType: file.fileType, 
-        isPublic: file.isPublic 
+      oldValues: {
+        description: file.description,
+        fileType: file.fileType,
+        isPublic: file.isPublic
       },
       newValues: data,
     });
@@ -1091,7 +1088,7 @@ export async function updateMusicFile(fileId: string, data: {
     await invalidateMusicCache(file.pieceId);
 
     revalidatePath(`/admin/music/${file.pieceId}`);
-    
+
     return { success: true };
   } catch (error) {
     console.error('Failed to update music file:', error);
@@ -1101,7 +1098,7 @@ export async function updateMusicFile(fileId: string, data: {
 
 export async function getFileVersionHistory(fileId: string) {
   const session = await requirePermission('music:read');
-  
+
   try {
     const versions = await prisma.musicFileVersion.findMany({
       where: { fileId },
@@ -1117,7 +1114,7 @@ export async function getFileVersionHistory(fileId: string) {
 
 export async function archiveMusicFile(fileId: string) {
   const session = await requirePermission(MUSIC_EDIT);
-  
+
   try {
     const file = await prisma.musicFile.findUnique({
       where: { id: fileId },
@@ -1144,7 +1141,7 @@ export async function archiveMusicFile(fileId: string) {
     await invalidateMusicCache(file.pieceId);
 
     revalidatePath(`/admin/music/${file.pieceId}`);
-    
+
     return { success: true };
   } catch (error) {
     console.error('Failed to archive music file:', error);
@@ -1154,7 +1151,7 @@ export async function archiveMusicFile(fileId: string) {
 
 export async function deleteMusicFile(fileId: string) {
   const session = await requirePermission(MUSIC_EDIT);
-  
+
   try {
     const file = await prisma.musicFile.findUnique({
       where: { id: fileId },
@@ -1178,7 +1175,7 @@ export async function deleteMusicFile(fileId: string) {
     await invalidateMusicCache(file.pieceId);
 
     revalidatePath(`/admin/music/${file.pieceId}`);
-    
+
     return { success: true };
   } catch (error) {
     console.error('Failed to delete music file:', error);
@@ -1186,83 +1183,231 @@ export async function deleteMusicFile(fileId: string) {
   }
 }
 
-export async function assignMusicToMembers(
-  pieceId: string,
-  memberIds: string[],
-  notes?: string
-) {
-  const session = await requirePermission(MUSIC_ASSIGN);
-  
-  try {
-    // Create assignments
-    await prisma.musicAssignment.createMany({
-      data: memberIds.map((memberId) => ({
-        pieceId,
-        memberId,
-        assignedBy: session.user.id,
-        notes,
-      })),
-      skipDuplicates: true,
-    });
 
-    await auditLog({
-      action: 'music.assign',
-      entityType: 'MusicPiece',
-      entityId: pieceId,
-      newValues: { memberCount: memberIds.length },
-    });
+// =============================================================================
+// ZOD VALIDATION SCHEMAS
+// =============================================================================
 
-    // Invalidate caches
-    await invalidateMusicAssignmentCache(pieceId);
+const musicPieceSchema = z.object({
+  title: z.string().min(1, 'Title is required'),
+  subtitle: z.string().optional(),
+  composerId: z.string().optional(),
+  arrangerId: z.string().optional(),
+  publisherId: z.string().optional(),
+  difficulty: z.nativeEnum(MusicDifficulty).optional(),
+  duration: z.number().positive().optional(),
+  genre: z.string().optional(),
+  style: z.string().optional(),
+  catalogNumber: z.string().optional(),
+  notes: z.string().optional(),
+});
 
-    revalidatePath(`/admin/music/${pieceId}`);
-    revalidatePath('/member/music');
-    
-    return { success: true };
-  } catch (error) {
-    console.error('Failed to assign music:', error);
-    return { success: false, error: 'Failed to assign music' };
-  }
-}
+// Re-export actions from other files to maintain backward compatibility if needed,
+// OR let the components update their imports.
+// For now, we update the components to use the new files.
 
-export async function unassignMusicFromMember(
-  pieceId: string,
-  memberId: string
-) {
-  const session = await requirePermission(MUSIC_ASSIGN);
-  
-  try {
-    await prisma.musicAssignment.deleteMany({
-      where: {
-        pieceId,
-        memberId,
-      },
-    });
-
-    await auditLog({
-      action: 'music.unassign',
-      entityType: 'MusicPiece',
-      entityId: pieceId,
-      newValues: { memberId },
-    });
-
-    // Invalidate caches
-    await invalidateMusicAssignmentCache(pieceId, memberId);
-
-    revalidatePath(`/admin/music/${pieceId}`);
-    revalidatePath('/member/music');
-    
-    return { success: true };
-  } catch (error) {
-    console.error('Failed to unassign music:', error);
-    return { success: false, error: 'Failed to unassign music' };
-  }
-}
-
+/**
+ * Helper to determine file type from mime type
+ */
 function getFileType(mimeType: string): FileType {
   if (mimeType.includes('pdf')) return FileType.FULL_SCORE;
   if (mimeType.includes('audio')) return FileType.AUDIO;
   return FileType.OTHER;
+}
+
+export async function createMusicPiece(formData: FormData) {
+  await requirePermission(MUSIC_CREATE);
+  
+  try {
+    const title = formData.get('title') as string;
+    const subtitle = formData.get('subtitle') as string | null;
+    const composerId = formData.get('composerId') as string | null;
+    const arrangerId = formData.get('arrangerId') as string | null;
+    const publisherId = formData.get('publisherId') as string | null;
+    const difficultyValue = formData.get('difficulty') as string | null;
+    const difficulty = difficultyValue ? (difficultyValue as MusicDifficulty) : null;
+    const duration = formData.get('duration') ? Number(formData.get('duration')) : null;
+    const genre = formData.get('genre') as string | null;
+    const style = formData.get('style') as string | null;
+    const catalogNumber = formData.get('catalogNumber') as string | null;
+    const notes = formData.get('notes') as string | null;
+    const files = formData.getAll('files') as File[];
+
+    const partialData = {
+      title,
+      subtitle: subtitle || undefined,
+      composerId: composerId || undefined,
+      arrangerId: arrangerId || undefined,
+      publisherId: publisherId || undefined,
+      difficulty,
+      duration,
+      genre: genre || undefined,
+      style: style || undefined,
+      catalogNumber: catalogNumber || undefined,
+      notes: notes || undefined,
+    };
+    
+    const parsed = musicPieceSchema.partial().safeParse(partialData);
+    if (!parsed.success) {
+      return { success: false, error: 'Invalid input data', details: parsed.error.issues };
+    }
+
+    // Create the music piece
+    const piece = await prisma.musicPiece.create({
+      data: {
+        title: parsed.data.title || '',
+        subtitle: parsed.data.subtitle,
+        composerId: parsed.data.composerId,
+        arrangerId: parsed.data.arrangerId,
+        publisherId: parsed.data.publisherId,
+        difficulty: parsed.data.difficulty,
+        duration: parsed.data.duration,
+        genre: parsed.data.genre,
+        style: parsed.data.style,
+        catalogNumber: parsed.data.catalogNumber,
+        notes: parsed.data.notes,
+      },
+    });
+
+    // Upload files if any
+    const uploadedFiles = [];
+    for (const file of files) {
+      if (file && file.size > 0) {
+        const buffer = await file.arrayBuffer();
+        const key = `music/${piece.id}/${Date.now()}-${file.name}`;
+        await uploadFile(key, Buffer.from(buffer), {
+          contentType: file.type,
+        });
+        
+        uploadedFiles.push({
+          pieceId: piece.id,
+          fileName: file.name,
+          storageKey: key,
+          mimeType: file.type,
+          fileSize: file.size,
+          fileType: getFileType(file.type),
+        });
+      }
+    }
+
+    if (uploadedFiles.length > 0) {
+      await prisma.musicFile.createMany({
+        data: uploadedFiles,
+      });
+    }
+
+    await auditLog({
+      action: 'music.create',
+      entityType: 'MusicPiece',
+      entityId: piece.id,
+      newValues: { title: piece.title, fileCount: uploadedFiles.length },
+    });
+
+    // Invalidate caches
+    await invalidateMusicCache();
+
+    revalidatePath('/admin/music');
+    revalidatePath('/member/music');
+    
+    return { success: true, pieceId: piece.id };
+  } catch (error) {
+    console.error('Failed to create music piece:', error);
+    return { success: false, error: 'Failed to create music piece' };
+  }
+}
+
+export async function updateMusicPiece(id: string, formData: FormData) {
+  await requirePermission(MUSIC_EDIT);
+  
+  try {
+    const title = formData.get('title') as string;
+    const subtitle = formData.get('subtitle') as string | null;
+    const composerId = formData.get('composerId') as string | null;
+    const arrangerId = formData.get('arrangerId') as string | null;
+    const publisherId = formData.get('publisherId') as string | null;
+    const difficultyValue = formData.get('difficulty') as string | null;
+    const difficulty = difficultyValue ? (difficultyValue as MusicDifficulty) : null;
+    const duration = formData.get('duration') ? Number(formData.get('duration')) : null;
+    const genre = formData.get('genre') as string | null;
+    const style = formData.get('style') as string | null;
+    const catalogNumber = formData.get('catalogNumber') as string | null;
+    const notes = formData.get('notes') as string | null;
+
+    const piece = await prisma.musicPiece.update({
+      where: { id },
+      data: {
+        title,
+        subtitle,
+        composerId: composerId || null,
+        arrangerId: arrangerId || null,
+        publisherId: publisherId || null,
+        difficulty,
+        duration,
+        genre,
+        style,
+        catalogNumber,
+        notes,
+      },
+    });
+
+    await auditLog({
+      action: 'music.update',
+      entityType: 'MusicPiece',
+      entityId: piece.id,
+      newValues: { title },
+    });
+
+    // Invalidate caches
+    await invalidateMusicCache(id);
+
+    revalidatePath('/admin/music');
+    revalidatePath(`/admin/music/${id}`);
+    revalidatePath('/member/music');
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to update music piece:', error);
+    return { success: false, error: 'Failed to update music piece' };
+  }
+}
+
+export async function deleteMusicPiece(id: string) {
+  await requirePermission(MUSIC_DELETE);
+  
+  try {
+    // Get all files for this piece
+    const files = await prisma.musicFile.findMany({
+      where: { pieceId: id },
+    });
+
+    // Delete files from storage
+    for (const file of files) {
+      await deleteFile(file.storageKey);
+    }
+
+    // Delete from database (cascading will handle related records)
+    const piece = await prisma.musicPiece.delete({
+      where: { id },
+    });
+
+    await auditLog({
+      action: 'music.delete',
+      entityType: 'MusicPiece',
+      entityId: id,
+      newValues: { title: piece.title },
+    });
+
+    // Invalidate caches
+    await invalidateMusicCache(id);
+
+    revalidatePath('/admin/music');
+    revalidatePath('/member/music');
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to delete music piece:', error);
+    return { success: false, error: 'Failed to delete music piece' };
+  }
 }
 
 // =============================================================================
@@ -1280,7 +1425,7 @@ export async function exportMusicToCSV(filters: MusicExportFilters = {}) {
   await requirePermission('music:read');
 
   try {
-    // Build where clause (same logic as page)
+    // Build where clause
     const where: Record<string, unknown> = {
       deletedAt: null,
     };

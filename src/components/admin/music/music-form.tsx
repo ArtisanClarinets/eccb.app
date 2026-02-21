@@ -77,7 +77,7 @@ export function MusicForm({
   composers,
   arrangers,
   publishers,
-  instruments,
+  instruments: _instruments,
   initialData,
 }: MusicFormProps) {
   const router = useRouter();
@@ -85,7 +85,7 @@ export function MusicForm({
   const [files, setFiles] = useState<File[]>([]);
 
   const form = useForm<MusicFormData>({
-    resolver: zodResolver(musicSchema) as any,
+    resolver: zodResolver(musicSchema),
     defaultValues: initialData,
   });
 
@@ -93,7 +93,7 @@ export function MusicForm({
     register,
     handleSubmit,
     setValue,
-    watch,
+    watch: _watch,
     formState: { errors },
   } = form;
 
@@ -121,7 +121,7 @@ export function MusicForm({
       } else {
         toast.error(result.error || 'Failed to create music piece');
       }
-    } catch (error) {
+    } catch (_error) {
       toast.error('Something went wrong');
     } finally {
       setIsSubmitting(false);

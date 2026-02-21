@@ -17,7 +17,7 @@ import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
 import { UserPlus, Search, Loader2 } from 'lucide-react';
-import { assignMusicToMembers } from '@/app/(admin)/admin/music/actions';
+import { assignMusicToMembers } from '@/app/(admin)/admin/music/assignment-actions';
 
 interface AssignMusicDialogProps {
   pieceId: string;
@@ -62,8 +62,8 @@ export function AssignMusicDialog({
         const data = await response.json();
         setMembers(data.members || []);
       }
-    } catch (error) {
-      console.error('Failed to load members:', error);
+    } catch (_error) {
+      console.error('Failed to load members:', _error);
     } finally {
       setIsLoading(false);
     }
@@ -112,7 +112,7 @@ export function AssignMusicDialog({
       } else {
         toast.error(result.error || 'Failed to assign members');
       }
-    } catch (error) {
+    } catch (_error) {
       toast.error('Assignment failed');
     } finally {
       setIsSubmitting(false);

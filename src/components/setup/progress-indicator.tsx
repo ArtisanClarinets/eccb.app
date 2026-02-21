@@ -33,7 +33,7 @@ const stepIcons: Record<string, string> = {
 
 export function ProgressIndicator({
   currentStep,
-  totalSteps,
+  totalSteps: _totalSteps,
   steps,
   progress,
   className,

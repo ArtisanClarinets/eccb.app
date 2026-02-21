@@ -7,7 +7,7 @@ import { requirePermission } from '@/lib/auth/guards';
 import { auditLog } from '@/lib/services/audit';
 import { SYSTEM_CONFIG } from '@/lib/auth/permission-constants';
 
-const settingSchema = z.object({
+const _settingSchema = z.object({
   key: z.string().min(1),
   value: z.string(),
 });

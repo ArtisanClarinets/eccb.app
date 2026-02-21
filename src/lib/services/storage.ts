@@ -27,6 +27,7 @@ export interface UploadOptions {
 export interface DownloadResult {
   stream: NodeJS.ReadableStream;
   metadata: FileMetadata;
+  buffer?: Buffer; // Optional buffer for local files
 }
 
 // =============================================================================
@@ -179,7 +180,7 @@ async function uploadToS3(
 async function uploadToLocal(
   key: string,
   file: Buffer | NodeJS.ReadableStream,
-  options: UploadOptions
+  _options: UploadOptions
 ): Promise<string> {
   await ensureStorageDirectory();
   
@@ -248,12 +249,16 @@ async function downloadFromLocal(key: string): Promise<DownloadResult> {
     
     const stream = createReadStream(fullPath);
     
+    // Read the file into buffer synchronously for PDF processing
+    const fileBuffer = await fs.readFile(fullPath);
+    
     // Detect content type from extension
     const ext = path.extname(fullPath).toLowerCase();
     const contentType = getContentType(ext);
     
     return {
       stream,
+      buffer: fileBuffer,
       metadata: {
         contentType,
         size: stats.size,
