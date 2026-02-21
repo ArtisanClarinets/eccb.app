@@ -122,7 +122,36 @@ function validateFileContent(buffer: Buffer, declaredMimeType: string): { valid:
     return { valid: true, detectedType: 'image/svg+xml' };
   }
 
-  // For documents, accept as-is (would need more complex validation)
+  // MS Office (DOC/XLS) validation
+  if (declaredMimeType === 'application/msword' || declaredMimeType === 'application/vnd.ms-excel') {
+    // Check for OLE2 signature: D0 CF 11 E0 A1 B1 1A E1
+    const isOle2 = buffer.length >= 8 &&
+      buffer[0] === 0xD0 && buffer[1] === 0xCF &&
+      buffer[2] === 0x11 && buffer[3] === 0xE0 &&
+      buffer[4] === 0xA1 && buffer[5] === 0xB1 &&
+      buffer[6] === 0x1A && buffer[7] === 0xE1;
+    if (!isOle2) {
+      return { valid: false };
+    }
+    return { valid: true, detectedType: declaredMimeType };
+  }
+
+  // Office Open XML (DOCX/XLSX) validation
+  if (
+    declaredMimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+    declaredMimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  ) {
+    // Check for ZIP signature: 50 4B 03 04
+    const isZip = buffer.length >= 4 &&
+      buffer[0] === 0x50 && buffer[1] === 0x4B &&
+      buffer[2] === 0x03 && buffer[3] === 0x04;
+    if (!isZip) {
+      return { valid: false };
+    }
+    return { valid: true, detectedType: declaredMimeType };
+  }
+
+  // For other documents, accept as-is
   return { valid: true, detectedType: declaredMimeType };
 }
 
