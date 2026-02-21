@@ -70,6 +70,9 @@ export default async function BatchDetailPage({ params }: PageProps) {
     errorMessage: item.errorMessage,
     ocrText: item.ocrText,
     extractedMeta: item.extractedMeta as Record<string, unknown> | null,
+    isPacket: item.isPacket,
+    splitPages: item.splitPages,
+    splitFiles: item.splitFiles as Record<string, unknown> | null,
     createdAt: item.createdAt.toISOString(),
     completedAt: item.completedAt?.toISOString() || null,
   }));
@@ -96,6 +99,7 @@ export default async function BatchDetailPage({ params }: PageProps) {
     matchedPieceId: proposal.matchedPieceId,
     isNewPiece: proposal.isNewPiece,
     corrections: proposal.corrections as Record<string, unknown> | null,
+    ocrText: null, // Proposals don't have ocrText directly, it's on the item
     createdAt: proposal.createdAt.toISOString(),
   }));
 

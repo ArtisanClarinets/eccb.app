@@ -226,7 +226,7 @@ async function main() {
 
   try {
     assertSuperAdminPasswordPresentForSeed();
-  } catch (err: unknown) {
+  } catch (_err: unknown) {
     console.error('❌ SUPER_ADMIN_PASSWORD is not set. For security, you must provide a password for the root SUPER_ADMIN user before running `npm run db:seed`.');
     console.error('   Add the following to your `.env` file (do NOT commit real passwords):');
     console.error('     SUPER_ADMIN_EMAIL="admin@eccb.org"');

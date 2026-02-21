@@ -23,7 +23,7 @@ import { logger } from '@/lib/logger';
 // ============================================================================
 
 const updateSettingsSchema = z.object({
-  settings: z.record(z.string()).optional(),
+  settings: z.record(z.string(), z.string()).optional(),
   enabled: z.boolean().optional(),
 });
 

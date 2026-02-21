@@ -255,6 +255,9 @@ export async function performOcr(buffer: Buffer, mode: OcrMode): Promise<string>
         const Tesseract = await import('tesseract.js');
         const { fromBuffer } = await import('pdf2pic');
         
+        // Get page count using pdf-lib (already implemented above)
+        const pageCount = await getPdfPageCount(buffer);
+        
         // Initialize pdf2pic converter
         const converter = fromBuffer(buffer, {
           density: 200, // 200 DPI for good OCR quality
@@ -264,9 +267,6 @@ export async function performOcr(buffer: Buffer, mode: OcrMode): Promise<string>
           width: 0, // Use original size
           height: 0,
         });
-        
-        // Get page count
-        const pageCount = converter.pageCount;
         
         logger.info('Converting PDF pages to images for OCR', { pageCount });
         

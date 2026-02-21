@@ -1,0 +1,1121 @@
+
+> eccb-platform@0.1.0 lint
+> eslint
+
+
+/home/dylan/eccb.app/prisma/seed.ts
+  229:12  warning  'err' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/scripts/debug-prisma-dashboard.ts
+  19:17  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/scripts/list-musicassignment-columns.ts
+  6:17  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/scripts/list-user-columns.ts
+  6:17  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/scripts/test-storage.ts
+  1:22  warning  'getSignedDownloadUrl' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(admin)/admin/announcements/__tests__/actions.test.ts
+   77:67  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  160:73  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/app/(admin)/admin/attendance/__tests__/actions.test.ts
+   74:63  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   75:74  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   76:73  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   77:79  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   91:63  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   96:30  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  106:63  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  122:63  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  142:69  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  143:73  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  167:69  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  197:63  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  198:73  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  209:63  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  221:63  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  244:63  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  245:81  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  256:63  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  276:63  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  277:81  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  306:63  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  307:81  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  334:69  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  335:73  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  336:80  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  352:69  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  353:73  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  354:80  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  355:89  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  366:69  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/app/(admin)/admin/attendance/__tests__/export.test.ts
+  101:21  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  102:27  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  103:29  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  108:31  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  117:38  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  137:31  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  145:35  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  146:38  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  163:38  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  212:31  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  221:34  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  244:34  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  287:29  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  295:33  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  318:33  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  336:38  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  353:31  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/app/(admin)/admin/audit/actions.ts
+  14:7  warning  'auditLogFiltersSchema' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  24:7  warning  'paginationSchema' is assigned a value but never used       @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(admin)/admin/communications/page.tsx
+  28:3  warning  'Pencil' is defined but never used  @typescript-eslint/no-unused-vars
+  29:3  warning  'Trash2' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(admin)/admin/communications/templates/page.tsx
+  23:3  warning  'Mail' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(admin)/admin/events/[id]/attendance/page.tsx
+  1:20  warning  'redirect' is defined but never used         @typescript-eslint/no-unused-vars
+  7:29  warning  'CardDescription' is defined but never used  @typescript-eslint/no-unused-vars
+  7:46  warning  'CardHeader' is defined but never used       @typescript-eslint/no-unused-vars
+  7:58  warning  'CardTitle' is defined but never used        @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(admin)/admin/events/[id]/page.tsx
+  5:34  warning  'formatDuration' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(admin)/admin/events/actions.ts
+   32:9   warning  'session' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   57:38  warning  Unexpected any. Specify a different type      @typescript-eslint/no-explicit-any
+   89:9   warning  'session' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  115:38  warning  Unexpected any. Specify a different type      @typescript-eslint/no-explicit-any
+  149:9   warning  'session' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  190:34  warning  Unexpected any. Specify a different type      @typescript-eslint/no-explicit-any
+  213:9   warning  'session' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  244:9   warning  'session' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  271:9   warning  'session' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(admin)/admin/events/page.tsx
+   6:29  warning  'CardDescription' is defined but never used  @typescript-eslint/no-unused-vars
+  32:16  warning  'TabsContent' is defined but never used      @typescript-eslint/no-unused-vars
+  69:16  warning  Unexpected any. Specify a different type     @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/app/(admin)/admin/loading.tsx
+  3:10  warning  'Sidebar' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(admin)/admin/members/__tests__/actions.test.ts
+    2:30  warning  'MemberExportFilters' is defined but never used  @typescript-eslint/no-unused-vars
+   27:27  warning  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+   28:32  warning  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+   66:34  warning  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+   79:34  warning  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+   91:34  warning  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  105:34  warning  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  119:34  warning  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  151:34  warning  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  161:34  warning  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/app/(admin)/admin/members/actions.ts
+   13:3  warning  'MEMBER_VIEW_SECTION' is defined but never used  @typescript-eslint/no-unused-vars
+   33:9  warning  'session' is assigned a value but never used     @typescript-eslint/no-unused-vars
+  128:9  warning  'session' is assigned a value but never used     @typescript-eslint/no-unused-vars
+  226:9  warning  'session' is assigned a value but never used     @typescript-eslint/no-unused-vars
+  250:9  warning  'session' is assigned a value but never used     @typescript-eslint/no-unused-vars
+  276:9  warning  'session' is assigned a value but never used     @typescript-eslint/no-unused-vars
+  332:9  warning  'session' is assigned a value but never used     @typescript-eslint/no-unused-vars
+  361:9  warning  'session' is assigned a value but never used     @typescript-eslint/no-unused-vars
+  462:9  warning  'session' is assigned a value but never used     @typescript-eslint/no-unused-vars
+  490:9  warning  'session' is assigned a value but never used     @typescript-eslint/no-unused-vars
+  525:9  warning  'session' is assigned a value but never used     @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(admin)/admin/members/page.tsx
+  71:9  warning  'session' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(admin)/admin/music/[id]/page.tsx
+   5:22  warning  'formatDuration' is defined but never used  @typescript-eslint/no-unused-vars
+  14:3   warning  'Music' is defined but never used           @typescript-eslint/no-unused-vars
+  17:3   warning  'Download' is defined but never used        @typescript-eslint/no-unused-vars
+  18:3   warning  'Trash2' is defined but never used          @typescript-eslint/no-unused-vars
+  19:3   warning  'Upload' is defined but never used          @typescript-eslint/no-unused-vars
+  20:3   warning  'Clock' is defined but never used           @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(admin)/admin/music/__tests__/actions.test.ts
+   65:8   warning  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+   67:9   warning  'mockPiece' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  107:66  warning  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+  108:66  warning  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+  138:12  warning  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+  158:12  warning  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+  171:12  warning  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+  177:12  warning  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+  223:12  warning  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+  233:12  warning  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+  251:76  warning  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+  257:12  warning  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+  305:85  warning  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+  317:76  warning  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+  321:12  warning  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+  347:8   warning  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+  399:77  warning  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+  414:82  warning  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+  432:82  warning  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+  447:82  warning  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+  484:88  warning  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/app/(admin)/admin/music/__tests__/librarian-actions.test.ts
+   59:8   warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   79:74  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   85:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  118:74  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  122:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  156:88  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  157:72  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  158:79  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  194:88  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  195:72  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  196:79  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  221:88  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  222:72  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  223:79  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  251:88  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  252:72  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  253:79  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  277:88  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  296:88  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  297:72  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  298:79  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  322:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  370:87  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  404:94  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  405:72  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  406:79  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  419:94  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/app/(admin)/admin/music/actions.ts
+    40:7   warning  'musicFileUploadSchema' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   447:9   warning  'session' is assigned a value but never used                @typescript-eslint/no-unused-vars
+   485:9   warning  'session' is assigned a value but never used                @typescript-eslint/no-unused-vars
+   603:9   warning  'session' is assigned a value but never used                @typescript-eslint/no-unused-vars
+   737:9   warning  'session' is assigned a value but never used                @typescript-eslint/no-unused-vars
+   838:9   warning  'session' is assigned a value but never used                @typescript-eslint/no-unused-vars
+   893:9   warning  'session' is assigned a value but never used                @typescript-eslint/no-unused-vars
+  1057:9   warning  'session' is assigned a value but never used                @typescript-eslint/no-unused-vars
+  1072:11  warning  'updatedFile' is assigned a value but never used            @typescript-eslint/no-unused-vars
+  1102:9   warning  'session' is assigned a value but never used                @typescript-eslint/no-unused-vars
+  1118:9   warning  'session' is assigned a value but never used                @typescript-eslint/no-unused-vars
+  1155:9   warning  'session' is assigned a value but never used                @typescript-eslint/no-unused-vars
+  1231:9   warning  'session' is assigned a value but never used                @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(admin)/admin/music/librarian/page.tsx
+  4:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/app/(admin)/admin/music/new/page.tsx
+  8:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/app/(admin)/admin/music/page.tsx
+   5:10  warning  'formatDate' is defined but never used                                                                                          @typescript-eslint/no-unused-vars
+  47:10  warning  'MusicDifficulty' is defined but never used                                                                                     @typescript-eslint/no-unused-vars
+  49:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/app/(admin)/admin/music/smart-upload/[batchId]/batch-detail-client.tsx
+  38:3  warning  'Upload' is defined but never used           @typescript-eslint/no-unused-vars
+  44:3  warning  'ExternalLink' is defined but never used     @typescript-eslint/no-unused-vars
+  60:9  warning  'router' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(admin)/admin/music/smart-upload/[batchId]/page.tsx
+   8:29  warning  'CardDescription' is defined but never used                                                                                     @typescript-eslint/no-unused-vars
+   8:46  warning  'CardHeader' is defined but never used                                                                                          @typescript-eslint/no-unused-vars
+   8:58  warning  'CardTitle' is defined but never used                                                                                           @typescript-eslint/no-unused-vars
+  13:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/app/(admin)/admin/music/smart-upload/page.tsx
+   2:10  warning  'redirect' is defined but never used                                                                                            @typescript-eslint/no-unused-vars
+   6:10  warning  'formatDate' is defined but never used                                                                                          @typescript-eslint/no-unused-vars
+   9:29  warning  'CardDescription' is defined but never used                                                                                     @typescript-eslint/no-unused-vars
+   9:46  warning  'CardHeader' is defined but never used                                                                                          @typescript-eslint/no-unused-vars
+   9:58  warning  'CardTitle' is defined but never used                                                                                           @typescript-eslint/no-unused-vars
+  11:10  warning  'Badge' is defined but never used                                                                                               @typescript-eslint/no-unused-vars
+  12:20  warning  'ArrowLeft' is defined but never used                                                                                           @typescript-eslint/no-unused-vars
+  15:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/app/(admin)/admin/music/smart-upload/settings/page.tsx
+  2:10  warning  'redirect' is defined but never used                                                                                            @typescript-eslint/no-unused-vars
+  6:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/app/(admin)/admin/music/smart-upload/settings/smart-upload-settings-client.tsx
+  1354:7  warning  '_modelId' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(admin)/admin/music/smart-upload/smart-upload-client.tsx
+   6:14  warning  'formatDate' is defined but never used          @typescript-eslint/no-unused-vars
+  70:37  warning  'isLoading' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  70:48  warning  'error' is assigned a value but never used      @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(admin)/admin/page.tsx
+    9:3   warning  'TrendingUp' is defined but never used                                                                                          @typescript-eslint/no-unused-vars
+   10:3   warning  'ArrowRight' is defined but never used                                                                                          @typescript-eslint/no-unused-vars
+   20:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+  138:48  warning  Unexpected any. Specify a different type                                                                                        @typescript-eslint/no-explicit-any
+  183:46  warning  Unexpected any. Specify a different type                                                                                        @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/app/(admin)/admin/pages/[id]/page.tsx
+   9:29  warning  'CardDescription' is defined but never used  @typescript-eslint/no-unused-vars
+  46:35  warning  '_' is defined but never used                @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(admin)/admin/pages/actions.ts
+    5:29  warning  'getSession' is defined but never used        @typescript-eslint/no-unused-vars
+  197:9   warning  'session' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  291:9   warning  'session' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  346:9   warning  'session' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(admin)/admin/pages/new/page.tsx
+  1:10  warning  'redirect' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(admin)/admin/pages/page.tsx
+  28:3  warning  'Eye' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(admin)/admin/reports/attendance/page.tsx
+   9:3   warning  'Select' is defined but never used                                                                                              @typescript-eslint/no-unused-vars
+  10:3   warning  'SelectContent' is defined but never used                                                                                       @typescript-eslint/no-unused-vars
+  11:3   warning  'SelectItem' is defined but never used                                                                                          @typescript-eslint/no-unused-vars
+  12:3   warning  'SelectTrigger' is defined but never used                                                                                       @typescript-eslint/no-unused-vars
+  13:3   warning  'SelectValue' is defined but never used                                                                                         @typescript-eslint/no-unused-vars
+  23:10  warning  'Input' is defined but never used                                                                                               @typescript-eslint/no-unused-vars
+  24:10  warning  'Label' is defined but never used                                                                                               @typescript-eslint/no-unused-vars
+  31:3   warning  'BarChart3' is defined but never used                                                                                           @typescript-eslint/no-unused-vars
+  35:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/app/(admin)/admin/reports/page.tsx
+  23:3  warning  'Clock' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(admin)/admin/roles/__tests__/actions.test.ts
+   74:67  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  100:75  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  152:66  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  178:71  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  179:71  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  180:65  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  195:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  208:71  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  220:71  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  233:71  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  234:71  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  242:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  275:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  276:71  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  277:71  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  278:65  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  305:75  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  306:71  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  307:71  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  308:71  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  344:71  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  376:71  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  397:71  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  416:76  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/app/(admin)/admin/roles/permissions/__tests__/actions.test.ts
+   89:67  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  107:78  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  134:78  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  166:86  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  181:71  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  194:76  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  220:71  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  241:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  291:76  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  340:76  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  355:83  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  357:71  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  358:71  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  390:83  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  398:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  410:83  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  424:83  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  426:71  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  434:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  460:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  461:71  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  462:83  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  463:71  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  489:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  490:71  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  491:83  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  492:71  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  512:83  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  513:71  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  535:83  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  548:83  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  549:71  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  551:85  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  560:83  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  561:71  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  571:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  614:71  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  627:71  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/app/(admin)/admin/roles/permissions/actions.ts
+   9:3  warning  'ALL_PERMISSIONS' is defined but never used  @typescript-eslint/no-unused-vars
+  11:8  warning  'Permission' is defined but never used       @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(admin)/admin/settings/actions.ts
+  10:7  warning  'settingSchema' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(admin)/admin/users/[id]/page.tsx
+   3:10  warning  'prisma' is defined but never used        @typescript-eslint/no-unused-vars
+  33:26  warning  'getUserStats' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(admin)/admin/users/[id]/user-actions.tsx
+  31:3  warning  'Key' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(admin)/admin/users/__tests__/actions.test.ts
+   8:3  warning  'sendPasswordReset' is defined but never used  @typescript-eslint/no-unused-vars
+  11:3  warning  'revokeSession' is defined but never used      @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(admin)/admin/users/actions.ts
+    5:29  warning  'getSession' is defined but never used              @typescript-eslint/no-unused-vars
+   10:10  warning  'hash' is defined but never used                    @typescript-eslint/no-unused-vars
+   22:7   warning  'banUserSchema' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  287:9   warning  'session' is assigned a value but never used        @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(admin)/admin/users/page.tsx
+  95:9  warning  'statusColors' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(auth)/forgot-password/page.tsx
+  10:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/app/(auth)/login/page.tsx
+   6:10  warning  'Music' is defined but never used                                                                                               @typescript-eslint/no-unused-vars
+  10:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/app/(auth)/reset-password/page.tsx
+  10:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/app/(auth)/verify-email/page.tsx
+  10:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/app/(member)/member/attendance/page.tsx
+   4:22  warning  'formatTime' is defined but never used             @typescript-eslint/no-unused-vars
+  79:9   warning  'statusColors' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(member)/member/calendar/page.tsx
+  7:9  warning  'session' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(member)/member/events/[id]/page.tsx
+   5:34  warning  'formatEventDateRange' is defined but never used  @typescript-eslint/no-unused-vars
+  10:10  warning  'Tabs' is defined but never used                  @typescript-eslint/no-unused-vars
+  10:16  warning  'TabsContent' is defined but never used           @typescript-eslint/no-unused-vars
+  10:29  warning  'TabsList' is defined but never used              @typescript-eslint/no-unused-vars
+  10:39  warning  'TabsTrigger' is defined but never used           @typescript-eslint/no-unused-vars
+  24:3   warning  'Users' is defined but never used                 @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(member)/member/events/page.tsx
+   5:29  warning  'CardDescription' is defined but never used   @typescript-eslint/no-unused-vars
+   5:46  warning  'CardHeader' is defined but never used        @typescript-eslint/no-unused-vars
+   5:58  warning  'CardTitle' is defined but never used         @typescript-eslint/no-unused-vars
+  15:10  warning  'cn' is defined but never used                @typescript-eslint/no-unused-vars
+  18:9   warning  'session' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(member)/member/music/[id]/page.tsx
+  11:3  warning  'Table' is defined but never used        @typescript-eslint/no-unused-vars
+  12:3  warning  'TableBody' is defined but never used    @typescript-eslint/no-unused-vars
+  13:3  warning  'TableCell' is defined but never used    @typescript-eslint/no-unused-vars
+  14:3  warning  'TableHead' is defined but never used    @typescript-eslint/no-unused-vars
+  15:3  warning  'TableHeader' is defined but never used  @typescript-eslint/no-unused-vars
+  16:3  warning  'TableRow' is defined but never used     @typescript-eslint/no-unused-vars
+  23:3  warning  'User' is defined but never used         @typescript-eslint/no-unused-vars
+  25:3  warning  'Clock' is defined but never used        @typescript-eslint/no-unused-vars
+  26:3  warning  'BarChart3' is defined but never used    @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(member)/member/music/page.tsx
+   6:29  warning  'CardDescription' is defined but never used                                                                                     @typescript-eslint/no-unused-vars
+   6:46  warning  'CardHeader' is defined but never used                                                                                          @typescript-eslint/no-unused-vars
+   6:58  warning  'CardTitle' is defined but never used                                                                                           @typescript-eslint/no-unused-vars
+  19:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+  53:9   warning  'session' is assigned a value but never used                                                                                    @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(member)/member/notifications/page.tsx
+   6:10  warning  'Button' is defined but never used            @typescript-eslint/no-unused-vars
+  14:3   warning  'Check' is defined but never used             @typescript-eslint/no-unused-vars
+  15:3   warning  'ChevronRight' is defined but never used      @typescript-eslint/no-unused-vars
+  19:9   warning  'session' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(member)/member/page.tsx
+   3:23  warning  'getUserWithProfile' is defined but never used                                                                                  @typescript-eslint/no-unused-vars
+   5:42  warning  'getFriendlyDateLabel' is defined but never used                                                                                @typescript-eslint/no-unused-vars
+   6:29  warning  'CardDescription' is defined but never used                                                                                     @typescript-eslint/no-unused-vars
+  20:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/app/(public)/[...slug]/page.tsx
+  38:23  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/app/(public)/about/page.tsx
+  6:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/app/(public)/contact/page.tsx
+  5:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/app/(public)/directors/page.tsx
+   9:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               react-refresh/only-export-components
+  26:23  error    Error: Cannot call impure function during render
+
+`Date.now` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).
+
+/home/dylan/eccb.app/src/app/(public)/directors/page.tsx:26:23
+  24 |   try {
+  25 |     console.log('[DirectorsPage] Fetching leadership users from database...');
+> 26 |     const startTime = Date.now();
+     |                       ^^^^^^^^^^ Cannot call impure function
+  27 |     
+  28 |     // Get users with director or board roles
+  29 |     leadershipUsers = await prisma.user.findMany({                   react-hooks/purity
+  49:21  error    Error: Cannot call impure function during render
+
+`Date.now` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).
+
+/home/dylan/eccb.app/src/app/(public)/directors/page.tsx:49:21
+  47 |     });
+  48 |
+> 49 |     const elapsed = Date.now() - startTime;
+     |                     ^^^^^^^^^^ Cannot call impure function
+  50 |     console.log(`[DirectorsPage] Query completed in ${elapsed}ms, fetched ${leadershipUsers.length} users`);
+  51 |   } catch (error) {
+  52 |     console.error('[DirectorsPage] Database error:', error);  react-hooks/purity
+
+/home/dylan/eccb.app/src/app/(public)/events/[id]/page.tsx
+   5:34  warning  'formatDateRange' is defined but never used                                                                                     @typescript-eslint/no-unused-vars
+   8:39  warning  'Users' is defined but never used                                                                                               @typescript-eslint/no-unused-vars
+  16:23  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/app/(public)/events/page.tsx
+   3:10  warning  'notFound' is defined but never used                                                                                            @typescript-eslint/no-unused-vars
+   5:34  warning  'formatDateRange' is defined but never used                                                                                     @typescript-eslint/no-unused-vars
+   6:10  warning  'Button' is defined but never used                                                                                              @typescript-eslint/no-unused-vars
+   8:39  warning  'Users' is defined but never used                                                                                               @typescript-eslint/no-unused-vars
+   8:46  warning  'ArrowLeft' is defined but never used                                                                                           @typescript-eslint/no-unused-vars
+  12:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/app/(public)/gallery/page.tsx
+  6:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/app/(public)/news/page.tsx
+  11:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/app/(public)/page.tsx
+  6:17  warning  'Calendar' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/(public)/policies/page.tsx
+  13:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/app/(public)/sponsors/page.tsx
+   4:29  warning  'CardHeader' is defined but never used                                                                                          @typescript-eslint/no-unused-vars
+   4:41  warning  'CardTitle' is defined but never used                                                                                           @typescript-eslint/no-unused-vars
+  10:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/app/actions/cms.ts
+  16:40  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/app/actions/events.ts
+  17:41  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/app/actions/members.ts
+  19:42  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/app/actions/music.ts
+  21:46  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  40:58  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/app/api/admin/jobs/route.ts
+  17:3  warning  'clearAllQueues' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/api/admin/smart-upload-settings/models/[modelId]/parameters/route.ts
+  15:3  warning  'getModelsForProvider' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/api/admin/smart-upload-settings/providers/[providerId]/api-key/route.ts
+  17:3  warning  'hasValidApiKey' is defined but never used                 @typescript-eslint/no-unused-vars
+  18:3  warning  'getProvider' is defined but never used                    @typescript-eslint/no-unused-vars
+  31:7  warning  'validateApiKeySchema' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/api/admin/smart-upload-settings/providers/[providerId]/models/route.ts
+  11:10  warning  'z' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/api/assets/[id]/route.ts
+   5:36  warning  'fileExists' is defined but never used        @typescript-eslint/no-unused-vars
+   9:20  warning  'CMS_VIEW_ALL' is defined but never used      @typescript-eslint/no-unused-vars
+   9:34  warning  'CMS_VIEW_PUBLIC' is defined but never used   @typescript-eslint/no-unused-vars
+  41:11  warning  'session' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/api/assets/__tests__/route.test.ts
+   72:20  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   73:29  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   74:22  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   83:22  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   92:31  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  119:38  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  120:35  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  133:38  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  134:35  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  150:38  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  151:35  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  181:22  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  192:31  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  241:22  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  242:36  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  274:40  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  293:40  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  295:24  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  310:22  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  323:40  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  342:40  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  343:22  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  344:36  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  374:40  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  375:36  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/app/api/events/rsvp/__tests__/route.test.ts
+   70:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   77:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   84:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   92:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  144:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  165:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  172:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  199:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  206:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  213:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  221:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  241:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  248:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  255:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  264:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  295:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  314:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  331:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  338:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  345:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  347:67  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  392:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  399:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  406:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  408:67  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  432:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  455:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/app/api/files/[...key]/route.ts
+  5:24  warning  'getSignedDownloadUrl' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/api/files/__tests__/download-url.test.ts
+    5:31  warning  'validateSignedToken' is defined but never used  @typescript-eslint/no-unused-vars
+   85:8   warning  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  157:12  warning  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  184:12  warning  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  207:12  warning  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  213:12  warning  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  235:12  warning  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  241:12  warning  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  266:12  warning  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  272:12  warning  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/app/api/files/upload/route.ts
+   27:7   warning  'EXTENSION_MIME_MAP' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  115:31  warning  'buffer' is defined but never used                       @typescript-eslint/no-unused-vars
+  282:41  warning  Unexpected any. Specify a different type                 @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/app/api/members/route.ts
+   12:7   warning  'memberQuerySchema' is assigned a value but never used   @typescript-eslint/no-unused-vars
+   21:7   warning  'memberCreateSchema' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   32:7   warning  'memberUpdateSchema' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   43:7   warning  'memberDeleteSchema' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  178:11  warning  'body' is assigned a value but never used                @typescript-eslint/no-unused-vars
+  217:11  warning  'body' is assigned a value but never used                @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/api/music/smart-upload/[batchId]/approve/route.ts
+  19:10  warning  'MUSIC_SMART_UPLOAD' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/api/music/smart-upload/[batchId]/cancel/route.ts
+  27:16  warning  'cleanupBatchFiles' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/api/music/smart-upload/[batchId]/upload/route.ts
+  17:3   warning  'updateItemStatus' is defined but never used         @typescript-eslint/no-unused-vars
+  19:10  warning  'validateSmartUploadFile' is defined but never used  @typescript-eslint/no-unused-vars
+  19:35  warning  'validateBatchLimits' is defined but never used      @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/api/music/smart-upload/__tests__/route.test.ts
+  70:10  warning  'MUSIC_SMART_UPLOAD' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/api/music/smart-upload/route.ts
+  14:23  warning  'listUserBatches' is defined but never used  @typescript-eslint/no-unused-vars
+  44:16  warning  'canAccessBatch' is defined but never used   @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/api/sections/route.ts
+  5:27  warning  'request' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/api/setup/status/route.ts
+  14:27  warning  'SetupProgressStatus' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/app/layout.tsx
+  22:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+  59:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/app/offline/page.tsx
+  3:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/app/setup/page.tsx
+  10:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/app/signup/page.tsx
+  41:14  warning  'err' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/components/admin/announcements/announcement-form.tsx
+  130:14  warning  'err' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/components/admin/attendance/attendance-roster.tsx
+   35:10  warning  'Tabs' is defined but never used                  @typescript-eslint/no-unused-vars
+   35:16  warning  'TabsContent' is defined but never used           @typescript-eslint/no-unused-vars
+   35:29  warning  'TabsList' is defined but never used              @typescript-eslint/no-unused-vars
+   35:39  warning  'TabsTrigger' is defined but never used           @typescript-eslint/no-unused-vars
+   37:3   warning  'DropdownMenu' is defined but never used          @typescript-eslint/no-unused-vars
+   38:3   warning  'DropdownMenuContent' is defined but never used   @typescript-eslint/no-unused-vars
+   39:3   warning  'DropdownMenuItem' is defined but never used      @typescript-eslint/no-unused-vars
+   40:3   warning  'DropdownMenuTrigger' is defined but never used   @typescript-eslint/no-unused-vars
+   51:3   warning  'ChevronDown' is defined but never used           @typescript-eslint/no-unused-vars
+  135:3   warning  'eventTitle' is defined but never used            @typescript-eslint/no-unused-vars
+  136:3   warning  'eventType' is defined but never used             @typescript-eslint/no-unused-vars
+  141:11  warning  'isLoading' is assigned a value but never used    @typescript-eslint/no-unused-vars
+  141:42  warning  'markBulk' is assigned a value but never used     @typescript-eslint/no-unused-vars
+  206:9   warning  'markedCount' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  269:14  warning  'error' is defined but never used                 @typescript-eslint/no-unused-vars
+  296:14  warning  'error' is defined but never used                 @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/components/admin/communications/email-template-form.tsx
+   41:36  warning  'TemplateVariable' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        @typescript-eslint/no-unused-vars
+  110:23  warning  Compilation Skipped: Use of incompatible library
+
+This API returns functions which cannot be memoized without leading to stale UI. To prevent this, by default React Compiler will skip memoizing this component/hook. However, you may see issues if values from this API are passed to other components/hooks that are memoized.
+
+/home/dylan/eccb.app/src/components/admin/communications/email-template-form.tsx:110:23
+  108 |   });
+  109 |
+> 110 |   const watchedBody = watch('body');
+      |                       ^^^^^ React Hook Form's `useForm()` API returns a `watch()` function which cannot be memoized safely.
+  111 |   const watchedSubject = watch('subject');
+  112 |   const watchedTextBody = watch('textBody');
+  113 |  react-hooks/incompatible-library
+  133:6   warning  React Hook useEffect has a missing dependency: 'variables'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        react-hooks/exhaustive-deps
+  188:6   warning  React Hook useEffect has a missing dependency: 'generatePreview'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  react-hooks/exhaustive-deps
+
+/home/dylan/eccb.app/src/components/admin/events/event-form.tsx
+   88:5   warning  'watch' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  126:14  warning  'error' is defined but never used           @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/components/admin/members/member-form.tsx
+   73:5   warning  'watch' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  106:14  warning  'error' is defined but never used           @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/components/admin/music/assign-music-dialog.tsx
+  115:14  warning  'error' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/components/admin/music/bulk-assign-dialog.tsx
+  114:14  warning  'error' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/components/admin/music/librarian-dashboard.tsx
+   35:3   warning  'Users' is defined but never used                                                                                   @typescript-eslint/no-unused-vars
+   40:3   warning  'AlertDialog' is defined but never used                                                                             @typescript-eslint/no-unused-vars
+   41:3   warning  'AlertDialogAction' is defined but never used                                                                       @typescript-eslint/no-unused-vars
+   42:3   warning  'AlertDialogCancel' is defined but never used                                                                       @typescript-eslint/no-unused-vars
+   43:3   warning  'AlertDialogContent' is defined but never used                                                                      @typescript-eslint/no-unused-vars
+   44:3   warning  'AlertDialogDescription' is defined but never used                                                                  @typescript-eslint/no-unused-vars
+   45:3   warning  'AlertDialogFooter' is defined but never used                                                                       @typescript-eslint/no-unused-vars
+   46:3   warning  'AlertDialogHeader' is defined but never used                                                                       @typescript-eslint/no-unused-vars
+   47:3   warning  'AlertDialogTitle' is defined but never used                                                                        @typescript-eslint/no-unused-vars
+   48:3   warning  'AlertDialogTrigger' is defined but never used                                                                      @typescript-eslint/no-unused-vars
+  119:6   warning  React Hook useEffect has a missing dependency: 'loadAssignments'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  165:14  warning  'error' is defined but never used                                                                                   @typescript-eslint/no-unused-vars
+  193:14  warning  'error' is defined but never used                                                                                   @typescript-eslint/no-unused-vars
+  222:14  warning  'error' is defined but never used                                                                                   @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/components/admin/music/music-assignments.tsx
+  16:3   warning  'Dialog' is defined but never used             @typescript-eslint/no-unused-vars
+  17:3   warning  'DialogContent' is defined but never used      @typescript-eslint/no-unused-vars
+  18:3   warning  'DialogDescription' is defined but never used  @typescript-eslint/no-unused-vars
+  19:3   warning  'DialogFooter' is defined but never used       @typescript-eslint/no-unused-vars
+  20:3   warning  'DialogHeader' is defined but never used       @typescript-eslint/no-unused-vars
+  21:3   warning  'DialogTitle' is defined but never used        @typescript-eslint/no-unused-vars
+  22:3   warning  'DialogTrigger' is defined but never used      @typescript-eslint/no-unused-vars
+  79:14  warning  'error' is defined but never used              @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/components/admin/music/music-files-list.tsx
+   16:3   warning  'AlertDialog' is defined but never used             @typescript-eslint/no-unused-vars
+   17:3   warning  'AlertDialogAction' is defined but never used       @typescript-eslint/no-unused-vars
+   18:3   warning  'AlertDialogCancel' is defined but never used       @typescript-eslint/no-unused-vars
+   19:3   warning  'AlertDialogContent' is defined but never used      @typescript-eslint/no-unused-vars
+   20:3   warning  'AlertDialogDescription' is defined but never used  @typescript-eslint/no-unused-vars
+   21:3   warning  'AlertDialogFooter' is defined but never used       @typescript-eslint/no-unused-vars
+   22:3   warning  'AlertDialogHeader' is defined but never used       @typescript-eslint/no-unused-vars
+   23:3   warning  'AlertDialogTitle' is defined but never used        @typescript-eslint/no-unused-vars
+   24:3   warning  'AlertDialogTrigger' is defined but never used      @typescript-eslint/no-unused-vars
+  144:10  warning  'deletingId' is assigned a value but never used     @typescript-eslint/no-unused-vars
+  194:14  warning  'error' is defined but never used                   @typescript-eslint/no-unused-vars
+  210:14  warning  'error' is defined but never used                   @typescript-eslint/no-unused-vars
+  225:14  warning  'error' is defined but never used                   @typescript-eslint/no-unused-vars
+  236:43  warning  Unexpected any. Specify a different type            @typescript-eslint/no-explicit-any
+  247:14  warning  'error' is defined but never used                   @typescript-eslint/no-unused-vars
+  261:14  warning  'error' is defined but never used                   @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/components/admin/music/music-form.tsx
+   80:3   warning  'instruments' is defined but never used     @typescript-eslint/no-unused-vars
+   88:43  warning  Unexpected any. Specify a different type    @typescript-eslint/no-explicit-any
+   96:5   warning  'watch' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  124:14  warning  'error' is defined but never used           @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/components/admin/music/smart-upload/smart-upload-dropzone.tsx
+  181:9  warning  'updateFileStatus' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/components/admin/music/smart-upload/smart-upload-progress.tsx
+  56:9  warning  'isPending' is assigned a value but never used   @typescript-eslint/no-unused-vars
+  75:9  warning  'isTerminal' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/components/admin/music/smart-upload/smart-upload-review-form.tsx
+  135:9  warning  'hasChanges' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/components/admin/pages/page-form.tsx
+   13:10  warning  'Switch' is defined but never used        @typescript-eslint/no-unused-vars
+   23:50  warning  'Calendar' is defined but never used      @typescript-eslint/no-unused-vars
+   41:66  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  140:14  warning  'error' is defined but never used         @typescript-eslint/no-unused-vars
+  289:73  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/components/admin/settings/security-settings-form.tsx
+  17:10  warning  'Input' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/components/admin/sidebar.tsx
+  18:3  warning  'ImageIcon' is defined but never used  @typescript-eslint/no-unused-vars
+  20:3  warning  'Upload' is defined but never used     @typescript-eslint/no-unused-vars
+  21:3  warning  'Sparkles' is defined but never used   @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/components/auth/reset-password-form.tsx
+  3:27  warning  'useEffect' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/components/auth/verify-email-content.tsx
+  14:10  warning  'loading' is assigned a value but never used                                                                    @typescript-eslint/no-unused-vars
+  27:6   warning  React Hook useEffect has a missing dependency: 'verifyEmail'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  60:14  warning  'err' is defined but never used                                                                                 @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/components/dashboard/sidebar.tsx
+  30:52  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/components/events/event-filter.tsx
+  234:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/components/events/member-calendar-client.tsx
+  7:45  warning  'EventFilterState' is defined but never used  @typescript-eslint/no-unused-vars
+  8:29  warning  'CardHeader' is defined but never used        @typescript-eslint/no-unused-vars
+  8:41  warning  'CardTitle' is defined but never used         @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/components/home/upcoming-events.tsx
+  36:39  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/components/layout/footer.tsx
+  3:10  warning  'Music' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/components/layout/navbar.removed.tsx
+  7:26  warning  'User' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/components/member/settings-form.tsx
+  32:3   warning  'AlertDialog' is defined but never used               @typescript-eslint/no-unused-vars
+  33:3   warning  'AlertDialogAction' is defined but never used         @typescript-eslint/no-unused-vars
+  34:3   warning  'AlertDialogCancel' is defined but never used         @typescript-eslint/no-unused-vars
+  35:3   warning  'AlertDialogContent' is defined but never used        @typescript-eslint/no-unused-vars
+  36:3   warning  'AlertDialogDescription' is defined but never used    @typescript-eslint/no-unused-vars
+  37:3   warning  'AlertDialogFooter' is defined but never used         @typescript-eslint/no-unused-vars
+  38:3   warning  'AlertDialogHeader' is defined but never used         @typescript-eslint/no-unused-vars
+  39:3   warning  'AlertDialogTitle' is defined but never used          @typescript-eslint/no-unused-vars
+  40:3   warning  'AlertDialogTrigger' is defined but never used        @typescript-eslint/no-unused-vars
+  73:10  warning  'is2FADialogOpen' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/components/providers/service-worker-provider.tsx
+  41:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/components/public/contact-form.tsx
+  69:14  warning  'error' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/components/public/footer.tsx
+  2:10  warning  'Music' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/components/public/navigation.tsx
+  6:19  warning  'Music' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/components/setup/progress-indicator.tsx
+  36:3  warning  'totalSteps' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/components/setup/setup-wizard.tsx
+  55:9  warning  'progress' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/components/shared/breadcrumbs.tsx
+  13:10  warning  'Home' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/components/ui/badge.tsx
+  46:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/components/ui/button-group.tsx
+  82:3  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/components/ui/button.tsx
+  62:18  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/components/ui/form.tsx
+  159:3  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/components/ui/navigation-menu.tsx
+  167:3  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/components/ui/sidebar.tsx
+  727:3  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/components/ui/toggle.tsx
+  45:18  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/home/dylan/eccb.app/src/hooks/__tests__/use-attendance.test.ts
+  324:10  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  356:10  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/hooks/use-smart-upload.ts
+  476:21  warning  'setIsLoading' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/lib/__tests__/csrf.test.ts
+  1:32  warning  'beforeEach' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/lib/__tests__/email.test.ts
+  24:68  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  33:64  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  34:56  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  35:58  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/lib/__tests__/encryption.test.ts
+  7:10  warning  'beforeEach' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/lib/__tests__/signed-url.test.ts
+  117:23  warning  'signature' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/lib/__tests__/validation.test.ts
+  62:7  warning  'musicPieceUpdateSchema' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/lib/ai/__tests__/provider-registry.test.ts
+  153:47  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/lib/ai/document-classification.ts
+  130:10  warning  'isRetryableError' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/lib/ai/index.ts
+   41:10  warning  'classifyExtractedText' is defined but never used           @typescript-eslint/no-unused-vars
+   49:3   warning  'DocumentClassification' is defined but never used          @typescript-eslint/no-unused-vars
+   50:3   warning  'DocumentClassificationSchema' is defined but never used    @typescript-eslint/no-unused-vars
+   51:3   warning  'DOCUMENT_CLASSIFICATION_PROMPT' is defined but never used  @typescript-eslint/no-unused-vars
+   72:28  warning  Unexpected any. Specify a different type                    @typescript-eslint/no-explicit-any
+   90:33  warning  Unexpected any. Specify a different type                    @typescript-eslint/no-explicit-any
+  110:62  warning  Unexpected any. Specify a different type                    @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/lib/ai/providers/anthropic.ts
+    9:10  warning  'z' is defined but never used                     @typescript-eslint/no-unused-vars
+   23:3   warning  'parseAndValidateJson' is defined but never used  @typescript-eslint/no-unused-vars
+  186:15  warning  'parse' is assigned a value but never used        @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/lib/ai/providers/custom.ts
+   9:10  warning  'z' is defined but never used                     @typescript-eslint/no-unused-vars
+  23:3   warning  'parseAndValidateJson' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/lib/ai/providers/gemini.ts
+   9:10  warning  'z' is defined but never used                     @typescript-eslint/no-unused-vars
+  22:3   warning  'parseAndValidateJson' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/lib/ai/providers/kilo.ts
+  9:10  warning  'z' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/lib/ai/providers/openai-compatible.ts
+  10:10  warning  'z' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/lib/ai/providers/openai.ts
+  9:10  warning  'z' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/lib/ai/providers/openrouter.ts
+  10:10  warning  'z' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/lib/auth/__tests__/auth-flows.test.ts
+  2:10  warning  'auth' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/lib/auth/__tests__/guards.test.ts
+   62:8   warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   76:8   warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  117:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  155:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  220:36  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  220:73  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  316:71  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  342:71  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  406:37  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  406:74  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  601:35  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  601:72  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  628:35  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  628:72  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  658:10  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/lib/auth/__tests__/permissions-enhanced.test.ts
+  120:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  148:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  167:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  183:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  207:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  216:36  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  216:73  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  235:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  267:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  290:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  317:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  328:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  353:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  364:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  406:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  428:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/lib/auth/__tests__/permissions-integration.test.ts
+   56:14  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   82:14  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   95:14  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  122:14  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  135:14  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  201:14  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  234:14  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  355:70  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  376:14  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  396:14  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  406:14  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/lib/auth/__tests__/permissions.test.ts
+   79:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  107:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  123:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  147:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/lib/auth/session-utils.ts
+  12:10  warning  'auth' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/lib/file-logger.ts
+  258:11  warning  'childLogger' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/lib/jobs/queue.ts
+  20:3  warning  'getConcurrencyForJob' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/lib/monitoring/metrics.ts
+  196:3  warning  'tags' is defined but never used  @typescript-eslint/no-unused-vars
+  220:3  warning  'tags' is defined but never used  @typescript-eslint/no-unused-vars
+  243:3  warning  'tags' is defined but never used  @typescript-eslint/no-unused-vars
+  268:3  warning  'tags' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/lib/services/__tests__/cms.service.test.ts
+  116:37  warning  Unexpected any. Specify a different type     @typescript-eslint/no-explicit-any
+  140:37  warning  Unexpected any. Specify a different type     @typescript-eslint/no-explicit-any
+  142:13  warning  'result' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  151:37  warning  Unexpected any. Specify a different type     @typescript-eslint/no-explicit-any
+  183:38  warning  Unexpected any. Specify a different type     @typescript-eslint/no-explicit-any
+  221:34  warning  Unexpected any. Specify a different type     @typescript-eslint/no-explicit-any
+  223:13  warning  'result' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  240:38  warning  Unexpected any. Specify a different type     @typescript-eslint/no-explicit-any
+  241:34  warning  Unexpected any. Specify a different type     @typescript-eslint/no-explicit-any
+  257:65  warning  Unexpected any. Specify a different type     @typescript-eslint/no-explicit-any
+  272:44  warning  Unexpected any. Specify a different type     @typescript-eslint/no-explicit-any
+  301:42  warning  Unexpected any. Specify a different type     @typescript-eslint/no-explicit-any
+  323:42  warning  Unexpected any. Specify a different type     @typescript-eslint/no-explicit-any
+  340:42  warning  Unexpected any. Specify a different type     @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/lib/services/__tests__/email-template.service.test.ts
+  1:32  warning  'beforeEach' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/lib/services/__tests__/music.service.test.ts
+   6:3  warning  'cacheKeys' is defined but never used              @typescript-eslint/no-unused-vars
+  77:7  warning  'mockCacheSet' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/lib/services/__tests__/storage.test.ts
+    3:10  warning  'env' is defined but never used           @typescript-eslint/no-unused-vars
+    5:8   warning  'path' is defined but never used          @typescript-eslint/no-unused-vars
+  147:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  262:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  283:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  293:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  346:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  365:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  384:12  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/lib/services/audit.ts
+  10:15  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  11:15  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/lib/services/member.service.ts
+  104:18  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/lib/services/music.service.ts
+    7:3   warning  'cacheSet' is defined but never used            @typescript-eslint/no-unused-vars
+  559:11  warning  'composer' is assigned a value but never used   @typescript-eslint/no-unused-vars
+  560:11  warning  'arranger' is assigned a value but never used   @typescript-eslint/no-unused-vars
+  561:11  warning  'publisher' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/lib/services/smart-upload/__tests__/instrument-mapper.test.ts
+   8:36  warning  'beforeEach' is defined but never used    @typescript-eslint/no-unused-vars
+  86:58  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/lib/services/smart-upload/__tests__/validators.test.ts
+  8:36  warning  'beforeEach' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/lib/services/smart-upload/smart-upload.service.ts
+   12:10  warning  'deleteFile' is defined but never used            @typescript-eslint/no-unused-vars
+   12:22  warning  'getSignedDownloadUrl' is defined but never used  @typescript-eslint/no-unused-vars
+  665:3   warning  'approvedBy' is defined but never used            @typescript-eslint/no-unused-vars
+  809:9   warning  'composer' is assigned a value but never used     @typescript-eslint/no-unused-vars
+  810:9   warning  'arranger' is assigned a value but never used     @typescript-eslint/no-unused-vars
+  811:9   warning  'publisher' is assigned a value but never used    @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/lib/services/smart-upload/text-extraction.ts
+  34:7  warning  'MIN_CONFIDENCE_THRESHOLD' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/lib/services/storage-cleanup.ts
+  2:22  warning  'fileExists' is defined but never used       @typescript-eslint/no-unused-vars
+  2:34  warning  'getFileMetadata' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/lib/services/storage.ts
+  183:3  warning  'options' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/lib/setup/schema-automation.ts
+   17:10  warning  'SetupError' is defined but never used         @typescript-eslint/no-unused-vars
+  140:13  warning  'env' is assigned a value but never used       @typescript-eslint/no-unused-vars
+  174:19  warning  'skipSeed' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  177:13  warning  'env' is assigned a value but never used       @typescript-eslint/no-unused-vars
+  212:13  warning  'env' is assigned a value but never used       @typescript-eslint/no-unused-vars
+  244:13  warning  'env' is assigned a value but never used       @typescript-eslint/no-unused-vars
+  293:13  warning  'env' is assigned a value but never used       @typescript-eslint/no-unused-vars
+  366:13  warning  'env' is assigned a value but never used       @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/workers/__tests__/smart-upload-worker.test.ts
+  93:30  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  98:21  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/dylan/eccb.app/src/workers/email-worker.ts
+   9:21  warning  'sendBulkEmails' is defined but never used  @typescript-eslint/no-unused-vars
+  10:24  warning  'QUEUE_NAMES' is defined but never used     @typescript-eslint/no-unused-vars
+
+/home/dylan/eccb.app/src/workers/scheduler.ts
+   3:24  warning  'QUEUE_NAMES' is defined but never used  @typescript-eslint/no-unused-vars
+  10:3   warning  'JOB_CONFIGS' is defined but never used  @typescript-eslint/no-unused-vars
+  14:10  warning  'env' is defined but never used          @typescript-eslint/no-unused-vars
+  15:47  warning  'isAfter' is defined but never used      @typescript-eslint/no-unused-vars
+  15:56  warning  'isBefore' is defined but never used     @typescript-eslint/no-unused-vars
+
+✖ 721 problems (2 errors, 719 warnings)
+

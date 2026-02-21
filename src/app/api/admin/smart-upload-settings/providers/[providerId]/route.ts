@@ -1,7 +1,7 @@
 /**
- * Model Parameters API
+ * Provider Update API
  *
- * PUT: Update user-defined parameter values for a model
+ * PUT: Enable/disable provider or set as default
  *
  * Admin-only access.
  */
@@ -11,30 +11,31 @@ import { z } from 'zod';
 import { auth } from '@/lib/auth/config';
 import { checkUserPermission } from '@/lib/auth/permissions';
 import {
-  updateModelParameters,
-  getModelsForProvider,
+  getProviders,
+  enableProvider,
+  setDefaultProvider,
 } from '@/lib/services/smart-upload-settings';
 import { logger } from '@/lib/logger';
-import { prisma } from '@/lib/db';
 
 // ============================================================================
 // Request Validation
 // ============================================================================
 
-const updateParametersSchema = z.object({
-  parameters: z.record(z.string(), z.union([z.number(), z.string()])),
+const updateProviderSchema = z.object({
+  enabled: z.boolean().optional(),
+  isDefault: z.boolean().optional(),
 });
 
 // ============================================================================
-// PUT: Update model parameters
+// PUT: Update provider
 // ============================================================================
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ modelId: string }> }
+  { params }: { params: Promise<{ providerId: string }> }
 ) {
   try {
-    const { modelId } = await params;
+    const { providerId } = await params;
 
     // Check authentication
     const session = await auth.api.getSession({ headers: request.headers });
@@ -53,7 +54,7 @@ export async function PUT(
 
     // Parse and validate request body
     const body = await request.json();
-    const parsed = updateParametersSchema.safeParse(body);
+    const parsed = updateProviderSchema.safeParse(body);
 
     if (!parsed.success) {
       return NextResponse.json(
@@ -62,33 +63,30 @@ export async function PUT(
       );
     }
 
-    const { parameters } = parsed.data;
+    const data = parsed.data;
     const userId = session.user.id;
 
-    // Update the parameters
-    await updateModelParameters(modelId, parameters, userId);
+    // Handle enabled status
+    if (data.enabled !== undefined) {
+      await enableProvider(providerId, data.enabled, userId);
+    }
 
-    // Get the updated model with parameters
-    const model = await prisma.aIModel.findUnique({
-      where: { id: modelId },
-      include: {
-        parameters: {
-          orderBy: { name: 'asc' },
-        },
-      },
-    });
+    // Handle default setting
+    if (data.isDefault === true) {
+      await setDefaultProvider(providerId, userId);
+    }
 
-    return NextResponse.json({
-      success: true,
-      model,
-    });
+    // Return updated providers list
+    const providers = await getProviders();
+
+    return NextResponse.json({ providers });
   } catch (error) {
     logger.error(
-      'Failed to update model parameters',
+      'Failed to update provider',
       error instanceof Error ? error : new Error(String(error))
     );
     return NextResponse.json(
-      { error: 'Failed to update parameters' },
+      { error: 'Failed to update provider' },
       { status: 500 }
     );
   }

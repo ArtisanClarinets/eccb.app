@@ -249,3 +249,18 @@ export const DEFAULT_TIMEOUT_MS = 30000;
  * Maximum number of retries for failed requests
  */
 export const MAX_RETRIES = 3;
+
+// =============================================================================
+// Dynamic Provider Exports (Task-Specific Model Configuration)
+// =============================================================================
+
+export {
+  getAIConfigForTask,
+  generateStructuredOutputForTask,
+  generateStructuredOutputWithConfig,
+  makeChatCompletion,
+  extractMusicMetadataWithConfig,
+  classifyDocumentWithConfig,
+  summarizeWithConfig,
+  type DynamicAIConfig,
+} from './dynamic-provider';

@@ -5,7 +5,7 @@
  * API keys, models, and audit logging.
  */
 
-import { prisma, SmartUploadSetting, AIProvider, APIKey, AIModel, ModelParameter, SettingsAuditLog } from '@/lib/db';
+import { prisma, AIProvider, AIModel, TaskModelConfig, UploadTaskType } from '@/lib/db';
 import { encryptApiKey, decryptApiKey, hashApiKey } from '@/lib/encryption';
 import { getProviderConfig, PROVIDER_CONFIGS } from '@/lib/ai/provider-config';
 import { logger } from '@/lib/logger';
@@ -500,7 +500,7 @@ export async function setDefaultModel(
  */
 export async function refreshModelsFromProvider(
   providerId: string
-): Promise<{ success: boolean; count?: number; error?: string }> {
+): Promise<{ success: boolean; count?: number; error?: string; errorType?: 'invalid_key' | 'rate_limited' | 'network' | 'unknown' }> {
   const provider = await prisma.aIProvider.findUnique({
     where: { id: providerId },
   });
@@ -539,15 +539,61 @@ export async function refreshModelsFromProvider(
     const baseUrl = provider.baseUrl || config.baseUrl;
     const endpoint = config.modelsEndpoint || '/models';
 
-    const response = await fetch(`${baseUrl}${endpoint}`, {
-      method: 'GET',
-      headers,
-    });
+    // Create abort controller for 30 second timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+    let response: Response;
+    try {
+      response = await fetch(`${baseUrl}${endpoint}`, {
+        method: 'GET',
+        headers,
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    // Handle 401 Unauthorized - mark API key as invalid
+    if (response.status === 401) {
+      await prisma.aPIKey.updateMany({
+        where: { providerId, isActive: true },
+        data: { 
+          isValid: false, 
+          validationError: 'Invalid API key (401 Unauthorized)',
+          lastValidated: new Date(),
+        },
+      });
+
+      logger.warn('API key marked as invalid due to 401 response', { providerId });
+
+      return {
+        success: false,
+        error: 'Invalid API key. Please check your API key and try again.',
+        errorType: 'invalid_key',
+      };
+    }
+
+    // Handle 429 Rate Limited - return existing models without wiping
+    if (response.status === 429) {
+      logger.warn('Rate limited while refreshing models, keeping existing models', { providerId });
+
+      // Get count of existing models
+      const existingCount = await prisma.aIModel.count({ where: { providerId } });
+
+      return {
+        success: true,
+        count: existingCount,
+        error: 'Rate limited. Existing models preserved.',
+        errorType: 'rate_limited',
+      };
+    }
 
     if (!response.ok) {
       return {
         success: false,
         error: `HTTP ${response.status}: ${response.statusText}`,
+        errorType: 'network',
       };
     }
 
@@ -593,10 +639,38 @@ export async function refreshModelsFromProvider(
       count++;
     }
 
+    // Mark API key as valid after successful refresh
+    await prisma.aPIKey.updateMany({
+      where: { providerId, isActive: true },
+      data: { 
+        isValid: true, 
+        validationError: null,
+        lastValidated: new Date(),
+      },
+    });
+
     return { success: true, count };
   } catch (error) {
+    // Handle timeout/abort errors
+    if (error instanceof Error && error.name === 'AbortError') {
+      return {
+        success: false,
+        error: 'Request timed out after 30 seconds',
+        errorType: 'network',
+      };
+    }
+
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return { success: false, error: errorMessage };
+    logger.error('Failed to refresh models from provider', {
+      providerId,
+      error: errorMessage,
+    });
+
+    return {
+      success: false,
+      error: errorMessage,
+      errorType: 'unknown',
+    };
   }
 }
 
@@ -756,8 +830,8 @@ export async function logAudit(params: {
         oldValue: params.oldValue ?? null,
         newValue: params.newValue ?? null,
         changedBy: params.userId ?? null,
-        ipAddress: (params.request as { headers?: { get?: (name: string) => string | null } })?.headers?.get('x-forwarded-for') ?? null,
-        userAgent: (params.request as { headers?: { get?: (name: string) => string | null } })?.headers?.get('user-agent') ?? null,
+        ipAddress: (params.request as { headers?: { get?: (name: string) => string | null } })?.headers?.get?.('x-forwarded-for') ?? null,
+        userAgent: (params.request as { headers?: { get?: (name: string) => string | null } })?.headers?.get?.('user-agent') ?? null,
       },
     });
   } catch (error) {
@@ -841,4 +915,344 @@ export async function seedDefaultProviders(): Promise<void> {
       },
     });
   }
+}
+
+// ============================================================================
+// Task Model Configuration Functions
+// ============================================================================
+
+/**
+ * Get all task model configurations
+ */
+export async function getTaskConfigs(): Promise<TaskModelConfig[]> {
+  try {
+    return await prisma.taskModelConfig.findMany({
+      include: {
+        model: {
+          include: {
+            provider: true,
+          },
+        },
+        primaryProvider: true,
+        fallbackProvider: true,
+        fallbackModel: {
+          include: {
+            provider: true,
+          },
+        },
+      },
+      orderBy: { taskType: 'asc' },
+    });
+  } catch (error) {
+    logger.error('Failed to fetch task configs', { error });
+    return [];
+  }
+}
+
+/**
+ * Get configuration for a specific task type
+ */
+export async function getTaskConfig(
+  taskType: UploadTaskType
+): Promise<TaskModelConfig | null> {
+  return prisma.taskModelConfig.findUnique({
+    where: { taskType },
+    include: {
+      model: {
+        include: {
+          provider: true,
+        },
+      },
+      primaryProvider: true,
+      fallbackProvider: true,
+      fallbackModel: {
+        include: {
+          provider: true,
+        },
+      },
+    },
+  });
+}
+
+/**
+ * Set or update task model configuration
+ */
+export async function setTaskConfig(
+  taskType: UploadTaskType,
+  modelId: string | null,
+  params: { temperature?: number; maxTokens?: number; topP?: number },
+  userId: string,
+  primaryProviderId?: string | null,
+  fallbackProviderId?: string | null,
+  fallbackModelId?: string | null,
+): Promise<TaskModelConfig> {
+  const existing = await prisma.taskModelConfig.findUnique({
+    where: { taskType },
+  });
+
+  const config = await prisma.taskModelConfig.upsert({
+    where: { taskType },
+    update: {
+      modelId,
+      primaryProviderId: primaryProviderId ?? null,
+      fallbackProviderId: fallbackProviderId ?? null,
+      fallbackModelId: fallbackModelId ?? null,
+      temperature: params.temperature ?? null,
+      maxTokens: params.maxTokens ?? null,
+      topP: params.topP ?? null,
+    },
+    create: {
+      taskType,
+      modelId,
+      primaryProviderId: primaryProviderId ?? null,
+      fallbackProviderId: fallbackProviderId ?? null,
+      fallbackModelId: fallbackModelId ?? null,
+      temperature: params.temperature ?? null,
+      maxTokens: params.maxTokens ?? null,
+      topP: params.topP ?? null,
+    },
+  });
+
+  await logAudit({
+    entityType: 'TaskModelConfig',
+    entityId: taskType,
+    action: existing ? 'UPDATE' : 'CREATE',
+    fieldName: 'modelId',
+    oldValue: existing?.modelId ?? undefined,
+    newValue: modelId ?? 'null (use default)',
+    userId,
+  });
+
+  return config;
+}
+
+// ============================================================================
+// Task Model Configuration Helper for Pipeline Integration
+// ============================================================================
+
+/**
+ * Result of getModelForTask - contains all info needed to make an AI call
+ */
+export interface ModelForTaskResult {
+  /** The model ID to use (e.g., 'gpt-4o-mini') */
+  modelId: string;
+  /** The provider ID (e.g., 'openai') */
+  providerId: string;
+  /** The database ID of the AIModel record */
+  modelDbId: string;
+  /** Temperature override (if configured) */
+  temperature?: number;
+  /** Max tokens override (if configured) */
+  maxTokens?: number;
+  /** Top P override (if configured) */
+  topP?: number;
+  /** The decrypted API key for the provider */
+  apiKey: string;
+  /** The base URL for the provider */
+  baseUrl: string;
+  /** Whether this is a fallback configuration */
+  isFallback?: boolean;
+}
+
+/**
+ * Get the model configuration for a specific task type.
+ * 
+ * This is the main entry point for the Smart Upload pipeline to get
+ * AI model configuration. It:
+ * 1. Checks if there's a task-specific config with a model assigned
+ * 2. Falls back to the default provider's default model if not
+ * 3. Returns all parameters needed to make an AI call
+ * 
+ * @param taskType - The upload task type
+ * @returns The model configuration or null if no valid configuration exists
+ */
+export async function getModelForTask(
+  taskType: UploadTaskType
+): Promise<ModelForTaskResult | null> {
+  // Try to get task-specific config
+  const taskConfig = await prisma.taskModelConfig.findUnique({
+    where: { taskType },
+    include: {
+      model: {
+        include: {
+          provider: true,
+        },
+      },
+      primaryProvider: true,
+      fallbackProvider: true,
+      fallbackModel: {
+        include: {
+          provider: { 
+            include: { 
+              apiKeys: { where: { isActive: true } } 
+            } 
+          },
+        },
+      },
+    },
+  });
+
+  // If task config exists and has a model assigned
+  if (taskConfig?.model) {
+    const model = taskConfig.model;
+    const provider = model.provider;
+
+    // Get the API key for this provider
+    const apiKey = await getDecryptedApiKey(provider.id);
+    if (apiKey) {
+      return {
+        modelId: model.modelId,
+        providerId: provider.providerId,
+        modelDbId: model.id,
+        temperature: taskConfig.temperature ?? undefined,
+        maxTokens: taskConfig.maxTokens ?? undefined,
+        topP: taskConfig.topP ?? undefined,
+        apiKey,
+        baseUrl: provider.baseUrl || getProviderConfig(provider.providerId)?.baseUrl || '',
+        isFallback: false,
+      };
+    }
+    
+    logger.warn('No API key found for task model provider, trying fallback', {
+      taskType,
+      providerId: provider.id,
+    });
+  }
+
+  // If primary model/provider failed and fallback is configured, try fallback
+  if (taskConfig?.fallbackModelId && taskConfig?.fallbackProviderId) {
+    const fallbackModel = await prisma.aIModel.findUnique({
+      where: { id: taskConfig.fallbackModelId },
+      include: { 
+        provider: { 
+          include: { 
+            apiKeys: { where: { isActive: true } } 
+          } 
+        } 
+      },
+    });
+    
+    if (fallbackModel?.provider) {
+      const fallbackApiKey = await getDecryptedApiKey(fallbackModel.provider.id);
+      if (fallbackApiKey) {
+        logger.info('Using fallback model for task', {
+          taskType,
+          fallbackModelId: fallbackModel.id,
+          fallbackProviderId: fallbackModel.provider.id,
+        });
+        
+        return {
+          modelId: fallbackModel.modelId,
+          providerId: fallbackModel.provider.providerId,
+          modelDbId: fallbackModel.id,
+          temperature: taskConfig.temperature ?? undefined,
+          maxTokens: taskConfig.maxTokens ?? undefined,
+          topP: taskConfig.topP ?? undefined,
+          apiKey: fallbackApiKey,
+          baseUrl: fallbackModel.provider.baseUrl || getProviderConfig(fallbackModel.provider.providerId)?.baseUrl || '',
+          isFallback: true,
+        };
+      }
+      
+      logger.warn('No API key found for fallback provider', {
+        taskType,
+        fallbackProviderId: taskConfig.fallbackProviderId,
+      });
+    }
+  }
+
+  // Fall back to default provider's default model
+  const defaultProvider = await prisma.aIProvider.findFirst({
+    where: { isDefault: true, isEnabled: true },
+    include: {
+      models: {
+        where: { isDefault: true },
+        take: 1,
+      },
+    },
+  });
+
+  if (!defaultProvider) {
+    logger.error('No default provider found for AI task', { taskType });
+    return null;
+  }
+
+  const defaultModel = defaultProvider.models[0];
+  if (!defaultModel) {
+    logger.error('No default model found for default provider', {
+      taskType,
+      providerId: defaultProvider.id,
+    });
+    return null;
+  }
+
+  // Get the API key for the default provider
+  const apiKey = await getDecryptedApiKey(defaultProvider.id);
+  if (!apiKey) {
+    logger.error('No API key found for default provider', {
+      taskType,
+      providerId: defaultProvider.id,
+    });
+    return null;
+  }
+
+  return {
+    modelId: defaultModel.modelId,
+    providerId: defaultProvider.providerId,
+    modelDbId: defaultModel.id,
+    temperature: taskConfig?.temperature ?? undefined,
+    maxTokens: taskConfig?.maxTokens ?? undefined,
+    topP: taskConfig?.topP ?? undefined,
+    apiKey,
+    baseUrl: defaultProvider.baseUrl || getProviderConfig(defaultProvider.providerId)?.baseUrl || '',
+    isFallback: false,
+  };
+}
+
+/**
+ * Get all task configs with resolved model info for display
+ */
+export async function getTaskConfigsWithModelInfo(): Promise<Array<{
+  taskType: UploadTaskType;
+  modelId: string | null;
+  modelName: string | null;
+  providerName: string | null;
+  temperature: number | null;
+  maxTokens: number | null;
+  topP: number | null;
+}>> {
+  const configs = await prisma.taskModelConfig.findMany({
+    include: {
+      model: {
+        include: {
+          provider: true,
+        },
+      },
+    },
+    orderBy: { taskType: 'asc' },
+  });
+
+  // Get all task types to ensure we return entries for unconfigured tasks
+  const allTaskTypes: UploadTaskType[] = [
+    'METADATA_EXTRACTION',
+    'AUDIO_ANALYSIS',
+    'SUMMARIZATION',
+    'TRANSCRIPTION',
+    'CLASSIFICATION',
+  ];
+
+  const configMap = new Map(configs.map(c => [c.taskType, c]));
+
+  return allTaskTypes.map(taskType => {
+    const config = configMap.get(taskType);
+    return {
+      taskType,
+      modelId: config?.modelId ?? null,
+      modelName: config?.model?.displayName ?? null,
+      providerName: config?.model?.provider?.displayName ?? null,
+      temperature: config?.temperature ?? null,
+      maxTokens: config?.maxTokens ?? null,
+      topP: config?.topP ?? null,
+    };
+  });
 }

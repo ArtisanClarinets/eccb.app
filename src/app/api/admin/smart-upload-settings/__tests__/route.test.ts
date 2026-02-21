@@ -7,7 +7,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { GET, PUT } from '../route';
-import { GET as PROVIDERS_GET, PUT as PROVIDERS_PUT } from '../providers/route';
+import { GET as PROVIDERS_GET } from '../providers/route';
 import { POST as API_KEY_POST } from '../providers/[providerId]/api-key/route';
 import { POST as VALIDATE_KEY_POST } from '../providers/[providerId]/validate-key/route';
 
@@ -85,6 +85,13 @@ import {
 } from '@/lib/services/smart-upload-settings';
 import { prisma } from '@/lib/db';
 
+// Helper type for mocked functions - using unknown as intermediate
+type MockedFn = { mockResolvedValue: (value: unknown) => void; mockResolvedValueOnce: (value: unknown) => void };
+
+function asMockedFn(fn: unknown): MockedFn {
+  return fn as MockedFn;
+}
+
 describe('Smart Upload Settings API', () => {
   const mockUser = {
     id: 'user-123',
@@ -98,22 +105,22 @@ describe('Smart Upload Settings API', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    (auth.api.getSession as ReturnType<typeof vi.fn>).mockResolvedValue(mockSession);
-    (checkUserPermission as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+    asMockedFn(auth.api.getSession).mockResolvedValue(mockSession);
+    asMockedFn(checkUserPermission).mockResolvedValue(true);
     
     // Reset default mock implementations
-    (getSettingsStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
+    asMockedFn(getSettingsStatus).mockResolvedValue({
       smartUploadEnabled: true,
       settings: {},
       providers: [],
     });
-    (setSetting as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
-    (setSmartUploadEnabled as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+    asMockedFn(setSetting).mockResolvedValue(undefined);
+    asMockedFn(setSmartUploadEnabled).mockResolvedValue(undefined);
   });
 
   describe('GET /api/admin/smart-upload-settings', () => {
     it('should return 401 if not authenticated', async () => {
-      (auth.api.getSession as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+      asMockedFn(auth.api.getSession).mockResolvedValue(null);
 
       const request = new NextRequest('http://localhost/api/admin/smart-upload-settings');
       const response = await GET(request);
@@ -122,7 +129,7 @@ describe('Smart Upload Settings API', () => {
     });
 
     it('should return 403 if user lacks permission', async () => {
-      (checkUserPermission as ReturnType<typeof vi.fn>).mockResolvedValue(false);
+      asMockedFn(checkUserPermission).mockResolvedValue(false);
 
       const request = new NextRequest('http://localhost/api/admin/smart-upload-settings');
       const response = await GET(request);
@@ -131,7 +138,7 @@ describe('Smart Upload Settings API', () => {
     });
 
     it('should return settings when authenticated', async () => {
-      (getSettingsStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
+      asMockedFn(getSettingsStatus).mockResolvedValue({
         smartUploadEnabled: true,
         settings: { enabled: 'true' },
         providers: [
@@ -159,7 +166,7 @@ describe('Smart Upload Settings API', () => {
     });
 
     it('should not expose API keys in response', async () => {
-      (getSettingsStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
+      asMockedFn(getSettingsStatus).mockResolvedValue({
         smartUploadEnabled: true,
         settings: {},
         providers: [],
@@ -177,7 +184,7 @@ describe('Smart Upload Settings API', () => {
 
   describe('PUT /api/admin/smart-upload-settings', () => {
     it('should return 401 if not authenticated', async () => {
-      (auth.api.getSession as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+      asMockedFn(auth.api.getSession).mockResolvedValue(null);
 
       const request = new NextRequest('http://localhost/api/admin/smart-upload-settings', {
         method: 'PUT',
@@ -190,7 +197,7 @@ describe('Smart Upload Settings API', () => {
     });
 
     it('should return 403 if user lacks edit permission', async () => {
-      (checkUserPermission as ReturnType<typeof vi.fn>).mockResolvedValue(false);
+      asMockedFn(checkUserPermission).mockResolvedValue(false);
 
       const request = new NextRequest('http://localhost/api/admin/smart-upload-settings', {
         method: 'PUT',
@@ -203,8 +210,8 @@ describe('Smart Upload Settings API', () => {
     });
 
     it('should update enabled status', async () => {
-      (setSmartUploadEnabled as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
-      (getSettingsStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
+      asMockedFn(setSmartUploadEnabled).mockResolvedValue(undefined);
+      asMockedFn(getSettingsStatus).mockResolvedValue({
         smartUploadEnabled: true,
         settings: {},
         providers: [],
@@ -222,8 +229,8 @@ describe('Smart Upload Settings API', () => {
     });
 
     it('should update individual settings', async () => {
-      (setSetting as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
-      (getSettingsStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
+      asMockedFn(setSetting).mockResolvedValue(undefined);
+      asMockedFn(getSettingsStatus).mockResolvedValue({
         smartUploadEnabled: true,
         settings: { testKey: 'testValue' },
         providers: [],
@@ -254,7 +261,7 @@ describe('Smart Upload Settings API', () => {
 
   describe('GET /api/admin/smart-upload-settings/providers', () => {
     it('should return providers list', async () => {
-      (getProviders as ReturnType<typeof vi.fn>).mockResolvedValue([
+      asMockedFn(getProviders).mockResolvedValue([
         { id: 'p1', providerId: 'openai', displayName: 'OpenAI', isEnabled: true },
       ]);
 
@@ -267,7 +274,7 @@ describe('Smart Upload Settings API', () => {
     });
 
     it('should require authentication', async () => {
-      (auth.api.getSession as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+      asMockedFn(auth.api.getSession).mockResolvedValue(null);
 
       const request = new NextRequest('http://localhost/api/admin/smart-upload-settings/providers');
       const response = await PROVIDERS_GET(request);
@@ -278,10 +285,10 @@ describe('Smart Upload Settings API', () => {
 
   describe('POST /api/admin/smart-upload-settings/providers/:providerId/api-key', () => {
     it('should save and validate API key', async () => {
-      (validateApiKey as ReturnType<typeof vi.fn>).mockResolvedValue({ valid: true });
-      (saveApiKey as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
-      (prisma.aPIKey.updateMany as ReturnType<typeof vi.fn>).mockResolvedValue({});
-      (prisma.aIProvider.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+      asMockedFn(validateApiKey).mockResolvedValue({ valid: true });
+      asMockedFn(saveApiKey).mockResolvedValue(undefined);
+      asMockedFn(prisma.aPIKey.updateMany).mockResolvedValue({});
+      asMockedFn(prisma.aIProvider.findUnique).mockResolvedValue({
         id: 'p1',
         providerId: 'openai',
       });
@@ -300,11 +307,11 @@ describe('Smart Upload Settings API', () => {
     });
 
     it('should reject invalid API key', async () => {
-      (validateApiKey as ReturnType<typeof vi.fn>).mockResolvedValue({
+      asMockedFn(validateApiKey).mockResolvedValue({
         valid: false,
         error: 'Invalid API key',
       });
-      (prisma.aIProvider.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+      asMockedFn(prisma.aIProvider.findUnique).mockResolvedValue({
         id: 'p1',
         providerId: 'openai',
       });
@@ -322,7 +329,7 @@ describe('Smart Upload Settings API', () => {
     });
 
     it('should require admin permission for saving key', async () => {
-      (checkUserPermission as ReturnType<typeof vi.fn>).mockResolvedValue(false);
+      asMockedFn(checkUserPermission).mockResolvedValue(false);
 
       const request = new NextRequest('http://localhost/api/admin/smart-upload-settings/providers/p1/api-key', {
         method: 'POST',
@@ -337,8 +344,8 @@ describe('Smart Upload Settings API', () => {
 
   describe('POST /api/admin/smart-upload-settings/providers/:providerId/validate-key', () => {
     it('should validate API key without saving', async () => {
-      (validateApiKey as ReturnType<typeof vi.fn>).mockResolvedValue({ valid: true });
-      (prisma.aIProvider.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+      asMockedFn(validateApiKey).mockResolvedValue({ valid: true });
+      asMockedFn(prisma.aIProvider.findUnique).mockResolvedValue({
         id: 'p1',
         providerId: 'openai',
       });
@@ -358,11 +365,11 @@ describe('Smart Upload Settings API', () => {
     });
 
     it('should return validation error for invalid key', async () => {
-      (validateApiKey as ReturnType<typeof vi.fn>).mockResolvedValue({
+      asMockedFn(validateApiKey).mockResolvedValue({
         valid: false,
         error: 'Rate limit exceeded',
       });
-      (prisma.aIProvider.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+      asMockedFn(prisma.aIProvider.findUnique).mockResolvedValue({
         id: 'p1',
         providerId: 'openai',
       });

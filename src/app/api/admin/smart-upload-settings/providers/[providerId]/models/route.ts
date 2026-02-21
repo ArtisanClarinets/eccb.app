@@ -15,6 +15,7 @@ import {
   getModelsForProvider,
   getDefaultModel,
   refreshModelsFromProvider,
+  getProvider,
 } from '@/lib/services/smart-upload-settings';
 import { logger } from '@/lib/logger';
 
@@ -42,6 +43,15 @@ export async function GET(
     );
     if (!hasAdminAccess) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    // Validate provider exists
+    const provider = await getProvider(providerId);
+    if (!provider) {
+      return NextResponse.json(
+        { error: 'Provider not found' },
+        { status: 404 }
+      );
     }
 
     const models = await getModelsForProvider(providerId);

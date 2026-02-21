@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,7 +9,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Dialog,
   DialogContent,
@@ -27,9 +25,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
-import { useSmartUploadSettings, getProviderLogo, getProviderColor, AIModel, ModelParameter } from '@/hooks/use-smart-upload-settings';
+import { useSmartUploadSettings, getProviderColor, AIModel, ModelParameter, TaskModelConfig } from '@/hooks/use-smart-upload-settings';
 import {
-  Settings,
   Sparkles,
   Key,
   CheckCircle,
@@ -44,39 +41,51 @@ import {
   Loader2,
   Star,
   Zap,
-  Check,
-  X,
   Undo2,
+  Cog,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
-// =============================================================================
-// Types
-// =============================================================================
+// Client-safe task type definition (matches Prisma enum)
+type UploadTaskType =
+  | 'METADATA_EXTRACTION'
+  | 'AUDIO_ANALYSIS'
+  | 'SUMMARIZATION'
+  | 'TRANSCRIPTION'
+  | 'CLASSIFICATION';
 
-interface ProviderCardProps {
-  provider: {
-    id: string;
-    providerId: string;
-    displayName: string;
-    description: string;
-    isEnabled: boolean;
-    isDefault: boolean;
-    hasValidApiKey: boolean;
-    capabilities: {
-      vision: boolean;
-      structuredOutput: boolean;
-    } | null;
-  };
-  onToggle: (enabled: boolean) => void;
-  onSetDefault: () => void;
-  onConfigure: () => void;
-  isDefaultProvider: boolean;
-}
-
-// =============================================================================
-// Sub-Components
-// =============================================================================
+// Task type definitions for UI
+const UPLOAD_TASK_TYPES: Array<{
+  value: UploadTaskType;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: 'METADATA_EXTRACTION',
+    label: 'Metadata Extraction',
+    description: 'Extract music metadata from uploaded files',
+  },
+  {
+    value: 'AUDIO_ANALYSIS',
+    label: 'Audio Analysis',
+    description: 'Analyze audio content for tempo, key, and instrumentation',
+  },
+  {
+    value: 'SUMMARIZATION',
+    label: 'Summarization',
+    description: 'Generate summaries of music pieces',
+  },
+  {
+    value: 'TRANSCRIPTION',
+    label: 'Transcription',
+    description: 'Transcribe audio to notation',
+  },
+  {
+    value: 'CLASSIFICATION',
+    label: 'Classification',
+    description: 'Classify documents and music types',
+  },
+];
 
 /**
  * API Key Configuration Dialog
@@ -329,7 +338,7 @@ function ParameterEditor({
 
     switch (param.paramType) {
       case 'float':
-      case 'int':
+      case 'int': {
         return (
           <div key={param.id} className="space-y-2">
             <div className="flex items-center justify-between">
@@ -347,8 +356,9 @@ function ParameterEditor({
             <p className="text-xs text-muted-foreground">{param.description}</p>
           </div>
         );
+      }
 
-      case 'boolean':
+      case 'boolean': {
         return (
           <div key={param.id} className="flex items-center justify-between">
             <div>
@@ -362,8 +372,9 @@ function ParameterEditor({
             />
           </div>
         );
+      }
 
-      case 'string':
+      case 'string': {
         return (
           <div key={param.id} className="space-y-2">
             <Label htmlFor={param.name}>{param.displayName}</Label>
@@ -376,8 +387,9 @@ function ParameterEditor({
             <p className="text-xs text-muted-foreground">{param.description}</p>
           </div>
         );
+      }
 
-      case 'enum':
+      case 'enum': {
         const values = Array.isArray(param.allowedValues) ? param.allowedValues : [];
         return (
           <div key={param.id} className="space-y-2">
@@ -400,6 +412,7 @@ function ParameterEditor({
             <p className="text-xs text-muted-foreground">{param.description}</p>
           </div>
         );
+      }
 
       default:
         return null;
@@ -424,6 +437,25 @@ function ParameterEditor({
 /**
  * Provider Card Component
  */
+interface ProviderCardProps {
+  provider: {
+    id: string;
+    providerId: string;
+    displayName: string;
+    description: string;
+    isEnabled: boolean;
+    hasValidApiKey: boolean;
+    capabilities: {
+      vision: boolean;
+      structuredOutput: boolean;
+    } | null;
+  };
+  isDefaultProvider: boolean;
+  onToggle: (enabled: boolean) => void;
+  onSetDefault: () => void;
+  onConfigure: () => void;
+}
+
 function ProviderCard({
   provider,
   onToggle,
@@ -636,19 +668,616 @@ function ProviderCard({
 }
 
 // =============================================================================
+// Task Configuration Card Component
+// =============================================================================
+
+interface TaskConfigCardProps {
+  taskType: UploadTaskType;
+  taskLabel: string;
+  taskDescription: string;
+  config: TaskModelConfig | undefined;
+  enabledProviders: Array<{
+    id: string;
+    providerId: string;
+    displayName: string;
+    hasValidApiKey: boolean;
+  }>;
+  providerModels: Record<string, AIModel[]>;
+  providerModelsLoading: Record<string, boolean>;
+  onLoadModels: (providerId: string) => void;
+  onRefreshModels: (providerId: string) => Promise<{ success: boolean; count?: number; error?: string }>;
+  onSave: (
+    taskType: string,
+    modelId: string | null,
+    params: { temperature?: number; maxTokens?: number; topP?: number },
+    primaryProviderId?: string | null,
+    fallbackProviderId?: string | null,
+    fallbackModelId?: string | null,
+  ) => Promise<void>;
+  onTestConfig?: (
+    providerId: string,
+    modelId: string | null,
+  ) => Promise<{ success: boolean; error?: string }>;
+}
+
+function TaskConfigCard({
+  taskType,
+  taskLabel,
+  taskDescription,
+  config,
+  enabledProviders,
+  providerModels,
+  providerModelsLoading,
+  onLoadModels,
+  onRefreshModels,
+  onSave,
+  onTestConfig,
+}: TaskConfigCardProps) {
+  // Primary configuration state
+  const [primaryProviderId, setPrimaryProviderId] = useState<string | null>(
+    config?.primaryProviderId ?? null,
+  );
+  const [selectedModelId, setSelectedModelId] = useState<string | null>(config?.modelId ?? null);
+  const [temperature, setTemperature] = useState<number | undefined>(config?.temperature ?? undefined);
+  const [maxTokens, setMaxTokens] = useState<number | undefined>(config?.maxTokens ?? undefined);
+  const [topP, setTopP] = useState<number | undefined>(config?.topP ?? undefined);
+
+  // Fallback configuration state
+  const [fallbackEnabled, setFallbackEnabled] = useState<boolean>(
+    !!(config?.fallbackProviderId || config?.fallbackModelId),
+  );
+  const [fallbackProviderId, setFallbackProviderId] = useState<string | null>(
+    config?.fallbackProviderId ?? null,
+  );
+  const [fallbackModelId, setFallbackModelId] = useState<string | null>(
+    config?.fallbackModelId ?? null,
+  );
+
+  // UI state
+  const [isSaving, setIsSaving] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isTesting, setIsTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; error?: string } | null>(null);
+
+  // Get available models for primary provider
+  const primaryModels = primaryProviderId ? (providerModels[primaryProviderId] || []) : [];
+  const primaryModelsLoading = primaryProviderId ? (providerModelsLoading[primaryProviderId] || false) : false;
+
+  // Get available models for fallback provider
+  const fallbackModels = fallbackProviderId ? (providerModels[fallbackProviderId] || []) : [];
+  const fallbackModelsLoading = fallbackProviderId ? (providerModelsLoading[fallbackProviderId] || false) : false;
+
+  // Load models when provider changes
+  useEffect(() => {
+    if (primaryProviderId && !providerModels[primaryProviderId] && !providerModelsLoading[primaryProviderId]) {
+      onLoadModels(primaryProviderId);
+    }
+  }, [primaryProviderId, providerModels, providerModelsLoading, onLoadModels]);
+
+  useEffect(() => {
+    if (fallbackProviderId && !providerModels[fallbackProviderId] && !providerModelsLoading[fallbackProviderId]) {
+      onLoadModels(fallbackProviderId);
+    }
+  }, [fallbackProviderId, providerModels, providerModelsLoading, onLoadModels]);
+
+  // Reset form when config changes
+  useEffect(() => {
+    setPrimaryProviderId(config?.primaryProviderId ?? null);
+    setSelectedModelId(config?.modelId ?? null);
+    setTemperature(config?.temperature ?? undefined);
+    setMaxTokens(config?.maxTokens ?? undefined);
+    setTopP(config?.topP ?? undefined);
+    setFallbackEnabled(!!(config?.fallbackProviderId || config?.fallbackModelId));
+    setFallbackProviderId(config?.fallbackProviderId ?? null);
+    setFallbackModelId(config?.fallbackModelId ?? null);
+    setTestResult(null);
+  }, [config]);
+
+  // Handle primary provider change
+  const handlePrimaryProviderChange = useCallback((value: string) => {
+    const newProviderId = value === 'default' ? null : value;
+    setPrimaryProviderId(newProviderId);
+    setSelectedModelId(null); // Reset model when provider changes
+    setTestResult(null);
+  }, []);
+
+  // Handle fallback provider change
+  const handleFallbackProviderChange = useCallback((value: string) => {
+    const newProviderId = value === 'none' ? null : value;
+    setFallbackProviderId(newProviderId);
+    setFallbackModelId(null); // Reset model when provider changes
+  }, []);
+
+  // Handle refresh models
+  const handleRefreshModels = useCallback(async () => {
+    if (!primaryProviderId) return;
+    setTestResult(null);
+    await onRefreshModels(primaryProviderId);
+  }, [primaryProviderId, onRefreshModels]);
+
+  // Handle test configuration
+  const handleTestConfig = useCallback(async () => {
+    if (!onTestConfig || !primaryProviderId) return;
+    setIsTesting(true);
+    setTestResult(null);
+    try {
+      const result = await onTestConfig(primaryProviderId, selectedModelId);
+      setTestResult(result);
+    } catch (err) {
+      setTestResult({ success: false, error: err instanceof Error ? err.message : 'Test failed' });
+    } finally {
+      setIsTesting(false);
+    }
+  }, [onTestConfig, primaryProviderId, selectedModelId]);
+
+  // Handle save
+  const handleSave = useCallback(async () => {
+    setIsSaving(true);
+    try {
+      await onSave(
+        taskType,
+        selectedModelId,
+        { temperature, maxTokens, topP },
+        primaryProviderId,
+        fallbackEnabled ? fallbackProviderId : null,
+        fallbackEnabled ? fallbackModelId : null,
+      );
+      toast.success(`${taskLabel} configuration saved`);
+    } catch {
+      toast.error(`Failed to save ${taskLabel} configuration`);
+    } finally {
+      setIsSaving(false);
+    }
+  }, [
+    onSave,
+    taskType,
+    selectedModelId,
+    temperature,
+    maxTokens,
+    topP,
+    primaryProviderId,
+    fallbackEnabled,
+    fallbackProviderId,
+    fallbackModelId,
+    taskLabel,
+  ]);
+
+  // Handle reset
+  const handleReset = useCallback(() => {
+    setPrimaryProviderId(config?.primaryProviderId ?? null);
+    setSelectedModelId(config?.modelId ?? null);
+    setTemperature(config?.temperature ?? undefined);
+    setMaxTokens(config?.maxTokens ?? undefined);
+    setTopP(config?.topP ?? undefined);
+    setFallbackEnabled(!!(config?.fallbackProviderId || config?.fallbackModelId));
+    setFallbackProviderId(config?.fallbackProviderId ?? null);
+    setFallbackModelId(config?.fallbackModelId ?? null);
+    setTestResult(null);
+  }, [config]);
+
+  // Check for changes
+  const hasChanges =
+    primaryProviderId !== (config?.primaryProviderId ?? null) ||
+    selectedModelId !== (config?.modelId ?? null) ||
+    temperature !== (config?.temperature ?? undefined) ||
+    maxTokens !== (config?.maxTokens ?? undefined) ||
+    topP !== (config?.topP ?? undefined) ||
+    fallbackEnabled !== !!(config?.fallbackProviderId || config?.fallbackModelId) ||
+    fallbackProviderId !== (config?.fallbackProviderId ?? null) ||
+    fallbackModelId !== (config?.fallbackModelId ?? null);
+
+  // Get status info
+  const getStatusInfo = () => {
+    if (!primaryProviderId && !config?.modelId) {
+      return {
+        icon: <AlertCircle className="h-4 w-4 text-amber-500" />,
+        text: 'Using default model',
+        color: 'text-amber-600',
+      };
+    }
+    const provider = enabledProviders.find((p) => p.id === primaryProviderId);
+    const model = primaryModels.find((m) => m.id === selectedModelId);
+    if (provider && model) {
+      return {
+        icon: <CheckCircle className="h-4 w-4 text-teal-500" />,
+        text: `Primary: ${provider.displayName} — ${model.displayName}`,
+        color: 'text-teal-600',
+      };
+    }
+    if (config?.model) {
+      return {
+        icon: <CheckCircle className="h-4 w-4 text-teal-500" />,
+        text: `Primary: ${config.model.provider?.displayName || 'Unknown'} — ${config.model.displayName}`,
+        color: 'text-teal-600',
+      };
+    }
+    return {
+      icon: <CheckCircle className="h-4 w-4 text-teal-500" />,
+      text: 'Primary configured',
+      color: 'text-teal-600',
+    };
+  };
+
+  const status = getStatusInfo();
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-teal-100 flex items-center justify-center">
+              <Cog className="h-5 w-5 text-teal-600" />
+            </div>
+            <div>
+              <CardTitle className="text-lg">{taskLabel}</CardTitle>
+              <CardDescription className="text-xs">{taskDescription}</CardDescription>
+            </div>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setIsExpanded(!isExpanded)}
+          >
+            {isExpanded ? (
+              <ChevronDown className="h-4 w-4" />
+            ) : (
+              <ChevronRight className="h-4 w-4" />
+            )}
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {/* Current Config Summary */}
+        <div className="flex items-center gap-4 text-sm">
+          <div className="flex items-center gap-1">
+            {status.icon}
+            <span className={status.color}>{status.text}</span>
+          </div>
+          {config?.fallbackProviderId && (
+            <Badge variant="outline" className="text-xs text-blue-600 border-blue-300">
+              Fallback: {config.fallbackProvider?.displayName || 'Configured'}
+            </Badge>
+          )}
+        </div>
+
+        {/* Expanded Configuration */}
+        {isExpanded && (
+          <div className="pt-3 border-t space-y-6">
+            {/* Primary Configuration */}
+            <div className="space-y-4">
+              <h4 className="text-sm font-medium text-muted-foreground">Primary Configuration</h4>
+
+              {/* Provider Selection */}
+              <div className="space-y-2">
+                <Label>Provider</Label>
+                <Select
+                  value={primaryProviderId || 'default'}
+                  onValueChange={handlePrimaryProviderChange}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a provider" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="default">
+                      <div className="flex items-center gap-2">
+                        <span className="text-muted-foreground">Use Default Provider</span>
+                      </div>
+                    </SelectItem>
+                    {enabledProviders
+                      .filter((p) => p.hasValidApiKey)
+                      .map((provider) => (
+                        <SelectItem key={provider.id} value={provider.id}>
+                          <div className="flex items-center gap-2">
+                            <span>{provider.displayName}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Select a provider for this task, or use the default provider.
+                </p>
+              </div>
+
+              {/* Model Selection */}
+              {primaryProviderId && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label>Model</Label>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleRefreshModels}
+                      disabled={primaryModelsLoading}
+                    >
+                      <RefreshCw className={cn('h-4 w-4 mr-1', primaryModelsLoading && 'animate-spin')} />
+                      Refresh
+                    </Button>
+                  </div>
+                  {primaryModelsLoading ? (
+                    <Skeleton className="h-10 w-full" />
+                  ) : primaryModels.length === 0 ? (
+                    <div className="text-sm text-muted-foreground p-3 border rounded-lg flex items-center justify-between">
+                      <span>No models available</span>
+                      <Button variant="outline" size="sm" onClick={handleRefreshModels}>
+                        <RefreshCw className="h-4 w-4 mr-1" />
+                        Load Models
+                      </Button>
+                    </div>
+                  ) : (
+                    <Select
+                      value={selectedModelId || 'default'}
+                      onValueChange={(value) => setSelectedModelId(value === 'default' ? null : value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a model" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="default">
+                          <div className="flex items-center gap-2">
+                            <span className="text-muted-foreground">Use Default Model</span>
+                          </div>
+                        </SelectItem>
+                        {primaryModels.map((model) => (
+                          <SelectItem key={model.id} value={model.id}>
+                            <div className="flex items-center gap-2">
+                              <span>{model.displayName}</span>
+                              {model.isDefault && <Badge variant="secondary">Default</Badge>}
+                              {model.isPreferred && <Badge variant="outline">Preferred</Badge>}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Select a specific model for this task, or use the provider's default model.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Fallback Configuration */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-medium text-muted-foreground">Fallback Configuration (Optional)</h4>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor={`fallback-enabled-${taskType}`} className="text-xs">
+                    Enable fallback
+                  </Label>
+                  <Switch
+                    id={`fallback-enabled-${taskType}`}
+                    checked={fallbackEnabled}
+                    onCheckedChange={setFallbackEnabled}
+                  />
+                </div>
+              </div>
+
+              {fallbackEnabled && (
+                <div className="space-y-4 pl-4 border-l-2 border-muted">
+                  {/* Fallback Provider Selection */}
+                  <div className="space-y-2">
+                    <Label>Fallback Provider</Label>
+                    <Select
+                      value={fallbackProviderId || 'none'}
+                      onValueChange={handleFallbackProviderChange}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a fallback provider" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">
+                          <div className="flex items-center gap-2">
+                            <span className="text-muted-foreground">None</span>
+                          </div>
+                        </SelectItem>
+                        {enabledProviders
+                          .filter((p) => p.hasValidApiKey && p.id !== primaryProviderId)
+                          .map((provider) => (
+                            <SelectItem key={provider.id} value={provider.id}>
+                              <div className="flex items-center gap-2">
+                                <span>{provider.displayName}</span>
+                              </div>
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Fallback Model Selection */}
+                  {fallbackProviderId && (
+                    <div className="space-y-2">
+                      <Label>Fallback Model</Label>
+                      {fallbackModelsLoading ? (
+                        <Skeleton className="h-10 w-full" />
+                      ) : fallbackModels.length === 0 ? (
+                        <div className="text-sm text-muted-foreground p-3 border rounded-lg">
+                          No models available. Click refresh on the provider to load models.
+                        </div>
+                      ) : (
+                        <Select
+                          value={fallbackModelId || 'none'}
+                          onValueChange={(value) => setFallbackModelId(value === 'none' ? null : value)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a fallback model" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">
+                              <div className="flex items-center gap-2">
+                                <span className="text-muted-foreground">None</span>
+                              </div>
+                            </SelectItem>
+                            {fallbackModels.map((model) => (
+                              <SelectItem key={model.id} value={model.id}>
+                                <div className="flex items-center gap-2">
+                                  <span>{model.displayName}</span>
+                                  {model.isDefault && <Badge variant="secondary">Default</Badge>}
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Generation Parameters */}
+            <div className="space-y-4">
+              <h4 className="text-sm font-medium text-muted-foreground">Generation Parameters</h4>
+
+              {/* Temperature */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor={`temperature-${taskType}`}>Temperature</Label>
+                  <span className="text-sm text-muted-foreground">
+                    {temperature !== undefined ? temperature.toFixed(2) : 'Default'}
+                  </span>
+                </div>
+                <Slider
+                  id={`temperature-${taskType}`}
+                  min={0}
+                  max={2}
+                  step={0.1}
+                  value={temperature !== undefined ? [temperature] : [0.7]}
+                  onValueChange={([value]) => setTemperature(value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Controls randomness. Lower is more deterministic, higher is more creative.
+                </p>
+              </div>
+
+              {/* Max Tokens */}
+              <div className="space-y-2">
+                <Label htmlFor={`maxTokens-${taskType}`}>Max Tokens</Label>
+                <Input
+                  id={`maxTokens-${taskType}`}
+                  type="number"
+                  min={1}
+                  max={128000}
+                  value={maxTokens ?? ''}
+                  onChange={(e) => setMaxTokens(e.target.value ? parseInt(e.target.value) : undefined)}
+                  placeholder="Default (model max)"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Maximum tokens in the response. Leave empty for model default.
+                </p>
+              </div>
+
+              {/* Top P */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor={`topP-${taskType}`}>Top P</Label>
+                  <span className="text-sm text-muted-foreground">
+                    {topP !== undefined ? topP.toFixed(2) : 'Default'}
+                  </span>
+                </div>
+                <Slider
+                  id={`topP-${taskType}`}
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={topP !== undefined ? [topP] : [0.9]}
+                  onValueChange={([value]) => setTopP(value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Nucleus sampling. Controls diversity via probability mass.
+                </p>
+              </div>
+            </div>
+
+            {/* Test Result */}
+            {testResult && (
+              <div
+                className={cn(
+                  'p-3 rounded-lg flex items-center gap-2 text-sm',
+                  testResult.success
+                    ? 'bg-green-50 text-green-700 border border-green-200'
+                    : 'bg-red-50 text-red-700 border border-red-200',
+                )}
+              >
+                {testResult.success ? (
+                  <CheckCircle className="h-4 w-4" />
+                ) : (
+                  <XCircle className="h-4 w-4" />
+                )}
+                {testResult.success ? 'Configuration test passed' : testResult.error}
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex items-center justify-between pt-2">
+              <div className="flex items-center gap-2">
+                {onTestConfig && primaryProviderId && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleTestConfig}
+                    disabled={isTesting}
+                  >
+                    {isTesting ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                    ) : (
+                      <Zap className="h-4 w-4 mr-1" />
+                    )}
+                    Test
+                  </Button>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleReset}
+                  disabled={!hasChanges}
+                >
+                  <Undo2 className="h-4 w-4 mr-1" />
+                  Reset
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleSave}
+                  disabled={isSaving}
+                >
+                  {isSaving ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4 mr-1" />
+                  )}
+                  Save
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// =============================================================================
 // Main Component
 // =============================================================================
 
 export function SmartUploadSettingsClient() {
   const {
     settings,
+    taskConfigs,
     isLoading,
     error,
     refreshSettings,
+    updateTaskConfig,
     toggleFeature,
     saveApiKey,
     enableProvider,
     setDefaultProvider,
+    providerModels,
+    providerModelsLoading,
+    fetchModelsForProvider,
+    refreshModels,
   } = useSmartUploadSettings();
 
   const [selectedProvider, setSelectedProvider] = useState<{
@@ -697,6 +1326,63 @@ export function SmartUploadSettingsClient() {
     setSelectedProvider(provider);
     setIsApiKeyDialogOpen(true);
   }, []);
+
+  const handleUpdateTaskConfig = useCallback(
+    async (
+      taskType: string,
+      modelId: string | null,
+      params: { temperature?: number; maxTokens?: number; topP?: number },
+      primaryProviderId?: string | null,
+      fallbackProviderId?: string | null,
+      fallbackModelId?: string | null,
+    ) => {
+      await updateTaskConfig(
+        taskType,
+        modelId,
+        params,
+        primaryProviderId,
+        fallbackProviderId,
+        fallbackModelId,
+      );
+    },
+    [updateTaskConfig]
+  );
+
+  const handleTestConfig = useCallback(
+    async (
+      providerId: string,
+      _modelId: string | null,
+    ): Promise<{ success: boolean; error?: string }> => {
+      try {
+        const response = await fetch(
+          `/api/admin/smart-upload-settings/providers/${providerId}/validate-key`,
+          { method: 'POST' }
+        );
+        const data = await response.json();
+        return { success: data.valid, error: data.error };
+      } catch (err) {
+        return {
+          success: false,
+          error: err instanceof Error ? err.message : 'Test failed',
+        };
+      }
+    },
+    []
+  );
+
+  const handleRefreshModels = useCallback(
+    async (providerId: string): Promise<{ success: boolean; count?: number; error?: string }> => {
+      return refreshModels(providerId);
+    },
+    [refreshModels]
+  );
+
+  const handleSave = useCallback(
+    async (providerId: string, apiKey: string): Promise<boolean> => {
+      return saveApiKey(providerId, apiKey);
+    },
+    [saveApiKey]
+  );
 
   if (isLoading) {
     return (
@@ -813,12 +1499,46 @@ export function SmartUploadSettingsClient() {
         </CardContent>
       </Card>
 
+      {/* Task Configuration */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Cog className="h-5 w-5 text-primary" />
+            Task Configuration
+          </CardTitle>
+          <CardDescription>
+            Assign specific AI models to different Smart Upload pipeline tasks for cost and
+            performance optimization.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {UPLOAD_TASK_TYPES.map((task) => (
+              <TaskConfigCard
+                key={task.value}
+                taskType={task.value}
+                taskLabel={task.label}
+                taskDescription={task.description}
+                config={taskConfigs.find((c) => c.taskType === task.value)}
+                enabledProviders={settings?.providers.filter((p) => p.hasValidApiKey) || []}
+                providerModels={providerModels}
+                providerModelsLoading={providerModelsLoading}
+                onLoadModels={fetchModelsForProvider}
+                onRefreshModels={handleRefreshModels}
+                onSave={handleUpdateTaskConfig}
+                onTestConfig={handleTestConfig}
+              />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* API Key Dialog */}
       <ApiKeyDialog
         provider={selectedProvider}
         open={isApiKeyDialogOpen}
         onOpenChange={setIsApiKeyDialogOpen}
-        onSave={saveApiKey}
+        onSave={handleSave}
       />
     </div>
   );

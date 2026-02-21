@@ -1,7 +1,7 @@
 /**
- * Smart Upload Providers API
+ * Task Model Configuration API
  *
- * GET: List all AI providers
+ * GET: Get all task model configurations
  *
  * Admin-only access.
  */
@@ -9,11 +9,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth/config';
 import { checkUserPermission } from '@/lib/auth/permissions';
-import { getProviders } from '@/lib/services/smart-upload-settings';
+import { getTaskConfigs } from '@/lib/services/smart-upload-settings';
 import { logger } from '@/lib/logger';
 
 // ============================================================================
-// GET: List all providers
+// GET: Get all task configs
 // ============================================================================
 
 export async function GET(request: NextRequest) {
@@ -33,16 +33,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const providers = await getProviders();
+    const configs = await getTaskConfigs();
 
-    return NextResponse.json({ providers });
+    return NextResponse.json({ configs });
   } catch (error) {
     logger.error(
-      'Failed to get providers',
+      'Failed to get task configs',
       error instanceof Error ? error : new Error(String(error))
     );
     return NextResponse.json(
-      { error: 'Failed to get providers' },
+      { error: 'Failed to get task configs' },
       { status: 500 }
     );
   }

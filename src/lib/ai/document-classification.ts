@@ -41,7 +41,7 @@ export async function classifyExtractedText(
   // Input validation
   if (!ocrText || typeof ocrText !== 'string') {
     return {
-      success: false,
+      data: null,
       error: 'Invalid input: OCR text must be a non-empty string',
       rawResponse: null,
     };
@@ -65,15 +65,14 @@ Provide a structured classification with all extractable metadata.`;
   try {
     // Execute with timeout and retry
     const result = await withTimeout(
-      withRetry(
-        () => generateStructuredOutput<DocumentClassification>(
+      async () => withRetry(
+        async () => generateStructuredOutput<DocumentClassification>(
           userPrompt,
           DocumentClassificationSchema as z.ZodSchema<DocumentClassification>,
           DOCUMENT_CLASSIFICATION_PROMPT
         ),
         MAX_RETRIES,
-        RETRY_DELAY_MS,
-        isRetryableError
+        RETRY_DELAY_MS
       ),
       CLASSIFICATION_TIMEOUT_MS
     );
@@ -86,7 +85,7 @@ Provide a structured classification with all extractable metadata.`;
     // Check for timeout
     if (errorMessage.includes('timed out')) {
       return {
-        success: false,
+        data: null,
         error: 'Document classification timed out',
         rawResponse: null,
       };
@@ -95,7 +94,7 @@ Provide a structured classification with all extractable metadata.`;
     // Check for retry exhaustion
     if (errorMessage.includes('retries') || errorMessage.includes('retry')) {
       return {
-        success: false,
+        data: null,
         error: `Classification failed after ${MAX_RETRIES} retries: ${errorMessage}`,
         rawResponse: null,
       };
@@ -103,7 +102,7 @@ Provide a structured classification with all extractable metadata.`;
 
     // Generic error handling
     return {
-      success: false,
+      data: null,
       error: `Classification failed: ${errorMessage}`,
       rawResponse: null,
     };

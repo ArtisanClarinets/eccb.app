@@ -37,6 +37,11 @@ export interface AIModel {
   isAvailable: boolean;
   lastFetched: Date | string | null;
   parameters: ModelParameter[];
+  provider?: {
+    id: string;
+    providerId: string;
+    displayName: string;
+  } | null;
 }
 
 export interface ModelParameter {
@@ -68,15 +73,53 @@ export interface SettingsStatus {
   providers: ProviderWithStatus[];
 }
 
+export interface TaskModelConfig {
+  id: string;
+  taskType: string;
+  primaryProviderId: string | null;
+  modelId: string | null;
+  fallbackProviderId: string | null;
+  fallbackModelId: string | null;
+  temperature: number | null;
+  maxTokens: number | null;
+  topP: number | null;
+  createdAt: string;
+  updatedAt: string;
+  model?: {
+    id: string;
+    modelId: string;
+    displayName: string;
+    provider?: { id: string; providerId: string; displayName: string } | null;
+  } | null;
+  primaryProvider?: { id: string; providerId: string; displayName: string } | null;
+  fallbackProvider?: { id: string; providerId: string; displayName: string } | null;
+  fallbackModel?: {
+    id: string;
+    modelId: string;
+    displayName: string;
+    provider?: { id: string; providerId: string; displayName: string } | null;
+  } | null;
+}
+
 // =============================================================================
 // Hook Return Type
 // =============================================================================
 
 export interface UseSmartUploadSettingsReturn {
   settings: SettingsStatus | null;
+  taskConfigs: TaskModelConfig[];
   isLoading: boolean;
   error: string | null;
   refreshSettings: () => Promise<void>;
+  fetchTaskConfigs: () => Promise<void>;
+  updateTaskConfig: (
+    taskType: string,
+    modelId: string | null,
+    params: { temperature?: number; maxTokens?: number; topP?: number },
+    primaryProviderId?: string | null,
+    fallbackProviderId?: string | null,
+    fallbackModelId?: string | null,
+  ) => Promise<void>;
   updateSetting: (key: string, value: string) => Promise<void>;
   toggleFeature: (enabled: boolean) => Promise<void>;
   saveApiKey: (providerId: string, apiKey: string) => Promise<boolean>;
@@ -86,6 +129,9 @@ export interface UseSmartUploadSettingsReturn {
   getModels: (providerId: string) => Promise<AIModel[]>;
   refreshModels: (providerId: string) => Promise<{ success: boolean; count?: number; error?: string }>;
   updateModelParameters: (modelId: string, parameters: Record<string, number | string>) => Promise<void>;
+  providerModels: Record<string, AIModel[]>;
+  providerModelsLoading: Record<string, boolean>;
+  fetchModelsForProvider: (providerId: string) => Promise<void>;
 }
 
 // =============================================================================
@@ -97,8 +143,11 @@ export interface UseSmartUploadSettingsReturn {
  */
 export function useSmartUploadSettings(): UseSmartUploadSettingsReturn {
   const [settings, setSettings] = useState<SettingsStatus | null>(null);
+  const [taskConfigs, setTaskConfigs] = useState<TaskModelConfig[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [providerModels, setProviderModels] = useState<Record<string, AIModel[]>>({});
+  const [providerModelsLoading, setProviderModelsLoading] = useState<Record<string, boolean>>({});
 
   const refreshSettings = useCallback(async () => {
     setIsLoading(true);
@@ -122,9 +171,98 @@ export function useSmartUploadSettings(): UseSmartUploadSettingsReturn {
     }
   }, []);
 
+  const fetchTaskConfigs = useCallback(async () => {
+    setError(null);
+
+    try {
+      const response = await fetch('/api/admin/smart-upload-settings/tasks');
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to fetch task configs');
+      }
+
+      const data = await response.json();
+      setTaskConfigs(data.configs || []);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      setError(errorMessage);
+    }
+  }, []);
+
+  const fetchModelsForProvider = useCallback(async (providerId: string) => {
+    if (providerModels[providerId]) return; // already cached
+    setProviderModelsLoading((prev) => ({ ...prev, [providerId]: true }));
+    try {
+      const response = await fetch(`/api/admin/smart-upload-settings/providers/${providerId}/models`);
+      if (response.ok) {
+        const data = await response.json();
+        setProviderModels((prev) => ({ ...prev, [providerId]: data.models || [] }));
+      }
+    } catch {
+      // ignore
+    } finally {
+      setProviderModelsLoading((prev) => ({ ...prev, [providerId]: false }));
+    }
+  }, [providerModels]);
+
+  const updateTaskConfig = useCallback(
+    async (
+      taskType: string,
+      modelId: string | null,
+      params: { temperature?: number; maxTokens?: number; topP?: number },
+      primaryProviderId?: string | null,
+      fallbackProviderId?: string | null,
+      fallbackModelId?: string | null,
+    ): Promise<void> => {
+      setError(null);
+
+      try {
+        const response = await fetch(
+          `/api/admin/smart-upload-settings/tasks/${taskType}`,
+          {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              modelId,
+              primaryProviderId,
+              fallbackProviderId,
+              fallbackModelId,
+              ...params,
+            }),
+          }
+        );
+
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || 'Failed to update task config');
+        }
+
+        const data = await response.json();
+        setTaskConfigs((prev) => {
+          const existing = prev.findIndex((c) => c.taskType === taskType);
+          if (existing >= 0) {
+            const updated = [...prev];
+            updated[existing] = data.config;
+            return updated;
+          }
+          return [...prev, data.config];
+        });
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+        setError(errorMessage);
+        throw err;
+      }
+    },
+    []
+  );
+
   useEffect(() => {
     refreshSettings();
-  }, [refreshSettings]);
+    fetchTaskConfigs();
+  }, [refreshSettings, fetchTaskConfigs]);
 
   const updateSetting = useCallback(async (key: string, value: string) => {
     setError(null);
@@ -388,9 +526,12 @@ export function useSmartUploadSettings(): UseSmartUploadSettingsReturn {
 
   return {
     settings,
+    taskConfigs,
     isLoading,
     error,
     refreshSettings,
+    fetchTaskConfigs,
+    updateTaskConfig,
     updateSetting,
     toggleFeature,
     saveApiKey,
@@ -400,6 +541,9 @@ export function useSmartUploadSettings(): UseSmartUploadSettingsReturn {
     getModels,
     refreshModels,
     updateModelParameters,
+    providerModels,
+    providerModelsLoading,
+    fetchModelsForProvider,
   };
 }
 

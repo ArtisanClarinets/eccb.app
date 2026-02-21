@@ -303,10 +303,11 @@ describe('Smart Upload Worker', () => {
   describe('Cleanup Job', () => {
     it('should delete uploaded files on cancellation', async () => {
       const { deleteFile } = await import('@/lib/services/storage');
+      const mockDeleteFile = vi.mocked(deleteFile);
       
       const mockItem = createMockItem({ storageKey: 'uploads/test.pdf' });
       prisma.smartUploadItem.findUnique.mockResolvedValue(mockItem);
-      deleteFile.mockResolvedValue(undefined);
+      mockDeleteFile.mockResolvedValue(undefined);
 
       const item = await prisma.smartUploadItem.findUnique({
         where: { id: 'item-123' },
@@ -316,7 +317,7 @@ describe('Smart Upload Worker', () => {
         await deleteFile(item.storageKey);
       }
 
-      expect(deleteFile).toHaveBeenCalledWith('uploads/test.pdf');
+      expect(mockDeleteFile).toHaveBeenCalledWith('uploads/test.pdf');
     });
 
     it('should update item status to cancelled', async () => {
@@ -360,8 +361,9 @@ describe('Smart Upload Worker', () => {
 
     it('should handle download failures', async () => {
       const { downloadFile } = await import('@/lib/services/storage');
+      const mockDownloadFile = vi.mocked(downloadFile);
       
-      downloadFile.mockRejectedValue(new Error('Download failed'));
+      mockDownloadFile.mockRejectedValue(new Error('Download failed'));
 
       await expect(downloadFile('invalid-key')).rejects.toThrow('Download failed');
     });

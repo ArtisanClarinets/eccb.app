@@ -370,6 +370,15 @@ enum SmartUploadStep {
   INGESTED
 }
 
+// Upload Pipeline Task Types for model assignment
+enum UploadTaskType {
+  METADATA_EXTRACTION
+  AUDIO_ANALYSIS
+  SUMMARIZATION
+  TRANSCRIPTION
+  CLASSIFICATION
+}
+
 model MusicFile {
   id                String   @id @default(cuid())
   pieceId           String
@@ -390,7 +399,7 @@ model MusicFile {
   contentHash          String?   // For deduplication
   extractedMetadata    Json?     // LLM-extracted metadata
   ocrText              String?   @db.Text // OCR-extracted text
-  source               String?   // Original source (e.g., "smart_upload", "manual")
+  source               String?
   originalUploadId     String?   // Link to SmartUploadItem if uploaded via smart upload
 
   piece       MusicPiece @relation(fields: [pieceId], references: [id], onDelete: Cascade)
@@ -683,6 +692,8 @@ model AIProvider {
   // Relations
   apiKeys      APIKey[]
   models       AIModel[]
+  primaryTaskConfigs  TaskModelConfig[]  @relation("TaskPrimaryProvider")
+  fallbackTaskConfigs TaskModelConfig[]  @relation("TaskFallbackProvider")
 
   @@index([isEnabled])
   @@index([sortOrder])
@@ -693,7 +704,7 @@ model APIKey {
   id              String    @id @default(cuid())
   providerId      String
   keyName         String?   // Optional name for identification
-  encryptedKey    String    // AES-256 encrypted API key
+  encryptedKey    String    @db.Text // AES-256 encrypted API key (IV:authTag:cipherText hex format)
   keyHash         String    // SHA-256 hash for validation (never decrypted)
   isValid         Boolean   @default(false)
   validationError String?   // Last validation error
@@ -741,10 +752,13 @@ model AIModel {
   // Relations
   provider               AIProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
   parameters             ModelParameter[]
+  taskConfigs            TaskModelConfig[]
+  fallbackTaskConfigs    TaskModelConfig[]  @relation("TaskFallbackModel")
 
   @@unique([providerId, modelId])
   @@index([providerId])
   @@index([isDefault])
+  @@index([isPreferred])
 }
 
 // Configurable Parameters per Model
@@ -808,6 +822,62 @@ model SettingsAuditLog {
   @@index([timestamp])
   @@index([changedBy])
 }
+
+// Task-specific Model Configuration for Upload Pipeline
+model TaskModelConfig {
+  id          String          @id @default(cuid())
+  taskType    UploadTaskType  @unique // One config per task type
+
+  // Model assignment (null = use global default)
+  modelId     String?         // Reference to AIModel.id
+
+  // Provider assignment for primary and fallback
+  primaryProviderId  String?    // FK to AIProvider.id — which provider to use
+  fallbackProviderId String?    // FK to AIProvider.id — fallback if primary fails
+  fallbackModelId    String?    // FK to AIModel.id — fallback model if primary fails
+
+  // Task-specific parameters
+  temperature Float?          // 0-2 range
+  maxTokens   Int?            // 1-128000 range
+  topP        Float?          // 0-1 range
+
+  // Timestamps
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  // Relation (optional - modelId can be null for default behavior)
+  model       AIModel?        @relation(fields: [modelId], references: [id], onDelete: SetNull)
+  primaryProvider AIProvider? @relation("TaskPrimaryProvider", fields: [primaryProviderId], references: [id], onDelete: SetNull)
+  fallbackProvider AIProvider? @relation("TaskFallbackProvider", fields: [fallbackProviderId], references: [id], onDelete: SetNull)
+  fallbackModel AIModel?      @relation("TaskFallbackModel", fields: [fallbackModelId], references: [id], onDelete: SetNull)
+
+  @@index([taskType])
+  @@index([modelId])
+  @@index([primaryProviderId])
+  @@index([fallbackProviderId])
+  @@index([fallbackModelId])
+}
+
+/*
+ * deprecates:
+ *
+ * model MicrosoftGraphClientUser {
+ *   id            String    @id @unique
+ *   email         String
+ *   accessToken   String?
+ *   refreshToken  String?
+ *   scope         String?
+ *   expiresAt   DateTime?
+ * }
+ *
+ * model FreshBooksProviderUser {
+ *   id            String    @id @unique
+ *   accessToken   String?
+ *   refreshToken  String?
+ *   scope         String?
+ *   expiresAt   DateTime?
+ * }
+ */
 
 enum AssignmentStatus {
   ASSIGNED      // Music assigned to member, waiting for pickup

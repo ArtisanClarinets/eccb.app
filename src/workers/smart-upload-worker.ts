@@ -13,9 +13,8 @@
 import { Job } from 'bullmq';
 
 import { prisma } from '@/lib/db';
-import { createWorker, QUEUE_NAMES } from '@/lib/jobs/queue';
+import { createWorker } from '@/lib/jobs/queue';
 import {
-  JOB_CONFIGS,
   SMART_UPLOAD_JOBS,
   type SmartUploadExtractTextPayload,
   type SmartUploadLlmPayload,
@@ -27,8 +26,17 @@ import { logger } from '@/lib/logger';
 import { downloadFile, uploadFile, deleteFile } from '@/lib/services/storage';
 import { extractTextFromPdf } from '@/lib/services/smart-upload/text-extraction';
 import { splitPdf, createSplitPlanFromClassification } from '@/lib/services/smart-upload/pdf-splitter';
-import { extractMusicMetadata, classifyParts, classifyExtractedText } from '@/lib/ai';
-import { SmartUploadStatus, SmartUploadStep } from '@prisma/client';
+import {
+  // Dynamic provider imports for task-specific model configuration
+  generateStructuredOutputForTask,
+  MusicMetadataSchema,
+  MUSIC_METADATA_PROMPT,
+  PartClassificationSchema,
+  PART_CLASSIFICATION_PROMPT,
+  DocumentClassificationSchema,
+  DOCUMENT_CLASSIFICATION_PROMPT,
+} from '@/lib/ai';
+import { SmartUploadStatus, SmartUploadStep, UploadTaskType } from '@prisma/client';
 
 // =============================================================================
 // Job Processors
@@ -90,14 +98,21 @@ async function handleExtractText(job: Job<SmartUploadExtractTextPayload>): Promi
 
     await job.updateProgress(80);
 
-    // Classify the document
-    const classificationResult = await classifyExtractedText(
-      extractionResult.text,
-      extractionResult.pageCount
+    // Classify the document using task-specific model configuration
+    // This uses the CLASSIFICATION task type from the database settings
+    const classificationResult = await generateStructuredOutputForTask(
+      UploadTaskType.CLASSIFICATION,
+      `Analyze the following OCR-extracted text and classify the document:
+
+${extractionResult.text}${extractionResult.pageCount ? `\n\nDocument has ${extractionResult.pageCount} page(s).` : ''}
+
+Provide a structured classification with all extractable metadata.`,
+      DocumentClassificationSchema,
+      DOCUMENT_CLASSIFICATION_PROMPT
     );
 
     // Update item with classification if successful
-    if (classificationResult.success && classificationResult.data) {
+    if (classificationResult.data) {
       await prisma.smartUploadItem.update({
         where: { id: itemId },
         data: {
@@ -111,8 +126,8 @@ async function handleExtractText(job: Job<SmartUploadExtractTextPayload>): Promi
       logger.info('Document classification completed', {
         jobId: job.id,
         itemId,
-        documentType: classificationResult.data.documentType,
-        confidence: classificationResult.data.confidence,
+        documentType: (classificationResult.data as { documentType?: string })?.documentType,
+        confidence: (classificationResult.data as { confidence?: number })?.confidence,
       });
     } else {
       logger.warn('Document classification failed', {
@@ -177,8 +192,14 @@ async function handleLlmExtractMetadata(job: Job<SmartUploadLlmPayload>): Promis
 
     await job.updateProgress(20);
 
-    // Extract music metadata using AI
-    const metadataResult = await extractMusicMetadata(item.ocrText);
+    // Extract music metadata using AI with task-specific model configuration
+    // This uses the METADATA_EXTRACTION task type from the database settings
+    const metadataResult = await generateStructuredOutputForTask(
+      UploadTaskType.METADATA_EXTRACTION,
+      item.ocrText,
+      MusicMetadataSchema,
+      MUSIC_METADATA_PROMPT
+    );
 
     await job.updateProgress(60);
 
@@ -249,8 +270,14 @@ async function handleClassifyAndPlan(job: Job<SmartUploadLlmPayload>): Promise<v
 
     await job.updateProgress(20);
 
-    // Classify parts using AI
-    const classificationResult = await classifyParts(item.ocrText);
+    // Classify parts using AI with task-specific model configuration
+    // This uses the CLASSIFICATION task type from the database settings
+    const classificationResult = await generateStructuredOutputForTask(
+      UploadTaskType.CLASSIFICATION,
+      item.ocrText,
+      PartClassificationSchema,
+      PART_CLASSIFICATION_PROMPT
+    );
 
     await job.updateProgress(60);
 
@@ -258,15 +285,25 @@ async function handleClassifyAndPlan(job: Job<SmartUploadLlmPayload>): Promise<v
       throw new Error(classificationResult.error || 'Failed to classify parts');
     }
 
-    const classification = classificationResult.data;
+    const aiClassification = classificationResult.data;
 
     // Determine if this is a packet (needs splitting)
-    const isPacket = classification.parts.length > 1;
+    const isPacket = aiClassification.parts.length > 1;
 
     // Create split plan if needed
     let splitPlan = null;
     if (isPacket) {
-      splitPlan = createSplitPlanFromClassification(classification);
+      // Convert AI classification format to smart-upload types format
+      const classificationForSplit: import('@/lib/services/smart-upload/smart-upload.types').PartClassification = {
+        parts: aiClassification.parts.map((part) => ({
+          instrument: part.instrument,
+          pages: Array.from({ length: part.endPage - part.startPage + 1 }, (_, i) => part.startPage + i),
+          confidence: part.confidence === 'high' ? 0.9 : part.confidence === 'medium' ? 0.6 : 0.3,
+        })),
+        totalPages: aiClassification.parts.reduce((max, part) => Math.max(max, part.endPage), 0),
+        confidence: aiClassification.parts[0]?.confidence === 'high' ? 0.9 : 0.6,
+      };
+      splitPlan = createSplitPlanFromClassification(classificationForSplit);
     }
 
     // Update item with classification results
@@ -295,7 +332,7 @@ async function handleClassifyAndPlan(job: Job<SmartUploadLlmPayload>): Promise<v
       jobId: job.id,
       itemId,
       isPacket,
-      partsCount: classification.parts.length,
+      partsCount: aiClassification.parts.length,
     });
 
     // If it's a packet that needs splitting, enqueue split job after approval
@@ -435,20 +472,31 @@ async function handleIngest(job: Job<SmartUploadIngestPayload>): Promise<void> {
         const item = items[i];
 
         try {
-          // Create music library entry
-          // Note: This is a simplified version - actual implementation would create
-          // Music and MusicAssignment records
-          await tx.music.create({
+          // Create music piece entry
+          const musicPiece = await tx.musicPiece.create({
             data: {
               title: (item.extractedMeta as { title?: string })?.title || item.fileName,
-              composer: (item.extractedMeta as { composer?: string })?.composer || 'Unknown',
-              arrangement: (item.extractedMeta as { arrangement?: string })?.arrangement || '',
-              publisher: (item.extractedMeta as { publisher?: string })?.publisher || '',
-              storageKey: item.storageKey || '',
-              source: 'smart_upload',
-              originalUploadId: item.id,
+              // Composer, arranger, publisher would need to be resolved to IDs
+              // For now, store in notes
+              notes: `Composer: ${(item.extractedMeta as { composer?: string })?.composer || 'Unknown'}\nArranger: ${(item.extractedMeta as { arrangement?: string })?.arrangement || ''}\nPublisher: ${(item.extractedMeta as { publisher?: string })?.publisher || ''}`,
             },
           });
+
+          // Create music file entry linked to the piece
+          if (item.storageKey) {
+            await tx.musicFile.create({
+              data: {
+                pieceId: musicPiece.id,
+                fileName: item.fileName,
+                fileType: 'PART',
+                fileSize: item.fileSize,
+                mimeType: item.mimeType,
+                storageKey: item.storageKey,
+                source: 'smart_upload',
+                originalUploadId: item.id,
+              },
+            });
+          }
 
           // Update item status
           await tx.smartUploadItem.update({
@@ -597,14 +645,13 @@ async function handleCleanup(job: Job<SmartUploadCleanupPayload>): Promise<void>
 /**
  * Enqueue a Smart Upload job
  */
-async function enqueueJob<T extends keyof typeof SMART_UPLOAD_JOBS>(
-  jobName: T,
-  data: Parameters<typeof SMART_UPLOAD_JOBS[T] extends string ? infer P : never>[0] extends infer D ? D extends object ? D : never : never
+async function enqueueJob(
+  jobName: string,
+  data: SmartUploadExtractTextPayload | SmartUploadLlmPayload | SmartUploadSplitPayload | SmartUploadIngestPayload | SmartUploadCleanupPayload
 ): Promise<void> {
   const { addJob } = await import('@/lib/jobs/queue');
-  const jobType = SMART_UPLOAD_JOBS[jobName] as Parameters<typeof addJob>[0];
 
-  await addJob(jobType as Parameters<typeof addJob>[0], data as Parameters<typeof addJob>[1]);
+  await addJob(jobName as Parameters<typeof addJob>[0], data as Parameters<typeof addJob>[1]);
 }
 
 /**
@@ -627,7 +674,7 @@ async function handleJobError(
       data: {
         status: SmartUploadStatus.FAILED,
         errorMessage: error instanceof Error ? error.message : String(error),
-        errorDetails: error instanceof Error ? { stack: error.stack } : null,
+        errorDetails: error instanceof Error ? { stack: error.stack } : undefined,
       },
     });
   } catch {
@@ -645,8 +692,6 @@ let smartUploadWorker: ReturnType<typeof createWorker> | null = null;
  * Start the Smart Upload worker
  */
 export function startSmartUploadWorker(): void {
-  const config = JOB_CONFIGS['smartUpload.extractText'];
-
   smartUploadWorker = createWorker({
     queueName: 'SMART_UPLOAD',
     concurrency: 3,

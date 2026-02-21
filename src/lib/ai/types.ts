@@ -129,7 +129,7 @@ export interface Usage {
 export interface StructuredExtractionResult<T> {
   data: T | null;
   error: string | null;
-  rawResponse: string;
+  rawResponse: string | null;
   usage?: Usage;
 }
 
