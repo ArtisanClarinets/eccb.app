@@ -28,6 +28,17 @@ import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import { Loader2, User, Shield, Bell, Lock, Smartphone } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 const profileSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -59,7 +70,7 @@ export function MemberSettingsForm({ user }: MemberSettingsFormProps) {
   const router = useRouter();
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
-  const [_is2FADialogOpen, setIs2FADialogOpen] = useState(false);
+  const [is2FADialogOpen, setIs2FADialogOpen] = useState(false);
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(user.twoFactorEnabled ?? false);
 
   const profileForm = useForm<ProfileFormValues>({

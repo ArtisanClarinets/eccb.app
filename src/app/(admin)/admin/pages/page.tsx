@@ -25,6 +25,7 @@ import {
   FileText,
   Plus,
   MoreHorizontal,
+  Eye,
   Edit,
   ExternalLink,
   Globe,

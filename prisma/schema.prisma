@@ -3,6 +3,7 @@ generator client {
 }
 
 datasource db {
+  url = env("DATABASE_URL")
   provider = "mysql"
 }
 
@@ -351,62 +352,21 @@ enum FileType {
   OTHER
 }
 
-// ====================================
-// Smart Upload Enums
-// ====================================
-
-enum SmartUploadStatus {
-  CREATED
-  UPLOADING
-  PROCESSING
-  NEEDS_REVIEW
-  APPROVED
-  INGESTING
-  COMPLETE
-  FAILED
-  CANCELLED
-}
-
-enum SmartUploadStep {
-  VALIDATED
-  TEXT_EXTRACTED
-  METADATA_EXTRACTED
-  SPLIT_PLANNED
-  SPLIT_COMPLETE
-  INGESTED
-}
-
-// Upload Pipeline Task Types for model assignment
-enum UploadTaskType {
-  METADATA_EXTRACTION
-  AUDIO_ANALYSIS
-  SUMMARIZATION
-  TRANSCRIPTION
-  CLASSIFICATION
-}
-
 model MusicFile {
-  id                String   @id @default(cuid())
-  pieceId           String
-  fileName          String
-  fileType          FileType
-  fileSize          Int
-  mimeType          String
-  storageKey        String
-  storageUrl        String?
-  version           Int      @default(1)
-  description       String?
-  isPublic          Boolean  @default(false)
-  isArchived        Boolean  @default(false)
-  uploadedAt        DateTime @default(now())
-  uploadedBy        String?
-
-  // Smart Upload extended fields
-  contentHash          String?   // For deduplication
-  extractedMetadata    Json?     // LLM-extracted metadata
-  ocrText              String?   @db.Text // OCR-extracted text
-  source               String?
-  originalUploadId     String?   // Link to SmartUploadItem if uploaded via smart upload
+  id          String   @id @default(cuid())
+  pieceId     String
+  fileName    String
+  fileType    FileType
+  fileSize    Int
+  mimeType    String
+  storageKey  String
+  storageUrl  String?
+  version     Int      @default(1)
+  description String?
+  isPublic    Boolean  @default(false)
+  isArchived  Boolean  @default(false)
+  uploadedAt  DateTime @default(now())
+  uploadedBy  String?
 
   piece       MusicPiece @relation(fields: [pieceId], references: [id], onDelete: Cascade)
   parts       MusicPart[]
@@ -527,363 +487,6 @@ model MusicAssignmentHistory {
   @@index([assignmentId])
   @@index([performedAt])
 }
-
-// ====================================
-// Smart Upload Models
-// ====================================
-
-/**
- * SmartUploadBatch - Top-level batch owned by a user
- * Represents a single drag-and-drop upload session
- */
-model SmartUploadBatch {
-  id              String           @id @default(cuid())
-  userId          String           // Owner of the batch
-  status          SmartUploadStatus @default(CREATED)
-  currentStep     SmartUploadStep?
-
-  // Summary counts
-  totalFiles      Int              @default(0)
-  processedFiles  Int              @default(0)
-  successFiles    Int              @default(0)
-  failedFiles     Int              @default(0)
-
-  // Timestamps
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  completedAt     DateTime?
-
-  // Error summary
-  errorSummary    String?
-
-  // Relations
-  items           SmartUploadItem[]
-  proposals       SmartUploadProposal[]
-
-  @@index([userId])
-  @@index([status])
-  @@index([createdAt])
-}
-
-/**
- * SmartUploadItem - Each uploaded file in a batch
- * Tracks per-step status, errors, and derived artifacts
- */
-model SmartUploadItem {
-  id              String           @id @default(cuid())
-  batchId         String
-
-  // File info
-  fileName        String
-  fileSize        Int
-  mimeType        String
-  storageKey      String?
-
-  // Processing status
-  status          SmartUploadStatus @default(CREATED)
-  currentStep     SmartUploadStep?
-
-  // Error tracking
-  errorMessage    String?
-  errorDetails    Json?
-
-  // Extracted content
-  ocrText         String?          @db.Text
-  extractedMeta   Json?            // Raw LLM-extracted metadata
-
-  // Split tracking (for packet PDFs)
-  isPacket        Boolean          @default(false)
-  splitPages      Int?             // Number of pages if split
-  splitFiles      Json?            // Array of split file info
-
-  // Timestamps
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  completedAt     DateTime?
-
-  // Relations
-  batch           SmartUploadBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  proposals       SmartUploadProposal[]
-
-  @@index([batchId])
-  @@index([status])
-}
-
-/**
- * SmartUploadProposal - Normalized extracted metadata + mapping
- * Represents the AI-generated proposal for review and approval
- */
-model SmartUploadProposal {
-  id              String           @id @default(cuid())
-  itemId          String
-  batchId         String
-
-  // Proposed metadata
-  title           String?
-  composer        String?
-  arranger        String?
-  publisher       String?
-  difficulty      String?
-  genre           String?
-  style           String?
-  instrumentation String?
-  duration        Int?
-  notes           String?
-
-  // Confidence scores (0-1)
-  titleConfidence     Float?
-  composerConfidence  Float?
-  difficultyConfidence Float?
-
-  // Approval status
-  isApproved      Boolean          @default(false)
-  approvedAt      DateTime?
-  approvedBy      String?
-
-  // User corrections (JSON blob of field -> corrected value)
-  corrections     Json?
-
-  // Mapping to existing piece (if matched)
-  matchedPieceId  String?
-  isNewPiece     Boolean          @default(true)
-
-  // Timestamps
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-
-  // Relations
-  item            SmartUploadItem  @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  batch           SmartUploadBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
-
-  @@index([itemId])
-  @@index([batchId])
-  @@index([isApproved])
-}
-
-// ====================================
-// Smart Upload Settings & AI Configuration
-// ====================================
-
-// Smart Upload Feature Settings (key-value approach for flexibility)
-model SmartUploadSetting {
-  id          String   @id @default(cuid())
-  key         String   @unique
-  value       String
-  description String?
-  category    String   @default("general") // general, feature, limits
-  isPublic    Boolean  @default(false) // whether visible to non-admins
-  updatedAt   DateTime @updatedAt
-  updatedBy   String?
-
-  @@index([key])
-  @@index([category])
-}
-
-// AI Provider Configuration
-model AIProvider {
-  id           String    @id @default(cuid())
-  providerId   String    @unique // openai, anthropic, gemini, etc.
-  displayName  String
-  description  String?
-  baseUrl      String?   // Custom endpoint URL
-  logoUrl      String?
-  isEnabled    Boolean   @default(false)
-  isDefault    Boolean   @default(false)
-  sortOrder    Int       @default(0)
-  capabilities Json?     // { vision: true, structuredOutput: true }
-
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  // Relations
-  apiKeys      APIKey[]
-  models       AIModel[]
-  primaryTaskConfigs  TaskModelConfig[]  @relation("TaskPrimaryProvider")
-  fallbackTaskConfigs TaskModelConfig[]  @relation("TaskFallbackProvider")
-
-  @@index([isEnabled])
-  @@index([sortOrder])
-}
-
-// API Keys (encrypted at rest)
-model APIKey {
-  id              String    @id @default(cuid())
-  providerId      String
-  keyName         String?   // Optional name for identification
-  encryptedKey    String    @db.Text // AES-256 encrypted API key (IV:authTag:cipherText hex format)
-  keyHash         String    // SHA-256 hash for validation (never decrypted)
-  isValid         Boolean   @default(false)
-  validationError String?   // Last validation error
-  lastValidated   DateTime?
-  expiresAt       DateTime? // Optional expiration
-  isActive        Boolean   @default(true)
-
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  createdBy       String?
-
-  // Relations
-  provider        AIProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
-
-  @@index([providerId])
-  @@index([isActive])
-}
-
-// Available Models per Provider
-model AIModel {
-  id                      String    @id @default(cuid())
-  providerId              String
-  modelId                 String    // Provider's model identifier (e.g., gpt-4o-mini)
-  displayName             String
-  description             String?
-
-  // Capabilities
-  supportsVision          Boolean   @default(false)
-  supportsStructuredOutput Boolean  @default(false)
-  supportsStreaming       Boolean   @default(false)
-  maxTokens              Int?
-  contextWindow           Int?
-
-  // Cache management
-  lastFetched             DateTime? // When model list was last fetched
-  isAvailable            Boolean   @default(true)
-
-  // Default selection
-  isDefault              Boolean   @default(false)
-  isPreferred            Boolean   @default(false) // User preference
-
-  createdAt              DateTime  @default(now())
-  updatedAt              DateTime  @updatedAt
-
-  // Relations
-  provider               AIProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
-  parameters             ModelParameter[]
-  taskConfigs            TaskModelConfig[]
-  fallbackTaskConfigs    TaskModelConfig[]  @relation("TaskFallbackModel")
-
-  @@unique([providerId, modelId])
-  @@index([providerId])
-  @@index([isDefault])
-  @@index([isPreferred])
-}
-
-// Configurable Parameters per Model
-model ModelParameter {
-  id            String    @id @default(cuid())
-  modelId       String
-
-  // Parameter definition
-  name          String    // temperature, max_tokens, top_p, etc.
-  displayName   String
-  description   String?
-  paramType     String    // float, int, string, boolean
-
-  // Constraints
-  defaultValue  Float?    // For numeric types
-  minValue      Float?
-  maxValue      Float?
-  stringDefault String?   // For string types
-  allowedValues Json?     // For enum-like params
-
-  // User override
-  userValue     Float?
-  userStringValue String?
-
-  // Metadata
-  isAdvanced    Boolean   @default(false)
-  isVisible     Boolean   @default(true)
-
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
-  // Relations
-  model         AIModel   @relation(fields: [modelId], references: [id], onDelete: Cascade)
-
-  @@unique([modelId, name])
-  @@index([modelId])
-}
-
-// Settings Change Audit Log
-model SettingsAuditLog {
-  id            String    @id @default(cuid())
-
-  // What changed
-  entityType    String    // SmartUploadSetting, AIProvider, APIKey, AIModel, ModelParameter
-  entityId      String
-  action        String    // CREATE, UPDATE, DELETE, VALIDATE, ENABLE, DISABLE
-
-  // Value changes
-  fieldName     String?   // Which field changed (null for entity-level actions)
-  oldValue      String?   // JSON serialized
-  newValue      String?   // JSON serialized
-
-  // Who made the change
-  changedBy     String?   // User ID
-  ipAddress     String?
-  userAgent     String?
-
-  timestamp     DateTime  @default(now())
-
-  @@index([entityType, entityId])
-  @@index([timestamp])
-  @@index([changedBy])
-}
-
-// Task-specific Model Configuration for Upload Pipeline
-model TaskModelConfig {
-  id          String          @id @default(cuid())
-  taskType    UploadTaskType  @unique // One config per task type
-
-  // Model assignment (null = use global default)
-  modelId     String?         // Reference to AIModel.id
-
-  // Provider assignment for primary and fallback
-  primaryProviderId  String?    // FK to AIProvider.id — which provider to use
-  fallbackProviderId String?    // FK to AIProvider.id — fallback if primary fails
-  fallbackModelId    String?    // FK to AIModel.id — fallback model if primary fails
-
-  // Task-specific parameters
-  temperature Float?          // 0-2 range
-  maxTokens   Int?            // 1-128000 range
-  topP        Float?          // 0-1 range
-
-  // Timestamps
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
-
-  // Relation (optional - modelId can be null for default behavior)
-  model       AIModel?        @relation(fields: [modelId], references: [id], onDelete: SetNull)
-  primaryProvider AIProvider? @relation("TaskPrimaryProvider", fields: [primaryProviderId], references: [id], onDelete: SetNull)
-  fallbackProvider AIProvider? @relation("TaskFallbackProvider", fields: [fallbackProviderId], references: [id], onDelete: SetNull)
-  fallbackModel AIModel?      @relation("TaskFallbackModel", fields: [fallbackModelId], references: [id], onDelete: SetNull)
-
-  @@index([taskType])
-  @@index([modelId])
-  @@index([primaryProviderId])
-  @@index([fallbackProviderId])
-  @@index([fallbackModelId])
-}
-
-/*
- * deprecates:
- *
- * model MicrosoftGraphClientUser {
- *   id            String    @id @unique
- *   email         String
- *   accessToken   String?
- *   refreshToken  String?
- *   scope         String?
- *   expiresAt   DateTime?
- * }
- *
- * model FreshBooksProviderUser {
- *   id            String    @id @unique
- *   accessToken   String?
- *   refreshToken  String?
- *   scope         String?
- *   expiresAt   DateTime?
- * }
- */
 
 enum AssignmentStatus {
   ASSIGNED      // Music assigned to member, waiting for pickup
@@ -1200,9 +803,6 @@ model UserNotification {
   user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   announcement   Announcement?    @relation(fields: [announcementId], references: [id])
 
-  updatedBy String?
-  updatedAt DateTime?      @updatedAt
-
   @@index([userId])
   @@index([isRead])
   @@index([createdAt])
@@ -1243,9 +843,6 @@ model EmailLog {
   sentAt         DateTime?
   errorMessage   String?
   createdAt      DateTime    @default(now())
-
-  updatedBy String?
-  updatedAt DateTime? @updatedAt
 
   sentBy         User?       @relation(fields: [sentById], references: [id])
   

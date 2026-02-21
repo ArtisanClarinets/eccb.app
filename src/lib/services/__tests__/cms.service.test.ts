@@ -139,7 +139,7 @@ describe('CmsService', () => {
       
       (mockPrisma.page.findFirst as any).mockResolvedValueOnce(dbPage);
       
-      const _result = await CmsService.getPageBySlug('draft', false);
+      const result = await CmsService.getPageBySlug('draft', false);
       
       expect(mockCacheGet).not.toHaveBeenCalled();
       expect(mockCacheSet).not.toHaveBeenCalled();
@@ -220,7 +220,7 @@ describe('CmsService', () => {
       
       (mockPrisma.page.upsert as any).mockResolvedValueOnce(upsertedPage);
       
-      const _result = await CmsService.upsertPage(pageData);
+      const result = await CmsService.upsertPage(pageData);
       
       expect(mockInvalidatePageCache).toHaveBeenCalledTimes(2);
       expect(mockInvalidatePageCache).toHaveBeenNthCalledWith(1, 'new-page');
