@@ -5,7 +5,7 @@ import { prisma } from '@/lib/db';
 import { requirePermission, getSession } from '@/lib/auth/guards';
 import { uploadFile, deleteFile } from '@/lib/services/storage';
 import { auditLog } from '@/lib/services/audit';
-import { MusicDifficulty, FileType, AssignmentStatus } from '@prisma/client';
+import { MusicDifficulty, FileType, AssignmentStatus } from '@/lib/db';
 import {
   MUSIC_CREATE,
   MUSIC_EDIT,
@@ -19,6 +19,7 @@ import {
 } from '@/lib/cache';
 import { z } from 'zod';
 
+// Forced change to fix CI
 // =============================================================================
 // ZOD VALIDATION SCHEMAS
 // =============================================================================
