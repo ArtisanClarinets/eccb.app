@@ -4,6 +4,7 @@ import { format } from 'date-fns';
 import { Calendar, MapPin, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
+import { Event as PrismaEvent } from '@prisma/client';
 
 export async function UpcomingEvents() {
   const events = await EventService.listUpcomingEvents(true);
@@ -33,7 +34,7 @@ export async function UpcomingEvents() {
         </div>
 
         <div className="grid gap-8 md:grid-cols-3">
-          {featuredEvents.map((event: any) => (
+          {featuredEvents.map((event: PrismaEvent) => (
             <div
               key={event.id}
               className="group relative overflow-hidden rounded-2xl border bg-card p-8 transition-all hover:shadow-2xl hover:-translate-y-1"
@@ -41,10 +42,10 @@ export async function UpcomingEvents() {
               <div className="mb-6 flex items-center justify-between">
                 <div className="flex flex-col items-center justify-center rounded-lg bg-primary/10 p-3 text-primary">
                   <span className="text-sm font-bold leading-none">
-                    {format(new Date(event.startTime), 'MMM')}
+                    {format(event.startTime, 'MMM')}
                   </span>
                   <span className="text-2xl font-black leading-none">
-                    {format(new Date(event.startTime), 'dd')}
+                    {format(event.startTime, 'dd')}
                   </span>
                 </div>
                 <div className="rounded-full bg-primary/20 px-3 py-1 text-xs font-bold text-primary">
@@ -59,7 +60,7 @@ export async function UpcomingEvents() {
               <div className="mb-8 space-y-3">
                 <div className="flex items-center gap-2 text-sm text-foreground/60">
                   <Calendar size={16} className="text-primary" />
-                  {format(new Date(event.startTime), 'eeee, h:mm a')}
+                  {format(event.startTime, 'eeee, h:mm a')}
                 </div>
                 <div className="flex items-center gap-2 text-sm text-foreground/60">
                   <MapPin size={16} className="text-primary" />
