@@ -473,7 +473,7 @@ export function useSmartUploadBatches(
  */
 export function useSmartUploadPoll(): UseSmartUploadPollReturn {
   const [batch, setBatch] = useState<SmartUploadBatch | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, _setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [isPolling, setIsPolling] = useState(false);
 

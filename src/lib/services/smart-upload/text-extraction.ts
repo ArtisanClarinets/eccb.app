@@ -31,7 +31,7 @@ interface PdfParseData {
 // =============================================================================
 
 const MIN_TEXT_LENGTH = 100;
-const MIN_CONFIDENCE_THRESHOLD = 0.5;
+const _MIN_CONFIDENCE_THRESHOLD = 0.5;
 
 /**
  * Minimum ratio of text to page count to consider the extraction successful.

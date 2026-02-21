@@ -6,7 +6,6 @@
  */
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { z } from 'zod';
 
 import { env } from '../../env';
 
@@ -19,7 +18,6 @@ import {
   ZodSchema,
 } from '../types';
 import {
-  parseAndValidateJson,
   withRetry,
   withTimeout,
 } from '../structured-output';

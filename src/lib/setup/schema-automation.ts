@@ -155,7 +155,7 @@ export class SchemaAutomationService {
     skipSeed?: boolean;
     createOnly?: boolean;
   } = {}): MigrationResult {
-    const { name, skipSeed = false, createOnly = false } = options;
+    const { name, skipSeed: _skipSeed = false, createOnly = false } = options;
 
     try {
       // Run migrations

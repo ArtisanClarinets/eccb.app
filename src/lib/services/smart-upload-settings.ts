@@ -501,22 +501,33 @@ export async function setDefaultModel(
 export async function refreshModelsFromProvider(
   providerId: string
 ): Promise<{ success: boolean; count?: number; error?: string; errorType?: 'invalid_key' | 'rate_limited' | 'network' | 'unknown' }> {
+  console.log('[refreshModelsFromProvider] Starting with providerId:', providerId);
+  
   const provider = await prisma.aIProvider.findUnique({
     where: { id: providerId },
   });
 
+  console.log('[refreshModelsFromProvider] Provider found:', provider ? { id: provider.id, providerId: provider.providerId, displayName: provider.displayName } : null);
+
   if (!provider) {
+    console.log('[refreshModelsFromProvider] FAIL: Provider not found for id:', providerId);
     return { success: false, error: 'Provider not found' };
   }
 
   const config = getProviderConfig(provider.providerId);
+  console.log('[refreshModelsFromProvider] Provider config found:', config ? { id: config.id, displayName: config.displayName } : null);
+  
   if (!config) {
+    console.log('[refreshModelsFromProvider] FAIL: Provider configuration not found for providerId:', provider.providerId);
     return { success: false, error: 'Provider configuration not found' };
   }
 
   // Get the decrypted API key
   const apiKey = await getDecryptedApiKey(providerId);
+  console.log('[refreshModelsFromProvider] API key found:', apiKey ? 'yes (length: ' + apiKey.length + ')' : 'no');
+  
   if (!apiKey) {
+    console.log('[refreshModelsFromProvider] FAIL: No API key configured for provider:', providerId);
     return { success: false, error: 'No API key configured' };
   }
 
@@ -891,6 +902,7 @@ export async function seedDefaultProviders(): Promise<void> {
 
     await prisma.aIProvider.upsert({
       where: { providerId: config.id },
+
       update: {
         displayName: config.displayName,
         description: config.description,
@@ -900,6 +912,7 @@ export async function seedDefaultProviders(): Promise<void> {
           structuredOutput: config.supportsStructuredOutput ?? false,
         },
       },
+
       create: {
         providerId: config.id,
         displayName: config.displayName,

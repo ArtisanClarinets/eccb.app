@@ -5,7 +5,7 @@ import { prisma } from '@/lib/db';
 import { requirePermission } from '@/lib/auth/guards';
 import { env } from '@/lib/env';
 import { isSmartUploadEnabled } from '@/lib/services/smart-upload-settings';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Settings, ArrowLeft } from 'lucide-react';
 import { BatchDetailClient } from './batch-detail-client';

@@ -20,7 +20,6 @@ import {
   Calendar,
   Music,
   TrendingUp,
-  Clock,
 } from 'lucide-react';
 
 export default async function AdminReportsPage() {

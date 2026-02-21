@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getSession } from '@/lib/auth/guards';
 import { checkUserPermission } from '@/lib/auth/permissions';
-import { downloadFile, deleteFile, fileExists } from '@/lib/services/storage';
+import { downloadFile, deleteFile } from '@/lib/services/storage';
 import { applyRateLimit } from '@/lib/rate-limit';
 import { validateCSRF } from '@/lib/csrf';
 import { logger } from '@/lib/logger';
-import { CMS_EDIT, CMS_VIEW_ALL, CMS_VIEW_PUBLIC } from '@/lib/auth/permission-constants';
+import { CMS_EDIT } from '@/lib/auth/permission-constants';
 import { Readable } from 'stream';
 
 // =============================================================================
@@ -38,7 +38,7 @@ export async function GET(
     // Check if user has permission to view
     // Public assets can be viewed by anyone
     // Private assets require CMS_VIEW_ALL or CMS_VIEW_PUBLIC permission
-    const session = await getSession();
+    const _session = await getSession();
 
     // For now, all CMS assets are considered public
     // In the future, we could add an `isPublic` field to MediaAsset

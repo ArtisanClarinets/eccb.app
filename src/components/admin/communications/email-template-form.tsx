@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -105,6 +105,40 @@ export function EmailTemplateForm({ template, onSubmit, isSubmitting }: EmailTem
   const watchedType = watch('type');
   const watchedIsActive = watch('isActive');
   const watchedIsDefault = watch('isDefault');
+
+  const generatePreview = useCallback(() => {
+    let html = watchedBody || '';
+    let subject = watchedSubject || '';
+    let text = watchedTextBody || '';
+
+    // Replace conditionals
+    const conditionalRegex = /\{\{#if\s+(\w+)\}\}([\s\S]*?)\{\{\/if\}\}/g;
+    const replaceConditionals = (content: string) => {
+      return content.replace(conditionalRegex, (_match, varName, innerContent) => {
+        const value = previewVars[varName];
+        if (value && value !== '' && value !== 'false') {
+          return innerContent;
+        }
+        return '';
+      });
+    };
+
+    html = replaceConditionals(html);
+    subject = replaceConditionals(subject);
+    text = replaceConditionals(text);
+
+    // Replace variables
+    const variableRegex = /\{\{(\w+)\}\}/g;
+    const replaceVars = (content: string) => {
+      return content.replace(variableRegex, (_match, varName) => {
+        return previewVars[varName] || `{{${varName}}}`;
+      });
+    };
+
+    setPreviewHtml(replaceVars(html));
+    setPreviewSubject(replaceVars(subject));
+    setPreviewText(replaceVars(text));
+  }, [watchedBody, watchedSubject, watchedTextBody, previewVars]);
 
   // Detect variables from template content
   useEffect(() => {

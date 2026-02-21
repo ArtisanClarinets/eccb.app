@@ -43,7 +43,6 @@ import {
   ArrowDown,
   Sparkles,
 } from 'lucide-react';
-import { MusicDifficulty } from '@prisma/client';
 
 export const metadata: Metadata = {
   title: 'Music Library',

@@ -1,6 +1,7 @@
 /**
  * Model Parameters API
  *
+ * GET: Get parameters for a model
  * PUT: Update user-defined parameter values for a model
  *
  * Admin-only access.
@@ -12,7 +13,6 @@ import { auth } from '@/lib/auth/config';
 import { checkUserPermission } from '@/lib/auth/permissions';
 import {
   updateModelParameters,
-  getModelsForProvider,
 } from '@/lib/services/smart-upload-settings';
 import { logger } from '@/lib/logger';
 import { prisma } from '@/lib/db';
@@ -24,6 +24,60 @@ import { prisma } from '@/lib/db';
 const updateParametersSchema = z.object({
   parameters: z.record(z.string(), z.union([z.number(), z.string()])),
 });
+
+
+// ============================================================================
+// GET: Get model parameters
+// ============================================================================
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ modelId: string }> }
+) {
+  try {
+    const { modelId } = await params;
+
+    // Check authentication
+    const session = await auth.api.getSession({ headers: request.headers });
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Check admin permission
+    const hasAdminAccess = await checkUserPermission(
+      session.user.id,
+      'system.view.all'
+    );
+    if (!hasAdminAccess) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    // Get the model with parameters
+    const model = await prisma.aIModel.findUnique({
+      where: { id: modelId },
+      include: {
+        parameters: {
+          orderBy: { name: 'asc' },
+        },
+      },
+    });
+
+    if (!model) {
+      return NextResponse.json({ error: 'Model not found' }, { status: 404 });
+    }
+
+    return NextResponse.json({ model });
+  } catch (error) {
+    logger.error(
+      'Failed to get model parameters',
+      error instanceof Error ? error : new Error(String(error))
+    );
+    return NextResponse.json(
+      { error: 'Failed to get model parameters' },
+      { status: 500 }
+    );
+  }
+}
 
 // ============================================================================
 // PUT: Update model parameters

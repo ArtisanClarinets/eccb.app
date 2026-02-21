@@ -11,7 +11,7 @@ import { getSession } from '@/lib/auth/guards';
 import { checkUserPermission } from '@/lib/auth/permissions';
 import { validateCSRF } from '@/lib/csrf';
 import { applyRateLimit } from '@/lib/rate-limit';
-import { createBatch, listUserBatches, getBatch } from '@/lib/services/smart-upload/smart-upload.service';
+import { createBatch, getBatch } from '@/lib/services/smart-upload/smart-upload.service';
 import { MUSIC_SMART_UPLOAD } from '@/lib/auth/permission-constants';
 import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
@@ -40,8 +40,9 @@ const listBatchesQuerySchema = z.object({
 
 /**
  * Check if user can access a batch (owner or admin)
+ * NOTE: Intended for future use when implementing batch access control
  */
-async function canAccessBatch(batchId: string, userId: string): Promise<boolean> {
+async function _canAccessBatch(batchId: string, userId: string): Promise<boolean> {
   const batch = await getBatch(batchId);
   if (!batch) return false;
 

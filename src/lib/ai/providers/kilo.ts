@@ -6,7 +6,6 @@
  */
 
 import OpenAI from 'openai';
-import { z } from 'zod';
 
 import { env } from '../../env';
 

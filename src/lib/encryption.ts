@@ -77,26 +77,44 @@ export function decryptApiKey(encrypted: string): string {
   }
 
   const parts = encrypted.split(':');
-  if (parts.length !== 3) {
-    throw new Error('Invalid encrypted format. Expected IV:authTag:cipherText');
+
+  // Try current 3-part format: IV:authTag:cipherText
+  if (parts.length === 3) {
+    const [ivHex, authTagHex, cipherText] = parts;
+    const key = getEncryptionKey();
+    const iv = Buffer.from(ivHex, 'hex');
+    const authTag = Buffer.from(authTagHex, 'hex');
+
+    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv, {
+      authTagLength: AUTH_TAG_LENGTH,
+    });
+
+    decipher.setAuthTag(authTag);
+
+    let decrypted = decipher.update(cipherText, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+
+    return decrypted;
   }
 
-  const [ivHex, authTagHex, cipherText] = parts;
+  // Try legacy 2-part format: IV:cipherText (AES-256-CBC)
+  if (parts.length === 2) {
+    const [ivHex, cipherText] = parts;
+    const key = getEncryptionKey();
+    const iv = Buffer.from(ivHex, 'hex');
 
-  const key = getEncryptionKey();
-  const iv = Buffer.from(ivHex, 'hex');
-  const authTag = Buffer.from(authTagHex, 'hex');
+    // Use AES-256-CBC for legacy format
+    const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
 
-  const decipher = crypto.createDecipheriv(ALGORITHM, key, iv, {
-    authTagLength: AUTH_TAG_LENGTH,
-  });
+    let decrypted = decipher.update(cipherText, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
 
-  decipher.setAuthTag(authTag);
+    return decrypted;
+  }
 
-  let decrypted = decipher.update(cipherText, 'hex', 'utf8');
-  decrypted += decipher.final('utf8');
-
-  return decrypted;
+  throw new Error(
+    `Invalid encrypted format. Expected IV:authTag:cipherText or IV:cipherText, got ${parts.length} parts`
+  );
 }
 
 /**

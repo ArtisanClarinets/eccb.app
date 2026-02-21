@@ -38,7 +38,6 @@ import {
   MUSIC_METADATA_PROMPT,
 } from './prompts/music-metadata';
 
-import { classifyExtractedText } from './document-classification';
 import {
   PartClassification,
   PartClassificationSchema,
@@ -46,9 +45,9 @@ import {
 } from './prompts/part-classification';
 
 import {
-  DocumentClassification,
-  DocumentClassificationSchema,
-  DOCUMENT_CLASSIFICATION_PROMPT,
+  DocumentClassification as _DocumentClassification,
+  DocumentClassificationSchema as _DocumentClassificationSchema,
+  DOCUMENT_CLASSIFICATION_PROMPT as _DOCUMENT_CLASSIFICATION_PROMPT,
 } from './prompts/document-classification';
 
 // =============================================================================
@@ -69,6 +68,7 @@ export async function extractMusicMetadata(
   // Using any to bypass strict Zod type checking issues with schema inference
   return provider.generateStructuredOutput(
     text,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     MusicMetadataSchema as any,
     MUSIC_METADATA_PROMPT
   );
@@ -87,6 +87,7 @@ export async function classifyParts(
 
   return provider.generateStructuredOutput(
     text,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     PartClassificationSchema as any,
     PART_CLASSIFICATION_PROMPT
   );
@@ -107,6 +108,7 @@ export async function generateStructuredOutput<T>(
 ): Promise<StructuredExtractionResult<T>> {
   const provider = getProvider();
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return provider.generateStructuredOutput(prompt, schema as any, systemPrompt);
 }
 

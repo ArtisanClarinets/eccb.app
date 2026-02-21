@@ -4,7 +4,6 @@ import { auditLog } from './audit';
 import { MusicDifficulty, FileType, AssignmentStatus, Prisma, MusicPiece, MusicFile, MusicPart } from '@prisma/client';
 import {
   cacheGet,
-  cacheSet,
   cacheKeys,
   CACHE_CONFIG,
   invalidateMusicCache,
@@ -556,9 +555,9 @@ export class MusicLibraryService {
     // Get final values (apply corrections if any)
     const corrections = proposal.corrections || {};
     const title = (corrections.title as string) || proposal.title || 'Untitled';
-    const composer = (corrections.composer as string) || proposal.composer;
-    const arranger = (corrections.arranger as string) || proposal.arranger;
-    const publisher = (corrections.publisher as string) || proposal.publisher;
+    const _composer = (corrections.composer as string) || proposal.composer;
+    const _arranger = (corrections.arranger as string) || proposal.arranger;
+    const _publisher = (corrections.publisher as string) || proposal.publisher;
     const difficulty = proposal.difficulty;
     const genre = (corrections.genre as string) || proposal.genre;
     const style = (corrections.style as string) || proposal.style;

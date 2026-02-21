@@ -23,8 +23,9 @@ import { SmartUploadStatus } from '@prisma/client';
 
 /**
  * Cleanup uploaded files for a batch
+ * NOTE: Intended for future use when implementing async file cleanup
  */
-async function cleanupBatchFiles(batchId: string): Promise<void> {
+async function _cleanupBatchFiles(batchId: string): Promise<void> {
   // Get all items with storage keys
   const items = await prisma.smartUploadItem.findMany({
     where: { batchId },

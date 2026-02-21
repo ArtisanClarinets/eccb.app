@@ -1,15 +1,12 @@
 import { Metadata } from 'next';
-import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { prisma } from '@/lib/db';
 import { requirePermission } from '@/lib/auth/guards';
-import { formatDate } from '@/lib/date';
 import { env } from '@/lib/env';
 import { isSmartUploadEnabled } from '@/lib/services/smart-upload-settings';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Settings, ArrowLeft } from 'lucide-react';
+import { Settings } from 'lucide-react';
 import { SmartUploadClient } from './smart-upload-client';
 
 export const metadata: Metadata = {

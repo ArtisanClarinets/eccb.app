@@ -178,15 +178,6 @@ export function SmartUploadDropzone({
     setValidationErrors([]);
   }, []);
 
-  const updateFileStatus = useCallback(
-    (id: string, status: FilePreview['status'], error?: string) => {
-      setFiles((prev) =>
-        prev.map((f) => (f.id === id ? { ...f, status, error } : f))
-      );
-    },
-    []
-  );
-
   const getFileIcon = (mimeType: string) => {
     if (mimeType.startsWith('audio/')) return FileAudio;
     if (mimeType.startsWith('image/')) return FileImage;

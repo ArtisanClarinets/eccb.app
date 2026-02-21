@@ -7,6 +7,8 @@
 
 'use client';
 
+import React from 'react';
+
 import { useEffect, useState } from 'react';
 
 import { ArrowLeft, ArrowRight, CheckCircle2, Database, Settings, Sparkles } from 'lucide-react';
@@ -52,7 +54,6 @@ export function SetupWizard({ repairMode = false }: SetupWizardProps): React.Rea
   const [error, setError] = useState<string | null>(null);
 
   const stepIndex = steps.findIndex((s) => s.id === currentStep);
-  const progress = Math.round(((stepIndex + 1) / steps.length) * 100);
 
   // Fetch initial status on mount
   useEffect(() => {

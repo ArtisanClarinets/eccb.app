@@ -9,7 +9,6 @@
 
 import { prisma } from '@/lib/db';
 import { auditLog } from '@/lib/services/audit';
-import { deleteFile, getSignedDownloadUrl } from '@/lib/services/storage';
 import { invalidateMusicCache } from '@/lib/cache';
 import {
   SmartUploadStatus,
@@ -662,7 +661,7 @@ export async function getBatchProposals(batchId: string): Promise<SmartUploadPro
  */
 export async function ingestBatch(
   batchId: string,
-  approvedBy: string
+  _approvedBy: string
 ): Promise<IngestResult> {
   const batch = await getBatchWithItems(batchId);
 
@@ -806,9 +805,9 @@ export async function createMusicPieceFromSmartUpload(
   // Get final values (apply corrections if any)
   const corrections = (proposal.corrections as Record<string, unknown>) || {};
   const title = (corrections.title as string) || proposal.title || 'Untitled';
-  const composer = (corrections.composer as string) || proposal.composer;
-  const arranger = (corrections.arranger as string) || proposal.arranger;
-  const publisher = (corrections.publisher as string) || proposal.publisher;
+  const _composer = (corrections.composer as string) || proposal.composer;
+  const _arranger = (corrections.arranger as string) || proposal.arranger;
+  const _publisher = (corrections.publisher as string) || proposal.publisher;
   const difficulty = corrections.difficulty as import('@prisma/client').MusicDifficulty | undefined;
   const genre = (corrections.genre as string) || proposal.genre;
   const style = (corrections.style as string) || proposal.style;
