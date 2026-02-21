@@ -110,7 +110,18 @@ export default async function EventPage({ params }: PageProps) {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">{event.title}</h1>
           <div className="flex items-center gap-2 mt-1">
-            <Badge variant={eventTypeColors[event.type] || 'outline'}>
+      // Define allowed event types
+      const allowedTypes = ["MEETING", "SOCIAL", "OTHER"];
+
+      // Validate event.type before using it as a key in eventTypeColors
+      const badgeVariant =
+        allowedTypes.includes(event.type) ? eventTypeColors[event.type] : "outline";
+
+      ...
+
+      <Badge variant={badgeVariant}>
+        {event.type}
+      </Badge>
               {event.type}
             </Badge>
             {event.isCancelled && (
