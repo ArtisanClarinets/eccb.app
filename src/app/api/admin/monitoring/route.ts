@@ -168,7 +168,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<Monitoring
   // Apply rate limiting
   const rateLimitResponse = await applyRateLimit(request, 'api');
   if (rateLimitResponse) {
-    return rateLimitResponse;
+    return rateLimitResponse as NextResponse<MonitoringResponse | { error: string }>;
   }
 
   const timer = startTimer('admin:monitoring:get');
@@ -230,9 +230,9 @@ export async function GET(request: NextRequest): Promise<NextResponse<Monitoring
 
     timer.end();
     return NextResponse.json(response);
-  } catch (error) {
+  } catch (_error) {
     timer.end({ error: true });
-    logger.error('Failed to get monitoring data', error instanceof Error ? error : new Error(String(error)));
+    logger.error('Failed to get monitoring data', _error instanceof Error ? _error : new Error(String(_error)));
     return NextResponse.json(
       { error: 'Failed to get monitoring data' },
       { status: 500 }
@@ -264,7 +264,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<{ success
   // Apply rate limiting
   const rateLimitResponse = await applyRateLimit(request, 'api');
   if (rateLimitResponse) {
-    return rateLimitResponse;
+    return rateLimitResponse as NextResponse<{ success: boolean } | { error: string }>;
   }
 
   try {
@@ -310,8 +310,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<{ success
     });
     
     return NextResponse.json({ success: true });
-  } catch (error) {
-    logger.error('Failed to track client error', error instanceof Error ? error : new Error(String(error)));
+  } catch (_error) {
+    logger.error('Failed to track client error', _error instanceof Error ? _error : new Error(String(_error)));
     return NextResponse.json(
       { error: 'Failed to track error' },
       { status: 500 }
@@ -327,7 +327,7 @@ export async function DELETE(request: NextRequest): Promise<NextResponse<{ succe
   // Apply rate limiting for sensitive admin action
   const rateLimitResponse = await applyRateLimit(request, 'adminAction');
   if (rateLimitResponse) {
-    return rateLimitResponse;
+    return rateLimitResponse as NextResponse<{ success: boolean } | { error: string }>;
   }
 
   try {
@@ -381,8 +381,8 @@ export async function DELETE(request: NextRequest): Promise<NextResponse<{ succe
     }
 
     return NextResponse.json({ success: true });
-  } catch (error) {
-    logger.error('Failed to clear monitoring data', error instanceof Error ? error : new Error(String(error)));
+  } catch (_error) {
+    logger.error('Failed to clear monitoring data', _error instanceof Error ? _error : new Error(String(_error)));
     return NextResponse.json(
       { error: 'Failed to clear monitoring data' },
       { status: 500 }
