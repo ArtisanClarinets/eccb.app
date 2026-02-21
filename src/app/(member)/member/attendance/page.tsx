@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { requireAuth } from '@/lib/auth/guards';
 import { prisma, AttendanceStatus } from '@/lib/db';
-import { formatDate } from '@/lib/date';
+import { formatDate, formatTime } from '@/lib/date';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -76,7 +76,7 @@ export default async function MemberAttendancePage() {
     LEFT_EARLY: <Clock className="h-4 w-4 text-orange-500" />,
   };
 
-  const _statusColors: Record<AttendanceStatus, string> = {
+  const statusColors: Record<AttendanceStatus, string> = {
     PRESENT: 'bg-green-100 text-green-800',
     ABSENT: 'bg-red-100 text-red-800',
     EXCUSED: 'bg-amber-100 text-amber-800',

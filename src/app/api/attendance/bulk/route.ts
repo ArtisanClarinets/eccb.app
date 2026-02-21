@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { validateCSRF } from '@/lib/csrf';
 import { applyRateLimit } from '@/lib/rate-limit';
 import { ATTENDANCE_MARK_ALL } from '@/lib/auth/permission-constants';
+import { checkUserPermission } from '@/lib/auth/permissions';
 import { auditLog } from '@/lib/services/audit';
 
 const bulkAttendanceSchema = z.object({
@@ -24,7 +25,7 @@ export async function POST(request: NextRequest) {
     // Apply rate limiting
     const rateLimitResponse = await applyRateLimit(request, 'api');
     if (rateLimitResponse) {
-      return rateLimitResponse;
+      return rateLimitResponse as any;
     }
 
     // Validate CSRF
@@ -45,22 +46,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Check for ATTENDANCE_MARK_ALL permission
-    const permissionsResponse = await fetch(
-      `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/me/permissions`,
-      {
-        headers: {
-          cookie: request.headers.get('cookie') || '',
-        },
-      }
-    );
+    const hasPermission = await checkUserPermission(session.user.id, ATTENDANCE_MARK_ALL);
 
-    if (permissionsResponse.ok) {
-      const permissionsData = await permissionsResponse.json();
-      if (!permissionsData.permissions?.includes(ATTENDANCE_MARK_ALL)) {
-        return NextResponse.json({ error: 'Permission denied' }, { status: 403 });
-      }
-    } else {
-      return NextResponse.json({ error: 'Permission check failed' }, { status: 403 });
+    if (!hasPermission) {
+      return NextResponse.json({ error: 'Permission denied' }, { status: 403 });
     }
 
     const body = await request.json();
@@ -99,9 +88,9 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json({ success: true, count: records.length });
-  } catch (error) {
-    console.error('Error marking bulk attendance:', error);
-    if (error instanceof z.ZodError) {
+  } catch (_error) {
+    console.error('Error marking bulk attendance:', _error);
+    if (_error instanceof z.ZodError) {
       return NextResponse.json({ error: 'Invalid request data' }, { status: 400 });
     }
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

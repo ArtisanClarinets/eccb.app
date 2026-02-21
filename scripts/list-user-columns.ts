@@ -1,18 +1,19 @@
-import 'dotenv/config';
-import { prisma } from '@/lib/db';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 async function main() {
   try {
-    const cols: any = await prisma.$queryRaw`
-      SELECT column_name, data_type
-      FROM information_schema.columns
-      WHERE table_name = 'User'
-      ORDER BY ordinal_position;
-    `;
-    console.log('User table columns:', cols);
-  } catch (err) {
-    console.error(err);
-    process.exitCode = 1;
+    // We need to use raw query to inspect the table structure or just check what prisma returns
+    // But since we want to see if columns exist, we can try to find one user and see keys
+    const user = await prisma.user.findFirst();
+    if (user) {
+      console.log('User columns:', Object.keys(user));
+    } else {
+      console.log('No users found to inspect columns');
+    }
+  } catch (error: unknown) {
+    console.error('Error:', error);
   } finally {
     await prisma.$disconnect();
   }

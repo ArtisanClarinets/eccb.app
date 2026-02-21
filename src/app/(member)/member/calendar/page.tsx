@@ -4,7 +4,7 @@ import { MemberCalendarClient } from '@/components/events/member-calendar-client
 import { Suspense } from 'react';
 
 export default async function MemberCalendarPage() {
-  const _session = await requireAuth();
+  const session = await requireAuth();
 
   const now = new Date();
   const endOfYear = new Date(now.getFullYear(), 11, 31);

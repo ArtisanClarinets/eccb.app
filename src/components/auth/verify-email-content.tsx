@@ -1,5 +1,6 @@
 'use client';
-import React, { useState, useEffect, Suspense, useCallback } from 'react';
+
+import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { authClient } from '@/lib/auth/client';
 import { Button } from '@/components/ui/button';
@@ -10,7 +11,7 @@ import { Loader2, Mail, CheckCircle2, XCircle, ArrowLeft, RefreshCw } from 'luci
 
 function VerifyEmailContentInner() {
   const [email, setEmail] = useState('');
-  const [_loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
   const [status, setStatus] = useState<'verifying' | 'success' | 'error' | 'pending'>('pending');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -19,45 +20,11 @@ function VerifyEmailContentInner() {
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
 
-  const verifyEmail = useCallback(
-    async (verificationToken: string) => {
-      setStatus('verifying');
-      setLoading(true);
-      setErrorMessage(null);
-
-      try {
-        const { error } = await authClient.verifyEmail({
-          query: {
-            token: verificationToken,
-          },
-        });
-
-        if (error) {
-          setStatus('error');
-          setErrorMessage(error.message || 'Email verification failed. The link may have expired.');
-        } else {
-          setStatus('success');
-          toast.success('Email verified successfully!');
-          // Redirect to dashboard after 3 seconds
-          setTimeout(() => {
-            router.push('/dashboard');
-          }, 3000);
-        }
-      } catch (_err) {
-        setStatus('error');
-        setErrorMessage('An unexpected error occurred. Please try again.');
-      } finally {
-        setLoading(false);
-      }
-    },
-    [router]
-  );
-
   useEffect(() => {
     if (token) {
       verifyEmail(token);
     }
-  }, [token, verifyEmail]);
+  }, [token]);
 
   // Countdown timer for resend button
   useEffect(() => {
@@ -66,6 +33,37 @@ function VerifyEmailContentInner() {
       return () => clearTimeout(timer);
     }
   }, [countdown]);
+
+  const verifyEmail = async (verificationToken: string) => {
+    setStatus('verifying');
+    setLoading(true);
+    setErrorMessage(null);
+
+    try {
+      const { error } = await authClient.verifyEmail({
+        query: {
+          token: verificationToken,
+        },
+      });
+
+      if (error) {
+        setStatus('error');
+        setErrorMessage(error.message || 'Email verification failed. The link may have expired.');
+      } else {
+        setStatus('success');
+        toast.success('Email verified successfully!');
+        // Redirect to dashboard after 3 seconds
+        setTimeout(() => {
+          router.push('/dashboard');
+        }, 3000);
+      }
+    } catch (err) {
+      setStatus('error');
+      setErrorMessage('An unexpected error occurred. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleResendVerification = async (e: React.FormEvent) => {
     e.preventDefault();

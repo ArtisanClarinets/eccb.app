@@ -1,16 +1,18 @@
 import { Job } from 'bullmq';
 import { prisma } from '@/lib/db';
-import { createWorker, addJob } from '@/lib/jobs/queue';
+import { createWorker, QUEUE_NAMES, addJob } from '@/lib/jobs/queue';
 import {
   type PublishScheduledJobData,
   type CleanupSessionsJobData,
   type CleanupFilesJobData,
   type EventReminderJobData,
   type NotificationJobData,
+  JOB_CONFIGS,
 } from '@/lib/jobs/definitions';
 import { logger } from '@/lib/logger';
 import { sendEmail } from '@/lib/email';
-import { subDays, subHours, addHours, format } from 'date-fns';
+import { env } from '@/lib/env';
+import { subDays, subHours, addHours, format, isAfter, isBefore } from 'date-fns';
 
 // ============================================================================
 // Scheduled Publishing
@@ -387,7 +389,7 @@ function mapNotificationType(type: NotificationJobData['type']): 'ANNOUNCEMENT' 
       return 'SYSTEM';
     default:
       return 'SYSTEM';
-  }
+    }
 }
 
 // ============================================================================
@@ -409,14 +411,14 @@ export async function checkScheduledContent(): Promise<void> {
     },
   });
 
-  for (const page of scheduledPages) {
+  await Promise.all(scheduledPages.map(async (page) => {
     await addJob('publish.scheduled', {
       contentType: 'page',
       contentId: page.id,
       scheduledFor: page.scheduledFor!.toISOString(),
     });
     logger.info('Queued scheduled page for publishing', { pageId: page.id, title: page.title });
-  }
+  }));
 
   // Check scheduled announcements
   const scheduledAnnouncements = await prisma.announcement.findMany({
@@ -426,7 +428,7 @@ export async function checkScheduledContent(): Promise<void> {
     },
   });
 
-  for (const announcement of scheduledAnnouncements) {
+  await Promise.all(scheduledAnnouncements.map(async (announcement) => {
     await addJob('publish.scheduled', {
       contentType: 'announcement',
       contentId: announcement.id,
@@ -436,7 +438,7 @@ export async function checkScheduledContent(): Promise<void> {
       announcementId: announcement.id, 
       title: announcement.title 
     });
-  }
+  }));
 }
 
 /**
@@ -458,16 +460,14 @@ export async function checkEventReminders(): Promise<void> {
     },
   });
 
-  for (const event of events24h) {
-    // Check if we already sent a 24h reminder (could use a tracking table)
-    // For now, we'll queue the reminder
-    await addJob('reminder.event', {
-      eventId: event.id,
-      eventTitle: event.title,
-      eventDate: event.startTime.toISOString(),
-      reminderType: '24h',
-    });
-  }
+  // Check if we already sent a 24h reminder (could use a tracking table)
+  // For now, we'll queue the reminder
+  await Promise.all(events24h.map(event => addJob('reminder.event', {
+    eventId: event.id,
+    eventTitle: event.title,
+    eventDate: event.startTime.toISOString(),
+    reminderType: '24h',
+  })));
 
   // 1-hour reminders
   const oneHourFromNow = addHours(now, 1);
@@ -481,14 +481,12 @@ export async function checkEventReminders(): Promise<void> {
     },
   });
 
-  for (const event of events1h) {
-    await addJob('reminder.event', {
-      eventId: event.id,
-      eventTitle: event.title,
-      eventDate: event.startTime.toISOString(),
-      reminderType: '1h',
-    });
-  }
+  await Promise.all(events1h.map(event => addJob('reminder.event', {
+    eventId: event.id,
+    eventTitle: event.title,
+    eventDate: event.startTime.toISOString(),
+    reminderType: '1h',
+  })));
 }
 
 /**

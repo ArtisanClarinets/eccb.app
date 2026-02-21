@@ -105,7 +105,7 @@ export default async function DynamicPage({ params }: PageProps) {
             className="prose prose-neutral dark:prose-invert max-w-none"
 
              // nosemgrep
-            dangerouslySetInnerHTML={{ __html: cleanHtml }}
+            dangerouslySetInnerHTML={{ __html: cleanHtml } /* nosemgrep: explicit-sanitization */}
           />
         );
       }

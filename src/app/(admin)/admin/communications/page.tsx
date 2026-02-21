@@ -25,6 +25,8 @@ import {
   MoreHorizontal,
   Send,
   Eye,
+  Pencil,
+  Trash2,
   Users,
   UserCheck,
   Music,

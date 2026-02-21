@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Select,
@@ -19,7 +20,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Loader2, Save, Eye, FileText, Settings } from 'lucide-react';
+import { Loader2, Save, Eye, FileText, Settings, Calendar } from 'lucide-react';
 
 const pageSchema = z.object({
   title: z.string().min(1, 'Title is required'),
@@ -136,7 +137,7 @@ export function PageForm({
       } else {
         toast.error(result.error || 'Failed to save page');
       }
-    } catch (_error) {
+    } catch (error) {
       toast.error('Something went wrong');
     } finally {
       setIsSubmitting(false);

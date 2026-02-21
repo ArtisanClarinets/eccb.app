@@ -23,6 +23,13 @@ const ALLOWED_MIME_TYPES = [
   'audio/x-wav',
 ] as const;
 
+// File extension to MIME type mapping
+const EXTENSION_MIME_MAP: Record<string, string> = {
+  '.pdf': 'application/pdf',
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+};
+
 // Maximum file size (from env, default 50MB)
 const MAX_FILE_SIZE = env.MAX_FILE_SIZE;
 
@@ -105,7 +112,7 @@ function getExtension(filename: string): string {
  * Scan file for viruses using ClamAV.
  * Only called if ENABLE_VIRUS_SCAN is true.
  */
-async function scanForViruses(_buffer: Buffer): Promise<{ clean: boolean; message?: string }> {
+async function scanForViruses(buffer: Buffer): Promise<{ clean: boolean; message?: string }> {
   if (!env.ENABLE_VIRUS_SCAN) {
     return { clean: true };
   }

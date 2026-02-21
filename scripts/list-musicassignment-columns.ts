@@ -1,18 +1,17 @@
-import 'dotenv/config';
-import { prisma } from '@/lib/db';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 async function main() {
   try {
-    const cols: any = await prisma.$queryRaw`
-      SELECT column_name, data_type
-      FROM information_schema.columns
-      WHERE table_name = 'MusicAssignment'
-      ORDER BY ordinal_position;
-    `;
-    console.log('MusicAssignment table columns:', cols);
-  } catch (err) {
-    console.error(err);
-    process.exitCode = 1;
+    const assignment = await prisma.musicAssignment.findFirst();
+    if (assignment) {
+      console.log('MusicAssignment columns:', Object.keys(assignment));
+    } else {
+      console.log('No assignments found');
+    }
+  } catch (error: unknown) {
+    console.error('Error:', error);
   } finally {
     await prisma.$disconnect();
   }

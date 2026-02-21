@@ -16,11 +16,6 @@ import {
   checkEventReminders,
   checkExpiringContent,
 } from './scheduler';
-import {
-  startSmartUploadWorker,
-  stopSmartUploadWorker,
-  isSmartUploadWorkerRunning,
-} from './smart-upload-worker';
 import { logger } from '@/lib/logger';
 
 // ============================================================================
@@ -140,7 +135,7 @@ function startHealthServer(): void {
     if (req.url === '/health') {
       try {
         const stats = await getAllQueueStats();
-        const workersHealthy = isEmailWorkerRunning() && isSchedulerWorkerRunning() && isSmartUploadWorkerRunning();
+        const workersHealthy = isEmailWorkerRunning() && isSchedulerWorkerRunning();
 
         const health = {
           status: workersHealthy ? 'healthy' : 'unhealthy',
@@ -149,7 +144,6 @@ function startHealthServer(): void {
           workers: {
             email: isEmailWorkerRunning(),
             scheduler: isSchedulerWorkerRunning(),
-            smartUpload: isSmartUploadWorkerRunning(),
           },
           queues: stats,
         };
@@ -165,7 +159,7 @@ function startHealthServer(): void {
       }
     } else if (req.url === '/ready') {
       // Readiness probe - check if workers are ready to accept jobs
-      const ready = isEmailWorkerRunning() && isSchedulerWorkerRunning() && isSmartUploadWorkerRunning();
+      const ready = isEmailWorkerRunning() && isSchedulerWorkerRunning();
       res.writeHead(ready ? 200 : 503, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ready }));
     } else {
@@ -223,7 +217,6 @@ async function gracefulShutdown(signal: string): Promise<void> {
   await Promise.all([
     stopEmailWorker(),
     stopSchedulerWorker(),
-    stopSmartUploadWorker(),
   ]);
 
   // Close queues
@@ -246,7 +239,6 @@ async function main(): Promise<void> {
   // Start workers
   startEmailWorker();
   startSchedulerWorker();
-  startSmartUploadWorker();
 
   // Start scheduler intervals
   startSchedulerIntervals();
@@ -290,7 +282,4 @@ export {
   stopSchedulerIntervals,
   runSchedulerTick,
   runCleanupTick,
-  startSmartUploadWorker,
-  stopSmartUploadWorker,
-  isSmartUploadWorkerRunning,
 };

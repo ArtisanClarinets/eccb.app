@@ -13,6 +13,15 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -26,7 +35,7 @@ import {
 import { toast } from 'sonner';
 import { Users, UserPlus, Trash2, Loader2 } from 'lucide-react';
 import { formatDate } from '@/lib/date';
-import { unassignMusicFromMember } from '@/app/(admin)/admin/music/actions';
+import { unassignMusicFromMember } from '@/app/(admin)/admin/music/assignment-actions';
 import { AssignMusicDialog } from './assign-music-dialog';
 
 interface Assignment {
@@ -67,7 +76,7 @@ export function MusicAssignments({ pieceId, assignments }: MusicAssignmentsProps
       } else {
         toast.error('Failed to unassign member');
       }
-    } catch (_error) {
+    } catch (error) {
       toast.error('Unassign failed');
     } finally {
       setUnassigningId(null);

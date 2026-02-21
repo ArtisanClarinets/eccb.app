@@ -68,7 +68,7 @@ export default async function AdminMembersPage({
   const params = await searchParams;
 
   // Get the current session to check for section leader scoping
-  const _session = await getSession();
+  const session = await getSession();
   const sectionFilterId = await getMemberSectionFilter();
   const isSectionLeaderScoped = sectionFilterId !== null;
 
