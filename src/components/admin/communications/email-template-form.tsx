@@ -479,22 +479,12 @@ export function EmailTemplateForm({ template, onSubmit, isSubmitting }: EmailTem
                 <Label className="text-sm font-medium">HTML Preview</Label>
                 <ScrollArea className="h-[300px] rounded-md border">
                   <div 
-      import DOMPurify from 'dompurify';
-
-      // ... other code
-
-      <ScrollArea className="h-[300px] rounded-md border">
-        <div 
-          className="p-4 prose prose-sm max-w-none"
-          // Sanitize HTML before rendering to prevent XSS attacks
-          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(previewHtml) }}
-        />
+                    className="p-4 prose prose-sm max-w-none"
+                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(previewHtml) }}
+                  />
       </ScrollArea>
 
-      // ... other code
-                </ScrollArea>
               </div>
-
               {previewText && (
                 <div className="space-y-2">
                   <Label className="text-sm font-medium">Plain Text Preview</Label>
