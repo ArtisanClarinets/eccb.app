@@ -22,7 +22,7 @@ const musicPieceSchema = z.object({
   notes: z.string().optional(),
   performanceHistory: z.string().optional(),
   isArchived: z.boolean().optional(),
-  tags: z.unknown().optional(),
+  tags: z.any().optional(),
 });
 
 const updateMusicPieceSchema = musicPieceSchema.partial();
@@ -36,7 +36,7 @@ export async function createMusicPiece(data: CreateMusicPieceInput) {
   const validated = musicPieceSchema.parse(data);
 
   const piece = await prisma.musicPiece.create({
-    data: validated as any,
+    data: validated,
   });
 
   await auditLog({
@@ -56,7 +56,7 @@ export async function updateMusicPiece(id: string, data: UpdateMusicPieceInput) 
 
   const piece = await prisma.musicPiece.update({
     where: { id },
-    data: validated as any,
+    data: validated,
   });
 
   await auditLog({

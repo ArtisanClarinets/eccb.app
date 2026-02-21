@@ -66,6 +66,25 @@ describe('Music Actions', () => {
 
       await expect(createMusicPiece(input as any)).rejects.toThrow();
     });
+
+    it('should create a music piece with tags', async () => {
+      const input = {
+        title: 'Tagged Piece',
+        tags: ['classical', 'symphony'],
+      };
+
+      vi.mocked(prisma.musicPiece.create).mockResolvedValue({ id: 'tagged-id', ...input } as any);
+
+      const result = await createMusicPiece(input);
+
+      expect(prisma.musicPiece.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          title: 'Tagged Piece',
+          tags: ['classical', 'symphony'],
+        }),
+      });
+      expect(result.tags).toEqual(['classical', 'symphony']);
+    });
   });
 
   describe('updateMusicPiece', () => {
