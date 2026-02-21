@@ -16,7 +16,7 @@ import {
   updateProposal,
   updateBatchStatus,
 } from '@/lib/services/smart-upload/smart-upload.service';
-import { MUSIC_SMART_UPLOAD, MUSIC_SMART_UPLOAD_APPROVE } from '@/lib/auth/permission-constants';
+import { MUSIC_SMART_UPLOAD_APPROVE } from '@/lib/auth/permission-constants';
 import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
 import { z } from 'zod';

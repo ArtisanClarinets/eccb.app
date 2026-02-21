@@ -2,12 +2,11 @@ import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { prisma } from '@/lib/db';
 import { requireAuth } from '@/lib/auth/guards';
-import { formatDate, formatTime, formatEventDateRange } from '@/lib/date';
+import { formatDate, formatTime } from '@/lib/date';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Table,
   TableBody,
@@ -21,7 +20,6 @@ import {
   Clock,
   MapPin,
   Music,
-  Users,
   ArrowLeft,
   FileMusic,
   Info,

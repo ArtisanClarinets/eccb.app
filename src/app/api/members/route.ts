@@ -9,7 +9,7 @@ import { z } from 'zod';
 // VALIDATION SCHEMAS
 // =============================================================================
 
-const memberQuerySchema = z.object({
+const _memberQuerySchema = z.object({
   status: z.string().optional(),
   sectionId: z.string().optional(),
   instrumentId: z.string().optional(),
@@ -18,7 +18,7 @@ const memberQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(100).default(50),
 });
 
-const memberCreateSchema = z.object({
+const _memberCreateSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
   lastName: z.string().min(1, 'Last name is required'),
   email: z.string().email('Valid email is required'),
@@ -29,7 +29,7 @@ const memberCreateSchema = z.object({
   instrumentIds: z.array(z.string()).optional(),
 });
 
-const memberUpdateSchema = z.object({
+const _memberUpdateSchema = z.object({
   id: z.string().min(1, 'Member ID is required'),
   firstName: z.string().min(1, 'First name is required').optional(),
   lastName: z.string().min(1, 'Last name is required').optional(),
@@ -40,7 +40,7 @@ const memberUpdateSchema = z.object({
   instrumentIds: z.array(z.string()).optional(),
 });
 
-const memberDeleteSchema = z.object({
+const _memberDeleteSchema = z.object({
   id: z.string().min(1, 'Member ID is required'),
 });
 
@@ -175,7 +175,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = await request.json();
+    const _body = await request.json();
     
     // Create member logic would go here
     // This is a placeholder - actual implementation would validate and create
@@ -214,7 +214,7 @@ export async function PUT(request: NextRequest) {
   }
 
   try {
-    const body = await request.json();
+    const _body = await request.json();
     
     // Update member logic would go here
     

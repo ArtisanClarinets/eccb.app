@@ -997,6 +997,291 @@ function getFileType(mimeType: string): FileType {
 }
 
 // =============================================================================
+// MUSIC FILE ACTIONS
+// =============================================================================
+
+/**
+ * Upload a music file to a piece
+ */
+export async function uploadMusicFile(pieceId: string, formData: FormData) {
+  const session = await requirePermission(MUSIC_EDIT);
+  
+  try {
+    const file = formData.get('file') as File | null;
+    const fileType = formData.get('fileType') as string;
+    const description = formData.get('description') as string | null;
+    const existingFileId = formData.get('existingFileId') as string | null;
+    const changeNote = formData.get('changeNote') as string | null;
+    const instrumentId = formData.get('instrumentId') as string | null;
+    const partType = formData.get('partType') as string | null;
+
+    if (!file || file.size === 0) {
+      return { success: false, error: 'No file provided' };
+    }
+
+    // If updating an existing file (new version)
+    if (existingFileId) {
+      const existingFile = await prisma.musicFile.findUnique({
+        where: { id: existingFileId },
+      });
+
+      if (!existingFile) {
+        return { success: false, error: 'Existing file not found' };
+      }
+
+      // Create version history entry for the old version
+      await prisma.musicFileVersion.create({
+        data: {
+          fileId: existingFileId,
+          version: existingFile.version,
+          fileName: existingFile.fileName,
+          storageKey: existingFile.storageKey,
+          fileSize: existingFile.fileSize,
+          mimeType: existingFile.mimeType,
+          changeNote: changeNote || null,
+          uploadedBy: session.user.id,
+        },
+      });
+
+      // Upload new file
+      const buffer = await file.arrayBuffer();
+      const newKey = `music/${pieceId}/${Date.now()}-${file.name}`;
+      await uploadFile(newKey, Buffer.from(buffer), {
+        contentType: file.type,
+      });
+
+      // Delete old file from storage
+      await deleteFile(existingFile.storageKey);
+
+      // Update the file record
+      const updatedFile = await prisma.musicFile.update({
+        where: { id: existingFileId },
+        data: {
+          fileName: file.name,
+          storageKey: newKey,
+          fileSize: file.size,
+          mimeType: file.type,
+          version: existingFile.version + 1,
+        },
+      });
+
+      await auditLog({
+        action: 'music.file.version',
+        entityType: 'MusicFile',
+        entityId: existingFileId,
+        newValues: { version: updatedFile.version, changeNote },
+      });
+
+      // Invalidate caches
+      await invalidateMusicCache(pieceId);
+
+      revalidatePath(`/admin/music/${pieceId}`);
+      
+      return { success: true, fileId: existingFileId, version: updatedFile.version };
+    }
+
+    // Upload new file
+    const buffer = await file.arrayBuffer();
+    const key = `music/${pieceId}/${Date.now()}-${file.name}`;
+    await uploadFile(key, Buffer.from(buffer), {
+      contentType: file.type,
+    });
+
+    const musicFile = await prisma.musicFile.create({
+      data: {
+        pieceId,
+        fileName: file.name,
+        storageKey: key,
+        mimeType: file.type,
+        fileSize: file.size,
+        fileType: (fileType as FileType) || getFileType(file.type),
+        description,
+        uploadedBy: session.user.id,
+      },
+    });
+
+    // Create part if instrument and part type are provided
+    if (instrumentId && partType) {
+      await prisma.musicPart.create({
+        data: {
+          pieceId,
+          instrumentId,
+          partName: partType,
+          fileId: musicFile.id,
+        },
+      });
+    }
+
+    await auditLog({
+      action: 'music.file.upload',
+      entityType: 'MusicFile',
+      entityId: musicFile.id,
+      newValues: { fileName: file.name, pieceId },
+    });
+
+    // Invalidate caches
+    await invalidateMusicCache(pieceId);
+
+    revalidatePath(`/admin/music/${pieceId}`);
+    
+    return { success: true, fileId: musicFile.id };
+  } catch (error) {
+    console.error('Failed to upload music file:', error);
+    return { success: false, error: 'Failed to upload music file' };
+  }
+}
+
+/**
+ * Update music file metadata
+ */
+export async function updateMusicFile(
+  fileId: string,
+  data: {
+    description?: string;
+    fileType?: FileType;
+    isPublic?: boolean;
+  }
+) {
+  const _session = await requirePermission(MUSIC_EDIT);
+  
+  try {
+    const file = await prisma.musicFile.findUnique({
+      where: { id: fileId },
+    });
+
+    if (!file) {
+      return { success: false, error: 'File not found' };
+    }
+
+    await prisma.musicFile.update({
+      where: { id: fileId },
+      data: {
+        description: data.description,
+        fileType: data.fileType,
+        isPublic: data.isPublic,
+      },
+    });
+
+    await auditLog({
+      action: 'music.file.update',
+      entityType: 'MusicFile',
+      entityId: fileId,
+      newValues: data,
+    });
+
+    // Invalidate caches
+    await invalidateMusicCache(file.pieceId);
+
+    revalidatePath(`/admin/music/${file.pieceId}`);
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to update music file:', error);
+    return { success: false, error: 'Failed to update music file' };
+  }
+}
+
+/**
+ * Delete a music file
+ */
+export async function deleteMusicFile(fileId: string) {
+  const _session = await requirePermission(MUSIC_DELETE);
+  
+  try {
+    const file = await prisma.musicFile.findUnique({
+      where: { id: fileId },
+    });
+
+    if (!file) {
+      return { success: false, error: 'File not found' };
+    }
+
+    // Delete from storage
+    await deleteFile(file.storageKey);
+
+    // Delete from database
+    await prisma.musicFile.delete({
+      where: { id: fileId },
+    });
+
+    await auditLog({
+      action: 'music.file.delete',
+      entityType: 'MusicFile',
+      entityId: fileId,
+      newValues: { fileName: file.fileName },
+    });
+
+    // Invalidate caches
+    await invalidateMusicCache(file.pieceId);
+
+    revalidatePath(`/admin/music/${file.pieceId}`);
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to delete music file:', error);
+    return { success: false, error: 'Failed to delete music file' };
+  }
+}
+
+/**
+ * Archive a music file (soft delete)
+ */
+export async function archiveMusicFile(fileId: string) {
+  const _session = await requirePermission(MUSIC_EDIT);
+  
+  try {
+    const file = await prisma.musicFile.findUnique({
+      where: { id: fileId },
+    });
+
+    if (!file) {
+      return { success: false, error: 'File not found' };
+    }
+
+    await prisma.musicFile.update({
+      where: { id: fileId },
+      data: { isArchived: true },
+    });
+
+    await auditLog({
+      action: 'music.file.archive',
+      entityType: 'MusicFile',
+      entityId: fileId,
+      newValues: { fileName: file.fileName },
+    });
+
+    // Invalidate caches
+    await invalidateMusicCache(file.pieceId);
+
+    revalidatePath(`/admin/music/${file.pieceId}`);
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to archive music file:', error);
+    return { success: false, error: 'Failed to archive music file' };
+  }
+}
+
+/**
+ * Get version history for a music file
+ */
+export async function getFileVersionHistory(fileId: string) {
+  const _session = await requirePermission('music:read');
+  
+  try {
+    const versions = await prisma.musicFileVersion.findMany({
+      where: { fileId },
+      orderBy: { version: 'desc' },
+    });
+
+    return { success: true, versions };
+  } catch (error) {
+    console.error('Failed to get file version history:', error);
+    return { success: false, error: 'Failed to get version history' };
+  }
+}
+
+// =============================================================================
 // EXPORT FUNCTIONALITY
 // =============================================================================
 

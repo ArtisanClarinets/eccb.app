@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -38,7 +38,7 @@ import {
   FileText,
 } from 'lucide-react';
 import { EmailTemplateType, EmailTemplate } from '@prisma/client';
-import { extractTemplateVariables, TemplateVariable } from '@/lib/email-template-utils';
+import { extractTemplateVariables } from '@/lib/email-template-utils';
 
 const templateTypes: { value: EmailTemplateType; label: string }[] = [
   { value: 'WELCOME', label: 'Welcome' },
@@ -111,45 +111,7 @@ export function EmailTemplateForm({ template, onSubmit, isSubmitting }: EmailTem
   const watchedSubject = watch('subject');
   const watchedTextBody = watch('textBody');
 
-  // Detect variables from template content
-  useEffect(() => {
-    const allContent = `${watchedSubject} ${watchedBody} ${watchedTextBody || ''}`;
-    const detected = extractTemplateVariables(allContent);
-    setDetectedVars(detected);
-
-    // Auto-add detected variables that aren't already in the list
-    const existingNames = variables.map(v => v.name);
-    const newVars = detected.filter(v => !existingNames.includes(v));
-    if (newVars.length > 0) {
-      setVariables(prev => [
-        ...prev,
-        ...newVars.map(name => ({
-          name,
-          description: '',
-          required: true,
-        })),
-      ]);
-    }
-  }, [watchedBody, watchedSubject, watchedTextBody]);
-
-  const addVariable = () => {
-    setVariables(prev => [
-      ...prev,
-      { name: '', description: '', required: true },
-    ]);
-  };
-
-  const removeVariable = (index: number) => {
-    setVariables(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const updateVariable = (index: number, field: keyof Variable, value: string | boolean) => {
-    setVariables(prev =>
-      prev.map((v, i) => (i === index ? { ...v, [field]: value } : v))
-    );
-  };
-
-  const generatePreview = () => {
+  const generatePreview = useCallback(() => {
     let html = watchedBody || '';
     let subject = watchedSubject || '';
     let text = watchedTextBody || '';
@@ -181,11 +143,50 @@ export function EmailTemplateForm({ template, onSubmit, isSubmitting }: EmailTem
     setPreviewHtml(replaceVars(html));
     setPreviewSubject(replaceVars(subject));
     setPreviewText(replaceVars(text));
+  }, [watchedBody, watchedSubject, watchedTextBody, previewVars]);
+
+  // Detect variables from template content
+  useEffect(() => {
+    const allContent = `${watchedSubject} ${watchedBody} ${watchedTextBody || ''}`;
+    const detected = extractTemplateVariables(allContent);
+    setDetectedVars(detected);
+
+    // Auto-add detected variables that aren't already in the list
+    const existingNames = variables.map(v => v.name);
+    const newVars = detected.filter(v => !existingNames.includes(v));
+    if (newVars.length > 0) {
+      setVariables(prev => [
+        ...prev,
+        ...newVars.map(name => ({
+          name,
+          description: '',
+          required: true,
+        })),
+      ]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- variables intentionally omitted to prevent infinite loop when auto-adding detected variables
+  }, [watchedBody, watchedSubject, watchedTextBody]);
+
+  const addVariable = () => {
+    setVariables(prev => [
+      ...prev,
+      { name: '', description: '', required: true },
+    ]);
+  };
+
+  const removeVariable = (index: number) => {
+    setVariables(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const updateVariable = (index: number, field: keyof Variable, value: string | boolean) => {
+    setVariables(prev =>
+      prev.map((v, i) => (i === index ? { ...v, [field]: value } : v))
+    );
   };
 
   useEffect(() => {
     generatePreview();
-  }, [previewVars, watchedBody, watchedSubject, watchedTextBody]);
+  }, [generatePreview]);
 
   const onFormSubmit = async (data: TemplateFormData) => {
     await onSubmit({ ...data, variables });

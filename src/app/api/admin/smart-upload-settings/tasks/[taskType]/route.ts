@@ -81,12 +81,22 @@ export async function GET(
 
     return NextResponse.json({ config });
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
     logger.error(
       'Failed to get task config',
-      error instanceof Error ? error : new Error(String(error))
+      { taskType, error: errorMessage }
     );
+    
+    // Check for specific error types and provide helpful messages
+    if (errorMessage.includes('prisma') || errorMessage.includes('database')) {
+      return NextResponse.json(
+        { error: 'Database error. Please ensure migrations are up to date.' },
+        { status: 500 }
+      );
+    }
+    
     return NextResponse.json(
-      { error: 'Failed to get task config' },
+      { error: 'Failed to get task config', details: errorMessage },
       { status: 500 }
     );
   }

@@ -64,7 +64,7 @@ describe('Music File Actions', () => {
     session: { id: 'session-1' },
   } as any;
 
-  const mockPiece = {
+  const _mockPiece = {
     id: 'piece-1',
     title: 'Test Piece',
     composerId: null,

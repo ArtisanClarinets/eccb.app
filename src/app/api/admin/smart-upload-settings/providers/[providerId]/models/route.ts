@@ -8,7 +8,6 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 import { auth } from '@/lib/auth/config';
 import { checkUserPermission } from '@/lib/auth/permissions';
 import {
@@ -83,10 +82,14 @@ export async function POST(
 ) {
   try {
     const { providerId } = await params;
+    
+    // DIAGNOSTIC: Log the incoming providerId
+    console.log('[refreshModels] POST called with providerId:', providerId);
 
     // Check authentication
     const session = await auth.api.getSession({ headers: request.headers });
     if (!session?.user?.id) {
+      console.log('[refreshModels] Unauthorized - no session');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -96,12 +99,20 @@ export async function POST(
       'system.edit.all'
     );
     if (!hasAdminAccess) {
+      console.log('[refreshModels] Forbidden - no admin access');
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    // DIAGNOSTIC: Log before calling refreshModelsFromProvider
+    console.log('[refreshModels] Calling refreshModelsFromProvider with providerId:', providerId);
+    
     const result = await refreshModelsFromProvider(providerId);
 
+    // DIAGNOSTIC: Log the result
+    console.log('[refreshModels] Result:', JSON.stringify(result, null, 2));
+
     if (!result.success) {
+      console.log('[refreshModels] Failed - returning 400 with error:', result.error);
       return NextResponse.json(
         {
           error: 'Failed to refresh models',

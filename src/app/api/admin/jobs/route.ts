@@ -14,7 +14,6 @@ import {
   getJobStatus, 
   getDeadLetterJobs,
   retryDeadLetterJob,
-  clearAllQueues,
   QUEUE_NAMES,
 } from '@/lib/jobs/queue';
 import { auth } from '@/lib/auth/config';

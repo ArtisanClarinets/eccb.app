@@ -127,7 +127,7 @@ function sanitizeOcrText(text: string): string {
 /**
  * Determines if an error is retryable
  */
-function isRetryableError(error: unknown): boolean {
+function _isRetryableError(error: unknown): boolean {
   if (error instanceof Error) {
     const message = error.message.toLowerCase();
     // Retry on rate limits, timeouts, and transient errors

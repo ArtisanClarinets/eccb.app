@@ -180,7 +180,7 @@ async function uploadToS3(
 async function uploadToLocal(
   key: string,
   file: Buffer | NodeJS.ReadableStream,
-  options: UploadOptions
+  _options: UploadOptions
 ): Promise<string> {
   await ensureStorageDirectory();
   

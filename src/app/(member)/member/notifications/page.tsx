@@ -3,7 +3,6 @@ import { requireAuth } from '@/lib/auth/guards';
 import { formatDate, formatRelativeTime } from '@/lib/date';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import {
   Bell,
@@ -11,12 +10,10 @@ import {
   Calendar,
   AlertTriangle,
   Info,
-  Check,
-  ChevronRight,
 } from 'lucide-react';
 
 export default async function MemberNotificationsPage() {
-  const session = await requireAuth();
+  const _session = await requireAuth();
   
   const now = new Date();
 

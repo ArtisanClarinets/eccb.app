@@ -14,9 +14,7 @@ import {
   getBatch,
   addItemToBatch,
   updateBatchStatus,
-  updateItemStatus,
 } from '@/lib/services/smart-upload/smart-upload.service';
-import { validateSmartUploadFile, validateBatchLimits } from '@/lib/services/smart-upload/validators';
 import { uploadFile, validateFileMagicBytes } from '@/lib/services/storage';
 import { MUSIC_SMART_UPLOAD } from '@/lib/auth/permission-constants';
 import { env } from '@/lib/env';

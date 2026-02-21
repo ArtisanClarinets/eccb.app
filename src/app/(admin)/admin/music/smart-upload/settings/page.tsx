@@ -1,5 +1,4 @@
 import { Metadata } from 'next';
-import { redirect } from 'next/navigation';
 import { requirePermission } from '@/lib/auth/guards';
 import { SmartUploadSettingsClient } from './smart-upload-settings-client';
 

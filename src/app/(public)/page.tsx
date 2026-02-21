@@ -3,7 +3,7 @@ import { Hero } from '@/components/home/hero';
 import { UpcomingEvents } from '@/components/home/upcoming-events';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { Music, Calendar, Users, Heart } from 'lucide-react';
+import { Music, Users, Heart } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 

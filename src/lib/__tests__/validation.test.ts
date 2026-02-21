@@ -59,7 +59,7 @@ const musicPieceCreateSchema = z.object({
   notes: z.string().max(2000, 'Notes too long').optional(),
 });
 
-const musicPieceUpdateSchema = musicPieceCreateSchema.partial();
+const _musicPieceUpdateSchema = musicPieceCreateSchema.partial();
 
 // =============================================================================
 // File Upload Validation Schemas

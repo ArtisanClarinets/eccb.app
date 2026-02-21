@@ -4,7 +4,7 @@
  * Tests for AES-256-GCM encryption functions for API keys.
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 // Mock the env module before importing encryption
 vi.mock('@/lib/env', () => ({

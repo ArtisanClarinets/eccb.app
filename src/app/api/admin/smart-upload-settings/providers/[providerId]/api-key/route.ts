@@ -14,8 +14,6 @@ import { checkUserPermission } from '@/lib/auth/permissions';
 import {
   saveApiKey,
   validateApiKey,
-  hasValidApiKey,
-  getProvider,
 } from '@/lib/services/smart-upload-settings';
 import { logger } from '@/lib/logger';
 import { prisma } from '@/lib/db';
@@ -25,10 +23,6 @@ import { prisma } from '@/lib/db';
 // ============================================================================
 
 const saveApiKeySchema = z.object({
-  apiKey: z.string().min(1, 'API key is required'),
-});
-
-const validateApiKeySchema = z.object({
   apiKey: z.string().min(1, 'API key is required'),
 });
 

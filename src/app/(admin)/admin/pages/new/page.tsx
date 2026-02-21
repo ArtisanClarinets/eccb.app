@@ -1,4 +1,3 @@
-import { redirect } from 'next/navigation';
 import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 import { PageForm } from '@/components/admin/pages/page-form';
 import { createPage } from '../actions';

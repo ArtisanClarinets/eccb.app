@@ -14,8 +14,6 @@ import { execSync } from 'child_process';
 import { existsSync, readdirSync, readFileSync, statSync } from 'fs';
 import { join } from 'path';
 
-import { SetupError } from './types';
-
 // =============================================================================
 // Constants
 // =============================================================================
@@ -137,9 +135,11 @@ export class SchemaAutomationService {
    */
   getMigrationStatus(): SchemaMigrationStatus {
     try {
-      const env = this.databaseUrl ? { DATABASE_URL: this.databaseUrl } : {};
+      const _env = this.databaseUrl ? { DATABASE_URL: this.databaseUrl } : {};
 
-      const output = executePrismaCommand('migrate status', { databaseUrl: this.databaseUrl });
+      const output = executePrismaCommand('migrate status', {
+        databaseUrl: this.databaseUrl,
+      });
 
       // Parse the output
       const hasPendingMigrations = output.includes('migration pending');
@@ -171,10 +171,10 @@ export class SchemaAutomationService {
     skipSeed?: boolean;
     createOnly?: boolean;
   } = {}): MigrationResult {
-    const { name, skipSeed = false, createOnly = false } = options;
+    const { name, skipSeed: _skipSeed = false, createOnly = false } = options;
 
     try {
-      const env = this.databaseUrl ? { DATABASE_URL: this.databaseUrl } : {};
+      const _env = this.databaseUrl ? { DATABASE_URL: this.databaseUrl } : {};
 
       // Run migrations
       let command = 'migrate deploy';
@@ -209,7 +209,7 @@ export class SchemaAutomationService {
    */
   createMigration(name: string): MigrationResult {
     try {
-      const env = this.databaseUrl ? { DATABASE_URL: this.databaseUrl } : {};
+      const _env = this.databaseUrl ? { DATABASE_URL: this.databaseUrl } : {};
 
       executePrismaCommand(`migrate dev --name ${name}`, {
         databaseUrl: this.databaseUrl,
@@ -241,7 +241,7 @@ export class SchemaAutomationService {
     const { skipSeed = false, force = false } = options;
 
     try {
-      const env = this.databaseUrl ? { DATABASE_URL: this.databaseUrl } : {};
+      const _env = this.databaseUrl ? { DATABASE_URL: this.databaseUrl } : {};
 
       // Reset the database
       const resetCommand = force ? 'migrate reset --force' : 'migrate reset';
@@ -290,7 +290,7 @@ export class SchemaAutomationService {
    */
   seedDatabase(): SeedingResult {
     try {
-      const env = this.databaseUrl ? { DATABASE_URL: this.databaseUrl } : {};
+      const _env = this.databaseUrl ? { DATABASE_URL: this.databaseUrl } : {};
 
       executePrismaCommand('db seed', {
         databaseUrl: this.databaseUrl,
@@ -363,7 +363,7 @@ export class SchemaAutomationService {
    */
   pullSchema(): boolean {
     try {
-      const env = this.databaseUrl ? { DATABASE_URL: this.databaseUrl } : {};
+      const _env = this.databaseUrl ? { DATABASE_URL: this.databaseUrl } : {};
 
       executePrismaCommand('db pull', {
         databaseUrl: this.databaseUrl,

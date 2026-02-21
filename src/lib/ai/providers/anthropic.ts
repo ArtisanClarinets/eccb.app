@@ -6,7 +6,6 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
-import { z } from 'zod';
 
 import { env } from '../../env';
 
@@ -20,7 +19,6 @@ import {
   ZodSchema,
 } from '../types';
 import {
-  parseAndValidateJson,
   withRetry,
   withTimeout,
 } from '../structured-output';
@@ -182,8 +180,6 @@ Respond with valid JSON now.`;
 
       const content = response.choices[0]?.message?.content || '';
 
-      // Import the schema here to avoid circular issues
-      const { parse } = await import('zod');
       let data: T | null = null;
       try {
         // Use a generic approach - try to parse the JSON

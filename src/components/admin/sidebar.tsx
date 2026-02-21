@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import {
+  Activity,
   LayoutDashboard,
   Users,
   Music,
@@ -15,10 +16,6 @@ import {
   Bell,
   X,
   Menu,
-  ImageIcon,
-  Activity,
-  Upload,
-  Sparkles,
 } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';

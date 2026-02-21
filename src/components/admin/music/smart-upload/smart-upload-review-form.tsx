@@ -132,7 +132,7 @@ export function SmartUploadReviewForm({
     notes: proposal.notes || '',
   });
 
-  const hasChanges = useCallback(() => {
+  const _hasChanges = useCallback(() => {
     return (
       formData.title !== (proposal.title || '') ||
       formData.composer !== (proposal.composer || '') ||

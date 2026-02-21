@@ -53,7 +53,7 @@ export function SmartUploadProgress({
   const activeStep = currentStep || STATUS_STEP_MAP[status] || 'VALIDATED';
   const stepIndex = STEPS.indexOf(activeStep);
 
-  const isPending = (step: SmartUploadStep) => {
+  const _isPending = (step: SmartUploadStep) => {
     const index = STEPS.indexOf(step);
     return index > stepIndex;
   };
@@ -72,7 +72,7 @@ export function SmartUploadProgress({
     status === 'PROCESSING' ||
     status === 'INGESTING';
 
-  const isTerminal =
+  const _isTerminal =
     status === 'COMPLETE' ||
     status === 'FAILED' ||
     status === 'CANCELLED';

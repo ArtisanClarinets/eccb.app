@@ -35,13 +35,11 @@ import {
 import {
   ArrowLeft,
   FileText,
-  Upload,
   CheckCircle,
   AlertCircle,
   XCircle,
   Loader2,
   Trash2,
-  ExternalLink,
 } from 'lucide-react';
 
 interface BatchDetailClientProps {
@@ -57,7 +55,7 @@ export function BatchDetailClient({
   proposals: initialProposals,
   progress: initialProgress,
 }: BatchDetailClientProps) {
-  const router = useRouter();
+  const _router = useRouter();
   const { getBatch, approveBatch, cancelBatch, isLoading } = useSmartUpload();
   const { startPolling, stopPolling, isPolling } = useSmartUploadPoll();
 

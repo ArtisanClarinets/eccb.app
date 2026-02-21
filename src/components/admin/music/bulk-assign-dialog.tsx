@@ -64,8 +64,8 @@ export function BulkAssignDialog({
         const data = await response.json();
         setSections(data.sections || []);
       }
-    } catch (error) {
-      console.error('Failed to load sections:', error);
+    } catch (_error) {
+      console.error('Failed to load sections:', _error);
     } finally {
       setIsLoading(false);
     }
@@ -111,7 +111,7 @@ export function BulkAssignDialog({
       } else {
         toast.error(result.error || 'Failed to assign music');
       }
-    } catch (error) {
+    } catch (_error) {
       toast.error('Assignment failed');
     } finally {
       setIsSubmitting(false);

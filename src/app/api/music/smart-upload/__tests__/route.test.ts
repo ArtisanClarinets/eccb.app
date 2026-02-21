@@ -67,7 +67,6 @@ import { validateCSRF } from '@/lib/csrf';
 import { applyRateLimit } from '@/lib/rate-limit';
 import { isSmartUploadEnabled } from '@/lib/services/smart-upload-settings';
 import { prisma } from '@/lib/db';
-import { MUSIC_SMART_UPLOAD } from '@/lib/auth/permission-constants';
 
 describe('Smart Upload API', () => {
   const mockUser = {

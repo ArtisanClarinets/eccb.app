@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { cn, formatDate } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -67,7 +67,7 @@ export function SmartUploadClient({
   aiProvider,
 }: SmartUploadClientProps) {
   const router = useRouter();
-  const { createBatch, uploadFiles, isLoading, error } = useSmartUpload();
+  const { createBatch, uploadFiles, isLoading: _isLoading, error: _error } = useSmartUpload();
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
