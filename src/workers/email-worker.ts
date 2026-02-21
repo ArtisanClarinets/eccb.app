@@ -6,8 +6,8 @@
  */
 
 import { Job } from 'bullmq';
-import { sendEmail, type SendEmailOptions } from '@/lib/email';
-import { createWorker } from '@/lib/jobs/queue';
+import { sendEmail, sendBulkEmails, type SendEmailOptions } from '@/lib/email';
+import { createWorker, QUEUE_NAMES } from '@/lib/jobs/queue';
 import { 
   type EmailSendJobData, 
   type EmailBulkJobData,

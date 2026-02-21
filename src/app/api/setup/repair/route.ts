@@ -1,21 +1,17 @@
 /**
- * Database Repair API Route
+ * Setup Repair API Route
  *
- * Endpoint for fixing database issues:
- * - Reset database (drop & recreate)
- * - Force migration
- * - Reseed data
+ * Repair broken database connections and fix setup issues:
+ * - Reset and reapply migrations
+ * - Re-seed database
+ * - Fix connection issues
  */
 
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
-import {
-  repairDatabase,
-  runMigrations,
-  seedDatabase,
-} from '@/lib/setup/schema-automation';
-import { SetupPhase } from '@/lib/setup/types';
+import { repairDatabase, runMigrations, seedDatabase } from '@/lib/setup/schema-automation';
+import { SetupPhase, type MigrationStatus } from '@/lib/setup/types';
 import { logger } from '@/lib/logger';
 
 // =============================================================================
@@ -33,7 +29,13 @@ interface RepairResponse {
   progress: number;
   message?: string;
   error?: string;
-  details?: Record<string, unknown>;
+  details?: {
+    migrations?: MigrationStatus;
+    seed?: {
+      success: boolean;
+      tablesSeeded?: number;
+    };
+  };
 }
 
 // =============================================================================
@@ -42,7 +44,7 @@ interface RepairResponse {
 
 const repairSchema = z.object({
   action: z.enum(['reset', 'migrate', 'seed', 'full']),
-  force: z.boolean().optional(),
+  force: z.boolean().optional().default(false),
 });
 
 // =============================================================================
@@ -52,53 +54,45 @@ const repairSchema = z.object({
 /**
  * Run full repair process
  */
-async function runFullRepair(force: boolean = false): Promise<RepairResponse> {
+async function runFullRepair(force: boolean): Promise<RepairResponse> {
   try {
-    // Phase 1: Reset
-    logger.info('Starting full repair: Resetting database');
-    const resetResult = repairDatabase({ force });
+    logger.info('Starting full repair process');
 
-    if (!resetResult.success) {
-      return {
-        success: false,
-        phase: SetupPhase.CHECKING,
-        progress: 10,
-        error: resetResult.error || 'Database reset failed',
-      };
-    }
+    // Step 1: Reset and migrate
+    const repairResult = repairDatabase({ skipSeed: true, force });
 
-    // Phase 2: Migration
-    logger.info('Starting full repair: Running migrations');
-    const migrationResult = runMigrations({ skipSeed: true });
-
-    if (!migrationResult.success) {
+    if (!repairResult.success) {
       return {
         success: false,
         phase: SetupPhase.MIGRATING,
-        progress: 40,
-        error: migrationResult.error || 'Migration failed',
+        progress: 50,
+        error: repairResult.error || 'Repair failed during migration',
       };
     }
 
-    // Phase 3: Seeding
-    logger.info('Starting full repair: Seeding database');
+    // Step 2: Seed
     const seedResult = seedDatabase();
 
     if (!seedResult.success) {
       return {
         success: false,
         phase: SetupPhase.SEEDING,
-        progress: 70,
-        error: seedResult.error || 'Seeding failed',
+        progress: 80,
+        error: seedResult.error || 'Repair failed during seeding',
       };
     }
 
-    // Complete
     return {
       success: true,
       phase: SetupPhase.COMPLETE,
       progress: 100,
-      message: 'Database repair completed successfully',
+      message: 'Repair completed successfully',
+      details: {
+        seed: {
+          success: seedResult.success,
+          tablesSeeded: seedResult.tablesSeeded,
+        },
+      },
     };
   } catch (error) {
     logger.error('Full repair failed', error instanceof Error ? error : new Error(String(error)));
@@ -106,7 +100,7 @@ async function runFullRepair(force: boolean = false): Promise<RepairResponse> {
       success: false,
       phase: SetupPhase.CHECKING,
       progress: 0,
-      error: error instanceof Error ? error.message : 'Unknown error occurred',
+      error: error instanceof Error ? error.message : 'Unknown error during repair',
     };
   }
 }
@@ -120,6 +114,12 @@ async function runFullRepair(force: boolean = false): Promise<RepairResponse> {
  * Run repair operations
  */
 export async function POST(request: Request): Promise<NextResponse<RepairResponse>> {
+  // Security Check
+  const guardResult = validateSetupRequest(request);
+  if (guardResult) {
+    return guardResult as NextResponse<RepairResponse>;
+  }
+
   try {
     // Validate request body
     const body = await request.json();
@@ -137,13 +137,13 @@ export async function POST(request: Request): Promise<NextResponse<RepairRespons
       );
     }
 
-    const { action, force } = validation.data as RepairRequest;
+    const { action, force = false } = validation.data as RepairRequest;
 
     logger.info(`Repair action: ${action}`, { force });
 
     // Handle different repair actions
     switch (action) {
-      case 'reset': {
+      case 'reset':
         logger.info('Resetting database');
         const resetResult = repairDatabase({ force });
 
@@ -153,9 +153,8 @@ export async function POST(request: Request): Promise<NextResponse<RepairRespons
           progress: resetResult.success ? 100 : 50,
           error: resetResult.error,
         });
-      }
 
-      case 'migrate': {
+      case 'migrate':
         logger.info('Running migrations');
         const migrationResult = runMigrations({ skipSeed: true });
 
@@ -165,9 +164,8 @@ export async function POST(request: Request): Promise<NextResponse<RepairRespons
           progress: migrationResult.success ? 100 : 50,
           error: migrationResult.error,
         });
-      }
 
-      case 'seed': {
+      case 'seed':
         logger.info('Seeding database');
         const seedResult = seedDatabase();
 
@@ -183,7 +181,6 @@ export async function POST(request: Request): Promise<NextResponse<RepairRespons
             },
           },
         });
-      }
 
       case 'full':
         return NextResponse.json(await runFullRepair(force));
@@ -194,7 +191,7 @@ export async function POST(request: Request): Promise<NextResponse<RepairRespons
             success: false,
             phase: SetupPhase.CHECKING,
             progress: 0,
-            error: `Unknown action: ${action}`,
+            error: `Unknown repair action: ${action}`,
           },
           { status: 400 },
         );

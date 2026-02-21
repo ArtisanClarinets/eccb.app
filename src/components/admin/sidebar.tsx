@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import {
-  Activity,
   LayoutDashboard,
   Users,
   Music,
@@ -16,6 +15,8 @@ import {
   Bell,
   X,
   Menu,
+  ImageIcon,
+  Activity,
 } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -48,8 +49,6 @@ const navigation = [
     children: [
       { name: 'All Music', href: '/admin/music' },
       { name: 'Add Music', href: '/admin/music/new' },
-      { name: 'Smart Upload', href: '/admin/music/smart-upload' },
-      { name: 'Smart Upload Settings', href: '/admin/music/smart-upload/settings' },
     ],
   },
   {

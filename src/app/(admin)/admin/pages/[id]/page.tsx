@@ -6,7 +6,7 @@ import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 import { PageForm } from '@/components/admin/pages/page-form';
 import { updatePage, deletePage } from '../actions';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { formatDate } from '@/lib/date';
 import {
