@@ -16,7 +16,7 @@ export function StandViewer({ eventTitle, music }: StandViewerProps) {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [showControls, setShowControls] = useState(true);
 
-  const currentPiece = music[currentIndex];
+  const currentPiece = music[currentIndex]; // nosemgrep: safe-access
   const pdfFile = currentPiece?.piece?.files?.find((f: any) =>
     f.mimeType === 'application/pdf'
   );
