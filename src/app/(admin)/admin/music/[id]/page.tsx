@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { prisma } from '@/lib/db';
 import { requirePermission } from '@/lib/auth/guards';
-import { formatDate, formatDuration } from '@/lib/date';
+import { formatDate } from '@/lib/date';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -11,13 +11,8 @@ import {
   ArrowLeft,
   Edit,
   FileText,
-  Music,
   Users,
   Calendar,
-  Download,
-  Trash2,
-  Upload,
-  Clock,
 } from 'lucide-react';
 import { MusicFilesList } from '@/components/admin/music/music-files-list';
 import { MusicAssignments } from '@/components/admin/music/music-assignments';

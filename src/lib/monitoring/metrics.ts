@@ -193,7 +193,7 @@ async function isRedisAvailable(): Promise<boolean> {
 export async function incrementCounter(
   name: string,
   value = 1,
-  tags?: Record<string, string>
+  _tags?: Record<string, string>
 ): Promise<void> {
   const key = `${METRICS_PREFIX}:counter:${name}`;
   
@@ -217,7 +217,7 @@ export async function incrementCounter(
 export async function setGauge(
   name: string,
   value: number,
-  tags?: Record<string, string>
+  _tags?: Record<string, string>
 ): Promise<void> {
   const key = `${METRICS_PREFIX}:gauge:${name}`;
   
@@ -240,7 +240,7 @@ export async function setGauge(
 export async function recordHistogram(
   name: string,
   value: number,
-  tags?: Record<string, string>
+  _tags?: Record<string, string>
 ): Promise<void> {
   const key = `${METRICS_PREFIX}:histogram:${name}`;
   
@@ -265,7 +265,7 @@ export async function recordHistogram(
 export async function recordTimer(
   name: string,
   durationMs: number,
-  tags?: Record<string, string>
+  _tags?: Record<string, string>
 ): Promise<void> {
   const key = `${METRICS_PREFIX}:timer:${name}`;
   

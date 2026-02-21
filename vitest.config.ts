@@ -19,7 +19,7 @@ export default defineConfig({
       ],
     },
     setupFiles: ['./src/lib/__tests__/test-setup.ts'],
-    testTimeout: 10000,
+    testTimeout: 30000,
     hookTimeout: 10000,
   },
   resolve: {

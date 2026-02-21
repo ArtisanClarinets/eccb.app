@@ -9,6 +9,8 @@ import {
   MUSIC_EDIT,
   MUSIC_DELETE,
   MUSIC_UPLOAD,
+  MUSIC_SMART_UPLOAD,
+  MUSIC_SMART_UPLOAD_APPROVE,
   MUSIC_DOWNLOAD_ALL,
   MUSIC_VIEW_ASSIGNED,
   MUSIC_DOWNLOAD_ASSIGNED,
@@ -18,6 +20,7 @@ import {
   ATTENDANCE_MARK_OWN,
 } from '@/lib/auth/permission-constants';
 import { assertSuperAdminPasswordPresentForSeed } from '@/lib/seeding';
+import { seedDefaultProviders } from '@/lib/services/smart-upload-settings';
 
 // If DATABASE_URL points to MySQL/MariaDB, provide a driver adapter required by the "client" (WASM) engine.
 function _parseDbUrl(url?: string) {
@@ -128,7 +131,7 @@ async function main() {
   }
 
   // Librarian music permissions
-  const librarianPermNames = [MUSIC_VIEW_ALL, MUSIC_CREATE, MUSIC_EDIT, MUSIC_DELETE, MUSIC_UPLOAD, MUSIC_DOWNLOAD_ALL];
+  const librarianPermNames = [MUSIC_VIEW_ALL, MUSIC_CREATE, MUSIC_EDIT, MUSIC_DELETE, MUSIC_UPLOAD, MUSIC_SMART_UPLOAD, MUSIC_SMART_UPLOAD_APPROVE, MUSIC_DOWNLOAD_ALL];
   for (const permName of librarianPermNames) {
     const perm = allPermissions.find((p) => p.name === permName);
     if (perm) {
@@ -223,7 +226,7 @@ async function main() {
 
   try {
     assertSuperAdminPasswordPresentForSeed();
-  } catch (err: unknown) {
+  } catch (_err: unknown) {
     console.error('❌ SUPER_ADMIN_PASSWORD is not set. For security, you must provide a password for the root SUPER_ADMIN user before running `npm run db:seed`.');
     console.error('   Add the following to your `.env` file (do NOT commit real passwords):');
     console.error('     SUPER_ADMIN_EMAIL="admin@eccb.org"');
@@ -325,6 +328,10 @@ async function main() {
       throw error;
     }
   }
+
+  // 7. Seed AI Providers
+  await seedDefaultProviders();
+  console.log('✅ Seeded AI providers');
 
   console.log('🎉 Seeding complete!');
 }

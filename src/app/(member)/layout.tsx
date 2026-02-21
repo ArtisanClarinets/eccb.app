@@ -16,7 +16,9 @@ export default async function MemberLayout({
       <div className="flex-1 flex flex-col lg:pl-64">
         <MemberHeader user={user} />
         <main className="flex-1 p-6 lg:p-8">
-          {children}
+          <div className="max-w-7xl mx-auto w-full">
+            {children}
+          </div>
         </main>
       </div>
     </div>

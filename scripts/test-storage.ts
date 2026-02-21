@@ -1,4 +1,4 @@
-import { uploadFile, getSignedDownloadUrl, deleteFile, getFileUrl } from '../src/lib/services/storage';
+import { uploadFile, deleteFile, getFileUrl } from '../src/lib/services/storage';
 import fs from 'fs/promises';
 import { env } from '../src/lib/env';
 

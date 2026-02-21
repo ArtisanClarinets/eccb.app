@@ -295,17 +295,7 @@ const musicPieceSchema = z.object({
   notes: z.string().optional(),
 });
 
-const musicFileUploadSchema = z.object({
-  file: z.any().refine((f) => f && typeof f.size === 'number' && f.size > 0, 'File is required'),
-  partType: z.string().optional(),
-  instrumentId: z.string().optional(),
-  fileType: z.nativeEnum(FileType).optional(),
-  description: z.string().optional(),
-  changeNote: z.string().optional(),
-  existingFileId: z.string().optional(),
-});
-
-const musicFileUpdateSchema = z.object({
+const _musicFileUpdateSchema = z.object({
   description: z.string().optional(),
   fileType: z.nativeEnum(FileType).optional(),
   isPublic: z.boolean().optional(),
@@ -702,7 +692,7 @@ export async function getAssignmentHistory(options: {
   assignmentId?: string;
   limit?: number;
 }) {
-  const session = await requirePermission('music:read');
+  const _session = await requirePermission('music:read');
   
   try {
     const where: Record<string, unknown> = {};
@@ -740,7 +730,7 @@ export async function getAssignmentHistory(options: {
  * Get librarian dashboard statistics
  */
 export async function getLibrarianDashboardStats() {
-  const session = await requirePermission('music:read');
+  const _session = await requirePermission('music:read');
   
   try {
     const now = new Date();
@@ -858,7 +848,7 @@ export async function getAssignmentsForLibrarian(filters?: {
   overdue?: boolean;
   search?: string;
 }) {
-  const session = await requirePermission('music:read');
+  const _session = await requirePermission('music:read');
   
   try {
     const where: Record<string, unknown> = {};
@@ -992,7 +982,7 @@ export async function markOverdueAssignments() {
 }
 
 export async function createMusicPiece(formData: FormData) {
-  const session = await requirePermission(MUSIC_CREATE);
+  const _session = await requirePermission(MUSIC_CREATE);
   
   try {
     const title = formData.get('title') as string;
@@ -1093,7 +1083,7 @@ export async function createMusicPiece(formData: FormData) {
 }
 
 export async function updateMusicPiece(id: string, formData: FormData) {
-  const session = await requirePermission(MUSIC_EDIT);
+  const _session = await requirePermission(MUSIC_EDIT);
   
   try {
     const title = formData.get('title') as string;
@@ -1148,7 +1138,7 @@ export async function updateMusicPiece(id: string, formData: FormData) {
 }
 
 export async function deleteMusicPiece(id: string) {
-  const session = await requirePermission(MUSIC_DELETE);
+  const _session = await requirePermission(MUSIC_DELETE);
   
   try {
     // Get all files for this piece
@@ -1230,44 +1220,23 @@ export async function assignMusicToMembers(
   }
 }
 
-export async function unassignMusicFromMember(
-  pieceId: string,
-  memberId: string
-) {
-  const session = await requirePermission(MUSIC_ASSIGN);
+/**
+ * Get version history for a music file
+ */
+export async function getFileVersionHistory(fileId: string) {
+  const _session = await requirePermission('music:read');
   
   try {
-    await prisma.musicAssignment.deleteMany({
-      where: {
-        pieceId,
-        memberId,
-      },
+    const versions = await prisma.musicFileVersion.findMany({
+      where: { fileId },
+      orderBy: { version: 'desc' },
     });
 
-    await auditLog({
-      action: 'music.unassign',
-      entityType: 'MusicPiece',
-      entityId: pieceId,
-      newValues: { memberId },
-    });
-
-    // Invalidate caches
-    await invalidateMusicAssignmentCache(pieceId, memberId);
-
-    revalidatePath(`/admin/music/${pieceId}`);
-    revalidatePath('/member/music');
-    
-    return { success: true };
+    return { success: true, versions };
   } catch (error) {
-    console.error('Failed to unassign music:', error);
-    return { success: false, error: 'Failed to unassign music' };
+    console.error('Failed to get file version history:', error);
+    return { success: false, error: 'Failed to get version history' };
   }
-}
-
-function getFileType(mimeType: string): FileType {
-  if (mimeType.includes('pdf')) return FileType.FULL_SCORE;
-  if (mimeType.includes('audio')) return FileType.AUDIO;
-  return FileType.OTHER;
 }
 
 // =============================================================================

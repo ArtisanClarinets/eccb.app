@@ -5,6 +5,7 @@ import { requirePermission } from '@/lib/auth/permissions';
 import { auditLog } from '@/lib/services/audit';
 import { z } from 'zod';
 import { MUSIC_CREATE, MUSIC_EDIT, MUSIC_DELETE } from '@/lib/auth/permission-constants';
+import { MusicDifficulty } from '@prisma/client';
 
 const musicPieceSchema = z.object({
   title: z.string().min(1, 'Title is required'),
@@ -12,19 +13,30 @@ const musicPieceSchema = z.object({
   composerId: z.string().optional(),
   arrangerId: z.string().optional(),
   publisherId: z.string().optional(),
-  difficulty: z.enum(['GRADE_1', 'GRADE_2', 'GRADE_3', 'GRADE_4', 'GRADE_5', 'GRADE_6']).optional(),
-  duration: z.number().optional(),
-  notes: z.string().optional(),
+  difficulty: z.nativeEnum(MusicDifficulty).optional(),
+  duration: z.number().int().nonnegative().optional(),
+  genre: z.string().optional(),
+  style: z.string().optional(),
+  instrumentation: z.string().optional(),
   catalogNumber: z.string().optional(),
+  notes: z.string().optional(),
+  performanceHistory: z.string().optional(),
+  isArchived: z.boolean().optional(),
+  tags: z.unknown().optional(),
 });
 
-export async function createMusicPiece(data: any) {
+const updateMusicPieceSchema = musicPieceSchema.partial();
+
+export type CreateMusicPieceInput = z.infer<typeof musicPieceSchema>;
+export type UpdateMusicPieceInput = z.infer<typeof updateMusicPieceSchema>;
+
+export async function createMusicPiece(data: CreateMusicPieceInput) {
   await requirePermission(MUSIC_CREATE);
 
   const validated = musicPieceSchema.parse(data);
 
   const piece = await prisma.musicPiece.create({
-    data: validated,
+    data: validated as any,
   });
 
   await auditLog({
@@ -37,12 +49,14 @@ export async function createMusicPiece(data: any) {
   return piece;
 }
 
-export async function updateMusicPiece(id: string, data: any) {
+export async function updateMusicPiece(id: string, data: UpdateMusicPieceInput) {
   await requirePermission(MUSIC_EDIT);
+
+  const validated = updateMusicPieceSchema.parse(data);
 
   const piece = await prisma.musicPiece.update({
     where: { id },
-    data,
+    data: validated as any,
   });
 
   await auditLog({

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getSession } from '@/lib/auth/guards';
 import { checkUserPermission, getUserRoles } from '@/lib/auth/permissions';
-import { downloadFile, getSignedDownloadUrl } from '@/lib/services/storage';
+import { downloadFile } from '@/lib/services/storage';
 import { applyRateLimit } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
 import { MUSIC_DOWNLOAD_ALL, MUSIC_DOWNLOAD_ASSIGNED } from '@/lib/auth/permission-constants';

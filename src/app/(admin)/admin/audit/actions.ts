@@ -11,7 +11,8 @@ import type { AuditLogEntry, AuditLogFilters, AuditLogStats } from './types';
 // VALIDATION SCHEMAS
 // =============================================================================
 
-const auditLogFiltersSchema = z.object({
+// Reserved for future validation use
+const _auditLogFiltersSchema = z.object({
   userId: z.string().optional(),
   userName: z.string().optional(),
   action: z.string().optional(),
@@ -21,7 +22,8 @@ const auditLogFiltersSchema = z.object({
   dateTo: z.string().optional(),
 });
 
-const paginationSchema = z.object({
+// Reserved for future validation use
+const _paginationSchema = z.object({
   page: z.number().int().positive().default(1),
   limit: z.number().int().positive().max(100).default(50),
 });
