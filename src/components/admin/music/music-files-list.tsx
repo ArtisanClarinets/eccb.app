@@ -70,7 +70,7 @@ import {
   updateMusicFile,
   archiveMusicFile,
   getFileVersionHistory,
-} from '@/app/(admin)/admin/music/actions';
+} from '../../../app/(admin)/admin/music/actions';
 
 interface MusicFile {
   id: string;
