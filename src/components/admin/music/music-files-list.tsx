@@ -70,7 +70,7 @@ import {
   updateMusicFile,
   archiveMusicFile,
   getFileVersionHistory,
-} from '@/app/(admin)/admin/music/actions';
+} from '@/app/(admin)/admin/music/file-actions';
 
 interface MusicFile {
   id: string;
@@ -141,7 +141,7 @@ const PART_TYPES = [
 
 export function MusicFilesList({ pieceId, files, instruments }: MusicFilesListProps) {
   const [isUploading, setIsUploading] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [_deletingId, setDeletingId] = useState<string | null>(null);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showVersionDialog, setShowVersionDialog] = useState(false);

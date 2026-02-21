@@ -5,8 +5,8 @@ import {
   updateMusicFile,
   getFileVersionHistory,
   archiveMusicFile,
-  exportMusicToCSV,
-} from '../actions';
+} from '../file-actions';
+import { exportMusicToCSV } from '../actions';
 import * as authGuards from '@/lib/auth/guards';
 import * as storage from '@/lib/services/storage';
 

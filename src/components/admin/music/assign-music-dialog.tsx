@@ -17,7 +17,7 @@ import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
 import { UserPlus, Search, Loader2 } from 'lucide-react';
-import { assignMusicToMembers } from '@/app/(admin)/admin/music/actions';
+import { assignMusicToMembers } from '@/app/(admin)/admin/music/assignment-actions';
 
 interface AssignMusicDialogProps {
   pieceId: string;

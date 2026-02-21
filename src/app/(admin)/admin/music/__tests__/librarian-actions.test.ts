@@ -8,7 +8,7 @@ import {
   getLibrarianDashboardStats,
   getAssignmentsForLibrarian,
   markOverdueAssignments,
-} from '../actions';
+} from '../assignment-actions';
 import { getSession, requirePermission } from '@/lib/auth/guards';
 import { AssignmentStatus } from '@prisma/client';
 
