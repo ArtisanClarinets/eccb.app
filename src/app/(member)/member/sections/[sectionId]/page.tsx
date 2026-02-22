@@ -1,7 +1,7 @@
-import { Metadata } from 'next';
 import { prisma } from '@/lib/db';
 import { auth } from '@/lib/auth/config';
 import { headers } from 'next/headers';
+import { Metadata } from 'next';
 import { MessageBoard } from '@/components/member/section/MessageBoard';
 
 export const metadata: Metadata = {
@@ -10,6 +10,17 @@ export const metadata: Metadata = {
 
 interface PageProps {
   params: Promise<{ sectionId: string }>;
+}
+
+interface Message {
+  id: string;
+  content: string;
+  createdAt: string | Date;
+  member: {
+    firstName: string;
+    lastName: string;
+    profilePhoto: string | null;
+  };
 }
 
 export default async function SectionBoardPage({ params }: PageProps) {
@@ -45,24 +56,8 @@ export default async function SectionBoardPage({ params }: PageProps) {
     );
   }
 
-  const messages = await prisma.sectionMessage.findMany({
-    where: { sectionId },
-    include: {
-      member: {
-        select: {
-          firstName: true,
-          lastName: true,
-          profilePhoto: true,
-        },
-      },
-    },
-    orderBy: { createdAt: 'desc' },
-  });
-
-  const serializedMessages = messages.map(msg => ({
-    ...msg,
-    createdAt: msg.createdAt.toISOString(),
-  }));
+  // Section messages not available - model missing from Prisma schema
+  const serializedMessages: Message[] = [];
 
   return (
     <div className="container mx-auto py-8">

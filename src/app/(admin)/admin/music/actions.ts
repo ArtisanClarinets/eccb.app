@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/db';
-import { requirePermission } from '@/lib/auth/guards';
+import { requirePermission, getSession } from '@/lib/auth/guards';
 import { uploadFile, deleteFile } from '@/lib/services/storage';
 import { auditLog } from '@/lib/services/audit';
 import { MusicDifficulty, FileType, AssignmentStatus } from '@/lib/db';
@@ -10,9 +10,12 @@ import {
   MUSIC_CREATE,
   MUSIC_EDIT,
   MUSIC_DELETE,
+  MUSIC_ASSIGN,
 } from '@/lib/auth/permission-constants';
 import {
   invalidateMusicCache,
+  invalidateMusicAssignmentCache,
+  invalidateMusicDashboardCache,
 } from '@/lib/cache';
 import { z } from 'zod';
 

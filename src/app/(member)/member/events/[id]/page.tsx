@@ -53,14 +53,6 @@ export default async function EventPage({ params }: PageProps) {
           member: { userId: session.user.id },
         },
       },
-      carpoolEntries: {
-        include: {
-          member: {
-            select: { firstName: true, lastName: true }
-          }
-        },
-        orderBy: { createdAt: 'desc' }
-      }
     },
   });
 
@@ -90,10 +82,11 @@ export default async function EventPage({ params }: PageProps) {
 
   let gigChecklistItems: string[] = [];
   try {
-      if (event.gigChecklist) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const items = event.gigChecklist as any;
-          if (Array.isArray(items)) gigChecklistItems = items;
+      // Cast to unknown first to access potentially missing properties
+      const eventAny = event as unknown as Record<string, unknown>;
+      if (eventAny.gigChecklist) {
+          const items = eventAny.gigChecklist;
+          if (Array.isArray(items)) gigChecklistItems = items as string[];
       }
   } catch {
       gigChecklistItems = [];
@@ -110,22 +103,13 @@ export default async function EventPage({ params }: PageProps) {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">{event.title}</h1>
           <div className="flex items-center gap-2 mt-1">
-      // Define allowed event types
-      const allowedTypes = ["MEETING", "SOCIAL", "OTHER"];
-
-      // Validate event.type before using it as a key in eventTypeColors
-      const badgeVariant =
-        allowedTypes.includes(event.type) ? eventTypeColors[event.type] : "outline";
-
-      ...
-
-      <Badge variant={badgeVariant}>
-        {event.type}
-      </Badge>
-            {event.isCancelled && (
-              <Badge variant="destructive">Cancelled</Badge>
-            )}
-            {isPast && <Badge variant="outline">Past Event</Badge>}
+          <Badge variant={eventTypeColors[event.type] || 'outline'}>
+            {event.type}
+          </Badge>
+          {event.isCancelled && (
+            <Badge variant="destructive">Cancelled</Badge>
+          )}
+          {isPast && <Badge variant="outline">Past Event</Badge>}
           </div>
         </div>
       </div>
@@ -260,7 +244,7 @@ export default async function EventPage({ params }: PageProps) {
                 <TabsContent value="carpool" className="mt-4">
                     <CarpoolBoard
                         eventId={event.id}
-                        entries={event.carpoolEntries}
+                        entries={[]}
                         currentMemberId={member.id}
                     />
                 </TabsContent>

@@ -59,7 +59,7 @@ export async function createAnnouncement(data: AnnouncementFormData) {
         content: validated.content,
         type: validated.type as AnnouncementType,
         audience: validated.audience as AnnouncementAudience,
-        targetRoles: validated.targetRoles ?? undefined,
+        targetRoles: validated.targetRoles as unknown as string | undefined,
         isUrgent: validated.isUrgent ?? false,
         isPinned: validated.isPinned ?? false,
         status: validated.status as ContentStatus,

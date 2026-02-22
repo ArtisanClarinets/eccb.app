@@ -384,7 +384,7 @@ export async function POST(request: NextRequest) {
         title: validData.title,
         altText: validData.altText,
         caption: validData.caption,
-        ...(parsedTags ? { tags: parsedTags } : {}),
+        ...(parsedTags ? { tags: JSON.stringify(parsedTags) } : {}),
         width: dimensions?.width,
         height: dimensions?.height,
         uploadedBy: session.user.id,

@@ -9,7 +9,8 @@ import {
   Settings,
   FileText,
   Activity,
-  ChevronRight
+  ChevronRight,
+  Upload,
 } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
@@ -19,6 +20,7 @@ const adminMenuItems = [
   { icon: Activity, label: 'Overview', href: '/admin' },
   { icon: Users, label: 'Members', href: '/admin/members' },
   { icon: Music, label: 'Library', href: '/admin/music' },
+  { icon: Upload, label: 'Uploads', href: '/admin/uploads/review' },
   { icon: Calendar, label: 'Events', href: '/admin/events' },
   { icon: FileText, label: 'Announcements', href: '/admin/cms' },
   { icon: ShieldCheck, label: 'Audit Logs', href: '/admin/audit' },

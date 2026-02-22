@@ -32,7 +32,6 @@ interface StatusResponse {
     migrations?: {
       applied: boolean;
       pendingCount: number;
-      lastMigration?: string;
     };
     seed?: {
       applied: boolean;
@@ -126,7 +125,6 @@ export async function GET(): Promise<NextResponse<StatusResponse>> {
         migrations: {
           applied: migrationStatus.applied,
           pendingCount: migrationStatus.pendingCount,
-          lastMigration: migrationStatus.lastMigration,
         },
       },
     };

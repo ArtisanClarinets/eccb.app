@@ -26,9 +26,6 @@ export const MUSIC_EDIT = 'music.edit';
 /** Delete music pieces from the library */
 export const MUSIC_DELETE = 'music.delete';
 
-/** Assign music to members */
-export const MUSIC_ASSIGN = 'music.assign';
-
 /** Download all music files */
 export const MUSIC_DOWNLOAD_ALL = 'music.download.all';
 
@@ -37,6 +34,9 @@ export const MUSIC_DOWNLOAD_ASSIGNED = 'music.download.assigned';
 
 /** Upload music files to the library */
 export const MUSIC_UPLOAD = 'music.upload';
+
+/** Assign music to members */
+export const MUSIC_ASSIGN = 'music.assign';
 
 // =============================================================================
 // MEMBER MANAGEMENT PERMISSIONS

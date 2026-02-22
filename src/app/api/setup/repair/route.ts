@@ -11,6 +11,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { repairDatabase, runMigrations, seedDatabase } from '@/lib/setup/schema-automation';
+import { validateSetupRequest } from '@/lib/setup/setup-guard';
 import { SetupPhase, type MigrationStatus } from '@/lib/setup/types';
 import { logger } from '@/lib/logger';
 

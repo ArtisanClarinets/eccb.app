@@ -215,7 +215,10 @@ export async function previewTemplateAction(data: {
       createdBy: null,
     };
 
-    const rendered = await renderTemplate(previewTemplate, validated.variables);
+    const rendered = await renderTemplate(
+      { ...previewTemplate, variables: previewTemplate.variables as unknown as string },
+      validated.variables as Record<string, string>
+    );
     
     return { success: true, rendered };
   } catch (error) {

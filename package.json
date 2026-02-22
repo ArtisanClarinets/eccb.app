@@ -34,7 +34,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.992.0",
     "@aws-sdk/s3-request-presigner": "^3.992.0",
-    "@hookform/resolvers": "^5.2.2",
+    "@hookform/resolvers": "^3.9.1",
     "@prisma/adapter-mariadb": "7.4.0",
     "@prisma/client": "7.4.0",
     "@radix-ui/react-accordion": "^1.2.12",

@@ -41,6 +41,15 @@ import { EmailTemplateType, EmailTemplate } from '@prisma/client';
 import { extractTemplateVariables } from '@/lib/email-template-utils';
 import DOMPurify from 'dompurify';
 
+const templateTypes = [
+  { value: 'WELCOME', label: 'Welcome Email' },
+  { value: 'PASSWORD_RESET', label: 'Password Reset' },
+  { value: 'EVENT_REMINDER', label: 'Event Reminder' },
+  { value: 'ANNOUNCEMENT', label: 'Announcement' },
+  { value: 'ATTENDANCE_SUMMARY', label: 'Attendance Summary' },
+  { value: 'CUSTOM', label: 'Custom Template' },
+];
+
 const templateSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
   type: z.enum(['WELCOME', 'PASSWORD_RESET', 'EVENT_REMINDER', 'ANNOUNCEMENT', 'ATTENDANCE_SUMMARY', 'CUSTOM']),

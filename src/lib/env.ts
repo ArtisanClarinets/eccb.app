@@ -63,6 +63,11 @@ const envSchema = z.object({
   CLAMAV_HOST: z.string().default('localhost'),
   CLAMAV_PORT: z.coerce.number().default(3310),
   ENABLE_VIRUS_SCAN: z.string().default('false').transform(val => val === 'true'),
+  
+  // LLM Configuration for Smart Upload
+  LLM_OLLAMA_ENDPOINT: z.string().url().default('http://localhost:11434'),
+  LLM_VISION_MODEL: z.string().default('llama3.2-vision'),
+  LLM_VERIFICATION_MODEL: z.string().default('qwen2.5:7b'),
 });
 
 function validateEnv() {

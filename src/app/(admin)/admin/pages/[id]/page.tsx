@@ -59,16 +59,8 @@ export default async function EditPagePage({ params }: EditPageProps) {
   };
 
   // Parse content for the form
-  let contentText = '';
-  if (page.content) {
-    if (typeof page.content === 'string') {
-      contentText = page.content;
-    } else if (typeof page.content === 'object' && 'text' in page.content) {
-      contentText = String(page.content.text);
-    } else {
-      contentText = JSON.stringify(page.content, null, 2);
-    }
-  }
+  // Page.content is a String per Prisma schema
+  const contentText = page.content || '';
 
   return (
     <div className="space-y-6">

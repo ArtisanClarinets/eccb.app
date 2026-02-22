@@ -13,7 +13,7 @@ import {
 export interface CreatePageData {
   slug: string;
   title: string;
-  content: Prisma.InputJsonValue; // Block-based content (JSON)
+  content: string; // Changed from Prisma.InputJsonValue to string to match Prisma schema
   description?: string;
   isPublished?: boolean;
 }
