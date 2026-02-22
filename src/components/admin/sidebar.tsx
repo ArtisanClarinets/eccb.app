@@ -15,9 +15,7 @@ import {
   Bell,
   X,
   Menu,
-  ImageIcon,
   Activity,
-  Upload,
 } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -50,7 +48,9 @@ const navigation = [
     children: [
       { name: 'All Music', href: '/admin/music' },
       { name: 'Add Music', href: '/admin/music/new' },
+      { name: 'Smart Music Upload', href: '/admin/uploads' },
       { name: 'Upload Review', href: '/admin/uploads/review' },
+      { name: 'Smart Upload Settings', href: '/admin/uploads/settings' },
     ],
   },
   {

@@ -33,16 +33,6 @@ interface ExtractedMetadata {
 }
 
 /**
- * LLM Response structure from Ollama API
- */
-interface OllamaResponse {
-  message: {
-    content: string;
-  };
-  done: boolean;
-}
-
-/**
  * JSON Schema for structured LLM output
  */
 const metadataJsonSchema = {
@@ -80,18 +70,109 @@ const metadataJsonSchema = {
 const ALLOWED_MIME_TYPE = 'application/pdf';
 const MAX_FILE_SIZE = env.MAX_FILE_SIZE;
 
-// Vision model for first pass (Llama 3.2 Vision or similar)
-const VISION_MODEL = process.env.LLM_VISION_MODEL || 'llama3.2-vision';
-// Verification model for second pass (Qwen2.5 or Llama-3-8B)
-const VERIFICATION_MODEL = process.env.LLM_VERIFICATION_MODEL || 'qwen2.5:7b';
-// Ollama endpoint
-const OLLAMA_ENDPOINT = process.env.LLM_OLLAMA_ENDPOINT || 'http://localhost:11434';
-
 // =============================================================================
-// System Prompts
+// LLM Config — loaded from DB settings with env var fallback
 // =============================================================================
 
-const VISION_SYSTEM_PROMPT = `You are an expert at analyzing music sheet metadata from images of sheet music.
+interface LLMConfig {
+  provider: string;
+  visionModel: string;
+  verificationModel: string;
+  ollamaEndpoint: string;
+  openaiApiKey: string;
+  anthropicApiKey: string;
+  openrouterApiKey: string;
+  customBaseUrl: string;
+  customApiKey: string;
+  confidenceThreshold: number;
+  twoPassEnabled: boolean;
+  visionSystemPrompt?: string;
+  verificationSystemPrompt?: string;
+}
+
+async function loadLLMConfig(): Promise<LLMConfig> {
+  const keys = [
+    'llm_provider',
+    'llm_ollama_endpoint',
+    'llm_openai_api_key',
+    'llm_anthropic_api_key',
+    'llm_openrouter_api_key',
+    'llm_custom_base_url',
+    'llm_custom_api_key',
+    'llm_vision_model',
+    'llm_verification_model',
+    'llm_confidence_threshold',
+    'llm_two_pass_enabled',
+    'llm_vision_system_prompt',
+    'llm_verification_system_prompt',
+  ];
+
+  let dbSettings: Record<string, string> = {};
+  try {
+    const rows = await prisma.systemSetting.findMany({ where: { key: { in: keys } } });
+    dbSettings = rows.reduce<Record<string, string>>((acc, r) => {
+      acc[r.key] = r.value ?? '';
+      return acc;
+    }, {});
+  } catch {
+    // DB may not be ready; fall back to env
+  }
+
+  // Resolve effective endpoint based on provider
+  const provider = dbSettings['llm_provider'] || 'ollama';
+  let endpoint: string;
+  switch (provider) {
+    case 'custom':
+      endpoint = dbSettings['llm_custom_base_url'] || '';
+      break;
+    case 'openai':
+      endpoint = 'https://api.openai.com/v1';
+      break;
+    case 'anthropic':
+      endpoint = 'https://api.anthropic.com';
+      break;
+    case 'gemini':
+      endpoint = 'https://generativelanguage.googleapis.com/v1beta';
+      break;
+    case 'openrouter':
+      endpoint = 'https://openrouter.ai/api/v1';
+      break;
+    default:
+      endpoint =
+        process.env.LLM_OLLAMA_ENDPOINT ||
+        dbSettings['llm_ollama_endpoint'] ||
+        'http://localhost:11434';
+  }
+
+  return {
+    provider,
+    // Env vars take precedence for model selection
+    visionModel:
+      process.env.LLM_VISION_MODEL ||
+      dbSettings['llm_vision_model'] ||
+      'llama3.2-vision',
+    verificationModel:
+      process.env.LLM_VERIFICATION_MODEL ||
+      dbSettings['llm_verification_model'] ||
+      'qwen2.5:7b',
+    ollamaEndpoint: endpoint,
+    openaiApiKey: dbSettings['llm_openai_api_key'] || '',
+    anthropicApiKey: dbSettings['llm_anthropic_api_key'] || '',
+    openrouterApiKey: dbSettings['llm_openrouter_api_key'] || '',
+    customBaseUrl: dbSettings['llm_custom_base_url'] || '',
+    customApiKey: dbSettings['llm_custom_api_key'] || '',
+    confidenceThreshold: Number(dbSettings['llm_confidence_threshold'] ?? 90),
+    twoPassEnabled: (dbSettings['llm_two_pass_enabled'] ?? 'true') === 'true',
+    visionSystemPrompt: dbSettings['llm_vision_system_prompt'] || undefined,
+    verificationSystemPrompt: dbSettings['llm_verification_system_prompt'] || undefined,
+  };
+}
+
+// =============================================================================
+// Default System Prompts (overridable via DB settings)
+// =============================================================================
+
+const DEFAULT_VISION_SYSTEM_PROMPT = `You are an expert at analyzing music sheet metadata from images of sheet music.
 Your task is to extract metadata from the first page of a music score.
 
 Extract the following information:
@@ -117,7 +198,7 @@ IMPORTANT INSTRUCTIONS:
 
 Return valid JSON only.`;
 
-const VERIFICATION_SYSTEM_PROMPT = `You are a verification assistant. Review the extracted metadata against the original image.
+const DEFAULT_VERIFICATION_SYSTEM_PROMPT = `You are a verification assistant. Review the extracted metadata against the original image.
 Check for:
 1. Typos in title or composer name
 2. Misclassification of file type (FULL_SCORE vs PART vs CONDUCTOR_SCORE vs CONDENSED_SCORE)
@@ -151,23 +232,66 @@ function getExtension(filename: string): string {
 }
 
 /**
+ * Build the Authorization / API key header for the configured provider.
+ */
+function buildAuthHeaders(config: LLMConfig): Record<string, string> {
+  switch (config.provider) {
+    case 'openai':
+    case 'openrouter':
+    case 'custom':
+      return config.openaiApiKey || config.openrouterApiKey || config.customApiKey
+        ? { Authorization: `Bearer ${config.openaiApiKey || config.openrouterApiKey || config.customApiKey}` }
+        : {};
+    case 'anthropic':
+      return config.anthropicApiKey
+        ? { 'x-api-key': config.anthropicApiKey, 'anthropic-version': '2023-06-01' }
+        : {};
+    default:
+      return {};
+  }
+}
+
+/**
+ * Build the chat API endpoint URL for the configured provider.
+ */
+function buildChatEndpoint(config: LLMConfig): string {
+  const base = config.ollamaEndpoint.replace(/\/$/, '');
+  switch (config.provider) {
+    case 'ollama':
+      return `${base}/api/chat`;
+    case 'anthropic':
+      return 'https://api.anthropic.com/v1/messages';
+    default:
+      // OpenAI-compatible: openai, openrouter, gemini (via proxy), custom
+      return `${base}/chat/completions`;
+  }
+}
+
+/**
  * Call LLM with image for metadata extraction.
  */
 async function callVisionLLM(
   imageBase64: string,
-  model: string = VISION_MODEL
+  config: LLMConfig,
 ): Promise<ExtractedMetadata> {
-  const response = await fetch(`${OLLAMA_ENDPOINT}/api/chat`, {
+  const systemPrompt =
+    config.visionSystemPrompt || DEFAULT_VISION_SYSTEM_PROMPT;
+
+  const endpoint = buildChatEndpoint(config);
+  const authHeaders = buildAuthHeaders(config);
+
+  const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      ...authHeaders,
     },
     body: JSON.stringify({
-      model,
+      model: config.visionModel,
       messages: [
         {
           role: 'system',
-          content: VISION_SYSTEM_PROMPT,
+          content: systemPrompt,
         },
         {
           role: 'user',
@@ -194,8 +318,9 @@ async function callVisionLLM(
     throw new Error(`LLM call failed: ${response.status} ${response.statusText}`);
   }
 
-  const data: OllamaResponse = await response.json();
-  const content = data.message.content;
+  const data = await response.json() as { message?: { content: string }; choices?: Array<{ message: { content: string } }> };
+  // Support both Ollama format and OpenAI-compatible format
+  const content = data.message?.content ?? data.choices?.[0]?.message?.content ?? '';
 
   try {
     // Try to parse JSON from the response
@@ -216,19 +341,26 @@ async function callVisionLLM(
 async function verifyMetadata(
   imageBase64: string,
   extractedMetadata: ExtractedMetadata,
-  model: string = VERIFICATION_MODEL
+  config: LLMConfig,
 ): Promise<ExtractedMetadata> {
-  const response = await fetch(`${OLLAMA_ENDPOINT}/api/chat`, {
+  const systemPrompt =
+    config.verificationSystemPrompt || DEFAULT_VERIFICATION_SYSTEM_PROMPT;
+
+  const endpoint = buildChatEndpoint(config);
+  const authHeaders = buildAuthHeaders(config);
+
+  const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      ...authHeaders,
     },
     body: JSON.stringify({
-      model,
+      model: config.verificationModel,
       messages: [
         {
           role: 'system',
-          content: VERIFICATION_SYSTEM_PROMPT,
+          content: systemPrompt,
         },
         {
           role: 'user',
@@ -258,8 +390,8 @@ async function verifyMetadata(
     return extractedMetadata;
   }
 
-  const data: OllamaResponse = await response.json();
-  const content = data.message.content;
+  const data = await response.json() as { message?: { content: string }; choices?: Array<{ message: { content: string } }> };
+  const content = data.message?.content ?? data.choices?.[0]?.message?.content ?? '';
 
   try {
     const jsonMatch = content.match(/\{[\s\S]*\}/);
@@ -402,16 +534,21 @@ export async function POST(request: NextRequest) {
     // Generate session ID
     const sessionId = crypto.randomUUID();
     
+    // Load LLM config from DB settings (with env var fallback)
+    const llmConfig = await loadLLMConfig();
+    
     // Convert PDF to image (first page, top 20%)
     const imageBase64 = await convertPdfToImage(buffer);
     
     // First pass: Vision model extraction
     let extractedMetadata: ExtractedMetadata;
     try {
-      extractedMetadata = await callVisionLLM(imageBase64);
+      extractedMetadata = await callVisionLLM(imageBase64, llmConfig);
       logger.info('Vision model extraction complete', {
         sessionId,
         confidence: extractedMetadata.confidenceScore,
+        provider: llmConfig.provider,
+        model: llmConfig.visionModel,
       });
     } catch (error) {
       logger.error('Vision model extraction failed', { error, sessionId });
@@ -422,14 +559,18 @@ export async function POST(request: NextRequest) {
       };
     }
     
-    // Second pass: Verification model
-    if (extractedMetadata.confidenceScore < 90) {
+    // Second pass: Verification model (if enabled and below threshold)
+    if (
+      llmConfig.twoPassEnabled &&
+      extractedMetadata.confidenceScore < llmConfig.confidenceThreshold
+    ) {
       try {
-        const verified = await verifyMetadata(imageBase64, extractedMetadata);
+        const verified = await verifyMetadata(imageBase64, extractedMetadata, llmConfig);
         extractedMetadata = verified;
         logger.info('Verification model complete', {
           sessionId,
           confidence: extractedMetadata.confidenceScore,
+          model: llmConfig.verificationModel,
         });
       } catch (error) {
         logger.warn('Verification model failed, using original', { error, sessionId });
