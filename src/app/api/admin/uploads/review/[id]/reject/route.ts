@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db';
 import { getSession } from '@/lib/auth/guards';
 import { requirePermission } from '@/lib/auth/permissions';
 import { logger } from '@/lib/logger';
+import { cleanupSmartUploadTempFiles } from '@/lib/services/smart-upload-cleanup';
 import { z } from 'zod';
 
 // =============================================================================
@@ -65,6 +66,9 @@ export async function POST(
         reviewedAt: new Date(),
       },
     });
+
+    // Clean up temporary files after rejection
+    await cleanupSmartUploadTempFiles(id);
 
     logger.info('Smart upload rejected', {
       sessionId: id,

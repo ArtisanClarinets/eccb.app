@@ -2,13 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getSession } from '@/lib/auth/guards';
 import { requirePermission } from '@/lib/auth/permissions';
-import { downloadFile, uploadFile } from '@/lib/services/storage';
-import { splitPdfByPageRanges } from '@/lib/services/pdf-splitter';
-import { analyzePdfParts } from '@/lib/services/pdf-part-detector';
+import { downloadFile, uploadFile, deleteFile } from '@/lib/services/storage';
 import { logger } from '@/lib/logger';
 import { z } from 'zod';
 import type { MusicDifficulty, FileType } from '@prisma/client';
-import type { DownloadResult } from '@/lib/services/storage';
+import type { ParsedPartRecord } from '@/types/smart-upload';
 
 // =============================================================================
 // Types
@@ -27,6 +25,10 @@ interface ExtractedMetadata {
     instrument: string;
     partName: string;
   }>;
+  ensembleType?: string;
+  keySignature?: string;
+  timeSignature?: string;
+  tempo?: string;
 }
 
 // =============================================================================
@@ -40,6 +42,10 @@ const approveSchema = z.object({
   instrument: z.string().optional(),
   partNumber: z.string().optional(),
   difficulty: z.string().optional(),
+  ensembleType: z.string().optional(),
+  keySignature: z.string().optional(),
+  timeSignature: z.string().optional(),
+  tempo: z.string().optional(),
 });
 
 // =============================================================================
@@ -132,87 +138,21 @@ export async function POST(
     // Get the extracted metadata
     const extractedMetadata = uploadSession.extractedMetadata as ExtractedMetadata | null;
 
+    // Get pre-split parts if available
+    const parsedParts = (uploadSession.parsedParts as ParsedPartRecord[] | null) || [];
+    const hasPreSplitParts = parsedParts.length > 0;
+
+    // Collect storageKeys from final MusicFiles for cleanup tracking
+    const finalMusicFileKeys: string[] = [];
+
     // -----------------------------------------------------------------
-    // Pre-transaction: PDF splitting (outside DB transaction because
-    // storage uploads cannot participate in a DB transaction).
+    // Pre-transaction: Get pre-split parts (no longer splitting at approval time)
     // -----------------------------------------------------------------
-    interface SplitResult {
-      partName: string;
-      instrument: string;
-      storageKey: string;
-      fileSize: number;
-      fileName: string;
-    }
-
-    let splitResults: SplitResult[] = [];
-
-    if (extractedMetadata?.isMultiPart && Array.isArray(extractedMetadata.parts) && extractedMetadata.parts.length > 1) {
-      try {
-        // Download original PDF
-        let pdfBuffer: Buffer;
-        const downloadResult = await downloadFile(uploadSession.storageKey);
-        if (typeof downloadResult === 'string') {
-          const res = await fetch(downloadResult);
-          if (!res.ok) throw new Error(`Storage download failed: ${res.status}`);
-          pdfBuffer = Buffer.from(await res.arrayBuffer());
-        } else {
-          const chunks: Buffer[] = [];
-          for await (const chunk of (downloadResult as DownloadResult).stream) {
-            const c = chunk as Buffer | string;
-            chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c));
-          }
-          pdfBuffer = Buffer.concat(chunks);
-        }
-
-        // Analyze PDF structure to determine page ranges
-        const partAnalysis = await analyzePdfParts(pdfBuffer, extractedMetadata);
-
-        if (partAnalysis.isMultiPart && partAnalysis.estimatedParts.length > 0) {
-          const pageRanges = partAnalysis.estimatedParts.map((p) => ({
-            start: p.pageRange[0],
-            end: p.pageRange[1],
-            name: p.partName,
-          }));
-
-          const splitParts = await splitPdfByPageRanges(pdfBuffer, pageRanges);
-
-          // Upload each split part to storage
-          for (let i = 0; i < splitParts.length; i++) {
-            const splitPart = splitParts[i];
-            const analysedPart = partAnalysis.estimatedParts[i];
-            const partStorageKey = uploadSession.storageKey.replace(
-              /\/original(\.pdf)?$/i,
-              `/part-${String(i + 1).padStart(2, '0')}-${analysedPart.instrumentName.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`
-            );
-
-            await uploadFile(partStorageKey, splitPart.buffer, {
-              contentType: 'application/pdf',
-              metadata: {
-                originalUploadId: uploadSession.uploadSessionId,
-                partName: splitPart.name,
-                instrument: analysedPart.instrumentName,
-              },
-            });
-
-            splitResults.push({
-              partName: splitPart.name,
-              instrument: analysedPart.instrumentName,
-              storageKey: partStorageKey,
-              fileSize: splitPart.buffer.length,
-              fileName: `${uploadSession.fileName.replace(/\.pdf$/i, '')} - ${splitPart.name}.pdf`,
-            });
-          }
-
-          logger.info('PDF split complete', {
-            sessionId: id,
-            partsCreated: splitResults.length,
-          });
-        }
-      } catch (splitError) {
-        const err = splitError instanceof Error ? splitError : new Error(String(splitError));
-        logger.warn('PDF splitting failed, falling back to single file', { error: err.message });
-        splitResults = []; // Fall back to single-file mode
-      }
+    if (hasPreSplitParts) {
+      logger.info('Using pre-split parts from parsedParts', {
+        sessionId: id,
+        partsCount: parsedParts.length,
+      });
     }
 
     // Use transaction to ensure atomicity
@@ -225,14 +165,14 @@ export async function POST(
         const nameParts = composerName.split(' ');
         const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : nameParts[0];
         const firstName = nameParts.length > 1 ? nameParts.slice(0, -1).join(' ') : '';
-        
+
         // Try to find existing composer
         let composer = await tx.person.findFirst({
           where: {
             fullName: composerName,
           },
         });
-        
+
         // Create if not found
         if (!composer) {
           composer = await tx.person.create({
@@ -244,7 +184,7 @@ export async function POST(
           });
           logger.info('Created new composer', { composerId: composer.id, name: composerName });
         }
-        
+
         composerId = composer.id;
       }
 
@@ -255,18 +195,18 @@ export async function POST(
         let publisher = await tx.publisher.findUnique({
           where: { name: publisherName },
         });
-        
+
         if (!publisher) {
           publisher = await tx.publisher.create({
             data: { name: publisherName },
           });
           logger.info('Created new publisher', { publisherId: publisher.id, name: publisherName });
         }
-        
+
         publisherId = publisher.id;
       }
 
-      // 3. Create MusicPiece record
+      // 3. Create MusicPiece record with new fields from extractedMetadata
       const musicPiece = await tx.musicPiece.create({
         data: {
           title: validatedData.title,
@@ -276,6 +216,11 @@ export async function POST(
           confidenceScore: extractedMetadata?.confidenceScore || null,
           source: 'SMART_UPLOAD',
           notes: `Imported via Smart Upload on ${new Date().toISOString()}`,
+          // New fields from extractedMetadata or form
+          ensembleType: validatedData.ensembleType || extractedMetadata?.ensembleType || null,
+          keySignature: validatedData.keySignature || extractedMetadata?.keySignature || null,
+          timeSignature: validatedData.timeSignature || extractedMetadata?.timeSignature || null,
+          tempo: validatedData.tempo || extractedMetadata?.tempo || null,
         },
       });
 
@@ -298,15 +243,16 @@ export async function POST(
         },
       });
 
+      // Track the original upload key - don't delete it
+      finalMusicFileKeys.push(uploadSession.storageKey);
+
       logger.info('Created music file (original)', { fileId: musicFile.id, storageKey: musicFile.storageKey });
 
-      // 5. Create MusicPart records
-      //    – If we successfully split the PDF, each part gets its own MusicFile.
-      //    – Otherwise fall back to linking all parts to the original MusicFile.
-      if (splitResults.length > 0) {
-        // Multi-part with separate PDF files per part
-        for (const sr of splitResults) {
-          const instrumentName = sr.instrument?.trim() || 'Unknown';
+      // 5. Create MusicPart records based on pre-split parts or fallback
+      if (hasPreSplitParts && parsedParts.length > 0) {
+        // Use pre-split parts from parsedParts
+        for (const part of parsedParts) {
+          const instrumentName = part.instrument?.trim() || 'Unknown';
 
           let instrument = await tx.instrument.findFirst({
             where: { name: { contains: instrumentName } },
@@ -321,37 +267,54 @@ export async function POST(
             });
           }
 
-          // Create a dedicated MusicFile for this split part
+          // Create a MusicFile for this pre-split part with all new fields
           const partFile = await tx.musicFile.create({
             data: {
               pieceId: musicPiece.id,
-              fileName: sr.fileName,
+              fileName: part.fileName,
               fileType: 'PART' as FileType,
-              fileSize: sr.fileSize,
+              fileSize: part.fileSize,
               mimeType: 'application/pdf',
-              storageKey: sr.storageKey,
+              storageKey: part.storageKey,
               uploadedBy: session.user.id,
               source: 'SMART_UPLOAD',
               originalUploadId: uploadSession.uploadSessionId,
+              // New fields for split parts
+              partLabel: part.partName || null,
+              instrumentName: part.instrument || null,
+              section: part.section || null,
+              partNumber: part.partNumber || null,
+              pageCount: part.pageCount || null,
             },
           });
 
+          // Track this storageKey - don't delete it
+          finalMusicFileKeys.push(part.storageKey);
+
+          // Create MusicPart with all fields
           await tx.musicPart.create({
             data: {
               pieceId: musicPiece.id,
               instrumentId: instrument.id,
-              partName: sr.partName,
+              partName: part.partName,
               fileId: partFile.id,
+              // New fields from parsedParts
+              section: part.section || null,
+              partNumber: part.partNumber || null,
+              partLabel: part.partName || null,
+              transposition: part.transposition || null,
+              pageCount: part.pageCount || null,
+              storageKey: part.storageKey || null,
             },
           });
         }
 
-        logger.info('Created split music parts', {
+        logger.info('Created music parts from pre-split parts', {
           pieceId: musicPiece.id,
-          partsCount: splitResults.length,
+          partsCount: parsedParts.length,
         });
       } else if (extractedMetadata?.isMultiPart && Array.isArray(extractedMetadata.parts) && extractedMetadata.parts.length > 0) {
-        // Multi-part metadata but splitting was skipped/failed – link all parts to original file
+        // Multi-part metadata but no pre-split parts - link all parts to original file
         for (const part of extractedMetadata.parts) {
           // Find or create instrument
           const instrumentName = part.instrument?.trim();
@@ -371,7 +334,7 @@ export async function POST(
               data: {
                 name: instrumentName,
                 family: guessInstrumentFamily(instrumentName),
-                sortOrder: 999, // Default sort order for auto-created instruments
+                sortOrder: 999,
               },
             });
             logger.info('Created new instrument', { instrumentId: instrument.id, name: instrumentName });
@@ -434,6 +397,39 @@ export async function POST(
 
       return { musicPiece, musicFile, updatedSession };
     });
+
+    // -----------------------------------------------------------------
+    // Post-transaction: Cleanup temp files that are no longer needed
+    // Only delete temp files that are in tempFiles but NOT in the final MusicFile storageKeys
+    // Do NOT delete the original upload file or any part files that were committed
+    // -----------------------------------------------------------------
+    const tempFiles = (uploadSession.tempFiles as string[] | null) || [];
+    if (tempFiles.length > 0) {
+      const filesToDelete = tempFiles.filter(
+        (tempKey) => !finalMusicFileKeys.includes(tempKey)
+      );
+
+      if (filesToDelete.length > 0) {
+        logger.info('Cleaning up temp files after approval', {
+          sessionId: id,
+          filesToDelete: filesToDelete.length,
+        });
+
+        for (const tempKey of filesToDelete) {
+          try {
+            await deleteFile(tempKey);
+            logger.info('Deleted temp file', { sessionId: id, tempKey });
+          } catch (deleteError) {
+            // Log but don't fail - temp file cleanup is best-effort
+            logger.warn('Failed to delete temp file', {
+              sessionId: id,
+              tempKey,
+              error: deleteError instanceof Error ? deleteError.message : String(deleteError),
+            });
+          }
+        }
+      }
+    }
 
     logger.info('Smart upload approved and imported', {
       sessionId: id,

@@ -24,6 +24,11 @@ const SETTING_KEYS = [
   'llm_two_pass_enabled',
   'llm_vision_system_prompt',
   'llm_verification_system_prompt',
+  'llm_rate_limit_rpm',
+  'llm_auto_approve_threshold',
+  'llm_skip_parse_threshold',
+  'llm_vision_model_params',
+  'llm_verification_model_params',
 ] as const;
 
 async function getSmartUploadSettings(): Promise<Record<string, string>> {

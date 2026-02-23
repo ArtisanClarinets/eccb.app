@@ -276,6 +276,10 @@ model MusicPiece {
   isArchived         Boolean           @default(false)
   confidenceScore    Int?
   source            String?
+  ensembleType       String?
+  keySignature       String?
+  timeSignature      String?
+  tempo              String?
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
   deletedAt          DateTime?
@@ -316,6 +320,11 @@ model MusicFile {
   ocrText           String?            @db.Text
   originalUploadId  String?
   source            String?
+  pageCount         Int?
+  partLabel         String?
+  instrumentName    String?
+  section           String?
+  partNumber        Int?
   downloads         FileDownload[]
   piece             MusicPiece         @relation(fields: [pieceId], references: [id], onDelete: Cascade)
   versions          MusicFileVersion[]
@@ -368,6 +377,20 @@ model SmartUploadSession {
   reviewedAt         DateTime?
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
+  parsedParts        Json?
+  parseStatus        String?
+  secondPassStatus   String?
+  secondPassResult   Json?
+  autoApproved       Boolean          @default(false)
+  routingDecision    String?
+  cuttingInstructions Json?
+  llmProvider        String?
+  llmVisionModel     String?
+  llmVerifyModel     String?
+  llmModelParams     Json?
+  tempFiles          Json?
+  firstPassRaw       String?          @db.LongText
+  secondPassRaw      String?          @db.LongText
 
   @@index([uploadSessionId])
   @@index([status])
@@ -382,6 +405,12 @@ model MusicPart {
   fileId       String?
   isOptional   Boolean    @default(false)
   notes        String?
+  section      String?
+  partNumber   Int?
+  partLabel    String?
+  transposition String?
+  pageCount    Int?
+  storageKey   String?
   file         MusicFile? @relation(fields: [fileId], references: [id])
   instrument   Instrument @relation(fields: [instrumentId], references: [id])
   piece        MusicPiece @relation(fields: [pieceId], references: [id], onDelete: Cascade)

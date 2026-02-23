@@ -9,13 +9,18 @@ import { PDFDocument } from 'pdf-lib';
 import type { DownloadResult } from '@/lib/services/storage';
 
 // =============================================================================
-// GET /api/admin/uploads/review/[id]/preview
+// GET /api/admin/uploads/review/[id]/part-preview
 //
-// Returns a base64-encoded PNG of the specified page of the uploaded PDF so that
-// admins can visually verify the extracted metadata without leaving the review
-// dialog.  The image is rendered on-demand server-side using pdf-renderer.
-// Supports pagination via ?page=N query parameter (0-indexed, defaults to 0).
+// Returns a base64-encoded PNG of the specified page of a parsed part PDF from
+// the SmartUploadSession. The part storage key must belong to the session's
+// parsedParts JSON. Supports pagination via ?page=N query parameter (0-indexed,
+// defaults to 0).
 // =============================================================================
+
+interface ParsedPart {
+  storageKey?: string;
+  [key: string]: unknown;
+}
 
 export async function GET(
   req: NextRequest,
@@ -35,9 +40,22 @@ export async function GET(
 
     const { id } = await params;
 
-    // Parse page query parameter (0-indexed, default to 0)
+    // Parse query parameters
     const url = new URL(req.url);
+    const partStorageKeyEncoded = url.searchParams.get('partStorageKey');
     const pageParam = url.searchParams.get('page');
+
+    if (!partStorageKeyEncoded) {
+      return NextResponse.json(
+        { error: 'partStorageKey query parameter is required' },
+        { status: 400 }
+      );
+    }
+
+    // Decode the part storage key (URL-encoded)
+    const partStorageKey = decodeURIComponent(partStorageKeyEncoded);
+
+    // Parse page parameter (0-indexed, default to 0)
     const pageIndex = pageParam ? parseInt(pageParam, 10) : 0;
 
     if (isNaN(pageIndex) || pageIndex < 0) {
@@ -56,9 +74,35 @@ export async function GET(
       return NextResponse.json({ error: 'Session not found' }, { status: 404 });
     }
 
-    // Download PDF bytes from storage
+    // Parse parsedParts JSON and verify the part storage key belongs to this session
+    let parsedParts: ParsedPart[] = [];
+    if (uploadSession.parsedParts) {
+      try {
+        parsedParts = uploadSession.parsedParts as ParsedPart[];
+      } catch {
+        logger.warn('Failed to parse parsedParts JSON', {
+          sessionId: id,
+        });
+      }
+    }
+
+    // Check if the provided partStorageKey belongs to this session
+    const partExists = parsedParts.some((part) => part.storageKey === partStorageKey);
+
+    if (!partExists) {
+      logger.warn('Part storage key not found in session', {
+        sessionId: id,
+        partStorageKey,
+      });
+      return NextResponse.json(
+        { error: 'Part not found in session' },
+        { status: 404 }
+      );
+    }
+
+    // Download the part PDF from storage
     let pdfBuffer: Buffer;
-    const downloadResult = await downloadFile(uploadSession.storageKey);
+    const downloadResult = await downloadFile(partStorageKey);
 
     if (typeof downloadResult === 'string') {
       // S3 signed URL — fetch the bytes
@@ -96,8 +140,9 @@ export async function GET(
       format: 'png',
     });
 
-    logger.info('PDF preview generated', {
+    logger.info('Part PDF preview generated', {
       sessionId: id,
+      partStorageKey,
       pageIndex,
       totalPages,
       imageLength: imageBase64.length,
@@ -106,7 +151,7 @@ export async function GET(
     return NextResponse.json({ imageBase64, totalPages });
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
-    logger.error('Failed to generate PDF preview', { error: err.message });
+    logger.error('Failed to generate part PDF preview', { error: err.message });
     return NextResponse.json(
       { error: 'Failed to generate preview', detail: err.message },
       { status: 500 }

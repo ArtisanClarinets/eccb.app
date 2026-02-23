@@ -46,14 +46,23 @@ export function generateOCRFallback(filename: string): OCRMetadata {
   let composer: string | undefined;
 
   if (dashMatch) {
-    // Assume first part is composer if it looks like a name (capitalized, not too long)
+    // Assume first part is composer if it looks like a name (capitalized, not too long, not just a number)
     const firstPart = dashMatch[1].trim();
     const secondPart = dashMatch[2].trim();
 
-    if (firstPart.length < 30 && /^[A-Z]/.test(firstPart)) {
+    // Check if first part looks like a composer name (not starting with digits, capitalized, not too long)
+    if (
+      !/^\d/.test(firstPart) &&
+      firstPart.length < 30 &&
+      /^[A-Z]/.test(firstPart)
+    ) {
       composer = firstPart;
       title = secondPart;
-    } else if (secondPart.length < 30 && /^[A-Z]/.test(secondPart)) {
+    } else if (
+      !/^\d/.test(secondPart) &&
+      secondPart.length < 30 &&
+      /^[A-Z]/.test(secondPart)
+    ) {
       composer = secondPart;
       title = firstPart;
     }

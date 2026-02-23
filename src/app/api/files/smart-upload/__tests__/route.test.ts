@@ -126,7 +126,7 @@ describe('Smart Upload API Route', () => {
     });
 
     it('should return 401 when session has no user id', async () => {
-      vi.mocked(getSession).mockResolvedValue({ user: null });
+      vi.mocked(getSession).mockResolvedValue({ user: null } as any);
 
       const file = createMockFile('test.pdf', 1024, 'application/pdf');
       const formData = createFormDataWithFile(file);
@@ -256,7 +256,7 @@ describe('Smart Upload API Route', () => {
 
   describe('Successful Upload Flow', () => {
     it('should successfully upload and process a valid PDF', async () => {
-      vi.mocked(getSession).mockResolvedValue(createMockSession(TEST_USER_ID));
+      vi.mocked(getSession).mockResolvedValue(createMockSession(TEST_USER_ID) as any);
 
       const mockFetch = vi.fn().mockResolvedValue({
         ok: true,
@@ -271,13 +271,13 @@ describe('Smart Upload API Route', () => {
         fileSize: 1024,
         mimeType: 'application/pdf',
         storageKey: 'smart-upload/upload-session-uuid/original.pdf',
-        extractedMetadata: VALID_METADATA_HIGH_CONFIDENCE,
+        extractedMetadata: VALID_METADATA_HIGH_CONFIDENCE as any,
         confidenceScore: 95,
         status: 'PENDING_REVIEW',
         uploadedBy: TEST_USER_ID,
         createdAt: new Date(),
         updatedAt: new Date(),
-      });
+      } as any);
 
       const file = createMockFile('test.pdf', 1024, 'application/pdf');
       const formData = createFormDataWithFile(file);
@@ -298,7 +298,7 @@ describe('Smart Upload API Route', () => {
     });
 
     it('should handle multi-part score with multiple parts', async () => {
-      vi.mocked(getSession).mockResolvedValue(createMockSession(TEST_USER_ID));
+      vi.mocked(getSession).mockResolvedValue(createMockSession(TEST_USER_ID) as any);
 
       const mockFetch = vi.fn().mockResolvedValue({
         ok: true,
@@ -313,13 +313,13 @@ describe('Smart Upload API Route', () => {
         fileSize: 1024,
         mimeType: 'application/pdf',
         storageKey: 'smart-upload/upload-session-uuid/original.pdf',
-        extractedMetadata: VALID_METADATA_MULTI_PART,
+        extractedMetadata: VALID_METADATA_MULTI_PART as any,
         confidenceScore: 88,
         status: 'PENDING_REVIEW',
         uploadedBy: TEST_USER_ID,
         createdAt: new Date(),
         updatedAt: new Date(),
-      });
+      } as any);
 
       const file = createMockFile('test.pdf', 1024, 'application/pdf');
       const formData = createFormDataWithFile(file);
@@ -338,7 +338,7 @@ describe('Smart Upload API Route', () => {
     });
 
     it('should handle condensed score file type', async () => {
-      vi.mocked(getSession).mockResolvedValue(createMockSession(TEST_USER_ID));
+      vi.mocked(getSession).mockResolvedValue(createMockSession(TEST_USER_ID) as any);
 
       const mockFetch = vi.fn().mockResolvedValue({
         ok: true,
@@ -353,13 +353,13 @@ describe('Smart Upload API Route', () => {
         fileSize: 1024,
         mimeType: 'application/pdf',
         storageKey: 'smart-upload/upload-session-uuid/original.pdf',
-        extractedMetadata: VALID_METADATA_CONDENSED_SCORE,
+        extractedMetadata: VALID_METADATA_CONDENSED_SCORE as any,
         confidenceScore: 92,
         status: 'PENDING_REVIEW',
         uploadedBy: TEST_USER_ID,
         createdAt: new Date(),
         updatedAt: new Date(),
-      });
+      } as any);
 
       const file = createMockFile('test.pdf', 1024, 'application/pdf');
       const formData = createFormDataWithFile(file);
@@ -383,7 +383,7 @@ describe('Smart Upload API Route', () => {
 
   describe('Confidence Score Handling', () => {
     it('should trigger verification when confidence is below 90', async () => {
-      vi.mocked(getSession).mockResolvedValue(createMockSession(TEST_USER_ID));
+      vi.mocked(getSession).mockResolvedValue(createMockSession(TEST_USER_ID) as any);
 
       // Return metadata with confidence < 90 so verification is triggered
       const lowConfidenceMetadata = { ...VALID_METADATA_HIGH_CONFIDENCE, confidenceScore: 85 };
@@ -401,13 +401,13 @@ describe('Smart Upload API Route', () => {
         fileSize: 1024,
         mimeType: 'application/pdf',
         storageKey: 'smart-upload/upload-session-uuid/original.pdf',
-        extractedMetadata: { ...VALID_METADATA_HIGH_CONFIDENCE, confidenceScore: 85 },
+        extractedMetadata: { ...VALID_METADATA_HIGH_CONFIDENCE, confidenceScore: 85 } as any,
         confidenceScore: 85,
         status: 'PENDING_REVIEW',
         uploadedBy: TEST_USER_ID,
         createdAt: new Date(),
         updatedAt: new Date(),
-      });
+      } as any);
 
       const file = createMockFile('test.pdf', 1024, 'application/pdf');
       const formData = createFormDataWithFile(file);
@@ -424,7 +424,7 @@ describe('Smart Upload API Route', () => {
     });
 
     it('should skip verification when confidence is >= 90', async () => {
-      vi.mocked(getSession).mockResolvedValue(createMockSession(TEST_USER_ID));
+      vi.mocked(getSession).mockResolvedValue(createMockSession(TEST_USER_ID) as any);
 
       const highConfidence = { ...VALID_METADATA_HIGH_CONFIDENCE, confidenceScore: 95 };
       const mockFetch = vi.fn().mockResolvedValue({
@@ -440,13 +440,13 @@ describe('Smart Upload API Route', () => {
         fileSize: 1024,
         mimeType: 'application/pdf',
         storageKey: 'smart-upload/upload-session-uuid/original.pdf',
-        extractedMetadata: highConfidence,
+        extractedMetadata: highConfidence as any,
         confidenceScore: 95,
         status: 'PENDING_REVIEW',
         uploadedBy: TEST_USER_ID,
         createdAt: new Date(),
         updatedAt: new Date(),
-      });
+      } as any);
 
       const file = createMockFile('test.pdf', 1024, 'application/pdf');
       const formData = createFormDataWithFile(file);
@@ -463,7 +463,7 @@ describe('Smart Upload API Route', () => {
     });
 
     it('should handle ambiguous composer (confidence < 80)', async () => {
-      vi.mocked(getSession).mockResolvedValue(createMockSession(TEST_USER_ID));
+      vi.mocked(getSession).mockResolvedValue(createMockSession(TEST_USER_ID) as any);
 
       const mockFetch = vi.fn().mockResolvedValue({
         ok: true,
@@ -478,13 +478,13 @@ describe('Smart Upload API Route', () => {
         fileSize: 1024,
         mimeType: 'application/pdf',
         storageKey: 'smart-upload/upload-session-uuid/original.pdf',
-        extractedMetadata: AMBIGUOUS_COMPOSER_METADATA,
+        extractedMetadata: AMBIGUOUS_COMPOSER_METADATA as any,
         confidenceScore: 65,
         status: 'PENDING_REVIEW',
         uploadedBy: TEST_USER_ID,
         createdAt: new Date(),
         updatedAt: new Date(),
-      });
+      } as any);
 
       const file = createMockFile('test.pdf', 1024, 'application/pdf');
       const formData = createFormDataWithFile(file);
@@ -502,7 +502,7 @@ describe('Smart Upload API Route', () => {
     });
 
     it('should handle ambiguous instrument (confidence < 80)', async () => {
-      vi.mocked(getSession).mockResolvedValue(createMockSession(TEST_USER_ID));
+      vi.mocked(getSession).mockResolvedValue(createMockSession(TEST_USER_ID) as any);
 
       const mockFetch = vi.fn().mockResolvedValue({
         ok: true,
@@ -517,13 +517,13 @@ describe('Smart Upload API Route', () => {
         fileSize: 1024,
         mimeType: 'application/pdf',
         storageKey: 'smart-upload/upload-session-uuid/original.pdf',
-        extractedMetadata: AMBIGUOUS_INSTRUMENT_METADATA,
+        extractedMetadata: AMBIGUOUS_INSTRUMENT_METADATA as any,
         confidenceScore: 72,
         status: 'PENDING_REVIEW',
         uploadedBy: TEST_USER_ID,
         createdAt: new Date(),
         updatedAt: new Date(),
-      });
+      } as any);
 
       const file = createMockFile('test.pdf', 1024, 'application/pdf');
       const formData = createFormDataWithFile(file);
@@ -541,7 +541,7 @@ describe('Smart Upload API Route', () => {
     });
 
     it('should use fallback metadata when LLM fails', async () => {
-      vi.mocked(getSession).mockResolvedValue(createMockSession(TEST_USER_ID));
+      vi.mocked(getSession).mockResolvedValue(createMockSession(TEST_USER_ID) as any);
 
       const mockFetch = vi.fn().mockRejectedValue(new Error('LLM API error'));
       global.fetch = mockFetch;
@@ -556,13 +556,13 @@ describe('Smart Upload API Route', () => {
         extractedMetadata: {
           title: 'test',
           confidenceScore: 10,
-        },
+        } as any,
         confidenceScore: 10,
         status: 'PENDING_REVIEW',
         uploadedBy: TEST_USER_ID,
         createdAt: new Date(),
         updatedAt: new Date(),
-      });
+      } as any);
 
       const file = createMockFile('test.pdf', 1024, 'application/pdf');
       const formData = createFormDataWithFile(file);
@@ -644,11 +644,7 @@ describe('Smart Upload API Route', () => {
 
   describe('OPTIONS Handler', () => {
     it('should return 204 with correct CORS headers', async () => {
-      const request = new NextRequest('http://localhost/api/files/smart-upload', {
-        method: 'OPTIONS',
-      });
-
-      const response = await OPTIONS(request);
+      const response = await OPTIONS();
 
       expect(response.status).toBe(204);
       expect(response.headers.get('Access-Control-Allow-Methods')).toBe(

@@ -6,7 +6,7 @@ import {
   processMusicReturn,
   reportMissingParts,
   getLibrarianDashboardStats,
-  getAssignments,
+  getAssignmentsForLibrarian,
   markOverdueAssignments,
 } from '../assignment-actions';
 import { getSession, requirePermission } from '@/lib/auth/guards';
@@ -37,6 +37,9 @@ vi.mock('@/lib/auth/guards', () => ({
   getSession: vi.fn(),
 }));
 
+// Import mocked functions
+import { requirePermission, getSession } from '@/lib/auth/guards';
+
 // Mock audit log
 vi.mock('@/lib/services/audit', () => ({
   auditLog: vi.fn(),
@@ -54,7 +57,8 @@ describe('Librarian Workflow Actions', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(authGuards.requirePermission).mockResolvedValue(mockSession);
+    vi.mocked(requirePermission).mockResolvedValue(mockSession);
+    vi.mocked(getSession).mockResolvedValue(mockSession);
   });
 
   afterEach(() => {
@@ -71,12 +75,7 @@ describe('Librarian Workflow Actions', () => {
       vi.mocked(prisma.member.findMany).mockResolvedValue(mockMembers as any);
       vi.mocked(prisma.musicAssignment.createMany).mockResolvedValue({ count: 2 });
 
-      const result = await assignMusicToSections({
-        pieceId: 'piece-1',
-        sectionIds: ['section-1'],
-        dueDate: undefined,
-        notes: undefined,
-      });
+      const result = await assignMusicToSections('piece-1', ['section-1']);
 
       expect(result.success).toBe(true);
       expect(result.count).toBe(2);
@@ -94,12 +93,7 @@ describe('Librarian Workflow Actions', () => {
     it('should return error when no members found in sections', async () => {
       vi.mocked(prisma.member.findMany).mockResolvedValue([]);
 
-      const result = await assignMusicToSections({
-        pieceId: 'piece-1',
-        sectionIds: ['section-1'],
-        dueDate: undefined,
-        notes: undefined,
-      });
+      const result = await assignMusicToSections('piece-1', ['section-1']);
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('No active members found in selected sections');
@@ -112,9 +106,7 @@ describe('Librarian Workflow Actions', () => {
       vi.mocked(prisma.member.findMany).mockResolvedValue(mockMembers as any);
       vi.mocked(prisma.musicAssignment.createMany).mockResolvedValue({ count: 1 });
 
-      const result = await assignMusicToSections({
-        pieceId: 'piece-1',
-        sectionIds: ['section-1'],
+      const result = await assignMusicToSections('piece-1', ['section-1'], {
         dueDate,
         notes: 'Test notes',
       });
@@ -156,10 +148,11 @@ describe('Librarian Workflow Actions', () => {
       expect(prisma.musicAssignmentHistory.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           assignmentId: 'assignment-1',
-          action: 'STATUS_CHANGE',
+          action: 'STATUS_CHANGED',
           fromStatus: AssignmentStatus.ASSIGNED,
           toStatus: AssignmentStatus.PICKED_UP,
           performedBy: 'librarian-1',
+          notes: expect.any(String),
         }),
       });
     });
@@ -212,7 +205,7 @@ describe('Librarian Workflow Actions', () => {
         returnedAt: new Date(),
       } as any);
 
-      const result = await processMusicReturn('assignment-1', 'good');
+      const result = await processMusicReturn('assignment-1', { condition: 'good' });
 
       expect(result.success).toBe(true);
       expect(prisma.musicAssignment.update).toHaveBeenCalledWith({
@@ -237,7 +230,7 @@ describe('Librarian Workflow Actions', () => {
         status: AssignmentStatus.DAMAGED,
       } as any);
 
-      const result = await processMusicReturn('assignment-1', 'damaged');
+      const result = await processMusicReturn('assignment-1', { condition: 'damaged' });
 
       expect(result.success).toBe(true);
       expect(prisma.musicAssignment.update).toHaveBeenCalledWith({
@@ -257,10 +250,10 @@ describe('Librarian Workflow Actions', () => {
 
       vi.mocked(prisma.musicAssignment.findUnique).mockResolvedValue(mockAssignment as any);
 
-      const result = await processMusicReturn('assignment-1', 'good');
+      const result = await processMusicReturn('assignment-1', { condition: 'good' });
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe('Assignment cannot be returned');
+      expect(result.error).toBe('Assignment is not in a returnable state');
     });
   });
 
@@ -277,14 +270,14 @@ describe('Librarian Workflow Actions', () => {
         status: AssignmentStatus.LOST,
       } as any);
 
-      const result = await reportMissingParts('assignment-1', 'Missing flute part');
+      const result = await reportMissingParts('assignment-1', { notes: 'Missing flute part' });
 
       expect(result.success).toBe(true);
       expect(prisma.musicAssignment.update).toHaveBeenCalledWith({
         where: { id: 'assignment-1' },
         data: expect.objectContaining({
           status: AssignmentStatus.LOST,
-          notes: 'Missing flute part',
+          missingNotes: 'Missing flute part',
         }),
       });
     });
@@ -292,28 +285,28 @@ describe('Librarian Workflow Actions', () => {
 
   describe('getLibrarianDashboardStats', () => {
     it('should return dashboard statistics', async () => {
-      vi.mocked(prisma.musicAssignment.count).mockImplementation(async (args) => {
-        const where = args?.where || {};
-        if (where.status === AssignmentStatus.OVERDUE) return 5;
-        if (where.status === AssignmentStatus.LOST) return 2;
-        if (where.status === AssignmentStatus.ASSIGNED) return 10;
-        return 0;
+      const mockCounts = [5, 2, 10, 0];
+      let countIndex = 0;
+      (prisma.musicAssignment.count as any).mockImplementation(() => {
+        return Promise.resolve(mockCounts[countIndex++] ?? 0);
       });
 
       const result = await getLibrarianDashboardStats();
 
-      expect(result.overdueCount).toBe(5);
-      expect(result.lostCount).toBe(2);
-      expect(result.pendingPickupCount).toBe(10);
+      if (!result.success) throw new Error('Action failed');
+
+      expect(result.stats!.overdueCount).toBe(5);
+      expect(result.stats!.missingCount).toBe(2);
+      expect(result.stats!.pendingPickups).toBe(10);
     });
   });
 
-  describe('getAssignments', () => {
+  describe('getAssignmentsForLibrarian', () => {
     it('should return filtered assignments', async () => {
       vi.mocked(prisma.musicAssignment.findMany).mockResolvedValue([]);
       vi.mocked(prisma.musicAssignment.count).mockResolvedValue(0);
 
-      const result = await getAssignments({ status: AssignmentStatus.OVERDUE });
+      const result = await getAssignmentsForLibrarian({ status: AssignmentStatus.OVERDUE });
 
       expect(result.assignments).toEqual([]);
       expect(prisma.musicAssignment.findMany).toHaveBeenCalledWith(
@@ -329,15 +322,22 @@ describe('Librarian Workflow Actions', () => {
       vi.mocked(prisma.musicAssignment.findMany).mockResolvedValue([]);
       vi.mocked(prisma.musicAssignment.count).mockResolvedValue(0);
 
-      const result = await getAssignments({ search: 'John' });
+      const result = await getAssignmentsForLibrarian({ search: 'John' });
 
       expect(prisma.musicAssignment.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
             OR: expect.arrayContaining([
-              { member: { firstName: { contains: 'John' } } },
-              { member: { lastName: { contains: 'John' } } },
               { piece: { title: { contains: 'John' } } },
+              {
+                member: {
+                  OR: [
+                    { firstName: { contains: 'John' } },
+                    { lastName: { contains: 'John' } },
+                  ],
+                },
+              },
+              { partName: { contains: 'John' } },
             ]),
           }),
         })
@@ -357,7 +357,9 @@ describe('Librarian Workflow Actions', () => {
       const result = await markOverdueAssignments();
 
       expect(result.success).toBe(true);
-      expect(result.count).toBe(1);
+      if (result.success) {
+        expect(result.markedCount).toBe(1);
+      }
       expect(prisma.musicAssignment.update).toHaveBeenCalledWith({
         where: { id: 'assignment-1' },
         data: expect.objectContaining({ status: AssignmentStatus.OVERDUE }),
@@ -374,7 +376,9 @@ describe('Librarian Workflow Actions', () => {
       const result = await markOverdueAssignments();
 
       expect(result.success).toBe(true);
-      expect(result.count).toBe(0);
+      if (result.success) {
+        expect(result.markedCount).toBe(0);
+      }
     });
   });
 });

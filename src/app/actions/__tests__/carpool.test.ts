@@ -67,14 +67,14 @@ describe('Carpool Actions', () => {
     it('should create a carpool offer successfully', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValueOnce({
         user: { id: mockUserId, email: 'test@example.com' },
-      });
+      } as any);
       vi.mocked(prisma.member.findFirst).mockResolvedValueOnce({
         id: mockMemberId,
         firstName: 'John',
         lastName: 'Doe',
         userId: mockUserId,
-      });
-      vi.mocked(prisma.carpoolEntry.create).mockResolvedValueOnce(mockCarpoolEntry);
+      } as any);
+      vi.mocked(prisma.carpoolEntry.create).mockResolvedValueOnce(mockCarpoolEntry as any);
 
       const formData = createMockFormData({
         eventId: mockEventId,
@@ -100,13 +100,13 @@ describe('Carpool Actions', () => {
     it('should create a carpool request successfully', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValueOnce({
         user: { id: mockUserId, email: 'test@example.com' },
-      });
+      } as any);
       vi.mocked(prisma.member.findFirst).mockResolvedValueOnce({
         id: mockMemberId,
         firstName: 'Jane',
         lastName: 'Smith',
         userId: mockUserId,
-      });
+      } as any);
       vi.mocked(prisma.carpoolEntry.create).mockResolvedValueOnce({
         ...mockCarpoolEntry,
         type: 'REQUEST',
@@ -153,7 +153,7 @@ describe('Carpool Actions', () => {
     it('should throw error when member is not found', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValueOnce({
         user: { id: mockUserId, email: 'test@example.com' },
-      });
+      } as any);
       vi.mocked(prisma.member.findFirst).mockResolvedValueOnce(null);
 
       const formData = createMockFormData({
@@ -167,13 +167,13 @@ describe('Carpool Actions', () => {
     it('should throw validation error when required fields are missing', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValueOnce({
         user: { id: mockUserId, email: 'test@example.com' },
-      });
+      } as any);
       vi.mocked(prisma.member.findFirst).mockResolvedValueOnce({
         id: mockMemberId,
         firstName: 'John',
         lastName: 'Doe',
         userId: mockUserId,
-      });
+      } as any);
 
       // Missing required fields - FormData.get returns null which fails Zod validation
       const formData = new FormData();
@@ -189,15 +189,15 @@ describe('Carpool Actions', () => {
     it('should delete carpool entry successfully', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValueOnce({
         user: { id: mockUserId, email: 'test@example.com' },
-      });
+      } as any);
       vi.mocked(prisma.member.findFirst).mockResolvedValueOnce({
         id: mockMemberId,
         firstName: 'John',
         lastName: 'Doe',
         userId: mockUserId,
-      });
-      vi.mocked(prisma.carpoolEntry.findUnique).mockResolvedValueOnce(mockCarpoolEntry);
-      vi.mocked(prisma.carpoolEntry.delete).mockResolvedValueOnce(mockCarpoolEntry);
+      } as any);
+      vi.mocked(prisma.carpoolEntry.findUnique).mockResolvedValueOnce(mockCarpoolEntry as any);
+      vi.mocked(prisma.carpoolEntry.delete).mockResolvedValueOnce(mockCarpoolEntry as any);
 
       await expect(deleteCarpoolEntry('carpool-entry-789', mockEventId)).resolves.not.toThrow();
       expect(prisma.carpoolEntry.delete).toHaveBeenCalledWith({
@@ -216,7 +216,7 @@ describe('Carpool Actions', () => {
     it('should throw error when member is not found', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValueOnce({
         user: { id: mockUserId, email: 'test@example.com' },
-      });
+      } as any);
       vi.mocked(prisma.member.findFirst).mockResolvedValueOnce(null);
 
       await expect(deleteCarpoolEntry('carpool-entry-789', mockEventId)).rejects.toThrow(
@@ -227,13 +227,13 @@ describe('Carpool Actions', () => {
     it('should throw error when carpool entry is not found', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValueOnce({
         user: { id: mockUserId, email: 'test@example.com' },
-      });
+      } as any);
       vi.mocked(prisma.member.findFirst).mockResolvedValueOnce({
         id: mockMemberId,
         firstName: 'John',
         lastName: 'Doe',
         userId: mockUserId,
-      });
+      } as any);
       vi.mocked(prisma.carpoolEntry.findUnique).mockResolvedValueOnce(null);
 
       await expect(deleteCarpoolEntry('non-existent', mockEventId)).rejects.toThrow(
@@ -244,13 +244,13 @@ describe('Carpool Actions', () => {
     it('should throw error when user does not own the carpool entry', async () => {
       vi.mocked(auth.api.getSession).mockResolvedValueOnce({
         user: { id: mockUserId, email: 'test@example.com' },
-      });
+      } as any);
       vi.mocked(prisma.member.findFirst).mockResolvedValueOnce({
         id: mockMemberId,
         firstName: 'John',
         lastName: 'Doe',
         userId: mockUserId,
-      });
+      } as any);
       vi.mocked(prisma.carpoolEntry.findUnique).mockResolvedValueOnce({
         ...mockCarpoolEntry,
         memberId: 'different-member-id',

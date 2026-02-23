@@ -39,6 +39,10 @@ interface UploadResult {
   title: string;
   composer?: string;
   instrument?: string;
+  routingDecision: string;
+  parseStatus: string;
+  secondPassStatus: string;
+  partsCount: number;
 }
 
 interface UploadItem {
@@ -109,6 +113,31 @@ function phaseProgress(phase: UploadPhase): number {
   }
 }
 
+function getRoutingDecisionInfo(routingDecision: string): {
+  text: string;
+  colorClass: string;
+} | null {
+  switch (routingDecision) {
+    case 'auto_parse_auto_approve':
+      return {
+        text: 'High confidence — parts split, ready for review',
+        colorClass: 'text-green-600',
+      };
+    case 'auto_parse_second_pass':
+      return {
+        text: 'Parts split — 2nd pass verification running in background',
+        colorClass: 'text-blue-600',
+      };
+    case 'no_parse_second_pass':
+      return {
+        text: 'Low confidence — sent to 2nd pass analysis before splitting',
+        colorClass: 'text-yellow-600',
+      };
+    default:
+      return null;
+  }
+}
+
 // =============================================================================
 // Upload logic
 // =============================================================================
@@ -157,8 +186,16 @@ async function processUpload(
 
   let body: {
     success: boolean;
-    session?: { id: string; fileName: string; confidenceScore: number };
+    session?: {
+      id: string;
+      fileName: string;
+      confidenceScore: number;
+      routingDecision: string;
+      parseStatus: string;
+      secondPassStatus: string;
+    };
     extractedMetadata?: { title: string; composer?: string; instrument?: string };
+    parsedParts?: unknown[];
     error?: string;
   };
 
@@ -178,16 +215,22 @@ async function processUpload(
     return;
   }
 
+  const partsCount = body.parsedParts?.length ?? 0;
+
   onProgress(id, {
     phase: 'done',
     progress: 100,
     result: {
-      sessionId: body.session.id,
-      fileName: body.session.fileName,
-      confidenceScore: body.session.confidenceScore,
-      title: body.extractedMetadata.title,
-      composer: body.extractedMetadata.composer,
-      instrument: body.extractedMetadata.instrument,
+      sessionId: body.session!.id,
+      fileName: body.session!.fileName,
+      confidenceScore: body.session!.confidenceScore,
+      title: body.extractedMetadata!.title,
+      composer: body.extractedMetadata!.composer,
+      instrument: body.extractedMetadata!.instrument,
+      routingDecision: body.session!.routingDecision,
+      parseStatus: body.session!.parseStatus,
+      secondPassStatus: body.session!.secondPassStatus,
+      partsCount: partsCount,
     },
   });
 }
@@ -391,6 +434,12 @@ export default function SmartMusicUploadPage() {
                   Clear Finished
                 </Button>
               )}
+              {items.length > 0 && (
+                <p className="text-xs text-muted-foreground mr-2">
+                  Tip: Processing speed depends on your LLM provider's rate limit. Check LLM Settings
+                  for details.
+                </p>
+              )}
               <Button
                 onClick={startProcessing}
                 disabled={
@@ -574,13 +623,22 @@ function UploadItemRow({
               >
                 {item.result.confidenceScore}%
               </Badge>
-              <Link
-                href="/admin/uploads/review"
-                className="text-primary underline-offset-2 hover:underline"
-              >
-                Review →
-              </Link>
             </p>
+            {item.result.routingDecision && (() => {
+              const routingInfo = getRoutingDecisionInfo(item.result!.routingDecision);
+              return routingInfo ? (
+                <p className={routingInfo.colorClass}>{routingInfo.text}</p>
+              ) : null;
+            })()}
+            {item.result.partsCount > 0 && (
+              <p>{item.result.partsCount} parts detected</p>
+            )}
+            <Link
+              href="/admin/uploads/review"
+              className="text-primary underline-offset-2 hover:underline"
+            >
+              Review →
+            </Link>
           </div>
         )}
       </div>

@@ -47,6 +47,9 @@ vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }));
 
+// Import the mocked requirePermission to configure it
+import { requirePermission } from '@/lib/auth/guards';
+
 // Define types for mocks
 type MockSession = {
   user: { id: string };
@@ -76,6 +79,11 @@ describe('Announcement Actions', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Configure requirePermission mock to return a valid session with user
+    vi.mocked(requirePermission).mockResolvedValue({
+      user: { id: mockUserId },
+      session: { id: 'session-123' },
+    } as MockSession);
   });
 
   afterEach(() => {

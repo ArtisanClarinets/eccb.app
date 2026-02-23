@@ -207,7 +207,7 @@ describe('CmsService', () => {
       const pageData = {
         slug: 'new-page',
         title: 'New Page',
-        content: { text: 'Content' },
+        content: 'Content',
         isPublished: true,
       };
       

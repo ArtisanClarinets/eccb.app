@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   markAttendance,
   markBulkAttendance,
@@ -9,8 +9,8 @@ import {
   initializeEventAttendance,
 } from '../actions';
 import { prisma } from '@/lib/db';
-import { requireAuth } from '@/lib/auth/guards';
-import { requirePermission, checkUserPermission } from '@/lib/auth/permissions';
+import { requireAuth, requirePermission } from '@/lib/auth/guards';
+import { checkUserPermission } from '@/lib/auth/permissions';
 
 vi.mock('@/lib/db', () => ({
   prisma: {
@@ -35,6 +35,7 @@ vi.mock('@/lib/db', () => ({
 
 vi.mock('@/lib/auth/guards', () => ({
   requireAuth: vi.fn(),
+  requirePermission: vi.fn(),
 }));
 
 vi.mock('@/lib/auth/permissions', () => ({
@@ -47,6 +48,14 @@ type MockSession = { user: { id: string } };
 type MockEvent = { id: string; title: string; attendance?: any[] };
 
 describe('Attendance Actions', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Set default mock return values for auth functions
+    vi.mocked(requireAuth).mockResolvedValue({ user: { id: 'user-1' } } as any);
+    vi.mocked(requirePermission).mockResolvedValue({ user: { id: 'user-1' } } as any);
+    vi.mocked(checkUserPermission).mockResolvedValue(true);
+  });
+
   describe('markAttendance', () => {
     it('should mark attendance successfully', async () => {
       const mockSession: MockSession = { user: { id: 'user-1' } };

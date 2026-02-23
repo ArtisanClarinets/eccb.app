@@ -29,14 +29,12 @@ describe('VirusScanner', () => {
   });
 
   it('should return clean when scanning is disabled', async () => {
-    // @ts-expect-error - testing disabled scanning
     env.ENABLE_VIRUS_SCAN = false;
     const result = await scanner.scan(Buffer.from('test'));
     expect(result.clean).toBe(true);
   });
 
   it('should log warning and return clean when scanning is enabled but implementation missing', async () => {
-    // @ts-expect-error - testing enabled scanning
     env.ENABLE_VIRUS_SCAN = true;
     
     const result = await scanner.scan(Buffer.from('test'));

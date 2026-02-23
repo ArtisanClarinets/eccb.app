@@ -8,6 +8,8 @@
 import { PDFDocument } from 'pdf-lib';
 import { logger } from '@/lib/logger';
 
+import type { CuttingInstruction } from '@/types/smart-upload';
+
 export interface PageRange {
   start: number; // 0-indexed start page
   end: number; // 0-indexed end page (inclusive)
@@ -189,5 +191,146 @@ export async function getPdfMetadata(
     return {
       pageCount: 0,
     };
+  }
+}
+
+
+/**
+ * Sanitize filename by replacing invalid characters
+ */
+function sanitizeFileName(fileName: string): string {
+  return fileName.replace(/[\\/:*?"<>|]/g, '_');
+}
+
+/**
+ * Split PDF by cutting instructions.
+ *
+ * @param pdfBuffer - The original PDF as a Buffer
+ * @param originalBaseName - The original PDF base name (without extension)
+ * @param instructions - Array of CuttingInstruction objects
+ * @returns Array of split parts with instructions, buffers, page counts, and filenames
+ */
+export async function splitPdfByCuttingInstructions(
+  pdfBuffer: Buffer,
+  originalBaseName: string,
+  instructions: CuttingInstruction[]
+): Promise<Array<{
+  instruction: CuttingInstruction;
+  buffer: Buffer;
+  pageCount: number;
+  fileName: string;
+}>> {
+  if (instructions.length === 0) {
+    logger.warn('No cutting instructions provided');
+    return [];
+  }
+
+  try {
+    const sourcePdf = await PDFDocument.load(pdfBuffer);
+    const totalPages = sourcePdf.getPageCount();
+    const results: Array<{
+      instruction: CuttingInstruction;
+      buffer: Buffer;
+      pageCount: number;
+      fileName: string;
+    }> = [];
+
+    const sanitizedBaseName = sanitizeFileName(originalBaseName);
+
+    logger.info('Starting PDF split by cutting instructions', {
+      totalPages,
+      instructionsCount: instructions.length,
+    });
+
+    for (const instruction of instructions) {
+      const [startPage, endPage] = instruction.pageRange;
+
+      // Validate and clamp page range
+      let clampedStart = startPage;
+      let clampedEnd = endPage;
+
+      // Check if page indices are out of bounds
+      if (startPage < 0 || startPage >= totalPages || endPage < 0 || endPage >= totalPages) {
+        logger.warn('Page range exceeds PDF bounds, clamping to valid range', {
+          partName: instruction.partName,
+          requestedStart: startPage,
+          requestedEnd: endPage,
+          totalPages,
+        });
+        clampedStart = Math.max(0, Math.min(startPage, totalPages - 1));
+        clampedEnd = Math.max(clampedStart, Math.min(endPage, totalPages - 1));
+      }
+
+      // Create page indices array (0-indexed, inclusive)
+      const pageIndices: number[] = [];
+      for (let i = clampedStart; i <= clampedEnd; i++) {
+        pageIndices.push(i);
+      }
+
+      if (pageIndices.length === 0) {
+        logger.warn('No valid pages for instruction', {
+          partName: instruction.partName,
+          pageRange: instruction.pageRange,
+        });
+        continue;
+      }
+
+      try {
+        // Create new PDF for this part
+        const newPdf = await PDFDocument.create();
+
+        // Copy pages from source to new PDF
+        const copiedPages = await newPdf.copyPages(sourcePdf, pageIndices);
+
+        // Add all copied pages to the new PDF (multi-page, not split)
+        copiedPages.forEach((page) => newPdf.addPage(page));
+
+        // Save to buffer
+        const pdfBytes = await newPdf.save();
+        const buffer = Buffer.from(pdfBytes);
+
+        // Generate filename
+        const fileName = sanitizeFileName(
+          `${sanitizedBaseName} - ${instruction.partName}.pdf`
+        );
+
+        results.push({
+          instruction,
+          buffer,
+          pageCount: copiedPages.length,
+          fileName,
+        });
+
+        logger.info('Split part created from cutting instruction', {
+          partName: instruction.partName,
+          pages: copiedPages.length,
+          pageIndexRange: `${clampedStart}-${clampedEnd}`,
+          fileName,
+        });
+      } catch (partError) {
+        const err = partError instanceof Error ? partError : new Error(String(partError));
+        logger.error('Failed to create split part from instruction', err, {
+          partName: instruction.partName,
+          pageRange: instruction.pageRange,
+        });
+        // Continue with other instructions
+      }
+    }
+
+    if (results.length === 0) {
+      logger.warn('No parts were successfully split from cutting instructions');
+      return [];
+    }
+
+    logger.info('PDF split by cutting instructions complete', {
+      partsCreated: results.length,
+      totalPagesProcessed: results.reduce((sum, part) => sum + part.pageCount, 0),
+    });
+
+    return results;
+  } catch (error) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    logger.error('Failed to split PDF by cutting instructions', err);
+    throw new Error(`Failed to split PDF: ${err.message}`);
   }
 }

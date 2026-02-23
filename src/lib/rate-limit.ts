@@ -36,6 +36,8 @@ export const RATE_LIMIT_CONFIGS = {
   adminAction: { limit: 20, window: 60 }, // 20 per minute
   // Smart upload - stricter limit for AI processing
   'smart-upload': { limit: 5, window: 60 }, // 5 uploads per minute
+  // Second pass - moderate limit for additional AI processing
+  'second-pass': { limit: 10, window: 60 }, // 10 requests per minute
 } as const;
 
 export type RateLimitType = keyof typeof RATE_LIMIT_CONFIGS;

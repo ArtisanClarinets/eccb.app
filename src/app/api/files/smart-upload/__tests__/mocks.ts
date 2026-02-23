@@ -12,6 +12,7 @@
 export interface ExtractedMetadata {
   title: string;
   composer?: string;
+  arranger?: string;
   publisher?: string;
   instrument?: string;
   partNumber?: string;

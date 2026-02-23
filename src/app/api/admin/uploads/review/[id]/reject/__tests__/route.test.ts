@@ -113,7 +113,7 @@ describe('Reject Upload Session API', () => {
     });
 
     it('should return 401 when session has no user id', async () => {
-      vi.mocked(getSession).mockResolvedValue({ user: null });
+      vi.mocked(getSession).mockResolvedValue({ user: null } as any);
 
       const request = new NextRequest('http://localhost/api/admin/uploads/review/session-1/reject', {
         method: 'POST',
@@ -348,11 +348,7 @@ describe('Reject Upload Session API', () => {
 
   describe('OPTIONS Handler', () => {
     it('should return 204 with correct CORS headers', async () => {
-      const request = new NextRequest('http://localhost/api/admin/uploads/review/session-1/reject', {
-        method: 'OPTIONS',
-      });
-
-      const response = await OPTIONS(request);
+      const response = await OPTIONS();
 
       expect(response.status).toBe(204);
       expect(response.headers.get('Access-Control-Allow-Methods')).toBe('POST, OPTIONS');

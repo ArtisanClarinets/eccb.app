@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db';
 import { getSession } from '@/lib/auth/guards';
 import { requirePermission } from '@/lib/auth/permissions';
 import { logger } from '@/lib/logger';
+import type { ParsedPartRecord, CuttingInstruction, ParseStatus, SecondPassStatus } from '@/types/smart-upload';
 
 // =============================================================================
 // Types
@@ -52,21 +53,27 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    // Transform sessions to include extracted metadata
-    const transformedSessions = sessions.map((session) => ({
-      id: session.uploadSessionId,
-      fileName: session.fileName,
-      fileSize: session.fileSize,
-      mimeType: session.mimeType,
-      storageKey: session.storageKey,
-      confidenceScore: session.confidenceScore,
-      status: session.status,
-      uploadedBy: session.uploadedBy,
-      reviewedBy: session.reviewedBy,
-      reviewedAt: session.reviewedAt,
-      createdAt: session.createdAt,
-      updatedAt: session.updatedAt,
-      extractedMetadata: session.extractedMetadata as ExtractedMetadata | null,
+    // Transform sessions to include extracted metadata and new fields
+    const transformedSessions = sessions.map((s) => ({
+      id: s.uploadSessionId,
+      fileName: s.fileName,
+      fileSize: s.fileSize,
+      mimeType: s.mimeType,
+      storageKey: s.storageKey,
+      confidenceScore: s.confidenceScore,
+      status: s.status,
+      uploadedBy: s.uploadedBy,
+      reviewedBy: s.reviewedBy,
+      reviewedAt: s.reviewedAt,
+      createdAt: s.createdAt,
+      updatedAt: s.updatedAt,
+      extractedMetadata: s.extractedMetadata as ExtractedMetadata | null,
+      // New fields
+      parsedParts: s.parsedParts as ParsedPartRecord[] | null,
+      parseStatus: s.parseStatus as ParseStatus | null,
+      secondPassStatus: s.secondPassStatus as SecondPassStatus | null,
+      autoApproved: s.autoApproved,
+      cuttingInstructions: s.cuttingInstructions as CuttingInstruction[] | null,
     }));
 
     // Get counts by status
