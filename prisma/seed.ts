@@ -200,6 +200,34 @@ async function main() {
 
   console.log(`✅ Created ${instruments.length} instruments`);
 
+  // 4.5. Smart Upload LLM Settings
+  const smartUploadSettings = [
+    { key: 'llm_provider', value: process.env.LLM_PROVIDER || 'ollama' },
+    { key: 'llm_ollama_endpoint', value: process.env.LLM_OLLAMA_ENDPOINT || 'http://localhost:11434' },
+    { key: 'llm_openai_api_key', value: process.env.LLM_OPENAI_API_KEY || '' },
+    { key: 'llm_anthropic_api_key', value: process.env.LLM_ANTHROPIC_API_KEY || '' },
+    { key: 'llm_openrouter_api_key', value: process.env.LLM_OPENROUTER_API_KEY || '' },
+    { key: 'llm_custom_base_url', value: process.env.LLM_CUSTOM_BASE_URL || '' },
+    { key: 'llm_custom_api_key', value: process.env.LLM_CUSTOM_API_KEY || '' },
+    { key: 'llm_vision_model', value: process.env.LLM_VISION_MODEL || 'llama3.2-vision' },
+    { key: 'llm_verification_model', value: process.env.LLM_VERIFICATION_MODEL || 'qwen2.5:7b' },
+    { key: 'llm_confidence_threshold', value: '85' },
+    { key: 'llm_two_pass_enabled', value: 'true' },
+    { key: 'llm_enable_ocr_fallback', value: 'true' },
+    { key: 'llm_vision_system_prompt', value: '' },
+    { key: 'llm_verification_system_prompt', value: '' },
+  ];
+
+  for (const setting of smartUploadSettings) {
+    await prisma.systemSetting.upsert({
+      where: { key: setting.key },
+      update: { value: setting.value },
+      create: { key: setting.key, value: setting.value },
+    });
+  }
+
+  console.log(`✅ Created ${smartUploadSettings.length} smart upload LLM settings`);
+
   // 5. Sections
   const sections = [
     { name: 'Woodwinds', sortOrder: 1 },

@@ -36,7 +36,7 @@ const settingsSchema = z.record(z.string(), z.string());
 // GET /api/admin/uploads/settings
 // =============================================================================
 
-export async function GET(_request: NextRequest) {
+export async function GET() {
   try {
     const session = await getSession();
     if (!session?.user?.id) {

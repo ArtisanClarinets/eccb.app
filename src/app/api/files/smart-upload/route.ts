@@ -8,7 +8,8 @@ import { validateCSRF } from '@/lib/csrf';
 import { logger } from '@/lib/logger';
 import { MUSIC_UPLOAD } from '@/lib/auth/permission-constants';
 import { env } from '@/lib/env';
-import { z } from 'zod';
+import { renderPdfToImage } from '@/lib/services/pdf-renderer';
+import { generateOCRFallback } from '@/lib/services/ocr-fallback';
 
 // =============================================================================
 // Types
@@ -280,38 +281,45 @@ async function callVisionLLM(
   const endpoint = buildChatEndpoint(config);
   const authHeaders = buildAuthHeaders(config);
 
+  // Build request body - format parameter is Ollama-only
+  const requestBody: Record<string, unknown> = {
+    model: config.visionModel,
+    messages: [
+      {
+        role: 'system',
+        content: systemPrompt,
+      },
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'image_url',
+            image_url: {
+              url: `data:image/png;base64,${imageBase64}`,
+            },
+          },
+          {
+            type: 'text',
+            text: 'Extract the metadata from this music sheet. Return JSON.',
+          },
+        ],
+      },
+    ],
+    stream: false,
+  };
+
+  // Only include 'format' for Ollama (structured output)
+  if (config.provider === 'ollama') {
+    requestBody.format = metadataJsonSchema;
+  }
+
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       ...authHeaders,
     },
-    body: JSON.stringify({
-      model: config.visionModel,
-      messages: [
-        {
-          role: 'system',
-          content: systemPrompt,
-        },
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'image_url',
-              image_url: {
-                url: `data:image/png;base64,${imageBase64}`,
-              },
-            },
-            {
-              type: 'text',
-              text: 'Extract the metadata from this music sheet. Return JSON.',
-            },
-          ],
-        },
-      ],
-      stream: false,
-      format: metadataJsonSchema,
-    }),
+    body: JSON.stringify(requestBody),
   });
 
   if (!response.ok) {
@@ -349,38 +357,45 @@ async function verifyMetadata(
   const endpoint = buildChatEndpoint(config);
   const authHeaders = buildAuthHeaders(config);
 
+  // Build request body - format parameter is Ollama-only
+  const requestBody: Record<string, unknown> = {
+    model: config.verificationModel,
+    messages: [
+      {
+        role: 'system',
+        content: systemPrompt,
+      },
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'image_url',
+            image_url: {
+              url: `data:image/png;base64,${imageBase64}`,
+            },
+          },
+          {
+            type: 'text',
+            text: `Verify and correct this extracted metadata:\n${JSON.stringify(extractedMetadata, null, 2)}`,
+          },
+        ],
+      },
+    ],
+    stream: false,
+  };
+
+  // Only include 'format' for Ollama (structured output)
+  if (config.provider === 'ollama') {
+    requestBody.format = metadataJsonSchema;
+  }
+
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       ...authHeaders,
     },
-    body: JSON.stringify({
-      model: config.verificationModel,
-      messages: [
-        {
-          role: 'system',
-          content: systemPrompt,
-        },
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'image_url',
-              image_url: {
-                url: `data:image/png;base64,${imageBase64}`,
-              },
-            },
-            {
-              type: 'text',
-              text: `Verify and correct this extracted metadata:\n${JSON.stringify(extractedMetadata, null, 2)}`,
-            },
-          ],
-        },
-      ],
-      stream: false,
-      format: metadataJsonSchema,
-    }),
+    body: JSON.stringify(requestBody),
   });
 
   if (!response.ok) {
@@ -407,45 +422,46 @@ async function verifyMetadata(
 }
 
 /**
- * Convert PDF first page to image (top 20%).
- * 
- * NOTE: This implementation uses a placeholder approach. In production,
- * you would use a library like pdf-lib or pdfjs-dist to render the PDF to an image.
- * 
- * To make this fully functional:
- * 1. Install: npm install pdf-lib
- * 2. Or use: npm install pdfjs-dist canvas
- * 
- * For now, this returns a placeholder that can be replaced with actual PDF rendering.
+ * Convert PDF first page to image for LLM analysis.
+ * Uses the pdf-renderer service to render the PDF to a base64 image.
  */
 async function convertPdfToImage(pdfBuffer: Buffer): Promise<string> {
-  // Log that PDF was received - in production, implement proper PDF rendering
   logger.info('Processing PDF for smart upload', {
     size: pdfBuffer.length,
-    // First few bytes for debugging
     magicBytes: pdfBuffer.slice(0, 4).toString('hex'),
   });
-  
-  // For production, implement PDF rendering here using pdf-lib:
-  // const pdfDoc = await pdfLib.PDFDocument.load(pdfBuffer);
-  // const page = pdfDoc.getPage(0);
-  // const { width, height } = page.getSize();
-  // ... render to image canvas
-  
-  // For now, return a placeholder that indicates the PDF was processed
-  // The LLM will receive metadata about the file instead of an actual image
-  // This allows the system to work while waiting for full PDF rendering implementation
-  return generatePlaceholderImage();
+
+  try {
+    // Render PDF first page to image using our PDF renderer service
+    const imageBase64 = await renderPdfToImage(pdfBuffer, {
+      pageIndex: 0,
+      quality: 85,
+      maxWidth: 1920,
+      format: 'png',
+    });
+
+    logger.info('PDF successfully rendered to image', {
+      imageSize: imageBase64.length,
+    });
+
+    return imageBase64;
+  } catch (error) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    logger.error('PDF rendering failed, using fallback', { error: err.message });
+
+    // Return a placeholder if rendering fails
+    return generatePlaceholderImage();
+  }
 }
 
 /**
- * Generate a placeholder image for demo purposes.
- * In production, this would be replaced with actual PDF rendering.
+ * Generate a placeholder image when PDF rendering fails.
+ * This is a 100x100 light gray PNG that signals to the LLM
+ * that the PDF could not be rendered properly.
  */
 function generatePlaceholderImage(): string {
-  // This is a minimal 1x1 PNG in base64 as placeholder
-  // In production, implement proper PDF rendering
-  return 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+  // Light gray 100x100 PNG in base64
+  return 'iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAYAAABw4pVUAAAADUlEQVR42u3BMQEAAADCoPVPbQhfoAAAAOA1v9QJZX6z/sIAAAAASUVORK5CYII=';
 }
 
 // =============================================================================
@@ -552,16 +568,25 @@ export async function POST(request: NextRequest) {
       });
     } catch (error) {
       logger.error('Vision model extraction failed', { error, sessionId });
-      // Create fallback metadata
+      // Use OCR fallback for better metadata
+      const ocrFallback = generateOCRFallback(file.name);
       extractedMetadata = {
-        title: file.name.replace('.pdf', ''),
-        confidenceScore: 10,
+        title: ocrFallback.title,
+        composer: ocrFallback.composer,
+        confidenceScore: ocrFallback.confidence,
       };
+      logger.warn('Using OCR fallback metadata', {
+        sessionId,
+        title: extractedMetadata.title,
+        confidence: extractedMetadata.confidenceScore,
+      });
     }
-    
-    // Second pass: Verification model (if enabled and below threshold)
+
+    // Second pass: Verification model (if enabled and confidence is reasonable)
+    // Don't verify garbage metadata (confidence < 30)
     if (
       llmConfig.twoPassEnabled &&
+      extractedMetadata.confidenceScore >= 30 &&
       extractedMetadata.confidenceScore < llmConfig.confidenceThreshold
     ) {
       try {
@@ -575,6 +600,11 @@ export async function POST(request: NextRequest) {
       } catch (error) {
         logger.warn('Verification model failed, using original', { error, sessionId });
       }
+    } else if (extractedMetadata.confidenceScore < 30) {
+      logger.warn('Metadata confidence too low to verify', {
+        sessionId,
+        score: extractedMetadata.confidenceScore,
+      });
     }
     
     // Store file in blob storage

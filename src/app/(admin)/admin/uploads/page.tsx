@@ -130,7 +130,7 @@ async function processUpload(
       method: 'POST',
       body: formData,
     });
-  } catch (networkError) {
+  } catch {
     onProgress(id, {
       phase: 'error',
       progress: 0,

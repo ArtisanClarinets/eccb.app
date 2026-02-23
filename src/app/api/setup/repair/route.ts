@@ -144,7 +144,7 @@ export async function POST(request: Request): Promise<NextResponse<RepairRespons
 
     // Handle different repair actions
     switch (action) {
-      case 'reset':
+      case 'reset': {
         logger.info('Resetting database');
         const resetResult = repairDatabase({ force });
 
@@ -154,8 +154,9 @@ export async function POST(request: Request): Promise<NextResponse<RepairRespons
           progress: resetResult.success ? 100 : 50,
           error: resetResult.error,
         });
+      }
 
-      case 'migrate':
+      case 'migrate': {
         logger.info('Running migrations');
         const migrationResult = runMigrations({ skipSeed: true });
 
@@ -165,8 +166,9 @@ export async function POST(request: Request): Promise<NextResponse<RepairRespons
           progress: migrationResult.success ? 100 : 50,
           error: migrationResult.error,
         });
+      }
 
-      case 'seed':
+      case 'seed': {
         logger.info('Seeding database');
         const seedResult = seedDatabase();
 
@@ -182,9 +184,11 @@ export async function POST(request: Request): Promise<NextResponse<RepairRespons
             },
           },
         });
+      }
 
-      case 'full':
+      case 'full': {
         return NextResponse.json(await runFullRepair(force));
+      }
 
       default:
         return NextResponse.json(

@@ -48,7 +48,6 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { Switch } from '@/components/ui/switch';
-import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
 // =============================================================================
@@ -62,8 +61,8 @@ const LLM_PROVIDERS = [
     description: 'OpenAI-compatible local inference server',
     requiresApiKey: false,
     defaultEndpoint: 'http://localhost:11434',
-    defaultVisionModel: 'llama3.2-vision',
-    defaultVerificationModel: 'qwen2.5:7b',
+    defaultVisionModel: 'gemma3:27b-cloud',
+    defaultVerificationModel: 'qwen3-vl:235b-instruct-cloud',
   },
   {
     value: 'openai',
@@ -86,11 +85,11 @@ const LLM_PROVIDERS = [
   {
     value: 'gemini',
     label: 'Google Gemini',
-    description: 'Gemini 1.5 Pro, Gemini Flash',
+    description: 'Gemini 2.5 Pro, Gemini 3 Flash',
     requiresApiKey: true,
     defaultEndpoint: 'https://generativelanguage.googleapis.com/v1beta',
-    defaultVisionModel: 'gemini-1.5-pro',
-    defaultVerificationModel: 'gemini-1.5-flash',
+    defaultVisionModel: 'gemini-3-flash-preview',
+    defaultVerificationModel: 'gemini-3-flash-preview',
   },
   {
     value: 'openrouter',
@@ -98,8 +97,8 @@ const LLM_PROVIDERS = [
     description: 'Access 200+ models via OpenAI-compatible API',
     requiresApiKey: true,
     defaultEndpoint: 'https://openrouter.ai/api/v1',
-    defaultVisionModel: 'anthropic/claude-3.5-sonnet',
-    defaultVerificationModel: 'meta-llama/llama-3.1-8b-instruct',
+    defaultVisionModel: 'nvidia/nemotron-nano-12b-v2-vl:free',
+    defaultVerificationModel: 'google/gemma-3-27b-it:free',
   },
   {
     value: 'custom',
@@ -179,7 +178,6 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
 
   const provider = form.watch('llm_provider') as ProviderValue;
   const providerConfig = LLM_PROVIDERS.find(p => p.value === provider);
-  const twoPassEnabled = form.watch('llm_two_pass_enabled');
 
   // Fill default models when provider changes
   const handleProviderChange = (value: ProviderValue) => {

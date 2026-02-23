@@ -1,7 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Metadata } from 'next';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   Card,
@@ -132,19 +131,43 @@ function UploadReviewClient({
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [rejectSessionId, setRejectSessionId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
+  // State for PDF preview images keyed by session id
+  const [previewImages, setPreviewImages] = useState<Record<string, string | null>>({});
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  // Auto-fetch sessions when the component mounts
+  useEffect(() => {
+    fetchSessions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Fetch sessions from API
   const fetchSessions = async () => {
     setLoading(true);
     try {
+      console.log('[REVIEW] Fetching sessions...');
       const response = await fetch('/api/admin/uploads/review?status=PENDING_REVIEW');
+      console.log('[REVIEW] Response status:', response.status);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('[REVIEW] API error:', errorData);
+        return;
+      }
+
       const data = await response.json();
+      console.log('[REVIEW] Response data:', data);
+      console.log('[REVIEW] Sessions count:', data.sessions?.length);
+
       if (data.sessions) {
         setSessions(data.sessions);
         setStats(data.stats);
+        console.log('[REVIEW] Sessions set:', data.sessions.length);
+      } else if (data.error) {
+        console.error('[REVIEW] API returned error:', data.error);
       }
     } catch (error) {
-      console.error('Failed to fetch sessions:', error);
+      console.error('[REVIEW] Fetch failed:', error);
     } finally {
       setLoading(false);
     }
@@ -250,10 +273,31 @@ function UploadReviewClient({
     }
   };
 
+  // Load PDF preview image for a session
+  const loadPreviewImage = useCallback(async (sessionId: string) => {
+    if (previewImages[sessionId] !== undefined) return; // already loaded
+    setPreviewLoading(true);
+    try {
+      const res = await fetch(`/api/admin/uploads/review/${sessionId}/preview`);
+      if (res.ok) {
+        const data = await res.json() as { imageBase64?: string };
+        setPreviewImages(prev => ({ ...prev, [sessionId]: data.imageBase64 ?? null }));
+      } else {
+        setPreviewImages(prev => ({ ...prev, [sessionId]: null }));
+      }
+    } catch {
+      setPreviewImages(prev => ({ ...prev, [sessionId]: null }));
+    } finally {
+      setPreviewLoading(false);
+    }
+  }, [previewImages]);
+
   // Open edit dialog
   const openEditDialog = (session: SmartUploadSession) => {
     setEditingSession(session);
     setEditedMetadata(session.extractedMetadata || {});
+    // Kick off preview image load asynchronously
+    loadPreviewImage(session.id);
   };
 
   // Close edit dialog
@@ -482,6 +526,26 @@ function UploadReviewClient({
                 </div>
               </div>
 
+              {/* PDF Preview */}
+              <div>
+                <h4 className="text-sm font-semibold mb-2">PDF Preview (First Page)</h4>
+                {previewLoading && previewImages[editingSession.id] === undefined ? (
+                  <div className="w-full h-40 bg-muted rounded-lg flex items-center justify-center">
+                    <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" />
+                  </div>
+                ) : previewImages[editingSession.id] ? (
+                  <img
+                    src={`data:image/png;base64,${previewImages[editingSession.id]}`}
+                    alt="PDF first page preview"
+                    className="w-full max-h-64 object-contain border rounded-lg bg-gray-50"
+                  />
+                ) : (
+                  <div className="w-full h-20 bg-muted rounded-lg flex items-center justify-center border border-dashed">
+                    <span className="text-xs text-muted-foreground">Preview unavailable</span>
+                  </div>
+                )}
+              </div>
+
               {/* Confidence Score */}
               <div className="flex items-center gap-4">
                 <span className="text-sm font-medium">Confidence Score:</span>
@@ -664,9 +728,11 @@ function UploadReviewClient({
 // Server Component (Page)
 // =============================================================================
 
+// Note: This page uses client-side fetching for sessions to ensure
+// proper authentication state. The initial data is empty and the
+// client fetches from the API on mount.
+
 export default function UploadReviewPage() {
-  // In a real implementation, this would fetch from the database directly
-  // For now, we'll pass empty data and let the client fetch
   return (
     <UploadReviewClient initialSessions={[]} initialStats={{ pending: 0, approved: 0, rejected: 0 }} />
   );

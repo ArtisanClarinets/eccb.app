@@ -1,0 +1,412 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "foundry",
+  "agent": {
+    "foundry": {
+      "description": "Foundry Orchestrator Agent - Runs enterprise iterative workflow with quality gates and peer review",
+      "mode": "primary",
+      "prompt": "You are Foundry Orchestrator Agent. Execute the enterprise state-machine workflow end-to-end: decompose intent, coordinate specialized agents, enforce security and compliance, require peer review from another agent, run quality gates, and iterate until release readiness.",
+      "tools": {
+        "read": true,
+        "write": true,
+        "edit": true,
+        "bash": true,
+        "task": true,
+        "SequentialThinking": true,
+        "Memory": true,
+        "critical-thinking": true,
+        "audit.logToolCall": true,
+        "audit.replayRun": true,
+        "audit.checkReproducibility": true
+      },
+      "permission": {
+        "edit": "ask",
+        "bash": {
+          "git status*": "allow",
+          "git log*": "allow",
+          "git diff*": "allow",
+          "ls*": "allow",
+          "pwd": "allow"
+        }
+      },
+      "maxSteps": 1000000
+    },
+    "orchestrator": {
+      "description": "Enterprise Orchestrator Agent - Coordinates all specialized agents with governance oversight",
+      "mode": "primary",
+      "prompt": "You are Enterprise Orchestrator Agent. Your role is to coordinate specialized agents, enforce security protocols, and ensure compliance with Fortune-500 governance standards. Always verify agent permissions before delegation. Maintain audit trails for all operations. Prioritize security, compliance, and traceability in all workflows.",
+      "tools": {
+        "read": true,
+        "write": true,
+        "edit": true,
+        "bash": true,
+        "task": true,
+        "SequentialThinking": true,
+        "Memory": true,
+        "critical-thinking": true,
+        "audit.logToolCall": true,
+        "audit.replayRun": true,
+        "audit.checkReproducibility": true
+      },
+      "permission": {
+        "edit": "ask",
+        "bash": {
+          "git status*": "allow",
+          "git log*": "allow",
+          "git diff*": "allow",
+          "ls*": "allow",
+          "pwd": "allow"
+        }
+      },
+      "maxSteps": 1000000
+    },
+    "architecture": {
+      "description": "Architecture Agent - System design with sequential thinking capabilities",
+      "mode": "subagent",
+      "prompt": "You are an Enterprise Architecture Agent. Design scalable, secure systems following Fortune-500 best practices. Use sequential thinking for complex architectural decisions. Document all trade-offs and security considerations. Validate designs against compliance requirements.",
+      "tools": {
+        "read": true,
+        "write": true,
+        "edit": true,
+        "arch.generate": true,
+        "backlog.generate": true,
+        "bash": false,
+        "SequentialThinking": true,
+        "Memory": true,
+        "critical-thinking": true,
+        "DeepWiki-SSE": true
+      }
+    },
+    "codegen": {
+      "description": "Codegen Agent - Code generation with memory and critical thinking",
+      "mode": "primary",
+      "prompt": "You are an Enterprise Build Agent. Write production-ready code with comprehensive error handling, logging, and security controls. Use memory to maintain context across sessions. Apply critical thinking to validate implementations. Follow established patterns and ensure code quality gates are met.",
+      "tools": {
+        "read": true,
+        "write": true,
+        "edit": true,
+        "codegen.scaffold": true,
+        "codegen.feature": true,
+        "codegen.tests": true,
+        "ci.verify": true,
+        "bash": true,
+        "SequentialThinking": true,
+        "Memory": true,
+        "critical-thinking": true,
+        "next-devtools": false,
+        "Desktop-Commander": false
+      },
+      "permission": {
+        "edit": "ask",
+        "bash": {
+          "npm *": "allow",
+          "yarn *": "allow",
+          "pnpm *": "allow",
+          "npx *": "allow",
+          "git status*": "allow",
+          "git log*": "allow",
+          "git diff*": "allow",
+          "git add*": "allow",
+          "git commit*": "allow",
+          "node *": "allow",
+          "git push*": "ask",
+          "npm publish*": "ask"
+        }
+      }
+    },
+    "database": {
+      "description": "Database Agent - Prisma ORM and database operations",
+      "mode": "subagent",
+      "prompt": "You are a Database Architecture Agent. Design and optimize database schemas, migrations, and queries. Use Prisma for type-safe database operations. Validate all migrations for safety. Never execute destructive operations without approval.",
+      "tools": {
+        "read": true,
+        "write": true,
+        "edit": true,
+        "bash": true,
+        "Prisma": true,
+        "Memory": true
+      },
+      "permission": {
+        "bash": {
+          "npx prisma*": "allow",
+          "npx prisma migrate*": "ask",
+          "npx prisma db push*": "ask"
+        }
+      }
+    },
+    "proposal": {
+      "description": "Proposal Agent - Generates client-ready proposals, SOWs, and compliance documentation.",
+      "mode": "primary",
+      "prompt": "You are Proposal Agent. Generate client proposals, SOWs, and compliance documentation based on research and architecture artifacts. Ensure all outputs adhere to legal, technical, and delivery standards. Use peer review tools for gate-keeping.",
+      "tools": {
+        "read": true,
+        "write": true,
+        "docs.prd.generate": true,
+        "docs.sow.generate": true,
+        "proposal.generate": true,
+        "proposal.peer_review": true,
+        "proposal.package.export": true,
+        "SequentialThinking": true,
+        "critical-thinking": true
+      }
+    },
+    "qa": {
+      "description": "QA Agent - Testing with TestSprite integration",
+      "mode": "subagent",
+      "prompt": "You are an Enterprise QA Agent. Write comprehensive tests, perform security scanning, and validate functionality. Use TestSprite for automated testing. Ensure all code meets quality gates before approval.",
+      "tools": {
+        "read": true,
+        "write": true,
+        "edit": true,
+        "bash": true,
+        "testsprite": false,
+        "qa.testplan.generate": true,
+        "qa.risk_matrix.generate": true,
+        "qa.static.run": true,
+        "qa.peer_review": true,
+        "Memory": true,
+        "critical-thinking": true
+      },
+      "permission": {
+        "bash": {
+          "npm test*": "allow",
+          "npm run test*": "allow",
+          "vitest*": "allow",
+          "jest*": "allow",
+          "npx testsprite*": "allow"
+        }
+      }
+    },
+    "delivery": {
+      "description": "Delivery Agent - Deployment, runbooks, and client handoff.",
+      "mode": "subagent",
+      "prompt": "You are Delivery Agent. Manage final delivery, create runbooks, and package client handoff materials. Ensure environment parity and operational readiness.",
+      "tools": {
+        "read": true,
+        "write": true,
+        "bash": true,
+        "Desktop-Commander": false,
+        "delivery.runbook.generate": true,
+        "delivery.nginx.generate": true,
+        "delivery.smoketest.run": true,
+        "delivery.handoff.package": true,
+        "Memory": true
+      },
+      "permission": {
+        "bash": {
+          "docker *": "ask",
+          "kubectl *": "ask",
+          "systemctl *": "ask"
+        }
+      }
+    },
+    "research": {
+      "description": "Research Agent - DeepWiki and documentation analysis",
+      "mode": "subagent",
+      "prompt": "You are a Research Agent. Gather information from documentation, analyze requirements, and provide comprehensive findings. Use DeepWiki for technical documentation. Focus on accuracy and completeness.",
+      "tools": {
+        "read": true,
+        "webfetch": true,
+        "search": true,
+        "research.plan": true,
+        "research.gather": true,
+        "research.claims.extract": true,
+        "research.citations.analyze": true,
+        "research.peer_review": true,
+        "research.dossier.finalize": true,
+        "discovery.session.export": true,
+        "rate-limit": true,
+        "source-normalize": true,
+        "DeepWiki-SSE": true,
+        "SequentialThinking": true,
+        "Memory": true
+      }
+    },
+    "security": {
+      "description": "Security Agent - Serena for code analysis and auditing",
+      "mode": "subagent",
+      "prompt": "You are a Security Agent. Audit code for vulnerabilities, enforce security policies, and ensure compliance. Use Serena for comprehensive code analysis. Flag any security risks immediately.",
+      "tools": {
+        "read": true,
+        "write": true,
+        "edit": true,
+        "Serena": false,
+        "Memory": true,
+        "critical-thinking": true
+      }
+    }
+  },
+  "tools": {
+    "SequentialThinking": true,
+    "Desktop-Commander": true,
+    "Memory": true,
+    "critical-thinking": true,
+    "testsprite": false,
+    "next-devtools": true,
+    "Prisma": false,
+    "webfetch": true,
+    "search": true,
+    "rate-limit": true,
+    "source-normalize": true,
+    "audit.logToolCall": false,
+    "audit.replayRun": false,
+    "audit.checkReproducibility": false,
+    "research.plan": true,
+    "research.gather": true,
+    "research.claims.extract": true,
+    "research.citations.analyze": true,
+    "research.peer_review": true,
+    "research.dossier.finalize": true,
+    "discovery.session.start": false,
+    "discovery.session.export": true,
+    "qa.testplan.generate": false,
+    "qa.risk_matrix.generate": false,
+    "qa.static.run": false,
+    "qa.peer_review": false,
+    "docs.prd.generate": false,
+    "docs.sow.generate": false,
+    "proposal.generate": false,
+    "proposal.peer_review": false,
+    "proposal.package.export": false,
+    "arch.generate": false,
+    "backlog.generate": false,
+    "codegen.scaffold": false,
+    "codegen.feature": false,
+    "codegen.tests": false,
+    "ci.verify": false,
+    "delivery.runbook.generate": false,
+    "delivery.nginx.generate": false,
+    "delivery.smoketest.run": false,
+    "delivery.handoff.package": false,
+    "DeepWiki-SSE": true,
+    "Serena": true
+  },
+  "mcp": {
+    "opencode-tools": {
+      "type": "local",
+      "command": [
+        "opencode-tools",
+        "mcp"
+      ],
+      "enabled": true
+    },
+    "Memory": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-memory@latest"
+      ],
+      "enabled": true,
+      "timeout": 5000
+    },
+    "critical-thinking": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "mcp-server-actor-critic-thinking"
+      ],
+      "enabled": true,
+      "timeout": 15000
+    },
+    "Serena": {
+      "type": "local",
+      "command": [
+        "uvx",
+        "--from",
+        "git+https://github.com/oraios/serena",
+        "serena",
+        "start-mcp-server"
+      ],
+      "enabled": true,
+      "timeout": 15000
+    },
+    "sequential-thinking": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking"
+      ],
+      "enabled": true
+    },
+    "shadcn": {
+      "type": "local",
+      "command": [
+        "npx",
+        "shadcn@latest",
+        "mcp"
+      ],
+      "enabled": true
+    },
+    "Desktop-Commander": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@wonderwhy-er/desktop-commander"
+      ],
+      "enabled": true
+    },
+    "next-devtools": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "next-devtools-mcp@latest"
+      ],
+      "enabled": true
+    },
+    "prisma-mcp-server": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "prisma",
+        "mcp"
+      ],
+      "enabled": true
+    },
+    "Better Auth": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "mcp-remote",
+        "https://mcp.inkeep.com/better-auth/mcp"
+      ],
+      "enabled": true
+    },
+    "Stripe": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "mcp-remote",
+        "https://mcp.stripe.com"
+      ],
+      "enabled": true
+    }
+  },
+  "permission": {
+    "edit": "allow",
+    "bash": {
+      "git status*": "allow",
+      "git log*": "allow",
+      "git diff*": "allow",
+      "ls*": "allow",
+      "pwd": "allow",
+      "echo *": "allow"
+    },
+    "write": "allow",
+    "read": "allow"
+  },
+  "plugin": [
+    "@mohak34/opencode-notifier@latest",
+    "opencode-scheduler",
+    "octto",
+    "@nick-vi/opencode-type-inject"
+
+  ]
+}

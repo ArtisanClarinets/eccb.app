@@ -62,5 +62,3 @@ export const prisma =
 // re-evaluation (HMR in dev, multiple module instances in build workers)
 // always reuses the same client and connection pool.
 globalForPrisma.prisma = prisma;
-
-export * from '@prisma/client';

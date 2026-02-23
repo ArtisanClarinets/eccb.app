@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import { prisma, EventType } from '@/lib/db';
+import { prisma } from '@/lib/db';
+import { EventType } from '@prisma/client';
 import { requirePermission } from '@/lib/auth/guards';
 import { formatDate, formatTime } from '@/lib/date';
 import { Button } from '@/components/ui/button';

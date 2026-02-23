@@ -19,11 +19,18 @@ function DropdownMenuPortal({
 }
 
 function DropdownMenuTrigger({
+  className,
+  asChild,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Trigger>) {
   return (
     <DropdownMenuPrimitive.Trigger
       data-slot="dropdown-menu-trigger"
+      asChild={asChild}
+      className={cn(
+        !asChild && "bg-background border rounded-md px-3 py-2 text-sm shadow-sm hover:bg-muted/50 transition-colors",
+        className
+      )}
       {...props}
     />
   )

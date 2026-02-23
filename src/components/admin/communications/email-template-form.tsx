@@ -143,7 +143,7 @@ export function EmailTemplateForm({ template, onSubmit, isSubmitting }: EmailTem
 
     // Replace variables in preview
     Object.entries(previewVars).forEach(([key, value]) => {
-      const regex = new RegExp(`{{\s*${key}\s*}}`, 'g');
+      const regex = new RegExp(`{{\\s*${key}\\s*}}`, 'g');
       html = html.replace(regex, value);
       subject = subject.replace(regex, value);
       text = text.replace(regex, value);

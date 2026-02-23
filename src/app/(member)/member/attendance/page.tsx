@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { requireAuth } from '@/lib/auth/guards';
-import { prisma, AttendanceStatus } from '@/lib/db';
+import { prisma } from '@/lib/db';
+import { AttendanceStatus } from '@prisma/client';
 import { formatDate, formatTime } from '@/lib/date';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
