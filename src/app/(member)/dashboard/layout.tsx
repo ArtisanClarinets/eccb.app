@@ -1,8 +1,7 @@
 import React from 'react';
 import { requireAuth } from '@/lib/auth/guards';
 import { DashboardSidebar } from '@/components/dashboard/sidebar';
-import { headers } from 'next/headers';
-import { auth } from '@/lib/auth/config';
+
 
 export default async function DashboardLayout({
   children,

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -32,21 +32,9 @@ import {
   PackageCheck,
   RotateCcw,
   Search,
-  Users,
   XCircle,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
 import {
   Dialog,
   DialogContent,
@@ -108,22 +96,10 @@ export function LibrarianDashboard() {
   const [missingNotes, setMissingNotes] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
 
-  useEffect(() => {
-    loadDashboardData();
-  }, []);
-
-  useEffect(() => {
-    if (statusFilter || searchQuery) {
-      loadAssignments();
-    }
-  }, [statusFilter, searchQuery]);
-
-  const loadDashboardData = async () => {
+  const loadDashboardData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [statsResult] = await Promise.all([
-        getLibrarianDashboardStats(),
-      ]);
+      const statsResult = await getLibrarianDashboardStats();
 
       if (statsResult.success && statsResult.stats) {
         setStats(statsResult.stats);
@@ -134,9 +110,9 @@ export function LibrarianDashboard() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  const loadAssignments = async () => {
+  const loadAssignments = useCallback(async () => {
     try {
       const result = await getAssignmentsForLibrarian({
         status: statusFilter !== 'all' ? (statusFilter as AssignmentStatus) : undefined,
@@ -149,82 +125,101 @@ export function LibrarianDashboard() {
     } catch (error) {
       console.error('Failed to load assignments:', error);
     }
-  };
+  }, [statusFilter, searchQuery]);
 
-  const handleMarkPickedUp = async (assignmentId: string) => {
-    setIsProcessing(true);
-    try {
-      const result = await updateAssignmentStatus(assignmentId, 'PICKED_UP');
-      if (result.success) {
-        toast.success('Marked as picked up');
-        loadDashboardData();
-        loadAssignments();
-      } else {
-        toast.error(result.error || 'Failed to update status');
+  useEffect(() => {
+    loadDashboardData();
+  }, [loadDashboardData]);
+
+  useEffect(() => {
+    if (statusFilter || searchQuery) {
+      loadAssignments();
+    }
+  }, [statusFilter, searchQuery, loadAssignments]);
+
+  const handleMarkPickedUp = useCallback(
+    async (assignmentId: string) => {
+      setIsProcessing(true);
+      try {
+        const result = await updateAssignmentStatus(assignmentId, 'PICKED_UP');
+        if (result.success) {
+          toast.success('Marked as picked up');
+          loadDashboardData();
+          loadAssignments();
+        } else {
+          toast.error(result.error || 'Failed to update status');
+        }
+      } catch (_error) {
+        toast.error('Failed to update status');
+      } finally {
+        setIsProcessing(false);
       }
-    } catch (error) {
-      toast.error('Failed to update status');
-    } finally {
-      setIsProcessing(false);
-    }
-  };
+    },
+    [loadDashboardData, loadAssignments],
+  );
 
-  const handleProcessReturn = async () => {
-    if (!selectedAssignment) return;
+  const handleProcessReturn = useCallback(
+    async () => {
+      if (!selectedAssignment) return;
 
-    setIsProcessing(true);
-    try {
-      const result = await processMusicReturn(selectedAssignment.id, {
-        condition: returnCondition || undefined,
-        notes: returnNotes || undefined,
-      });
+      setIsProcessing(true);
+      try {
+        const result = await processMusicReturn(selectedAssignment.id, {
+          condition: returnCondition || undefined,
+          notes: returnNotes || undefined,
+        });
 
-      if (result.success) {
-        toast.success('Return processed successfully');
-        setIsReturnDialogOpen(false);
-        setSelectedAssignment(null);
-        setReturnCondition('');
-        setReturnNotes('');
-        loadDashboardData();
-        loadAssignments();
-      } else {
-        toast.error(result.error || 'Failed to process return');
+        if (result.success) {
+          toast.success('Return processed successfully');
+          setIsReturnDialogOpen(false);
+          setSelectedAssignment(null);
+          setReturnCondition('');
+          setReturnNotes('');
+          loadDashboardData();
+          loadAssignments();
+        } else {
+          toast.error(result.error || 'Failed to process return');
+        }
+      } catch (_error) {
+        toast.error('Failed to process return');
+      } finally {
+        setIsProcessing(false);
       }
-    } catch (error) {
-      toast.error('Failed to process return');
-    } finally {
-      setIsProcessing(false);
-    }
-  };
+    },
+    [selectedAssignment, returnCondition, returnNotes, loadDashboardData, loadAssignments],
+  );
 
-  const handleReportMissing = async () => {
-    if (!selectedAssignment || !missingNotes.trim()) {
-      toast.error('Please provide notes about the missing parts');
-      return;
-    }
-
-    setIsProcessing(true);
-    try {
-      const result = await reportMissingParts(selectedAssignment.id, {
-        notes: missingNotes,
-      });
-
-      if (result.success) {
-        toast.success('Missing parts reported');
-        setIsMissingDialogOpen(false);
-        setSelectedAssignment(null);
-        setMissingNotes('');
-        loadDashboardData();
-        loadAssignments();
-      } else {
-        toast.error(result.error || 'Failed to report missing parts');
+  const handleReportMissing = useCallback(
+    async () => {
+      if (!selectedAssignment || !missingNotes.trim()) {
+        toast.error('Please provide notes about the missing parts');
+        return;
       }
-    } catch (error) {
-      toast.error('Failed to report missing parts');
-    } finally {
-      setIsProcessing(false);
-    }
-  };
+
+      setIsProcessing(true);
+      try {
+        const result = await reportMissingParts(selectedAssignment.id, {
+          notes: missingNotes,
+        });
+
+        if (result.success) {
+          toast.success('Missing parts reported');
+          setIsMissingDialogOpen(false);
+          setSelectedAssignment(null);
+          setMissingNotes('');
+          loadDashboardData();
+          loadAssignments();
+        } else {
+          toast.error(result.error || 'Failed to report missing parts');
+        }
+      } catch (_error) {
+        toast.error('Failed to report missing parts');
+      } finally {
+        setIsProcessing(false);
+      }
+    },
+    [selectedAssignment, missingNotes, loadDashboardData, loadAssignments],
+  );
 
   if (isLoading) {
     return (

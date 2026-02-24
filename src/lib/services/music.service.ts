@@ -4,7 +4,6 @@ import { auditLog } from './audit';
 import { MusicDifficulty, FileType, AssignmentStatus } from '@prisma/client';
 import {
   cacheGet,
-  cacheSet,
   cacheKeys,
   CACHE_CONFIG,
   invalidateMusicCache,

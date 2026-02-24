@@ -87,7 +87,7 @@ export async function createAnnouncement(data: AnnouncementFormData) {
     revalidatePath('/member');
 
     return { success: true, id: announcement.id };
-  } catch (error) {
+  } catch (error: unknown) {
     if (error instanceof z.ZodError) {
       return { success: false, error: error.issues[0].message };
     }
@@ -153,7 +153,7 @@ export async function updateAnnouncement(id: string, data: Partial<AnnouncementF
     revalidatePath('/member');
 
     return { success: true };
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Failed to update announcement:', error);
     return { success: false, error: 'Failed to update announcement' };
   }
@@ -182,7 +182,7 @@ export async function deleteAnnouncement(id: string) {
     revalidatePath('/member');
 
     return { success: true };
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Failed to delete announcement:', error);
     return { success: false, error: 'Failed to delete announcement' };
   }
@@ -220,7 +220,7 @@ export async function toggleAnnouncementPin(id: string) {
     revalidatePath('/news');
 
     return { success: true };
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Failed to toggle pin:', error);
     return { success: false, error: 'Failed to update pin status' };
   }
@@ -258,7 +258,7 @@ export async function publishAnnouncement(id: string) {
     revalidatePath('/member');
 
     return { success: true };
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Failed to publish announcement:', error);
     return { success: false, error: 'Failed to publish announcement' };
   }
@@ -288,7 +288,7 @@ export async function archiveAnnouncement(id: string) {
     revalidatePath('/member');
 
     return { success: true };
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Failed to archive announcement:', error);
     return { success: false, error: 'Failed to archive announcement' };
   }

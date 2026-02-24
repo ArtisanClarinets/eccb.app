@@ -1,54 +1,285 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight, Maximize2, Minimize2 } from 'lucide-react';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useEffect } from 'react';
+import { useStandStore, StandPiece, Annotation, NavigationLink } from '@/store/standStore';
+import { useStandSync } from '@/hooks/use-stand-sync';
+import { useAudioTracker } from '@/hooks/useAudioTracker';
+import { NavigationControls } from './NavigationControls';
+import { Toolbar } from './Toolbar';
+import { StandCanvas } from './StandCanvas';
+import { GestureHandler } from './GestureHandler';
+import { KeyboardHandler } from './KeyboardHandler';
+import { MidiHandler } from './MidiHandler';
+import { RosterOverlay } from './RosterOverlay';
+import { Metronome } from './Metronome';
+import { Tuner } from './Tuner';
+import { AudioPlayer } from './AudioPlayer';
+import { PitchPipe } from './PitchPipe';
+import { AudioTrackerSettings } from './AudioTrackerSettings';
 
-interface StandViewerProps {
-  eventTitle: string;
-  music: any[];
+// Type for music assignment with piece and files (from Prisma)
+interface MusicAssignment {
+  id: string;
+  piece: {
+    id: string;
+    title: string;
+    composer?: string | null;
+    files?: Array<{
+      id: string;
+      mimeType: string;
+      storageKey: string;
+      storageUrl?: string | null;
+    }>;
+  };
 }
 
-export function StandViewer({ eventTitle, music }: StandViewerProps) {
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [showControls, setShowControls] = useState(true);
+// Type for annotation from loader (database format transformed)
+interface StandAnnotation {
+  id: string;
+  pieceId: string;
+  pageNumber: number;
+  x: number;
+  y: number;
+  content: string;
+  color: string;
+  layer: 'PERSONAL' | 'SECTION' | 'DIRECTOR';
+  createdAt: Date;
+}
 
-  const currentPiece = music[currentIndex]; // nosemgrep: safe-access
-  const pdfFile = currentPiece?.piece?.files?.find((f: any) =>
-    f.mimeType === 'application/pdf'
-  );
+// Type for navigation link from loader
+interface StandNavigationLink {
+  id: string;
+  fromPieceId: string;
+  fromPage: number;
+  toPieceId: string;
+  toPage: number;
+  label: string;
+}
 
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen();
-      setIsFullscreen(true);
-    } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen();
-        setIsFullscreen(false);
-      }
-    }
-  };
+// Type for audio link from loader
+interface StandAudioLink {
+  id: string;
+  pieceId: string;
+  fileKey: string;
+  url: string | null;
+  description: string | null;
+  createdAt: Date;
+}
 
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
+// Type for user preferences from loader
+interface StandUserPreferences {
+  nightMode: boolean;
+  metronomeSettings?: Record<string, any>;
+  tunerSettings?: Record<string, any>;
+  pitchPipeSettings?: Record<string, any>;
+}
+
+// Type for stand session (roster presence)
+interface StandSessionPresence {
+  id: string;
+  eventId: string;
+  userId: string;
+  section: string | null;
+  lastSeenAt: Date;
+}
+
+// Aggregated loader data type
+export interface StandLoaderData {
+  eventId: string;
+  userId: string;
+  eventTitle: string;
+  music: MusicAssignment[];
+  annotations: StandAnnotation[];
+  navigationLinks: StandNavigationLink[];
+  audioLinks: StandAudioLink[];
+  preferences: StandUserPreferences | null;
+  roster: StandSessionPresence[];
+}
+
+interface StandViewerProps {
+  data: StandLoaderData;
+}
+
+// Transform music data to StandPiece format
+function transformToStandPieces(music: MusicAssignment[]): StandPiece[] {
+  return music.map((m) => {
+    const pdfFile = m.piece?.files?.find((f) => f.mimeType === 'application/pdf');
+    return {
+      id: m.id,
+      title: m.piece?.title || 'Untitled',
+      composer: m.piece?.composer || '',
+      pdfUrl: pdfFile
+        ? // prefer explicit URL when provided, otherwise fall back to download route
+          pdfFile.storageUrl ||
+          (pdfFile.storageKey ? `/api/files/download/${pdfFile.storageKey}` : null)
+        : null,
+      totalPages: 1,
     };
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
-  }, []);
+  });
+}
 
-  const nextPiece = () => {
-    if (currentIndex < music.length - 1) setCurrentIndex(prev => prev + 1);
+// Transform annotation from loader to store format
+function transformAnnotation(annotation: StandAnnotation): Annotation {
+  return {
+    id: annotation.id,
+    pieceId: annotation.pieceId,
+    pageNumber: annotation.pageNumber,
+    x: annotation.x,
+    y: annotation.y,
+    content: annotation.content,
+    color: annotation.color,
+    layer: annotation.layer,
+    createdAt: annotation.createdAt,
   };
+}
 
-  const prevPiece = () => {
-    if (currentIndex > 0) setCurrentIndex(prev => prev - 1);
+// Transform navigation link from loader to store format
+function transformNavigationLink(link: StandNavigationLink): NavigationLink {
+  return {
+    id: link.id,
+    fromPieceId: link.fromPieceId,
+    fromPage: link.fromPage,
+    toPieceId: link.toPieceId,
+    toPage: link.toPage,
+    label: link.label,
   };
+}
 
+export function StandViewer({ data }: StandViewerProps) {
+  const {
+    setPieces,
+    setEventInfo,
+    isFullscreen,
+    showControls,
+    gigMode,
+    setAnnotations,
+    addAnnotation,
+    addNavigationLink,
+    toggleNightMode,
+    setRoster,
+    addRosterEntry,
+    removeRosterEntry,
+    setAudioLinks,
+    updateMetronomeSettings,
+    updateTunerSettings,
+    updatePitchPipeSettings,
+    toggleMetronome: _toggleMetronome,
+    toggleTuner: _toggleTuner,
+    toggleAudioPlayer: _toggleAudioPlayer,
+    togglePitchPipe: _togglePitchPipe,
+    updateAudioTrackerSettings,
+  } = useStandStore();
+
+  const { eventId, userId, eventTitle, music, annotations, navigationLinks, audioLinks, preferences, roster } = data;
+
+  // Initialize audio tracker hook - auto-starts when enabled in settings
+  useAudioTracker();
+
+  // Initialize store with music data
+  useEffect(() => {
+    if (music && music.length > 0) {
+      const standPieces = transformToStandPieces(music);
+      setPieces(standPieces);
+      setEventInfo(eventId, eventTitle);
+    }
+  }, [music, eventTitle, setPieces, setEventInfo, eventId]);
+
+  // Initialize annotations
+  useEffect(() => {
+    if (annotations && annotations.length > 0) {
+      const transformedAnnotations = annotations.map(transformAnnotation);
+      setAnnotations(transformedAnnotations);
+    }
+  }, [annotations, setAnnotations]);
+
+  // Initialize navigation links
+  useEffect(() => {
+    if (navigationLinks && navigationLinks.length > 0) {
+      const transformedLinks = navigationLinks.map(transformNavigationLink);
+      transformedLinks.forEach((link) => addNavigationLink(link));
+    }
+  }, [navigationLinks, addNavigationLink]);
+
+  // Apply user preferences (night mode)
+  useEffect(() => {
+    if (preferences?.nightMode) {
+      toggleNightMode();
+    }
+    // load other preferences if available
+    if (preferences?.metronomeSettings) {
+      updateMetronomeSettings(preferences.metronomeSettings as any);
+    }
+    if (preferences?.tunerSettings) {
+      updateTunerSettings(preferences.tunerSettings as any);
+    }
+    if (preferences?.pitchPipeSettings) {
+      updatePitchPipeSettings(preferences.pitchPipeSettings as any);
+    }
+    if ((preferences as any)?.midiMappings) {
+      useStandStore.getState().setMidiMappings((preferences as any).midiMappings);
+    }
+    // Load audio tracker settings from preferences
+    if (preferences && (preferences as any).audioTrackerSettings) {
+      updateAudioTrackerSettings((preferences as any).audioTrackerSettings);
+    }
+  }, [preferences, toggleNightMode, updateMetronomeSettings, updateTunerSettings, updatePitchPipeSettings, updateAudioTrackerSettings]);
+
+  // initialize audio links
+  useEffect(() => {
+    if (audioLinks && audioLinks.length > 0) {
+      setAudioLinks(audioLinks);
+    }
+  }, [audioLinks, setAudioLinks]);
+
+  // initialize roster from loader data
+  useEffect(() => {
+    if (roster && roster.length > 0) {
+      // convert to StandRosterMember
+      const entries = roster.map((r) => ({
+        userId: r.userId,
+        name: '', // loader doesn't include name; will be filled by sync
+        section: r.section || undefined,
+        joinedAt: r.lastSeenAt.toISOString(),
+      }));
+      setRoster(entries);
+    }
+  }, [roster, setRoster]);
+
+  // real-time sync
+  useStandSync({
+    eventId,
+    userId,
+    onRosterChange: (members) => setRoster(members),
+    onPresenceChange: (presence) => {
+      if (presence.status === 'joined') {
+        addRosterEntry({
+          userId: presence.userId,
+          name: presence.name,
+          section: presence.section,
+          joinedAt: new Date().toISOString(),
+        });
+      } else {
+        removeRosterEntry(presence.userId);
+      }
+    },
+    onAnnotation: (msg) => {
+      const d = msg.data as any;
+      // convert to our Annotation type and insert
+      addAnnotation({
+        id: d.id,
+        pieceId: d.musicId,
+        pageNumber: d.page,
+        x: d.x,
+        y: d.y,
+        content: d.content,
+        color: d.color,
+        layer: d.layer,
+        createdAt: new Date(d.createdAt),
+      });
+    },
+  });
+
+  // Early return for empty music
   if (!music || music.length === 0) {
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground">
@@ -58,59 +289,39 @@ export function StandViewer({ eventTitle, music }: StandViewerProps) {
   }
 
   return (
-    <div className={`flex flex-col h-[calc(100vh-4rem)] ${isFullscreen ? 'fixed inset-0 z-50 bg-background h-screen' : ''}`}>
-      {/* Controls Bar */}
-      <div className={`p-4 border-b flex items-center justify-between bg-card ${!showControls && isFullscreen ? 'hidden' : ''}`}>
-        <div className="flex items-center gap-4">
-          <Button variant="outline" size="icon" onClick={prevPiece} disabled={currentIndex === 0}>
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <div className="flex flex-col">
-            <span className="font-bold text-lg">{currentPiece?.piece?.title || 'No Music'}</span>
-            <span className="text-sm text-muted-foreground">
-              {currentIndex + 1} of {music.length} - {eventTitle}
-            </span>
-          </div>
-          <Button variant="outline" size="icon" onClick={nextPiece} disabled={currentIndex === music.length - 1}>
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-
-        <div className="flex items-center gap-2">
-           <Select
-            value={currentIndex.toString()}
-            onValueChange={(val) => setCurrentIndex(parseInt(val))}
-          >
-            <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="Jump to piece" />
-            </SelectTrigger>
-            <SelectContent>
-              {music.map((m, idx) => (
-                <SelectItem key={m.id} value={idx.toString()}>
-                  {idx + 1}. {m.piece.title}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button variant="ghost" size="icon" onClick={toggleFullscreen}>
-            {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-          </Button>
-        </div>
+    <div
+      className={`flex flex-col h-[calc(100vh-4rem)] ${
+        isFullscreen ? 'fixed inset-0 z-50 bg-background h-screen' : ''
+      }`}
+    >
+      {/* Controls Bar - Navigation and Toolbar */}
+      <div
+        className={`p-4 border-b flex items-center justify-between bg-card ${
+          gigMode || (!showControls && isFullscreen) ? 'hidden' : ''
+        }`}
+      >
+        <NavigationControls />
+        <Toolbar />
       </div>
+      {/* Utilities toggle sidebar could be placed here if needed */}
 
-      {/* Viewer Area */}
+      {/* Keyboard Handler - Global keyboard navigation */}
+      <KeyboardHandler />
+      <MidiHandler />
+
+      {/* Viewer Area - StandCanvas */}
       <div className="flex-1 bg-muted/20 relative overflow-hidden">
-        {pdfFile ? (
-          <iframe
-            src={pdfFile.storageUrl || `/api/files/download/${pdfFile.storageKey}`}
-            className="w-full h-full border-none"
-            title={currentPiece.piece.title}
-          />
-        ) : (
-          <div className="flex items-center justify-center h-full text-muted-foreground">
-            No PDF available for this piece.
-          </div>
-        )}
+        {/* Gesture Handler overlay - positioned over canvas */}
+        <GestureHandler />
+        <StandCanvas />
+        <RosterOverlay />
+        {/* Rehearsal utilities */}
+        <Metronome />
+        <Tuner />
+        <AudioPlayer />
+        <PitchPipe />
+        {/* Audio Tracker Settings Panel */}
+        <AudioTrackerSettings />
       </div>
     </div>
   );

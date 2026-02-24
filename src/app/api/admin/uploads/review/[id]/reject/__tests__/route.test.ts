@@ -123,7 +123,7 @@ describe('Reject Upload Session API', () => {
 
       const params = Promise.resolve({ id: SESSION_ID });
       const response = await POST(request, { params });
-      const data = await response.json();
+      const _data = await response.json();
 
       expect(response.status).toBe(401);
     });
@@ -307,7 +307,7 @@ describe('Reject Upload Session API', () => {
 
       const params = Promise.resolve({ id: SESSION_ID });
       const response = await POST(request, { params });
-      const data = await response.json();
+      const _data = await response.json();
 
       expect(response.status).toBe(400);
     });

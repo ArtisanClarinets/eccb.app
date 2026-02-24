@@ -81,7 +81,29 @@ vi.mock('next/headers', () => ({
   }),
 }));
 
-// Clean up after each test
+// Global AudioContext and mediaDevices mocks
+global.AudioContext = class {
+  createOscillator() {
+    return {
+      frequency: { value: 0 },
+      type: 'sine',
+      connect: () => {},
+      start: () => {},
+      stop: () => {},
+    };
+  }
+  get currentTime() {
+    return 0;
+  }
+  createMediaStreamSource() {
+    return null;
+  }
+  destination = {};
+  createGain() {
+    return { connect: () => {}, gain: { value: 1 } };
+  }
+};
+
 afterEach(() => {
   vi.clearAllMocks();
 });

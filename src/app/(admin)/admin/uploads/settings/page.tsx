@@ -4,7 +4,7 @@ import { requirePermission } from '@/lib/auth/guards';
 import { SYSTEM_CONFIG } from '@/lib/auth/permission-constants';
 import { SmartUploadSettingsForm } from '@/components/admin/music/smart-upload-settings-form';
 
-// eslint-disable-next-line react-refresh/only-export-components
+ 
 export const metadata: Metadata = {
   title: 'Smart Upload Settings',
 };

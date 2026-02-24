@@ -30,6 +30,8 @@ model User {
   roles             UserRole[]
   accounts          Account[]
   sessions          Session[]
+  annotations       Annotation[]
+  userPreferences   UserPreferences?
 
   @@index([email])
   @@index([deletedAt])
@@ -290,6 +292,9 @@ model MusicPiece {
   arranger           Person?           @relation("ArrangerPieces", fields: [arrangerId], references: [id])
   composer           Person?           @relation("ComposerPieces", fields: [composerId], references: [id])
   publisher          Publisher?        @relation(fields: [publisherId], references: [id])
+  annotations        Annotation[]
+  navigationLinks    NavigationLink[]
+  audioLinks        AudioLink[]
 
   @@index([title])
   @@index([composerId])
@@ -1029,6 +1034,85 @@ model SmartUploadSetting {
 
   @@index([category])
   @@index([key])
+}
+
+// ====================================
+// Stand Features - Digital Music Stand
+// ====================================
+
+model Annotation {
+  id        String           @id @default(cuid())
+  musicId   String
+  page      Int
+  layer     AnnotationLayer
+  strokeData Json
+  userId    String
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  music     MusicPiece       @relation(fields: [musicId], references: [id], onDelete: Cascade)
+  user      User             @relation(fields: [userId], references: [id])
+
+  @@index([musicId])
+  @@index([userId])
+  @@index([layer])
+}
+
+enum AnnotationLayer {
+  PERSONAL
+  SECTION
+  DIRECTOR
+}
+
+model NavigationLink {
+  id        String     @id @default(cuid())
+  musicId   String
+  fromX     Float
+  fromY     Float
+  toX       Float
+  toY       Float
+  label     String?
+  createdAt DateTime   @default(now())
+  music     MusicPiece @relation(fields: [musicId], references: [id], onDelete: Cascade)
+
+  @@index([musicId])
+}
+
+model StandSession {
+  id         String   @id @default(cuid())
+  eventId    String
+  userId     String
+  section    String?
+  lastSeenAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  @@unique([eventId, userId])
+  @@index([eventId])
+  @@index([userId])
+}
+
+model AudioLink {
+  id          String     @id @default(cuid())
+  pieceId     String
+  fileKey     String
+  url         String?
+  description String?
+  createdAt   DateTime   @default(now())
+  piece       MusicPiece @relation(fields: [pieceId], references: [id], onDelete: Cascade)
+
+  @@index([pieceId])
+}
+
+model UserPreferences {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  nightMode         Boolean  @default(false)
+  metronomeSettings Json?
+  midiMappings      Json?
+  otherSettings     Json?
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model TaskModelConfig {

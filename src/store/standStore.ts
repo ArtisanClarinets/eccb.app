@@ -1,0 +1,793 @@
+import { create } from 'zustand';
+
+// Roster member type used for presence overlay
+export interface StandRosterMember {
+  userId: string;
+  name: string;
+  section?: string;
+  joinedAt: string;
+}
+
+export interface Annotation {
+  id: string;
+  pieceId: string;
+  pageNumber: number;
+  x: number;
+  y: number;
+  content: string;
+  color: string;
+  layer: 'PERSONAL' | 'SECTION' | 'DIRECTOR';
+  createdAt: Date;
+}
+
+export interface NavigationLink {
+  id: string;
+  fromPieceId: string;
+  fromPage: number;
+  toPieceId: string;
+  toPage: number;
+  label: string;
+}
+
+export interface StandSettings {
+  autoTurnPage: boolean;
+  turnPageDelay: number;
+  defaultZoom: number;
+  showPageNumbers: boolean;
+  showPageTransitions: boolean;
+  hapticFeedback: boolean;
+  swipeGesture: boolean;
+}
+
+export interface StandPiece {
+  id: string;
+  title: string;
+  composer: string;
+  pdfUrl: string | null;
+  totalPages: number;
+}
+
+export interface StandState {
+  // Navigation state
+  currentPieceIndex: number;
+  _currentPage: number;
+  pieces: StandPiece[];
+  scrollOffset: number; // For half-page scrolling in portrait mode
+
+  // Setlist state
+  atEnd: boolean; // Flag indicating end of setlist has been reached
+
+  // UI state
+  isFullscreen: boolean;
+  showControls: boolean;
+  gigMode: boolean;
+  nightMode: boolean;
+  zoom: number;
+
+  // Annotations split by layer and keyed by `${pieceId}-${pageNumber}`
+  annotations: {
+    personal: Record<string, Annotation[]>;
+    section: Record<string, Annotation[]>;
+    director: Record<string, Annotation[]>;
+  };
+  selectedLayer: 'PERSONAL' | 'SECTION' | 'DIRECTOR';
+
+  // Tool state
+  currentTool: Tool;
+  toolColor: string;
+  strokeWidth: number;
+  pressureScale: number;
+
+  // Navigation links (smart nav)
+  navigationLinks: NavigationLink[];
+
+  // Settings
+  settings: StandSettings;
+
+  // Event info
+  eventId: string | null;
+  eventTitle: string | null;
+  // Roster entries for presence overlay
+  roster: StandRosterMember[];
+  // Edit mode for annotations
+  editMode: boolean;
+
+  // Actions
+  setCurrentPieceIndex: (index: number) => void;
+  setCurrentPage: (page: number) => void;
+  nextPiece: () => void;
+  prevPiece: () => void;
+  nextPage: () => void;
+  prevPage: () => void;
+  goToNextPage: () => void;
+  goToPreviousPage: () => void;
+  // Setlist advance actions - automatically advance to next piece at end of current piece
+  nextPageOrPiece: () => void;
+  prevPageOrPiece: () => void;
+  scrollHalfPage: () => void;
+  nextTwoPages: () => void;
+  prevTwoPages: () => void;
+  setScrollOffset: (offset: number) => void;
+  setPieces: (pieces: StandPiece[]) => void;
+  setIsFullscreen: (isFullscreen: boolean) => void;
+  setShowControls: (show: boolean) => void;
+  toggleGigMode: () => void;
+  toggleNightMode: () => void;
+  setZoom: (zoom: number) => void;
+
+  // annotation actions
+  loadAnnotations: (pieceId: string, pageNumber: number) => Promise<void>;
+  setAnnotations: (annotations: Annotation[]) => void;
+  addAnnotation: (annotation: Annotation) => Promise<void>;
+  updateAnnotation: (annotation: Annotation) => Promise<void>;
+  deleteAnnotation: (id: string) => Promise<void>;
+  setLayer: (layer: 'PERSONAL' | 'SECTION' | 'DIRECTOR') => void;
+  setCurrentTool: (tool: Tool) => void;
+  setToolColor: (color: string) => void;
+  setStrokeWidth: (width: number) => void;
+  setPressureScale: (scale: number) => void;
+
+  addNavigationLink: (link: NavigationLink) => void;
+  removeNavigationLink: (id: string) => void;
+  updateSettings: (settings: Partial<StandSettings>) => void;
+  setEventInfo: (eventId: string, eventTitle: string) => void;
+  // roster actions
+  setRoster: (entries: StandRosterMember[]) => void;
+  addRosterEntry: (entry: StandRosterMember) => void;
+  removeRosterEntry: (userId: string) => void;
+  setEditMode: (edit: boolean) => void;
+  toggleEditMode: () => void;
+
+  // Audio links for current piece
+  audioLinks: StandAudioLink[];
+  selectedAudioLinkId: string | null;
+  audioLoopStart: number | null;
+  audioLoopEnd: number | null;
+  audioPlaying: boolean;
+
+  // Rehearsal utilities visibility
+  showMetronome: boolean;
+  showTuner: boolean;
+  showAudioPlayer: boolean;
+  showPitchPipe: boolean;
+
+  // Utility settings (persisted in user preferences)
+  metronomeSettings: {
+    bpm: number;
+    numerator: number;
+    denominator: number;
+    subdivision: number;
+  };
+  tunerSettings: {
+    mute: boolean;
+  };
+  pitchPipeSettings: {
+    instrument: 'sine' | 'square' | 'triangle' | 'sawtooth';
+  };
+
+  // Audio tracker settings (AI/automation feature)
+  audioTrackerSettings: {
+    enabled: boolean;
+    sensitivity: number;
+    cooldownMs: number;
+  };
+
+  // MIDI mappings for hardware integration
+  midiMappings: Record<string, string>;
+
+  setAudioLinks: (links: StandAudioLink[]) => void;
+  selectAudioLink: (id: string | null) => void;
+  setAudioLoopPoints: (start: number | null, end: number | null) => void;
+  setAudioPlaying: (playing: boolean) => void;
+
+  // Audio tracker actions
+  updateAudioTrackerSettings: (settings: Partial<StandState['audioTrackerSettings']>) => void;
+  toggleAudioTracker: () => void;
+
+  toggleMetronome: () => void;
+  toggleTuner: () => void;
+  toggleAudioPlayer: () => void;
+  togglePitchPipe: () => void;
+
+  updateMetronomeSettings: (settings: Partial<StandState['metronomeSettings']>) => void;
+  updateTunerSettings: (settings: Partial<StandState['tunerSettings']>) => void;
+  updatePitchPipeSettings: (settings: Partial<StandState['pitchPipeSettings']>) => void;
+
+  reset: () => void;
+  // PREFERENCE HELPERS
+  loadPreferences: (prefs: Partial<{ midiMappings: Record<string, string> }>) => void;
+  savePreferences: () => Promise<void>;
+  setMidiMappings: (mappings: Record<string, string>) => void;
+  updateMidiMapping: (key: string, action: string) => void;
+}
+
+// Tool types for annotation layer
+export enum Tool {
+  PENCIL = 'PENCIL',
+  HIGHLIGHTER = 'HIGHLIGHTER',
+  ERASER = 'ERASER',
+  WHITEOUT = 'WHITEOUT',
+  TEXT = 'TEXT',
+  STAMP = 'STAMP',
+}
+
+// Stroke point with pressure
+export interface StrokePoint {
+  x: number;
+  y: number;
+  pressure: number;
+  timestamp: number;
+}
+
+// Complete stroke data for persistence
+export interface StrokeData {
+  id: string;
+  type: Tool;
+  points: StrokePoint[];
+  color: string;
+  baseWidth: number;
+  opacity: number;
+  // For text annotations
+  text?: string;
+  fontSize?: number;
+  // For stamp annotations
+  stampId?: string;
+  svgContent?: string;
+  width?: number;
+  height?: number;
+  rotation?: number;
+}
+
+const DEFAULT_SETTINGS: StandSettings = {
+  autoTurnPage: false,
+  turnPageDelay: 3000,
+  defaultZoom: 100,
+  showPageNumbers: true,
+  showPageTransitions: true,
+  hapticFeedback: false,
+  swipeGesture: true,
+};
+
+const initialState = {
+  currentPieceIndex: 0,
+  _currentPage: 1,
+  pieces: [],
+  scrollOffset: 0,
+  atEnd: false,
+  isFullscreen: false,
+  showControls: true,
+  gigMode: false,
+  nightMode: false,
+  zoom: 100,
+  annotations: { personal: {}, section: {}, director: {} },
+  selectedLayer: 'PERSONAL' as const,
+  currentTool: Tool.PENCIL,
+  toolColor: '#ff0000',
+  strokeWidth: 3,
+  pressureScale: 5,
+
+  navigationLinks: [],
+  settings: DEFAULT_SETTINGS,
+  eventId: null,
+  eventTitle: null,
+  roster: [],
+  editMode: false,
+
+  // audio
+  audioLinks: [],
+  selectedAudioLinkId: null,
+  audioLoopStart: null,
+  audioLoopEnd: null,
+  audioPlaying: false,
+
+  // utilities
+  showMetronome: false,
+  showTuner: false,
+  showAudioPlayer: false,
+  showPitchPipe: false,
+
+  metronomeSettings: {
+    bpm: 120,
+    numerator: 4,
+    denominator: 4,
+    subdivision: 1,
+  },
+  tunerSettings: {
+    mute: true,
+  },
+  pitchPipeSettings: {
+    instrument: 'sine' as 'sine' | 'square' | 'triangle' | 'sawtooth',
+  },
+  // Audio tracker settings (AI/automation)
+  audioTrackerSettings: {
+    enabled: false,
+    sensitivity: 0.5,
+    cooldownMs: 3000,
+  },
+  // MIDI mappings: key string -> action name
+  midiMappings: {} as Record<string, string>,
+};
+
+// helper to ensure fetch receives an absolute URL when running under Node
+function apiFetch(input: RequestInfo, init?: RequestInit) {
+  let url = input;
+  if (typeof url === 'string' && !/^https?:\/\//.test(url)) {
+    const prefix = typeof window !== 'undefined' ? '' : 'http://localhost';
+    url = prefix + url;
+  }
+  return fetch(url, init);
+}
+
+// Helper to build annotation key
+function annotationKey(pieceId: string, pageNumber: number): string {
+  return `${pieceId}-${pageNumber}`;
+}
+
+export const useStandStore = create<StandState>((set, get) => ({
+  ...initialState,
+
+  setCurrentPieceIndex: (index: number) => {
+    const { pieces } = get();
+    if (index >= 0 && index < pieces.length) {
+      set({ currentPieceIndex: index, _currentPage: 1, scrollOffset: 0, atEnd: false });
+    }
+  },
+
+  setCurrentPage: (page: number) => {
+    const { pieces, currentPieceIndex } = get();
+    const currentPiece = pieces[currentPieceIndex];
+    if (currentPiece && page >= 1 && page <= currentPiece.totalPages) {
+      set({ _currentPage: page, scrollOffset: 0 });
+    }
+  },
+
+  nextPiece: () => {
+    const { pieces, currentPieceIndex } = get();
+    if (currentPieceIndex < pieces.length - 1) {
+      set({ currentPieceIndex: currentPieceIndex + 1, _currentPage: 1, scrollOffset: 0 });
+    }
+  },
+
+  prevPiece: () => {
+    const { currentPieceIndex } = get();
+    if (currentPieceIndex > 0) {
+      set({ currentPieceIndex: currentPieceIndex - 1, _currentPage: 1, scrollOffset: 0 });
+    }
+  },
+
+  nextPage: () => {
+    const { pieces, currentPieceIndex, _currentPage } = get();
+    const currentPiece = pieces[currentPieceIndex];
+    if (currentPiece && _currentPage < currentPiece.totalPages) {
+      set({ _currentPage: _currentPage + 1, scrollOffset: 0 });
+    }
+  },
+
+  prevPage: () => {
+    const { _currentPage } = get();
+    if (_currentPage > 1) {
+      set({ _currentPage: _currentPage - 1, scrollOffset: 0 });
+    }
+  },
+
+  // Action for advancing to next page (used by gesture/keyboard handlers)
+  // Advances to next page (used by gesture/keyboard handlers)
+  goToNextPage: () => {
+    const { pieces, currentPieceIndex, _currentPage } = get();
+    const currentPiece = pieces[currentPieceIndex];
+    if (currentPiece && _currentPage < currentPiece.totalPages) {
+      set({ _currentPage: _currentPage + 1, scrollOffset: 0 });
+    }
+  },
+
+  // Action for going to previous page (used by gesture/keyboard handlers)
+  // Goes to previous page (used by gesture/keyboard handlers)
+  goToPreviousPage: () => {
+    const { _currentPage } = get();
+    if (_currentPage > 1) {
+      set({ _currentPage: _currentPage - 1, scrollOffset: 0 });
+    }
+  },
+
+  // Action for automatic setlist advancement
+  // Advances to next page within piece, or advances to first page of next piece
+  // If at last page of last piece, sets atEnd flag
+  nextPageOrPiece: () => {
+    const { pieces, currentPieceIndex, _currentPage, atEnd } = get();
+    const currentPiece = pieces[currentPieceIndex];
+
+    // If already at end, don't advance
+    if (atEnd) {
+      return;
+    }
+
+    if (!currentPiece) {
+      return;
+    }
+
+    // If not on last page of current piece, just advance page
+    if (_currentPage < currentPiece.totalPages) {
+      set({ _currentPage: _currentPage + 1, scrollOffset: 0, atEnd: false });
+      return;
+    }
+
+    // We're on the last page of the current piece
+    // Try to advance to next piece
+    if (currentPieceIndex < pieces.length - 1) {
+      set({
+        currentPieceIndex: currentPieceIndex + 1,
+        _currentPage: 1,
+        scrollOffset: 0,
+        atEnd: false,
+      });
+      return;
+    }
+
+    // We're on the last page of the last piece - set atEnd flag
+    set({ atEnd: true });
+  },
+
+  // Action for automatic setlist backwards
+  // Goes to previous page within piece, or goes to last page of previous piece
+  prevPageOrPiece: () => {
+    const { pieces, currentPieceIndex, _currentPage } = get();
+
+    // If not on first page of current piece, just go back
+    if (_currentPage > 1) {
+      set({ _currentPage: _currentPage - 1, scrollOffset: 0, atEnd: false });
+      return;
+    }
+
+    // We're on the first page of the current piece
+    // Try to go to previous piece
+    if (currentPieceIndex > 0) {
+      const prevPiece = pieces[currentPieceIndex - 1];
+      set({
+        currentPieceIndex: currentPieceIndex - 1,
+        _currentPage: prevPiece?.totalPages || 1,
+        scrollOffset: 0,
+        atEnd: false,
+      });
+      return;
+    }
+
+    // We're on the first page of the first piece - no change
+    set({ atEnd: false });
+  },
+
+  // Action for scrolling half a page (used in portrait mode)
+  scrollHalfPage: () => {
+    const { scrollOffset, _currentPage, pieces, currentPieceIndex } = get();
+    const currentPiece = pieces[currentPieceIndex];
+
+    if (!currentPiece) return;
+
+    // Toggle between 0 and 50% offset
+    const newOffset = scrollOffset === 0 ? 0.5 : 0;
+    set({ scrollOffset: newOffset });
+  },
+
+  // Action for turning two pages at once (used in landscape/two-up mode)
+  nextTwoPages: () => {
+    const { pieces, currentPieceIndex, _currentPage } = get();
+    const currentPiece = pieces[currentPieceIndex];
+    if (currentPiece) {
+      const newPage = Math.min(_currentPage + 2, currentPiece.totalPages);
+      set({ _currentPage: newPage, scrollOffset: 0 });
+    }
+  },
+
+  // Action for turning back two pages at once (used in landscape/two-up mode)
+  prevTwoPages: () => {
+    const { _currentPage } = get();
+    const newPage = Math.max(_currentPage - 2, 1);
+    set({ _currentPage: newPage, scrollOffset: 0 });
+  },
+
+  setScrollOffset: (offset: number) => {
+    set({ scrollOffset: Math.max(0, Math.min(1, offset)) });
+  },
+
+  setPieces: (pieces: StandPiece[]) => {
+    set({ pieces, currentPieceIndex: 0, _currentPage: 1, scrollOffset: 0, atEnd: false });
+  },
+
+  setIsFullscreen: (isFullscreen: boolean) => set({ isFullscreen }),
+
+  setShowControls: (showControls: boolean) => set({ showControls }),
+
+  toggleGigMode: () => set((state) => ({ gigMode: !state.gigMode })),
+
+  toggleNightMode: () => set((state) => ({ nightMode: !state.nightMode })),
+
+  setZoom: (zoom: number) => set({ zoom: Math.max(50, Math.min(200, zoom)) }),
+
+  setEditMode: (edit: boolean) => set({ editMode: edit }),
+  toggleEditMode: () => set((state) => ({ editMode: !state.editMode })),
+
+  loadAnnotations: async (pieceId: string, pageNumber: number) => {
+    const key = annotationKey(pieceId, pageNumber);
+    const layer = get().selectedLayer.toLowerCase() as 'personal' | 'section' | 'director';
+    try {
+      const res = await apiFetch(
+        `/api/stand/annotations?musicId=${pieceId}&page=${pageNumber}&layer=${get().selectedLayer}`
+      );
+      if (!res.ok) throw new Error('Failed to load annotations');
+      const json = await res.json();
+      const anns: Annotation[] = json.annotations.map((a: any) => ({
+        id: a.id,
+        pieceId: a.musicId,
+        pageNumber: a.page,
+        x: a.strokeData.x,
+        y: a.strokeData.y,
+        content: a.strokeData.content,
+        color: a.strokeData.color,
+        layer: a.layer,
+        createdAt: new Date(a.createdAt),
+      }));
+      set((state) => ({
+        annotations: {
+          ...state.annotations,
+          [layer]: { ...state.annotations[layer], [key]: anns },
+        },
+      }));
+    } catch (err) {
+      console.error('loadAnnotations error', err);
+    }
+  },
+
+  setAnnotations: (annotations: Annotation[]) => {
+    const layer = get().selectedLayer.toLowerCase() as 'personal' | 'section' | 'director';
+    set((state) => ({
+      annotations: {
+        ...state.annotations,
+        [layer]: { ...state.annotations[layer], ...annotations },
+      },
+    }));
+  },
+
+  addAnnotation: async (annotation: Annotation) => {
+    try {
+      const res = await apiFetch('/api/stand/annotations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          musicId: annotation.pieceId,
+          page: annotation.pageNumber,
+          layer: annotation.layer,
+          strokeData: {
+            x: annotation.x,
+            y: annotation.y,
+            content: annotation.content,
+            color: annotation.color,
+          },
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to create annotation');
+      const json = await res.json();
+      const saved = json.annotation;
+      // API may return musicId or pieceId depending on context; normalize
+      const musicId = saved.musicId ?? saved.pieceId;
+      // annotations sometimes return page or pageNumber fields
+      const pageNum = saved.page ?? saved.pageNumber;
+      const key = annotationKey(musicId, pageNum);
+      const layer = saved.layer.toLowerCase() as 'personal' | 'section' | 'director';
+      const ann: Annotation = {
+        id: saved.id,
+        pieceId: musicId,
+        pageNumber: pageNum,
+        x: saved.strokeData.x,
+        y: saved.strokeData.y,
+        content: saved.strokeData.content,
+        color: saved.strokeData.color,
+        layer: saved.layer,
+        createdAt: new Date(saved.createdAt),
+      };
+      set((state) => ({
+        annotations: {
+          ...state.annotations,
+          [layer]: {
+            ...state.annotations[layer],
+            [key]: [...(state.annotations[layer][key] || []), ann],
+          },
+        },
+      }));
+    } catch (err) {
+      console.error('addAnnotation error', err);
+    }
+  },
+
+  updateAnnotation: async (annotation: Annotation) => {
+    try {
+      const res = await apiFetch(`/api/stand/annotations/${annotation.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          strokeData: {
+            x: annotation.x,
+            y: annotation.y,
+            content: annotation.content,
+            color: annotation.color,
+          },
+          layer: annotation.layer,
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to update annotation');
+      const json = await res.json();
+      const saved = json.annotation;
+      // normalize musicId similar to addAnnotation
+      const musicId = saved.musicId ?? saved.pieceId;
+      const pageNum = saved.page ?? saved.pageNumber;
+      const key = annotationKey(musicId, pageNum);
+      const newLayer = saved.layer.toLowerCase() as 'personal' | 'section' | 'director';
+      set((state) => {
+        const updated = { ...state.annotations };
+        // remove the annotation from all layers first (clears old location)
+        (['personal', 'section', 'director'] as const).forEach((layer) => {
+          Object.keys(updated[layer]).forEach((k) => {
+            updated[layer][k] = updated[layer][k].filter((a) => a.id !== annotation.id);
+          });
+        });
+        const newAnn: Annotation = {
+          id: saved.id,
+          pieceId: musicId,
+          pageNumber: pageNum,
+          x: saved.strokeData.x,
+          y: saved.strokeData.y,
+          content: saved.strokeData.content,
+          color: saved.strokeData.color,
+          layer: saved.layer,
+          createdAt: new Date(saved.createdAt),
+        };
+        // ensure layer object exists (should always, but guard in case)
+        if (!updated[newLayer]) {
+          updated[newLayer] = {} as Record<string, Annotation[]>;
+        }
+        updated[newLayer][key] = [...(updated[newLayer][key] || []), newAnn];
+        return { annotations: updated };
+      });
+    } catch (err) {
+      console.error('updateAnnotation error', err);
+    }
+  },
+
+  deleteAnnotation: (id: string) => {
+    set((state) => ({
+      annotations: {
+        personal: { ...state.annotations.personal },
+        section: { ...state.annotations.section },
+        director: { ...state.annotations.director },
+      },
+    }));
+    return (async () => {
+      try {
+        const res = await apiFetch(`/api/stand/annotations/${id}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error('Failed to delete annotation');
+        set((state) => {
+          const updated = { ...state.annotations };
+          (['personal', 'section', 'director'] as const).forEach((layer) => {
+            Object.keys(updated[layer]).forEach((key) => {
+              const newEntries = updated[layer][key]!.filter((a) => a.id !== id);
+              if (newEntries.length === 0) {
+                delete updated[layer][key];
+              } else {
+                updated[layer][key] = newEntries;
+              }
+            });
+          });
+          return { annotations: updated };
+        });
+      } catch (err) {
+        console.error('deleteAnnotation error', err);
+      }
+    })();
+  },
+
+  setLayer: (layer: 'PERSONAL' | 'SECTION' | 'DIRECTOR') => set({ selectedLayer: layer }),
+  setCurrentTool: (tool: Tool) => set({ currentTool: tool }),
+  setToolColor: (color: string) => set({ toolColor: color }),
+  setStrokeWidth: (width: number) => set({ strokeWidth: Math.max(1, Math.min(50, width)) }),
+  setPressureScale: (scale: number) => set({ pressureScale: Math.max(0, Math.min(20, scale)) }),
+
+  addNavigationLink: (link: NavigationLink) =>
+    set((state) => ({
+      navigationLinks: [...state.navigationLinks, link],
+    })),
+
+  removeNavigationLink: (id: string) =>
+    set((state) => ({
+      navigationLinks: state.navigationLinks.filter((l) => l.id !== id),
+    })),
+
+  updateSettings: (newSettings: Partial<StandSettings>) =>
+    set((state) => ({
+      settings: { ...state.settings, ...newSettings },
+    })),
+
+  setEventInfo: (eventId: string, eventTitle: string) =>
+    set({ eventId, eventTitle }),
+
+  setRoster: (entries: StandRosterMember[]) => set({ roster: entries }),
+  addRosterEntry: (entry: StandRosterMember) =>
+    set((state) => ({
+      roster:
+        state.roster.some((e) => e.userId === entry.userId)
+          ? state.roster
+          : [...state.roster, entry],
+    })),
+  removeRosterEntry: (userId: string) =>
+    set((state) => ({
+      roster: state.roster.filter((e) => e.userId !== userId),
+    })),
+
+  setAudioLinks: (links: StandAudioLink[]) => set({ audioLinks: links }),
+  selectAudioLink: (id: string | null) => set({ selectedAudioLinkId: id }),
+  setAudioLoopPoints: (start: number | null, end: number | null) =>
+    set({ audioLoopStart: start, audioLoopEnd: end }),
+  setAudioPlaying: (playing: boolean) => set({ audioPlaying: playing }),
+
+  toggleMetronome: () =>
+    set((state) => ({ showMetronome: !state.showMetronome })),
+  toggleTuner: () => set((state) => ({ showTuner: !state.showTuner })),
+  toggleAudioPlayer: () =>
+    set((state) => ({ showAudioPlayer: !state.showAudioPlayer })),
+  togglePitchPipe: () =>
+    set((state) => ({ showPitchPipe: !state.showPitchPipe })),
+
+  updateMetronomeSettings: (settings) =>
+    set((state) => ({ metronomeSettings: { ...state.metronomeSettings, ...settings } })),
+  updateTunerSettings: (settings) =>
+    set((state) => ({ tunerSettings: { ...state.tunerSettings, ...settings } })),
+  updatePitchPipeSettings: (settings) =>
+    set((state) => ({ pitchPipeSettings: { ...state.pitchPipeSettings, ...settings } })),
+
+  updateAudioTrackerSettings: (settings) =>
+    set((state) => ({ audioTrackerSettings: { ...state.audioTrackerSettings, ...settings } })),
+  toggleAudioTracker: () =>
+    set((state) => ({
+      audioTrackerSettings: {
+        ...state.audioTrackerSettings,
+        enabled: !state.audioTrackerSettings.enabled,
+      },
+    })),
+
+  reset: () => set(initialState),
+  // PREFERENCE HELPERS
+  loadPreferences: (prefs: Partial<{ midiMappings: Record<string, string> }>) => {
+    if (prefs.midiMappings) {
+      set({ midiMappings: prefs.midiMappings });
+    }
+  },
+  savePreferences: async () => {
+    try {
+      const { midiMappings } = get();
+      await apiFetch('/api/stand/preferences', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ midiMappings }),
+      });
+    } catch (err) {
+      console.error('savePreferences error', err);
+    }
+  },
+  setMidiMappings: (mappings: Record<string, string>) => set({ midiMappings: mappings }),
+  updateMidiMapping: (key: string, action: string) =>
+    set((state) => ({
+      midiMappings: { ...state.midiMappings, [key]: action },
+    })),
+}));
+
+// Selector hook for more specific state selections
+export const useStoreSelector = <T>(selector: (state: StandState) => T): T => {
+  return useStandStore(selector);
+};
+
+export interface StandAudioLink {
+  id: string;
+  pieceId: string;
+  fileKey: string;
+  url: string | null;
+  description: string | null;
+  createdAt: Date;
+}
+// ... existing code ...

@@ -2,12 +2,12 @@
 
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/db';
-import { requirePermission, getSession } from '@/lib/auth/guards';
+import { requirePermission } from '@/lib/auth/guards';
 import { auditLog } from '@/lib/services/audit';
 import { sendEmail } from '@/lib/email';
 import { z } from 'zod';
 import { env } from '@/lib/env';
-import { hash, randomBytes } from 'crypto';
+import { randomBytes } from 'crypto';
 
 // =============================================================================
 // VALIDATION SCHEMAS
@@ -19,7 +19,7 @@ const updateUserSchema = z.object({
   emailVerified: z.boolean().optional(),
 });
 
-const banUserSchema = z.object({
+const _banUserSchema = z.object({
   userId: z.string().min(1, 'User ID is required'),
   banReason: z.string().optional(),
   banExpires: z.string().optional(),
@@ -284,7 +284,7 @@ export async function updateUser(
   userId: string,
   data: { name?: string; email?: string; emailVerified?: boolean }
 ): Promise<{ success: boolean; error?: string }> {
-  const session = await requirePermission('admin.users.manage');
+  const _session = await requirePermission('admin.users.manage');
 
   try {
     const validated = updateUserSchema.parse(data);

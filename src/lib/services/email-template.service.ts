@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/db';
-import { EmailTemplate, EmailTemplateType, Prisma } from '@prisma/client';
+import { EmailTemplate, EmailTemplateType } from '@prisma/client';
 import {
   substituteVariables,
   extractTemplateVariables,

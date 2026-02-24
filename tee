@@ -1,0 +1,10 @@
+
+> eccb-platform@0.1.0 lint
+> eslint /tmp/lint_full.txt
+
+
+/tmp/lint_full.txt
+  0:0  warning  File ignored because outside of base path
+
+✖ 1 problem (0 errors, 1 warning)
+

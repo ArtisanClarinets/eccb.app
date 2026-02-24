@@ -88,9 +88,9 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json({ success: true, count: records.length });
-  } catch (_error) {
-    console.error('Error marking bulk attendance:', _error);
-    if (_error instanceof z.ZodError) {
+  } catch (error) {
+    console.error('Error marking bulk attendance:', error);
+    if (error instanceof z.ZodError) {
       return NextResponse.json({ error: 'Invalid request data' }, { status: 400 });
     }
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

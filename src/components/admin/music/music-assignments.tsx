@@ -13,15 +13,6 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -76,7 +67,7 @@ export function MusicAssignments({ pieceId, assignments }: MusicAssignmentsProps
       } else {
         toast.error('Failed to unassign member');
       }
-    } catch (error) {
+    } catch (_error) {
       toast.error('Unassign failed');
     } finally {
       setUnassigningId(null);

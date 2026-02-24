@@ -45,8 +45,9 @@ export async function analyzePdfParts(
   extractedMetadata: ExtractedMetadata | null
 ): Promise<SmartUploadPartAnalysis> {
   try {
-    // Load PDF
-    const loadingTask = pdfjsLib.getDocument({ data: pdfBuffer });
+    // Load PDF - convert Buffer to Uint8Array for pdfjs-dist compatibility
+    const pdfData = new Uint8Array(pdfBuffer);
+    const loadingTask = pdfjsLib.getDocument({ data: pdfData });
     const pdfDocument = await loadingTask.promise;
     const totalPages = pdfDocument.numPages;
 
@@ -156,7 +157,7 @@ async function analyzePdfStructure(
 
   // For longer PDFs, try to detect structure
   // This is a simplified heuristic - real detection would require OCR or pattern matching
-  const estimatedPartsPerPage = 1; // Most parts are 1-4 pages
+  const _estimatedPartsPerPage = 1; // Most parts are 1-4 pages
   const potentialParts = Math.min(Math.ceil(totalPages / 4), totalPages);
 
   // Only consider multi-part if we have a reasonable number of pages

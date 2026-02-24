@@ -1,3 +1,6 @@
+import { logger } from '@/lib/logger';
+import { OCRMetadata } from '@/lib/services/ocr-fallback';
+
 export function generateOCRFallback(filename: string): OCRMetadata {
   // Remove .pdf extension and clean up filename
   let title = filename.replace(/\.pdf$/i, '').trim();

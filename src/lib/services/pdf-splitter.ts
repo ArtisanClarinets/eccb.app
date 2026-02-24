@@ -46,7 +46,9 @@ export async function splitPdfByPageRanges(
   }
 
   try {
-    const sourcePdf = await PDFDocument.load(pdfBuffer);
+    // Convert Buffer to Uint8Array for pdf-lib compatibility
+    const pdfData = new Uint8Array(pdfBuffer);
+    const sourcePdf = await PDFDocument.load(pdfData);
     const totalPages = sourcePdf.getPageCount();
     const results: SplitPart[] = [];
 
@@ -151,7 +153,8 @@ export async function validatePdfBuffer(pdfBuffer: Buffer): Promise<{
   error?: string;
 }> {
   try {
-    const pdfDoc = await PDFDocument.load(pdfBuffer);
+    const pdfData = new Uint8Array(pdfBuffer);
+    const pdfDoc = await PDFDocument.load(pdfData);
     return {
       valid: true,
       pageCount: pdfDoc.getPageCount(),
@@ -177,7 +180,8 @@ export async function getPdfMetadata(
   subject?: string;
 }> {
   try {
-    const pdfDoc = await PDFDocument.load(pdfBuffer);
+    const pdfData = new Uint8Array(pdfBuffer);
+    const pdfDoc = await PDFDocument.load(pdfData);
 
     return {
       pageCount: pdfDoc.getPageCount(),
@@ -226,7 +230,9 @@ export async function splitPdfByCuttingInstructions(
   }
 
   try {
-    const sourcePdf = await PDFDocument.load(pdfBuffer);
+    // Convert Buffer to Uint8Array for pdf-lib compatibility
+    const pdfData = new Uint8Array(pdfBuffer);
+    const sourcePdf = await PDFDocument.load(pdfData);
     const totalPages = sourcePdf.getPageCount();
     const results: Array<{
       instruction: CuttingInstruction;

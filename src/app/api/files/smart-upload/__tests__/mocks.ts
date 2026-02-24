@@ -299,7 +299,7 @@ export function createMockPdfBuffer(size: number = 1024): Buffer {
  */
 export function createMockFormData(
   fileName: string = 'test.pdf',
-  fileSize: number = 1024,
+  _fileSize: number = 1024,
   mimeType: string = 'application/pdf'
 ): FormData {
   const blob = new Blob(['test content'], { type: mimeType });

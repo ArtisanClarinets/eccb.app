@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { exportMembersToCSV, MemberExportFilters } from '../actions';
+import { exportMembersToCSV } from '../actions';
 import { prisma } from '@/lib/db';
 import { requirePermission, getMemberSectionFilter } from '@/lib/auth/guards';
 

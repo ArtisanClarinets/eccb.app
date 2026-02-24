@@ -1,0 +1,502 @@
+'use client';
+import type React from 'react';
+import { useCallback, useEffect, useState, useRef, useMemo, type RefObject } from 'react';
+import { useStandStore, Tool, Annotation, StrokePoint, StrokeData } from '@/store/standStore';
+
+// Generate unique ID for strokes
+function generateId(): string {
+  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+}
+
+// Render scheduler using requestAnimationFrame for performance
+function scheduleRender(callback: () => void): () => void {
+  let cancelled = false;
+  let frameId: number | null = null;
+
+  frameId = requestAnimationFrame(() => {
+    if (!cancelled) {
+      callback();
+    }
+  });
+
+  return () => {
+    cancelled = true;
+    if (frameId !== null) {
+      cancelAnimationFrame(frameId);
+    }
+  };
+}
+
+export function AnnotationLayer() {
+  const {
+    annotations,
+    currentPieceIndex: _currentPieceIndex,
+    _currentPage: currentPage,
+    selectedLayer,
+    editMode,
+    currentTool,
+    toolColor,
+    strokeWidth,
+    pressureScale,
+    addAnnotation,
+  } = useStandStore();
+
+  const pieceId = useStandStore((s) => s.pieces[s.currentPieceIndex]?.id);
+
+  // refs for three canvases
+  const personalRef = useRef<HTMLCanvasElement>(null);
+  const sectionRef = useRef<HTMLCanvasElement>(null);
+  const directorRef = useRef<HTMLCanvasElement>(null);
+
+  // current drawing state
+  const isDrawingRef = useRef(false);
+  const currentPointsRef = useRef<StrokePoint[]>([]);
+  const currentStrokeRef = useRef<StrokeData | null>(null);
+
+  // Track if we need to render (for RAF scheduling)
+  const needsRenderRef = useRef(false);
+  const renderCancelRef = useRef<(() => void) | null>(null);
+
+  // text input overlay state
+  const [textInput, setTextInput] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    value: string;
+  }>({ visible: false, x: 0, y: 0, value: '' });
+
+  const textInputRef = useRef<HTMLTextAreaElement>(null);
+
+  // helper to key map - memoized
+  const key = useMemo(() => `${pieceId}-${currentPage}`, [pieceId, currentPage]);
+
+  const layerMap: Record<string, RefObject<HTMLCanvasElement | null>> = useMemo(() => ({
+    PERSONAL: personalRef,
+    SECTION: sectionRef,
+    DIRECTOR: directorRef,
+  }), []);
+
+  // Get current layer canvas ref
+  const getCurrentCanvasRef = useCallback((): HTMLCanvasElement | null => {
+    return layerMap[selectedLayer]?.current || null;
+  }, [selectedLayer, layerMap]);
+
+  // Compute stroke width with pressure - memoized
+  const computeWidth = useCallback(
+    (pressure: number): number => {
+      const effectivePressure = pressure === 0 ? 0.5 : pressure;
+      return strokeWidth + effectivePressure * pressureScale;
+    },
+    [strokeWidth, pressureScale]
+  );
+
+  // Draw a single stroke on canvas - stable callback
+  const drawStroke = useCallback(
+    (ctx: CanvasRenderingContext2D, stroke: StrokeData) => {
+      const { type, points, color, baseWidth: _baseWidth, opacity } = stroke;
+      if (points.length < 2) return;
+
+      ctx.save();
+
+      // Set composite operation based on tool type
+      if (type === Tool.HIGHLIGHTER) {
+        ctx.globalCompositeOperation = 'multiply';
+        ctx.globalAlpha = 0.4;
+      } else if (type === Tool.WHITEOUT || type === Tool.ERASER) {
+        ctx.globalCompositeOperation = 'destination-out';
+      } else {
+        ctx.globalAlpha = opacity || 1;
+      }
+
+      ctx.strokeStyle = type === Tool.WHITEOUT ? '#ffffff' : color;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      // Draw the stroke with variable width based on pressure
+      ctx.beginPath();
+      const firstPoint = points[0];
+      ctx.moveTo(firstPoint.x, firstPoint.y);
+
+      // Use quadratic curves for smooth lines with pressure-sensitive width
+      for (let i = 1; i < points.length; i++) {
+        const point = points[i];
+        const prevPoint = points[i - 1];
+        const width = computeWidth(point.pressure);
+
+        ctx.lineWidth = width;
+        // Use quadratic curve for smoother lines - creates bezier curves between points
+        const midX = (prevPoint.x + point.x) / 2;
+        const midY = (prevPoint.y + point.y) / 2;
+        ctx.quadraticCurveTo(prevPoint.x, prevPoint.y, midX, midY);
+      }
+
+      // Draw to the last point to complete the stroke
+      const lastPoint = points[points.length - 1];
+      ctx.lineTo(lastPoint.x, lastPoint.y);
+      ctx.stroke();
+
+      ctx.restore();
+    },
+    [computeWidth]
+  );
+
+  // RAF-based render function for performance
+  const scheduleCanvasRender = useCallback(() => {
+    if (renderCancelRef.current) {
+      renderCancelRef.current();
+    }
+
+    renderCancelRef.current = scheduleRender(() => {
+      if (!pieceId) return;
+
+      // Render each layer separately to maintain layer isolation
+      ['PERSONAL', 'SECTION', 'DIRECTOR'].forEach((layer) => {
+        const ref = layerMap[layer];
+        const ctx = ref.current?.getContext('2d');
+        if (!ctx || !ref.current) return;
+
+        // Clear canvas before redrawing to prevent artifacts
+        ctx.clearRect(0, 0, ref.current.width, ref.current.height);
+
+        // Get annotations for current piece and page
+        const anns =
+          annotations[layer.toLowerCase() as keyof typeof annotations]?.[key] || [];
+
+        // Draw existing annotations as strokes
+        anns.forEach((a) => {
+          // Check if it's a stroke-based annotation (has strokeData)
+          if ('strokeData' in a && a.strokeData) {
+            const strokeData = a.strokeData as unknown as StrokeData;
+            if (strokeData.points && Array.isArray(strokeData.points)) {
+              drawStroke(ctx, strokeData);
+              return;
+            }
+          }
+
+          // Fallback: draw simple circles for legacy annotations
+          ctx.fillStyle = a.color || '#f00';
+          const x = a.x * ref.current!.width;
+          const y = a.y * ref.current!.height;
+          ctx.beginPath();
+          ctx.arc(x, y, 5, 0, Math.PI * 2);
+          ctx.fill();
+        });
+      });
+    });
+  }, [pieceId, layerMap, annotations, key, drawStroke]);
+
+  // Render all annotations on canvas - uses RAF scheduler
+  useEffect(() => {
+    scheduleCanvasRender();
+
+    return () => {
+      if (renderCancelRef.current) {
+        renderCancelRef.current();
+      }
+    };
+  }, [annotations, pieceId, currentPage, scheduleCanvasRender]);
+
+  // Sync canvas size with container
+  useEffect(() => {
+    const resize = () => {
+      [personalRef, sectionRef, directorRef].forEach((ref) => {
+        if (ref.current && ref.current.parentElement) {
+          ref.current.width = ref.current.parentElement.clientWidth;
+          ref.current.height = ref.current.parentElement.clientHeight;
+        }
+      });
+      // Trigger re-render after resize
+      needsRenderRef.current = true;
+      scheduleCanvasRender();
+    };
+    resize();
+    window.addEventListener('resize', resize, { passive: true });
+    return () => window.removeEventListener('resize', resize);
+  }, [scheduleCanvasRender]);
+
+  // Handle pointer down - start drawing
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent<HTMLCanvasElement>) => {
+      if (!editMode) return;
+
+      const canvas = e.currentTarget;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      // Handle text tool separately
+      if (currentTool === Tool.TEXT) {
+        const rect = canvas.getBoundingClientRect();
+        const _x = e.clientX - rect.left;
+        const _y = e.clientY - rect.top;
+        setTextInput({
+          visible: true,
+          x: e.clientX,
+          y: e.clientY,
+          value: '',
+        });
+        return;
+      }
+
+      isDrawingRef.current = true;
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      currentPointsRef.current = [
+        {
+          x,
+          y,
+          pressure: e.pressure || 0.5,
+          timestamp: Date.now(),
+        },
+      ];
+
+      currentStrokeRef.current = {
+        id: generateId(),
+        type: currentTool,
+        points: currentPointsRef.current,
+        color: toolColor,
+        baseWidth: strokeWidth,
+        opacity: currentTool === Tool.HIGHLIGHTER ? 0.4 : 1,
+      };
+
+      // Capture pointer for smooth drawing
+      canvas.setPointerCapture(e.pointerId);
+    },
+    [editMode, currentTool, toolColor, strokeWidth]
+  );
+
+  // Handle pointer move - continue drawing with RAF
+  const handlePointerMove = useCallback(
+    (e: React.PointerEvent<HTMLCanvasElement>) => {
+      if (!isDrawingRef.current || !currentStrokeRef.current) return;
+
+      const canvas = e.currentTarget;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      const newPoint: StrokePoint = {
+        x,
+        y,
+        pressure: e.pressure || 0.5,
+        timestamp: Date.now(),
+      };
+
+      currentPointsRef.current.push(newPoint);
+      currentStrokeRef.current.points = currentPointsRef.current;
+
+      // Use RAF for smooth rendering during draw
+      if (renderCancelRef.current) {
+        renderCancelRef.current();
+      }
+
+      renderCancelRef.current = scheduleRender(() => {
+        // Clear and redraw with new point
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Redraw all existing strokes
+        const anns =
+          annotations[selectedLayer.toLowerCase() as keyof typeof annotations]?.[
+            key
+          ] || [];
+
+        anns.forEach((a) => {
+          if ('strokeData' in a && a.strokeData) {
+            const strokeData = a.strokeData as unknown as StrokeData;
+            if (strokeData.points && Array.isArray(strokeData.points)) {
+              drawStroke(ctx, strokeData);
+            }
+          }
+        });
+
+        // Draw current stroke
+        if (currentStrokeRef.current) {
+          drawStroke(ctx, currentStrokeRef.current);
+        }
+      });
+    },
+    [annotations, selectedLayer, key, drawStroke]
+  );
+
+  // Handle pointer up - finish drawing and persist
+  const handlePointerUp = useCallback(
+    async (e: React.PointerEvent<HTMLCanvasElement>) => {
+      const canvas = e.currentTarget;
+      if (!isDrawingRef.current || !currentStrokeRef.current || !addAnnotation)
+        return;
+
+      canvas.releasePointerCapture(e.pointerId);
+
+      // Save the completed stroke
+      const stroke = currentStrokeRef.current;
+
+      // Convert to annotation format for persistence
+      const annotation: Annotation = {
+        id: stroke.id,
+        pieceId: pieceId || '',
+        pageNumber: currentPage,
+        x: stroke.points[0]?.x / canvas.width || 0,
+        y: stroke.points[0]?.y / canvas.height || 0,
+        content: JSON.stringify(stroke),
+        color: stroke.color,
+        layer: selectedLayer,
+        createdAt: new Date(),
+      };
+
+      await addAnnotation(annotation);
+
+      // Reset drawing state
+      isDrawingRef.current = false;
+      currentPointsRef.current = [];
+      currentStrokeRef.current = null;
+    },
+    [pieceId, currentPage, selectedLayer, addAnnotation]
+  );
+
+  // Handle text input submit
+  const handleTextSubmit = useCallback(async () => {
+    if (!textInput.value.trim() || !pieceId) {
+      setTextInput({ visible: false, x: 0, y: 0, value: '' });
+      return;
+    }
+
+    const canvas = getCurrentCanvasRef();
+    if (!canvas) {
+      setTextInput({ visible: false, x: 0, y: 0, value: '' });
+      return;
+    }
+
+    // Create text annotation
+    const stroke: StrokeData = {
+      id: generateId(),
+      type: Tool.TEXT,
+      points: [
+        { x: textInput.x, y: textInput.y, pressure: 0, timestamp: Date.now() },
+      ],
+      color: toolColor,
+      baseWidth: strokeWidth,
+      opacity: 1,
+      text: textInput.value,
+      fontSize: 16,
+    };
+
+    // Render text to canvas
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.font = `${16}px sans-serif`;
+      ctx.fillStyle = toolColor;
+      ctx.fillText(textInput.value, textInput.x, textInput.y);
+    }
+
+    // Persist annotation
+    const annotation: Annotation = {
+      id: stroke.id,
+      pieceId: pieceId,
+      pageNumber: currentPage,
+      x: textInput.x / canvas.width,
+      y: textInput.y / canvas.height,
+      content: JSON.stringify(stroke),
+      color: toolColor,
+      layer: selectedLayer,
+      createdAt: new Date(),
+    };
+
+    await addAnnotation(annotation);
+
+    setTextInput({ visible: false, x: 0, y: 0, value: '' });
+  }, [textInput, pieceId, currentPage, selectedLayer, toolColor, strokeWidth, getCurrentCanvasRef, addAnnotation]);
+
+  // Focus text input when visible - focus management for accessibility
+  useEffect(() => {
+    if (textInput.visible && textInputRef.current) {
+      // Small delay to ensure DOM is ready
+      const focusTimeout = setTimeout(() => {
+        textInputRef.current?.focus();
+      }, 0);
+      return () => clearTimeout(focusTimeout);
+    }
+  }, [textInput.visible]);
+
+  // Handle escape key to close text input
+  const handleTextInputKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleTextSubmit();
+      }
+      if (e.key === 'Escape') {
+        setTextInput({ visible: false, x: 0, y: 0, value: '' });
+      }
+    },
+    [handleTextSubmit]
+  );
+
+  return (
+    <div
+      className="absolute inset-0"
+      role="group"
+      aria-label="Annotation layers"
+    >
+      {(['PERSONAL', 'SECTION', 'DIRECTOR'] as const).map((layer, idx) => (
+        <canvas
+          key={layer}
+          ref={layerMap[layer]}
+          className="absolute inset-0"
+          style={{
+            zIndex: idx,
+            pointerEvents: editMode && selectedLayer === layer ? 'auto' : 'none',
+          }}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerLeave={handlePointerUp}
+          aria-label={
+            `${layer.toLowerCase()} annotation layer` +
+            (editMode && selectedLayer === layer ? ' - active' : '')
+          }
+          aria-hidden={!editMode || selectedLayer !== layer}
+        />
+      ))}
+
+      {/* Text input overlay with proper ARIA */}
+      {textInput.visible && (
+        <textarea
+          ref={textInputRef}
+          value={textInput.value}
+          onChange={(e) =>
+            setTextInput((prev) => ({ ...prev, value: e.target.value }))
+          }
+          onBlur={handleTextSubmit}
+          onKeyDown={handleTextInputKeyDown}
+          style={{
+            position: 'absolute',
+            left: textInput.x,
+            top: textInput.y,
+            background: 'rgba(255, 255, 255, 0.9)',
+            border: `2px solid ${toolColor}`,
+            borderRadius: '4px',
+            padding: '4px 8px',
+            fontSize: '16px',
+            minWidth: '150px',
+            minHeight: '40px',
+            resize: 'both',
+            zIndex: 100,
+          }}
+          placeholder="Type text and press Enter..."
+          aria-label="Text annotation input"
+          aria-describedby="text-annotation-help"
+        />
+      )}
+      {/* Screen reader help text */}
+      <div id="text-annotation-help" className="sr-only">
+        Press Enter to save text annotation, Escape to cancel
+      </div>
+    </div>
+  );
+}
+
+AnnotationLayer.displayName = 'AnnotationLayer';

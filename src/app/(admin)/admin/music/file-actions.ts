@@ -141,7 +141,7 @@ export async function updateMusicFile(fileId: string, data: {
   fileType?: FileType;
   isPublic?: boolean;
 }) {
-  const session = await requirePermission(MUSIC_EDIT);
+  const _session = await requirePermission(MUSIC_EDIT);
 
   try {
     const file = await prisma.musicFile.findUnique({
@@ -152,7 +152,7 @@ export async function updateMusicFile(fileId: string, data: {
       return { success: false, error: 'File not found' };
     }
 
-    const updatedFile = await prisma.musicFile.update({
+    const _updatedFile = await prisma.musicFile.update({
       where: { id: fileId },
       data,
     });

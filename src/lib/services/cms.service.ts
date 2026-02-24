@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/db';
-import { ContentStatus, Prisma } from '@prisma/client';
+import { ContentStatus } from '@prisma/client';
 import { auditLog } from './audit';
 import {
   cacheGet,

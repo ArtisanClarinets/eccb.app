@@ -30,6 +30,11 @@ const mockMkdirSync = vi.fn();
 const mockExistsSync = vi.fn(() => false);
 
 vi.mock('fs', () => ({
+  default: {
+    writeFileSync: (...args: unknown[]) => (mockWriteFileSync as any)(...args),
+    mkdirSync: (...args: unknown[]) => (mockMkdirSync as any)(...args),
+    existsSync: (...args: unknown[]) => (mockExistsSync as any)(...args),
+  },
   writeFileSync: (...args: unknown[]) => (mockWriteFileSync as any)(...args),
   mkdirSync: (...args: unknown[]) => (mockMkdirSync as any)(...args),
   existsSync: (...args: unknown[]) => (mockExistsSync as any)(...args),

@@ -38,7 +38,7 @@ const musicPieceSchema = z.object({
   notes: z.string().optional(),
 });
 
-const musicFileUploadSchema = z.object({
+const _musicFileUploadSchema = z.object({
   file: z.any().refine((f) => f && typeof f.size === 'number' && f.size > 0, 'File is required'),
   partType: z.string().optional(),
   instrumentId: z.string().optional(),
@@ -445,7 +445,7 @@ export async function getAssignmentHistory(options: {
   assignmentId?: string;
   limit?: number;
 }) {
-  const session = await requirePermission('music:read');
+  const _session = await requirePermission('music:read');
   
   try {
     const where: Record<string, unknown> = {};
@@ -483,7 +483,7 @@ export async function getAssignmentHistory(options: {
  * Get librarian dashboard statistics
  */
 export async function getLibrarianDashboardStats() {
-  const session = await requirePermission('music:read');
+  const _session = await requirePermission('music:read');
   
   try {
     const now = new Date();
@@ -601,7 +601,7 @@ export async function getAssignmentsForLibrarian(filters?: {
   overdue?: boolean;
   search?: string;
 }) {
-  const session = await requirePermission('music:read');
+  const _session = await requirePermission('music:read');
   
   try {
     const where: Record<string, unknown> = {};
@@ -735,7 +735,7 @@ export async function markOverdueAssignments() {
 }
 
 export async function createMusicPiece(formData: FormData) {
-  const session = await requirePermission(MUSIC_CREATE);
+  const _session = await requirePermission(MUSIC_CREATE);
   
   try {
     const title = formData.get('title') as string;
@@ -836,7 +836,7 @@ export async function createMusicPiece(formData: FormData) {
 }
 
 export async function updateMusicPiece(id: string, formData: FormData) {
-  const session = await requirePermission(MUSIC_EDIT);
+  const _session = await requirePermission(MUSIC_EDIT);
   
   try {
     const title = formData.get('title') as string;
@@ -891,7 +891,7 @@ export async function updateMusicPiece(id: string, formData: FormData) {
 }
 
 export async function deleteMusicPiece(id: string) {
-  const session = await requirePermission(MUSIC_DELETE);
+  const _session = await requirePermission(MUSIC_DELETE);
   
   try {
     // Get all files for this piece
@@ -1055,7 +1055,7 @@ export async function updateMusicFile(fileId: string, data: {
   fileType?: FileType;
   isPublic?: boolean;
 }) {
-  const session = await requirePermission(MUSIC_EDIT);
+  const _session = await requirePermission(MUSIC_EDIT);
   
   try {
     const file = await prisma.musicFile.findUnique({
@@ -1070,7 +1070,7 @@ export async function updateMusicFile(fileId: string, data: {
     if (!parsed.success) {
       return { success: false, error: 'Invalid file update data', details: parsed.error.issues };
     }
-    const updatedFile = await prisma.musicFile.update({
+    const _updatedFile = await prisma.musicFile.update({
       where: { id: fileId },
       data: parsed.data,
     });
@@ -1100,7 +1100,7 @@ export async function updateMusicFile(fileId: string, data: {
 }
 
 export async function getFileVersionHistory(fileId: string) {
-  const session = await requirePermission('music:read');
+  const _session = await requirePermission('music:read');
 
   try {
     const versions = await prisma.musicFileVersion.findMany({
@@ -1116,7 +1116,7 @@ export async function getFileVersionHistory(fileId: string) {
 }
 
 export async function archiveMusicFile(fileId: string) {
-  const session = await requirePermission(MUSIC_EDIT);
+  const _session = await requirePermission(MUSIC_EDIT);
   
   try {
     const file = await prisma.musicFile.findUnique({
@@ -1153,7 +1153,7 @@ export async function archiveMusicFile(fileId: string) {
 }
 
 export async function deleteMusicFile(fileId: string) {
-  const session = await requirePermission(MUSIC_EDIT);
+  const _session = await requirePermission(MUSIC_EDIT);
   
   try {
     const file = await prisma.musicFile.findUnique({
@@ -1229,7 +1229,7 @@ export async function unassignMusicFromMember(
   pieceId: string,
   memberId: string
 ) {
-  const session = await requirePermission(MUSIC_ASSIGN);
+  const _session = await requirePermission(MUSIC_ASSIGN);
 
   try {
     await prisma.musicAssignment.deleteMany({

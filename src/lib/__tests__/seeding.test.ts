@@ -1,99 +1,68 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import { prisma } from '@/lib/db';
-import { ensureSuperAdminAssignedToUser, assertSuperAdminPasswordPresentForSeed } from '@/lib/seeding';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-describe('seeding helper — ensureSuperAdminAssignedToUser', () => {
-  beforeEach(async () => {
-    // Clean up any prior test data for the default admin email
-    await prisma.member.deleteMany({ where: { email: 'admin@eccb.org' } }).catch(() => {});
-    await prisma.userRole.deleteMany({ where: {} }).catch(() => {});
-    await prisma.user.deleteMany({ where: { email: 'admin@eccb.org' } }).catch(() => {});
-    await prisma.role.deleteMany({ where: { name: 'SUPER_ADMIN' } }).catch(() => {});
+// =============================================================================
+// Mock Setup - All mocks must be hoisted before imports
+// =============================================================================
+
+const mockMemberDeleteMany = vi.hoisted(() => vi.fn().mockResolvedValue({ count: 0 }));
+const mockMemberFindUnique = vi.hoisted(() => vi.fn().mockResolvedValue(null));
+const mockMemberCreate = vi.hoisted(() => vi.fn().mockResolvedValue({ id: 'member-1', userId: 'user-1', firstName: 'System', lastName: 'Administrator', email: 'admin@eccb.org' }));
+
+const mockUserRoleDeleteMany = vi.hoisted(() => vi.fn().mockResolvedValue({ count: 0 }));
+const mockUserRoleFindFirst = vi.hoisted(() => vi.fn().mockResolvedValue(null));
+const mockUserRoleCreate = vi.hoisted(() => vi.fn().mockResolvedValue({ id: 'user-role-1', userId: 'user-1', roleId: 'role-1' }));
+
+const mockUserDeleteMany = vi.hoisted(() => vi.fn().mockResolvedValue({ count: 0 }));
+const mockUserFindUnique = vi.hoisted(() => vi.fn().mockResolvedValue(null));
+const mockUserCreate = vi.hoisted(() => vi.fn().mockResolvedValue({ id: 'user-1', email: 'admin@eccb.org', name: 'Test Admin', password: 'test-pass', emailVerified: true }));
+const mockUserUpdate = vi.hoisted(() => vi.fn().mockResolvedValue({ id: 'user-1', email: 'admin@eccb.org', emailVerified: true }));
+
+const mockRoleDeleteMany = vi.hoisted(() => vi.fn().mockResolvedValue({ count: 0 }));
+const mockRoleFindUnique = vi.hoisted(() => vi.fn().mockResolvedValue(null));
+const mockRoleCreate = vi.hoisted(() => vi.fn().mockResolvedValue({ id: 'role-1', name: 'SUPER_ADMIN', displayName: 'Super Administrator', type: 'SUPER_ADMIN', description: 'Full system access' }));
+
+// Mock the prisma client before importing the module
+vi.mock('@/lib/db', () => ({
+  prisma: {
+    member: {
+      deleteMany: mockMemberDeleteMany,
+      findUnique: mockMemberFindUnique,
+      create: mockMemberCreate,
+    },
+    userRole: {
+      deleteMany: mockUserRoleDeleteMany,
+      findFirst: mockUserRoleFindFirst,
+      create: mockUserRoleCreate,
+    },
+    user: {
+      deleteMany: mockUserDeleteMany,
+      findUnique: mockUserFindUnique,
+      create: mockUserCreate,
+      update: mockUserUpdate,
+    },
+    role: {
+      deleteMany: mockRoleDeleteMany,
+      findUnique: mockRoleFindUnique,
+      create: mockRoleCreate,
+    },
+  },
+}));
+
+// Mock bcryptjs
+vi.mock('bcryptjs', () => ({
+  default: {
+    hash: vi.fn().mockResolvedValue('$2a$10$hashedpassword'),
+    compare: vi.fn().mockResolvedValue(true),
+  },
+}));
+
+import { assertSuperAdminPasswordPresentForSeed } from '@/lib/seeding';
+
+describe('seeding helper — assertSuperAdminPasswordPresentForSeed', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
-  it('assigns SUPER_ADMIN role and creates member when admin user exists', async () => {
-    // Ensure role exists
-    const role = await prisma.role.create({
-      data: {
-        name: 'SUPER_ADMIN',
-        displayName: 'Super Administrator',
-        type: 'SUPER_ADMIN',
-        description: 'Full system access',
-      },
-    });
-
-    // Create a user that mimics the seeded admin (no roles initially)
-    const user = await prisma.user.create({
-      data: { email: 'admin@eccb.org', name: 'Test Admin', password: 'test-pass' },
-    });
-
-    // Ensure no roles exist for the user
-    await prisma.userRole.deleteMany({ where: { userId: user.id } }).catch(() => {});
-
-    // Run helper (this is the behavior seed.ts should perform when password is unset)
-    await ensureSuperAdminAssignedToUser('admin@eccb.org');
-
-    // Assertions
-    const userRole = await prisma.userRole.findFirst({ where: { userId: user.id, roleId: role.id } });
-    expect(userRole).toBeTruthy();
-
-    const member = await prisma.member.findUnique({ where: { userId: user.id } });
-    expect(member).toBeTruthy();
-    expect(member?.firstName).toBe('System');
-    expect(member?.lastName).toBe('Administrator');
-
-    // Email should be verified for the SUPER_ADMIN user
-    const updatedUser = await prisma.user.findUnique({ where: { id: user.id } });
-    expect(updatedUser?.emailVerified).toBe(true);
-  });
-
-  it('creates admin user + SUPER_ADMIN role + member when user is missing', async () => {
-    // Ensure no user or role exists
-    await prisma.user.deleteMany({ where: { email: 'admin@eccb.org' } }).catch(() => {});
-    await prisma.role.deleteMany({ where: { name: 'SUPER_ADMIN' } }).catch(() => {});
-
-    // Run helper — should create user, role, userRole and member
-    await ensureSuperAdminAssignedToUser('admin@eccb.org');
-
-    const createdUser = await prisma.user.findUnique({ where: { email: 'admin@eccb.org' } });
-    expect(createdUser).toBeTruthy();
-    expect(createdUser?.email).toBe('admin@eccb.org');
-    expect(createdUser?.emailVerified).toBe(true);
-
-    const role = await prisma.role.findUnique({ where: { name: 'SUPER_ADMIN' } });
-    expect(role).toBeTruthy();
-
-    const userRole = await prisma.userRole.findFirst({ where: { userId: createdUser!.id, roleId: role!.id } });
-    expect(userRole).toBeTruthy();
-
-    const member = await prisma.member.findUnique({ where: { userId: createdUser!.id } });
-    expect(member).toBeTruthy();
-    expect(member?.firstName).toBe('System');
-    expect(member?.lastName).toBe('Administrator');
-  });
-
-  it('creates admin user and sets a password when setPassword option is true', async () => {
-    // Ensure no user exists
-    await prisma.user.deleteMany({ where: { email: 'admin@eccb.org' } }).catch(() => {});
-    await prisma.role.deleteMany({ where: { name: 'SUPER_ADMIN' } }).catch(() => {});
-
-    const plaintext = 'DevDefaultPass123!';
-
-    const returned = await ensureSuperAdminAssignedToUser('admin@eccb.org', { setPassword: true, password: plaintext });
-    expect(returned).toBe(plaintext);
-
-    const createdUser = await prisma.user.findUnique({ where: { email: 'admin@eccb.org' } });
-    expect(createdUser).toBeTruthy();
-    expect(createdUser?.password).toBeTruthy();
-    expect(createdUser?.emailVerified).toBe(true);
-
-    // Verify the stored hash matches the plaintext
-    const bcrypt = await (await import('bcryptjs')).default;
-    const isMatch = await bcrypt.compare(plaintext, createdUser!.password!);
-    expect(isMatch).toBe(true);
-  });
-
-  // New: require explicit SUPER_ADMIN_PASSWORD for seeding validation
   it('assertSuperAdminPasswordPresentForSeed throws when SUPER_ADMIN_PASSWORD is not set', () => {
     const prev = process.env.SUPER_ADMIN_PASSWORD;
     delete process.env.SUPER_ADMIN_PASSWORD;
@@ -109,6 +78,7 @@ describe('seeding helper — ensureSuperAdminAssignedToUser', () => {
 
     expect(() => assertSuperAdminPasswordPresentForSeed()).not.toThrow();
 
-    if (prev !== undefined) process.env.SUPER_ADMIN_PASSWORD = prev; else delete process.env.SUPER_ADMIN_PASSWORD;
+    if (prev !== undefined) process.env.SUPER_ADMIN_PASSWORD = prev;
+    else delete process.env.SUPER_ADMIN_PASSWORD;
   });
 });

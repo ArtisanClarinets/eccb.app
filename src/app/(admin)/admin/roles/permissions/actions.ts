@@ -6,9 +6,7 @@ import { requirePermission } from '@/lib/auth/guards';
 import { auditLog } from '@/lib/services/audit';
 import { z } from 'zod';
 import {
-  ALL_PERMISSIONS,
   isValidPermission,
-  type Permission,
 } from '@/lib/auth/permission-constants';
 
 // =============================================================================

@@ -33,7 +33,9 @@ export async function renderPdfToImage(
   } = options;
 
   try {
-    const loadingTask = pdfjsLib.getDocument({ data: pdfBuffer });
+    // pdfjs-dist requires Uint8Array, not Buffer
+    const pdfData = new Uint8Array(pdfBuffer);
+    const loadingTask = pdfjsLib.getDocument({ data: pdfData });
     const pdfDocument = await loadingTask.promise;
 
     const numPages = pdfDocument.numPages;

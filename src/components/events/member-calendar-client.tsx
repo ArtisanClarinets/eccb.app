@@ -4,8 +4,8 @@ import * as React from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { EventCalendar, type CalendarEvent, type ViewMode } from './event-calendar';
-import { EventFilter, useEventFilters, type EventFilterState } from './event-filter';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { EventFilter, useEventFilters } from './event-filter';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Calendar, Music, Users, ArrowLeft } from 'lucide-react';
 

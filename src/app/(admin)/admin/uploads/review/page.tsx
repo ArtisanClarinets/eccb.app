@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import Link from 'next/link';
+import _Link from 'next/link';
 import {
   Card,
   CardContent,
@@ -44,7 +44,6 @@ import {
   Plus,
   RefreshCw,
   Trash2,
-  Upload,
   X,
   Play,
 } from 'lucide-react';
@@ -180,7 +179,7 @@ function getSecondPassStatusBadge(secondPassStatus: SecondPassStatus | null): Re
   }
 }
 
-const ZOOM_LEVELS = [0.5, 0.75, 1, 1.25, 1.5, 2];
+const _ZOOM_LEVELS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
 // =============================================================================
 // Client Component

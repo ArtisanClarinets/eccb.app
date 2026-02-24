@@ -17,7 +17,7 @@ import {
 // VALIDATION SCHEMAS
 // =============================================================================
 
-const memberQuerySchema = z.object({
+const _memberQuerySchema = z.object({
   status: z.string().optional(),
   sectionId: z.string().optional(),
   instrumentId: z.string().optional(),
@@ -87,7 +87,7 @@ export async function GET(request: NextRequest) {
   const page = parseInt(searchParams.get('page') || '1');
   const limit = parseInt(searchParams.get('limit') || '50');
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const where: any = {};
 
   if (status) {
@@ -167,8 +167,8 @@ export async function GET(request: NextRequest) {
       page,
       totalPages: Math.ceil(total / limit),
     });
-  } catch (_error) {
-    console.error('Failed to fetch members:', _error);
+  } catch (error) {
+    console.error('Failed to fetch members:', error);
     return NextResponse.json(
       { error: 'Failed to fetch members' },
       { status: 500 }
@@ -230,8 +230,8 @@ export async function POST(request: NextRequest) {
     } else {
       return NextResponse.json(result, { status: 400 });
     }
-  } catch (_error) {
-    console.error('Failed to create member:', _error);
+  } catch (error) {
+    console.error('Failed to create member:', error);
     return NextResponse.json(
       { error: 'Failed to create member' },
       { status: 500 }
@@ -295,8 +295,8 @@ export async function PUT(request: NextRequest) {
     } else {
       return NextResponse.json(result, { status: 400 });
     }
-  } catch (_error) {
-    console.error('Failed to update member:', _error);
+  } catch (error) {
+    console.error('Failed to update member:', error);
     return NextResponse.json(
       { error: 'Failed to update member' },
       { status: 500 }
@@ -361,8 +361,8 @@ export async function DELETE(request: NextRequest) {
     } else {
       return NextResponse.json(result, { status: 400 });
     }
-  } catch (_error) {
-    console.error('Failed to delete member:', _error);
+  } catch (error) {
+    console.error('Failed to delete member:', error);
     return NextResponse.json(
       { error: 'Failed to delete member' },
       { status: 500 }

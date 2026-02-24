@@ -98,13 +98,15 @@ ${colorConfig
   const styleRef = React.useRef<HTMLStyleElement>(null);
 
   React.useEffect(() => {
-    if (styleRef.current) {
-      styleRef.current.textContent = cssString;
+    // Capture ref value at effect start to avoid stale ref in cleanup
+    const styleElement = styleRef.current;
+    if (styleElement) {
+      styleElement.textContent = cssString;
     }
-    // If the style element ever unmounts/mounts, clean up old content.
+    // Cleanup uses captured value, not the ref directly
     return () => {
-      if (styleRef.current) {
-        styleRef.current.textContent = '';
+      if (styleElement) {
+        styleElement.textContent = '';
       }
     };
   }, [cssString]);

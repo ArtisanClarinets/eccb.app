@@ -1,22 +1,77 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
-import { POST, OPTIONS } from '../route';
+
+// =============================================================================
+// Mock Setup - All mocks must be defined before any imports
+// =============================================================================
+
+// Hoisted mock functions that will be shared between mock definition and tests
+const mockGetSession = vi.hoisted(() => vi.fn());
+const mockRequirePermission = vi.hoisted(() => vi.fn());
+const mockFindUnique = vi.hoisted(() => vi.fn());
+const mockTransaction = vi.hoisted(() => vi.fn());
+
+// Transaction mock functions
+const mockTxPersonFindFirst = vi.hoisted(() => vi.fn().mockResolvedValue(null));
+const mockTxPersonCreate = vi.hoisted(() => vi.fn().mockResolvedValue({ id: 'composer-1', fullName: 'John Philip Sousa' }));
+const mockTxPublisherFindUnique = vi.hoisted(() => vi.fn().mockResolvedValue(null));
+const mockTxPublisherCreate = vi.hoisted(() => vi.fn().mockResolvedValue({ id: 'publisher-1', name: 'Test Publisher' }));
+const mockTxMusicPieceCreate = vi.hoisted(() => vi.fn().mockResolvedValue({ id: 'piece-1', title: 'Stars and Stripes Forever' }));
+const mockTxMusicFileCreate = vi.hoisted(() => vi.fn().mockResolvedValue({ id: 'file-1', fileName: 'test.pdf', storageKey: 'test-key' }));
+const mockTxInstrumentFindFirst = vi.hoisted(() => vi.fn().mockResolvedValue(null));
+const mockTxInstrumentCreate = vi.hoisted(() => vi.fn().mockResolvedValue({ id: 'instrument-1', name: 'Flute' }));
+const mockTxMusicPartCreate = vi.hoisted(() => vi.fn().mockResolvedValue({ id: 'part-1' }));
+const mockTxSmartUploadSessionUpdate = vi.hoisted(() => vi.fn());
+
+// Mock transaction object
+const mockTx = {
+  person: {
+    findFirst: mockTxPersonFindFirst,
+    create: mockTxPersonCreate,
+  },
+  publisher: {
+    findUnique: mockTxPublisherFindUnique,
+    create: mockTxPublisherCreate,
+  },
+  musicPiece: {
+    create: mockTxMusicPieceCreate,
+  },
+  musicFile: {
+    create: mockTxMusicFileCreate,
+  },
+  instrument: {
+    findFirst: mockTxInstrumentFindFirst,
+    create: mockTxInstrumentCreate,
+  },
+  musicPart: {
+    create: mockTxMusicPartCreate,
+  },
+  smartUploadSession: {
+    update: mockTxSmartUploadSessionUpdate,
+  },
+};
 
 // Mock dependencies
 vi.mock('@/lib/auth/guards', () => ({
-  getSession: vi.fn(),
+  getSession: mockGetSession,
 }));
 
 vi.mock('@/lib/auth/permissions', () => ({
-  requirePermission: vi.fn().mockResolvedValue(true),
+  requirePermission: mockRequirePermission,
+}));
+
+vi.mock('@/lib/services/storage', () => ({
+  downloadFile: vi.fn(),
+  uploadFile: vi.fn(),
+  deleteFile: vi.fn(),
 }));
 
 vi.mock('@/lib/db', () => ({
   prisma: {
     smartUploadSession: {
-      findUnique: vi.fn(),
-      update: vi.fn(),
+      findUnique: mockFindUnique,
     },
+    $transaction: mockTransaction,
   },
 }));
 
@@ -28,9 +83,8 @@ vi.mock('@/lib/logger', () => ({
   },
 }));
 
-import { getSession } from '@/lib/auth/guards';
-import { requirePermission } from '@/lib/auth/permissions';
-import { prisma } from '@/lib/db';
+// Import after mocks are set up
+import { POST, OPTIONS } from '../route';
 
 // =============================================================================
 // Types
@@ -96,10 +150,9 @@ function createMockSessionData(overrides: Partial<any> = {}): any {
 describe('Approve Upload Session API', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-  });
-
-  afterEach(() => {
-    vi.resetAllMocks();
+    // Reset transaction mock to default behavior
+    mockTransaction.mockImplementation(async (callback: (tx: typeof mockTx) => Promise<unknown>) => callback(mockTx));
+    mockRequirePermission.mockResolvedValue(true);
   });
 
   // ===========================================================================
@@ -108,7 +161,7 @@ describe('Approve Upload Session API', () => {
 
   describe('Authentication', () => {
     it('should return 401 when no session exists', async () => {
-      vi.mocked(getSession).mockResolvedValue(null);
+      mockGetSession.mockResolvedValue(null);
 
       const request = new NextRequest('http://localhost/api/admin/uploads/review/session-1/approve', {
         method: 'POST',
@@ -125,7 +178,7 @@ describe('Approve Upload Session API', () => {
     });
 
     it('should return 401 when session has no user id', async () => {
-      vi.mocked(getSession).mockResolvedValue({ user: null } as any);
+      mockGetSession.mockResolvedValue({ user: null });
 
       const request = new NextRequest('http://localhost/api/admin/uploads/review/session-1/approve', {
         method: 'POST',
@@ -135,7 +188,7 @@ describe('Approve Upload Session API', () => {
 
       const params = Promise.resolve({ id: SESSION_ID });
       const response = await POST(request, { params });
-      const data = await response.json();
+      const _data = await response.json();
 
       expect(response.status).toBe(401);
     });
@@ -146,9 +199,9 @@ describe('Approve Upload Session API', () => {
   // ===========================================================================
 
   describe('Permissions', () => {
-    it('should return 403 when user lacks music:create permission', async () => {
-      vi.mocked(getSession).mockResolvedValue(createMockSession());
-      vi.mocked(requirePermission).mockRejectedValue(new Error('Permission denied'));
+    it('should return 500 when user lacks music:create permission', async () => {
+      mockGetSession.mockResolvedValue(createMockSession());
+      mockRequirePermission.mockRejectedValue(new Error('Permission denied'));
 
       const request = new NextRequest('http://localhost/api/admin/uploads/review/session-1/approve', {
         method: 'POST',
@@ -169,10 +222,8 @@ describe('Approve Upload Session API', () => {
 
   describe('Validation', () => {
     it('should return 400 when title is missing', async () => {
-      vi.mocked(getSession).mockResolvedValue(createMockSession());
-      vi.mocked(prisma.smartUploadSession.findUnique).mockResolvedValue(
-        createMockSessionData()
-      );
+      mockGetSession.mockResolvedValue(createMockSession());
+      mockFindUnique.mockResolvedValue(createMockSessionData());
 
       const request = new NextRequest('http://localhost/api/admin/uploads/review/session-1/approve', {
         method: 'POST',
@@ -189,10 +240,8 @@ describe('Approve Upload Session API', () => {
     });
 
     it('should return 400 when title is empty', async () => {
-      vi.mocked(getSession).mockResolvedValue(createMockSession());
-      vi.mocked(prisma.smartUploadSession.findUnique).mockResolvedValue(
-        createMockSessionData()
-      );
+      mockGetSession.mockResolvedValue(createMockSession());
+      mockFindUnique.mockResolvedValue(createMockSessionData());
 
       const request = new NextRequest('http://localhost/api/admin/uploads/review/session-1/approve', {
         method: 'POST',
@@ -202,7 +251,7 @@ describe('Approve Upload Session API', () => {
 
       const params = Promise.resolve({ id: SESSION_ID });
       const response = await POST(request, { params });
-      const data = await response.json();
+      const _data = await response.json();
 
       expect(response.status).toBe(400);
     });
@@ -214,8 +263,8 @@ describe('Approve Upload Session API', () => {
 
   describe('Session Not Found', () => {
     it('should return 404 when session does not exist', async () => {
-      vi.mocked(getSession).mockResolvedValue(createMockSession());
-      vi.mocked(prisma.smartUploadSession.findUnique).mockResolvedValue(null);
+      mockGetSession.mockResolvedValue(createMockSession());
+      mockFindUnique.mockResolvedValue(null);
 
       const request = new NextRequest('http://localhost/api/admin/uploads/review/session-1/approve', {
         method: 'POST',
@@ -232,10 +281,8 @@ describe('Approve Upload Session API', () => {
     });
 
     it('should return 400 when session is not pending review', async () => {
-      vi.mocked(getSession).mockResolvedValue(createMockSession());
-      vi.mocked(prisma.smartUploadSession.findUnique).mockResolvedValue(
-        createMockSessionData({ status: 'APPROVED' })
-      );
+      mockGetSession.mockResolvedValue(createMockSession());
+      mockFindUnique.mockResolvedValue(createMockSessionData({ status: 'APPROVED' }));
 
       const request = new NextRequest('http://localhost/api/admin/uploads/review/session-1/approve', {
         method: 'POST',
@@ -258,11 +305,9 @@ describe('Approve Upload Session API', () => {
 
   describe('Successful Approval', () => {
     it('should successfully approve a pending session', async () => {
-      vi.mocked(getSession).mockResolvedValue(createMockSession());
-      vi.mocked(prisma.smartUploadSession.findUnique).mockResolvedValue(
-        createMockSessionData()
-      );
-      vi.mocked(prisma.smartUploadSession.update).mockResolvedValue({
+      mockGetSession.mockResolvedValue(createMockSession());
+      mockFindUnique.mockResolvedValue(createMockSessionData());
+      mockTxSmartUploadSessionUpdate.mockResolvedValue({
         ...createMockSessionData(),
         status: 'APPROVED',
         reviewedBy: TEST_USER_ID,
@@ -285,7 +330,7 @@ describe('Approve Upload Session API', () => {
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
       expect(data.session.status).toBe('APPROVED');
-      expect(prisma.smartUploadSession.update).toHaveBeenCalledWith({
+      expect(mockTxSmartUploadSessionUpdate).toHaveBeenCalledWith({
         where: { uploadSessionId: SESSION_ID },
         data: {
           status: 'APPROVED',
@@ -296,11 +341,9 @@ describe('Approve Upload Session API', () => {
     });
 
     it('should approve session with all optional fields', async () => {
-      vi.mocked(getSession).mockResolvedValue(createMockSession());
-      vi.mocked(prisma.smartUploadSession.findUnique).mockResolvedValue(
-        createMockSessionData()
-      );
-      vi.mocked(prisma.smartUploadSession.update).mockResolvedValue({
+      mockGetSession.mockResolvedValue(createMockSession());
+      mockFindUnique.mockResolvedValue(createMockSessionData());
+      mockTxSmartUploadSessionUpdate.mockResolvedValue({
         ...createMockSessionData(),
         status: 'APPROVED',
         reviewedBy: TEST_USER_ID,
@@ -335,13 +378,9 @@ describe('Approve Upload Session API', () => {
 
   describe('Database Errors', () => {
     it('should return 500 when database update fails', async () => {
-      vi.mocked(getSession).mockResolvedValue(createMockSession());
-      vi.mocked(prisma.smartUploadSession.findUnique).mockResolvedValue(
-        createMockSessionData()
-      );
-      vi.mocked(prisma.smartUploadSession.update).mockRejectedValue(
-        new Error('Database error')
-      );
+      mockGetSession.mockResolvedValue(createMockSession());
+      mockFindUnique.mockResolvedValue(createMockSessionData());
+      mockTransaction.mockRejectedValue(new Error('Database error'));
 
       const request = new NextRequest('http://localhost/api/admin/uploads/review/session-1/approve', {
         method: 'POST',

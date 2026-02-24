@@ -17,7 +17,6 @@ import {
   QUEUE_NAMES,
   getJobOptions,
   getQueueNameForJob,
-  getConcurrencyForJob,
   type EmailSendJobData,
   type EmailBulkJobData,
 } from './definitions';

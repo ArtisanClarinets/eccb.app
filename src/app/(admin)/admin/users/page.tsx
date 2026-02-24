@@ -92,7 +92,7 @@ export default async function AdminUsersPage({
     }),
   ]);
 
-  const statusColors: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
+  const _statusColors: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
     active: 'default',
     banned: 'destructive',
     unverified: 'outline',

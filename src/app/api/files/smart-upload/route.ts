@@ -320,7 +320,7 @@ Your task is to analyze EVERY PAGE of the PDF and extract complete metadata AND 
 
 Return valid JSON only.`;
 
-const DEFAULT_VERIFICATION_SYSTEM_PROMPT = `You are a verification assistant. Review the extracted metadata against the original images.
+const _DEFAULT_VERIFICATION_SYSTEM_PROMPT = `You are a verification assistant. Review the extracted metadata against the original images.
 Check for:
 1. Typos in title or composer name
 2. Misclassification of file type (FULL_SCORE vs PART vs CONDUCTOR_SCORE vs CONDENSED_SCORE)

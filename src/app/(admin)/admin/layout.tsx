@@ -1,6 +1,5 @@
 import React from 'react';
 import { requireRole } from '@/lib/auth/permissions';
-import { DashboardSidebar } from '@/components/dashboard/sidebar';
 import {
   ShieldCheck,
   Users,
@@ -13,7 +12,7 @@ import {
   Upload,
 } from 'lucide-react';
 import Link from 'next/link';
-import { cn } from '@/lib/utils';
+
 
 // We'll define distinct menu items for admins
 const adminMenuItems = [

@@ -50,8 +50,14 @@ export function generateOCRFallback(filename: string): OCRMetadata {
     const firstPart = dashMatch[1].trim();
     const secondPart = dashMatch[2].trim();
 
-    // Check if first part looks like a composer name (not starting with digits, capitalized, not too long)
-    if (
+    // Check if first part is just a number (like "01" or "1") - skip it entirely
+    if (/^\d+$/.test(firstPart)) {
+      // First part is just a track/sequence number, use second part as title
+      title = secondPart;
+      // Don't try to extract composer from the remaining title -
+      // the second dash is likely part of the title (e.g., "March - Stars and Stripes")
+    } else if (
+      // Check if first part looks like a composer name (not starting with digits, capitalized, not too long)
       !/^\d/.test(firstPart) &&
       firstPart.length < 30 &&
       /^[A-Z]/.test(firstPart)

@@ -6,8 +6,6 @@ import {
   Music, 
   Calendar, 
   ShieldCheck,
-  TrendingUp,
-  ArrowRight,
   ChevronRight,
   Clock,
   Activity,

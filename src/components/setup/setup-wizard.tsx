@@ -52,7 +52,7 @@ export function SetupWizard({ repairMode = false }: SetupWizardProps): React.Rea
   const [error, setError] = useState<string | null>(null);
 
   const stepIndex = steps.findIndex((s) => s.id === currentStep);
-  const progress = Math.round(((stepIndex + 1) / steps.length) * 100);
+  const _progress = Math.round(((stepIndex + 1) / steps.length) * 100);
 
   // Fetch initial status on mount
   useEffect(() => {

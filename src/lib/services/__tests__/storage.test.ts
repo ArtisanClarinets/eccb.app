@@ -1,8 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { uploadFile, downloadFile, deleteFile, fileExists, validateFileMagicBytes } from '../storage';
-import { env } from '@/lib/env';
 import fs from 'fs/promises';
-import path from 'path';
+import _path from 'path';
 
 // Mock dependencies
 vi.mock('@/lib/env', () => ({
@@ -36,6 +35,17 @@ vi.mock('fs/promises', () => ({
 }));
 
 vi.mock('fs', () => ({
+  default: {
+    createReadStream: vi.fn(() => ({
+      pipe: vi.fn(),
+      on: vi.fn(),
+    })),
+    createWriteStream: vi.fn(() => ({
+      write: vi.fn(),
+      end: vi.fn(),
+      on: vi.fn(),
+    })),
+  },
   createReadStream: vi.fn(() => ({
     pipe: vi.fn(),
     on: vi.fn(),

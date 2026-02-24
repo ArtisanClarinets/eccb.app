@@ -53,7 +53,7 @@ export default async function AdminAttendancePage({
   const now = new Date();
   
   // Build where clause for events (past and recent, for attendance taking)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const where: any = {};
 
   // Show events from the past 30 days and future

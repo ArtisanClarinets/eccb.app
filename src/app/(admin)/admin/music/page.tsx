@@ -2,7 +2,6 @@ import { Metadata } from 'next';
 import Link from 'next/link';
 import { prisma } from '@/lib/db';
 import { requirePermission } from '@/lib/auth/guards';
-import { formatDate } from '@/lib/date';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -43,7 +42,7 @@ import {
   ArrowUp,
   ArrowDown,
 } from 'lucide-react';
-import { MusicDifficulty } from '@prisma/client';
+
 
 export const metadata: Metadata = {
   title: 'Music Library',

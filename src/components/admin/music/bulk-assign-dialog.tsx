@@ -111,7 +111,7 @@ export function BulkAssignDialog({
       } else {
         toast.error(result.error || 'Failed to assign music');
       }
-    } catch (error) {
+    } catch (_error) {
       toast.error('Assignment failed');
     } finally {
       setIsSubmitting(false);

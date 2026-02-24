@@ -179,7 +179,7 @@ async function uploadToS3(
 async function uploadToLocal(
   key: string,
   file: Buffer | NodeJS.ReadableStream,
-  options: UploadOptions
+  _options: UploadOptions
 ): Promise<string> {
   await ensureStorageDirectory();
   
@@ -309,9 +309,9 @@ export interface SecureUrlOptions {
 
 export async function generateSecureDownloadUrl(
   key: string,
-  options: SecureUrlOptions = {}
+  _options: SecureUrlOptions = {}
 ): Promise<string> {
-  const expiresIn = options.expiresIn || 3600;
+  const expiresIn = _options.expiresIn || 3600;
   
   if (env.STORAGE_DRIVER === 'S3') {
     const client = getS3Client();
@@ -327,7 +327,7 @@ export async function generateSecureDownloadUrl(
   // For local storage, generate a signed URL with token
   return generateLocalSignedUrl(key, {
     expiresIn,
-    userId: options.userId,
+    userId: _options.userId,
   });
 }
 

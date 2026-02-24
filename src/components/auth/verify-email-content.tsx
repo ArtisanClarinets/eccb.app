@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, Suspense, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { authClient } from '@/lib/auth/client';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,7 @@ import { Loader2, Mail, CheckCircle2, XCircle, ArrowLeft, RefreshCw } from 'luci
 
 function VerifyEmailContentInner() {
   const [email, setEmail] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [_loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
   const [status, setStatus] = useState<'verifying' | 'success' | 'error' | 'pending'>('pending');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -20,21 +20,7 @@ function VerifyEmailContentInner() {
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
 
-  useEffect(() => {
-    if (token) {
-      verifyEmail(token);
-    }
-  }, [token]);
-
-  // Countdown timer for resend button
-  useEffect(() => {
-    if (countdown > 0) {
-      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [countdown]);
-
-  const verifyEmail = async (verificationToken: string) => {
+  const verifyEmail = useCallback(async (verificationToken: string) => {
     setStatus('verifying');
     setLoading(true);
     setErrorMessage(null);
@@ -57,13 +43,27 @@ function VerifyEmailContentInner() {
           router.push('/dashboard');
         }, 3000);
       }
-    } catch (err) {
+    } catch (_err) {
       setStatus('error');
       setErrorMessage('An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [router]);
+
+  useEffect(() => {
+    if (token) {
+      verifyEmail(token);
+    }
+  }, [token, verifyEmail]);
+
+  // Countdown timer for resend button
+  useEffect(() => {
+    if (countdown > 0) {
+      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [countdown]);
 
   const handleResendVerification = async (e: React.FormEvent) => {
     e.preventDefault();

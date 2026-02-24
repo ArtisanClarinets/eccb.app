@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getSession } from '@/lib/auth/guards';
 import { requirePermission } from '@/lib/auth/permissions';
-import { downloadFile, uploadFile, deleteFile } from '@/lib/services/storage';
+import { deleteFile } from '@/lib/services/storage';
 import { logger } from '@/lib/logger';
 import { z } from 'zod';
 import type { MusicDifficulty, FileType } from '@prisma/client';

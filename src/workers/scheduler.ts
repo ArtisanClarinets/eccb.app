@@ -1,18 +1,16 @@
 import { Job } from 'bullmq';
 import { prisma } from '@/lib/db';
-import { createWorker, QUEUE_NAMES, addJob } from '@/lib/jobs/queue';
+import { createWorker, addJob } from '@/lib/jobs/queue';
 import {
   type PublishScheduledJobData,
   type CleanupSessionsJobData,
   type CleanupFilesJobData,
   type EventReminderJobData,
   type NotificationJobData,
-  JOB_CONFIGS,
 } from '@/lib/jobs/definitions';
 import { logger } from '@/lib/logger';
 import { sendEmail } from '@/lib/email';
-import { env } from '@/lib/env';
-import { subDays, subHours, addHours, format, isAfter, isBefore } from 'date-fns';
+import { subDays, subHours, addHours, format } from 'date-fns';
 
 // ============================================================================
 // Scheduled Publishing

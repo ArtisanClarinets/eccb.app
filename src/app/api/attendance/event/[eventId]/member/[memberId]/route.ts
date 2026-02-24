@@ -82,8 +82,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     return NextResponse.json({ success: true, attendance });
-  } catch (_error) {
-    console.error('Error fetching attendance record:', _error);
+  } catch (error) {
+    console.error('Error fetching attendance record:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
