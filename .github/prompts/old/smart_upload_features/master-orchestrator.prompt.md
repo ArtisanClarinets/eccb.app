@@ -12,10 +12,26 @@ collaborative, performance‑ready notation application as described in the user
 ### Workflow
 1. **Read the workspace** to confirm all stand‑related files and models.
 2. Maintain a task list internally; mark each item complete only when its subagent reports success.
-3. For each major feature group below, spawn a specialized *sub‑agent* with the corresponding prompt.
-   - When sub‑agents finish, gather their outputs, run `npm run lint` and `npm run build`
-     to ensure the repo stays healthy.
-   - When database changes are needed, generate Prisma migration files and run `npx prisma generate`.
+3. For each major feature group identified below as well as every prompt file
+present in this directory (`ai-automation.prompt.md`,
+`performance-accessibility.prompt.md`, `annotations.prompt.md`,
+`performance-gig-mode.prompt.md`, `annotation-tools.prompt.md`,
+`refactor-standviewer.prompt.md`, `api-routes.prompt.md`,
+`rehearsal-utilities.prompt.md`, `build-validation.prompt.md`,
+`review-inventory.prompt.md`, `commit-strategy.prompt.md`,
+`roster-overlay.prompt.md`, `dependencies-scaffolding.prompt.md`,
+`scaffold-modularity.prompt.md`, `documentation.prompt.md`,
+`schema-migrations.prompt.md`, `hardware-integration.prompt.md`,
+`setlist-advance.prompt.md`, `night-mode.prompt.md`,
+`tests.prompt.md`, `page-turning.prompt.md`, `update-loader.prompt.md`,
+`pdf-canvas.prompt.md`, `websocket-sync.prompt.md`), spawn a specialized
+*sub‑agent* using the content of that file as its instruction set.
+   - The orchestrator should dynamically discover and read each prompt file
+     in the folder and treat it as an independent sub-agent.
+   - When sub‑agents finish, gather their outputs, run `npm run lint` and
+     `npm run build` to ensure the repo stays healthy.
+   - When database changes are needed, generate Prisma migration files and
+     run `npx prisma generate`.
    - Write tests for every new component, utility, and API route.
    - Update `docs/` and comment complex logic as you go.
 
