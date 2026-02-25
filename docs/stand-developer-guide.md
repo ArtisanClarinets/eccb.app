@@ -25,7 +25,7 @@ The Digital Music Stand is built as a modular React application with the followi
 - **Styling**: Tailwind CSS with Radix UI primitives
 - **PDF Rendering**: PDF.js for canvas-based PDF display
 - **Real-time Communication**: WebSocket connections for collaboration
-- **Build Tool**: Vite for fast development and optimized builds
+- **Build Tool**: Next.js (Webpack/Turbopack) for development and production builds
 
 ### Key Components
 

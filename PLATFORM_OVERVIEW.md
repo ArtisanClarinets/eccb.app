@@ -4,14 +4,14 @@
 
 This repository contains the **complete architectural design and implementation roadmap** for a production-grade Community Band Management Platform that integrates:
 
-1. **Public CMS-driven website** (existing Vite/React content migrated to Next.js)
-2. **Secure internal member portal** (new)
-3. **Comprehensive digital music library** (new - core feature)
-4. **Band operations management** (new - rehearsals, attendance, events)
+1. **Public CMS-driven website**
+2. **Secure internal member portal** 
+3. **Comprehensive digital music library** (core feature)
+4. **Band operations management** (rehearsals, attendance, events)
 
 **Designed for:** 5-10 year operational lifecycle  
 **Target scale:** Dozens to hundreds of members, hundreds to thousands of music files  
-**Technology:** Next.js 16, React 19, PostgreSQL, Better Auth, Local Disk or S3-Compatible (Free Tier)
+**Technology:** Next.js 16, React 19, MariaDB, Better Auth, Local Disk or S3-Compatible (Free Tier)
 
 ---
 

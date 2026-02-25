@@ -2,21 +2,54 @@
 
 ## Project Overview
 
-The Emerald Coast Community Band website is designed to be a cinematic, ultra-dynamic platform. It features GSAP ScrollTrigger animations, Three.js 3D elements, custom GLSL shaders, and CSS Houdini effects. The site is built with React 19, TypeScript, Vite, Tailwind CSS, and Radix UI primitives.
+The Emerald Coast Community Band (ECCB) Management Platform is a production-grade, domain-driven application integrating a public CMS-driven website, secure member portal, digital music library, and band operations management.
+
+**Tech Stack:** Next.js 16 (App Router), React 19, PostgreSQL, Prisma, Better Auth, Redis, BullMQ.
+**Style:** Cinematic coastal elegance (Tailwind CSS + Radix UI + GSAP).
 
 ## Key Features
 
--   **Cinematic & Dynamic Website:** Visually rich and interactive public-facing website for the Emerald Coast Community Band.
--   **Cloud Storage Integration:** Seamless integration with major cloud storage providers (Google Drive, OneDrive, Dropbox) to create a comprehensive, easily accessible digital music library directly on the website.
--   **Non-Technical Content Management:** Implementation of a user-friendly system (e.g., a CMS or custom administrative interface) that empowers non-technical board members to update, modify, and create new events and content on the public website without requiring developer assistance.
+-   **Public Website:** CMS-driven pages with cinematic animations.
+-   **Member Portal:** Secure dashboard for musicians (Music, Schedule, Profile).
+-   **Digital Music Stand:** Interactive PDF viewer with annotations and real-time sync.
+-   **Smart Upload:** AI-powered music library ingestion.
+-   **Operations:** Attendance tracking, event management, and role-based access control.
+
+## Documentation Index (Knowledge Base)
+
+Agents **MUST** consult these files for specific domain knowledge:
+
+### Core Architecture
+- **[PLATFORM_OVERVIEW.md](PLATFORM_OVERVIEW.md)**: High-level summary, features, and goals.
+- **[ARCHITECTURE.md](ARCHITECTURE.md)**: System design, tech stack, and domain boundaries.
+- **[VISUAL_ARCHITECTURE.md](VISUAL_ARCHITECTURE.md)**: System diagrams and data flow.
+- **[DATABASE_SCHEMA.md](DATABASE_SCHEMA.md)**: Complete Prisma schema and data models.
+- **[PERMISSIONS.md](PERMISSIONS.md)**: RBAC system, roles, and permission matrix.
+- **[SECURITY.md](docs/SECURITY.md)**: Security protocols, headers, and audit tools.
+- **[ACCESSIBILITY.md](docs/ACCESSIBILITY.md)**: WCAG 2.1 AA standards and testing.
+
+### Setup & Deployment
+- **[LOCAL_SETUP.md](LOCAL_SETUP.md)**: Development environment setup.
+- **[DATABASE_SETUP_ARCHITECTURE.md](docs/DATABASE_SETUP_ARCHITECTURE.md)**: DB repair and setup wizard architecture.
+- **[README.md](README.md)**: Entry point and quick start.
+- **[CHANGELOG.md](CHANGELOG.md)**: Version history.
+
+### Feature-Specific Documentation
+- **[SMART_UPLOAD.md](docs/SMART_UPLOAD.md)**: AI-powered music PDF metadata extraction.
+- **[stand-developer-guide.md](docs/stand-developer-guide.md)**: Digital Music Stand architecture and API.
+- **[stand-user-guide.md](docs/stand-user-guide.md)**: User manual for the Music Stand.
+- **[stand-annotation-system.md](docs/stand-annotation-system.md)**: Canvas drawing and sync logic.
+- **[stand-pdf-rendering.md](docs/stand-pdf-rendering.md)**: PDF.js integration and optimization.
 
 ## Build Commands
 
 ```bash
 npm run dev          # Start dev server with HMR
 npm run build        # Type-check + production build
-npm run lint         # Run ESLint on entire codebase
-npm run preview      # Preview production build locally
+npm run start        # Start production server
+npm run lint         # Run ESLint
+npm run test         # Run Vitest unit tests
+npm run db:generate  # Generate Prisma client
 ```
 
 ## Code Style Guidelines

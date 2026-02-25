@@ -22,6 +22,11 @@ This project is strictly defined by the following documentation files. **All cod
 | **`Design.md`** | UI/UX | Design system, color palette, typography, GSAP motion choreography, and component layouts. |
 | **`AGENTS.md`** | Standards | Code style guidelines, import conventions, TypeScript usage, testing rules, and git workflow. |
 | **`README.md`** | Entry | Project entry point, quick start, and navigation. |
+| **`docs/SECURITY.md`** | Security | Security protocols, headers, CSRF, rate limiting, and audit tools. |
+| **`docs/ACCESSIBILITY.md`** | A11y | WCAG 2.1 AA standards, testing procedures, and component guidelines. |
+| **`docs/SMART_UPLOAD.md`** | Feature | AI-powered music PDF metadata extraction architecture and flow. |
+| **`docs/stand-*.md`** | Feature | Digital Music Stand architecture, rendering, annotations, and user guide. |
+| **`docs/DATABASE_SETUP_ARCHITECTURE.md`** | DB | Database setup wizard and repair system architecture. |
 
 ---
 
