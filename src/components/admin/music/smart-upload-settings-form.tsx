@@ -10,9 +10,12 @@ import {
   Brain,
   CheckCircle2,
   ChevronDown,
+  Eye,
+  EyeOff,
   ExternalLink,
   Info,
   Loader2,
+  RotateCcw,
   Save,
   Wifi,
 } from 'lucide-react';
@@ -49,69 +52,25 @@ import {
 } from '@/components/ui/collapsible';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
+import { LLM_PROVIDERS, getDefaultEndpointForProvider } from '@/lib/llm/providers';
+import type { LLMProviderValue } from '@/lib/llm/providers';
 
 // =============================================================================
 // Constants
 // =============================================================================
 
-const LLM_PROVIDERS = [
-  {
-    value: 'ollama',
-    label: 'Ollama (Local / Self-hosted)',
-    description: 'OpenAI-compatible local inference server',
-    requiresApiKey: false,
-    defaultEndpoint: 'http://localhost:11434',
-    defaultVisionModel: 'gemma3:27b-cloud',
-    defaultVerificationModel: 'qwen3-vl:235b-instruct-cloud',
-  },
-  {
-    value: 'openai',
-    label: 'OpenAI',
-    description: 'GPT-4o, GPT-4 Vision',
-    requiresApiKey: true,
-    defaultEndpoint: 'https://api.openai.com/v1',
-    defaultVisionModel: 'gpt-4o',
-    defaultVerificationModel: 'gpt-4o-mini',
-  },
-  {
-    value: 'anthropic',
-    label: 'Anthropic',
-    description: 'Claude 3.5 Sonnet, Claude 3 Opus',
-    requiresApiKey: true,
-    defaultEndpoint: 'https://api.anthropic.com',
-    defaultVisionModel: 'claude-3-5-sonnet-20241022',
-    defaultVerificationModel: 'claude-3-haiku-20240307',
-  },
-  {
-    value: 'gemini',
-    label: 'Google Gemini',
-    description: 'Gemini 2.5 Pro, Gemini 3 Flash',
-    requiresApiKey: true,
-    defaultEndpoint: 'https://generativelanguage.googleapis.com/v1beta',
-    defaultVisionModel: 'gemini-3-flash-preview',
-    defaultVerificationModel: 'gemini-3-flash-preview',
-  },
-  {
-    value: 'openrouter',
-    label: 'OpenRouter',
-    description: 'Access 200+ models via OpenAI-compatible API',
-    requiresApiKey: true,
-    defaultEndpoint: 'https://openrouter.ai/api/v1',
-    defaultVisionModel: 'nvidia/nemotron-nano-12b-v2-vl:free',
-    defaultVerificationModel: 'google/gemma-3-27b-it:free',
-  },
-  {
-    value: 'custom',
-    label: 'Custom (OpenAI-compatible)',
-    description: 'vLLM, TGI, LM Studio, KiloCode Gateway, Groq, etc.',
-    requiresApiKey: false,
-    defaultEndpoint: '',
-    defaultVisionModel: '',
-    defaultVerificationModel: '',
-  },
-] as const;
+// LLM_PROVIDERS is imported from @/lib/llm/providers (single source of truth)
 
-type ProviderValue = typeof LLM_PROVIDERS[number]['value'];
+type ProviderValue = LLMProviderValue;
+
+// Secret key configuration with display names
+const SECRET_KEYS = [
+  { key: 'llm_openai_api_key', label: 'OpenAI API Key', placeholder: 'sk-...' },
+  { key: 'llm_anthropic_api_key', label: 'Anthropic API Key', placeholder: 'sk-ant-...' },
+  { key: 'llm_openrouter_api_key', label: 'OpenRouter API Key', placeholder: 'sk-or-...' },
+  { key: 'llm_gemini_api_key', label: 'Gemini API Key', placeholder: 'AIza...' },
+  { key: 'llm_custom_api_key', label: 'Custom API Key', placeholder: 'Bearer token or API key' },
+] as const;
 
 // =============================================================================
 // Schema
@@ -119,20 +78,48 @@ type ProviderValue = typeof LLM_PROVIDERS[number]['value'];
 
 const formSchema = z.object({
   llm_provider: z.enum(['ollama', 'openai', 'anthropic', 'gemini', 'openrouter', 'custom']),
-  llm_ollama_endpoint: z.string().url('Must be a valid URL').or(z.literal('')).optional(),
+  llm_endpoint_url: z.string().url('Must be a valid URL').or(z.literal('')).optional(),
   llm_openai_api_key: z.string().optional(),
   llm_anthropic_api_key: z.string().optional(),
   llm_openrouter_api_key: z.string().optional(),
-  llm_custom_base_url: z.string().url('Must be a valid URL').or(z.literal('')).optional(),
+  llm_gemini_api_key: z.string().optional(),
   llm_custom_api_key: z.string().optional(),
   llm_vision_model: z.string().min(1, 'Vision model is required'),
   llm_verification_model: z.string().min(1, 'Verification model is required'),
-  llm_confidence_threshold: z
+  smart_upload_confidence_threshold: z
+    .string()
+    .transform(v => Number(v))
+    .pipe(z.number().min(0).max(100))
+    .or(z.number().min(0).max(100)),
+  smart_upload_auto_approve_threshold: z
+    .string()
+    .transform(v => Number(v))
+    .pipe(z.number().min(0).max(100))
+    .or(z.number().min(0).max(100)),
+  smart_upload_rate_limit_rpm: z
+    .string()
+    .transform(v => Number(v))
+    .pipe(z.number().min(1).max(1000))
+    .or(z.number().min(1).max(1000)),
+  smart_upload_max_concurrent: z
+    .string()
+    .transform(v => Number(v))
+    .pipe(z.number().min(1).max(50))
+    .or(z.number().min(1).max(50)),
+  smart_upload_max_pages: z
     .string()
     .transform(v => Number(v))
     .pipe(z.number().min(1).max(100))
     .or(z.number().min(1).max(100)),
-  llm_two_pass_enabled: z.boolean(),
+  smart_upload_max_file_size_mb: z
+    .string()
+    .transform(v => Number(v))
+    .pipe(z.number().min(1).max(500))
+    .or(z.number().min(1).max(500)),
+  smart_upload_allowed_mime_types: z.string().optional(),
+  vision_model_params: z.string().optional(),
+  verification_model_params: z.string().optional(),
+  llm_two_pass_enabled: z.boolean().default(true),
   llm_vision_system_prompt: z.string().optional(),
   llm_verification_system_prompt: z.string().optional(),
 });
@@ -151,6 +138,118 @@ interface SmartUploadSettingsFormProps {
 // Component
 // =============================================================================
 
+// Secret input component with show/hide toggle and clear functionality
+function SecretInput({
+  value,
+  onChange,
+  placeholder,
+  label: _label,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  label: string;
+}) {
+  const [show, setShow] = useState(false);
+  const isSet = value === '__SET__';
+  const _isUnset = value === '__UNSET__' || !value;
+
+  if (isSet) {
+    return (
+      <div className="flex items-center gap-2">
+        <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-md border bg-muted/50 text-sm">
+          <CheckCircle2 className="h-4 w-4 text-green-500" />
+          <span>Key is set</span>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onChange('')}
+        >
+          Update
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => onChange('__CLEAR__')}
+          className="text-red-500 hover:text-red-600"
+        >
+          Clear
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <div className="relative flex-1">
+        <Input
+          type={show ? 'text' : 'password'}
+          placeholder={placeholder}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="pr-10"
+        />
+        <button
+          type="button"
+          onClick={() => setShow(!show)}
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+        >
+          {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// JSON editor with validation
+function JsonEditor({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  const [error, setError] = useState<string | null>(null);
+
+  const validateJson = (val: string) => {
+    if (!val || val.trim() === '') {
+      setError(null);
+      return;
+    }
+    try {
+      JSON.parse(val);
+      setError(null);
+    } catch {
+      setError('Invalid JSON');
+    }
+  };
+
+  return (
+    <div>
+      <Textarea
+        value={value}
+        onChange={(e) => {
+          onChange(e.target.value);
+          validateJson(e.target.value);
+        }}
+        placeholder={placeholder || '{\n  "temperature": 0.1,\n  "max_tokens": 4000\n}'}
+        className={cn(
+          'font-mono text-xs min-h-[120px]',
+          error && 'border-red-500 focus-visible:ring-red-500'
+        )}
+      />
+      {error && (
+        <p className="text-xs text-red-500 mt-1">{error}</p>
+      )}
+    </div>
+  );
+}
+
 export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'ok' | 'error'>('idle');
@@ -161,15 +260,23 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
     resolver: zodResolver(formSchema),
     defaultValues: {
       llm_provider: (settings['llm_provider'] as ProviderValue) || 'ollama',
-      llm_ollama_endpoint: settings['llm_ollama_endpoint'] || 'http://localhost:11434',
+      llm_endpoint_url: settings['llm_endpoint_url'] || settings['llm_ollama_endpoint'] || getDefaultEndpointForProvider((settings['llm_provider'] as LLMProviderValue) || 'ollama'),
       llm_openai_api_key: settings['llm_openai_api_key'] || '',
       llm_anthropic_api_key: settings['llm_anthropic_api_key'] || '',
       llm_openrouter_api_key: settings['llm_openrouter_api_key'] || '',
-      llm_custom_base_url: settings['llm_custom_base_url'] || '',
+      llm_gemini_api_key: settings['llm_gemini_api_key'] || '',
       llm_custom_api_key: settings['llm_custom_api_key'] || '',
       llm_vision_model: settings['llm_vision_model'] || 'llama3.2-vision',
       llm_verification_model: settings['llm_verification_model'] || 'qwen2.5:7b',
-      llm_confidence_threshold: Number(settings['llm_confidence_threshold'] ?? 90),
+      smart_upload_confidence_threshold: Number(settings['smart_upload_confidence_threshold'] ?? settings['llm_confidence_threshold'] ?? 70),
+      smart_upload_auto_approve_threshold: Number(settings['smart_upload_auto_approve_threshold'] ?? settings['llm_auto_approve_threshold'] ?? 90),
+      smart_upload_rate_limit_rpm: Number(settings['smart_upload_rate_limit_rpm'] ?? settings['llm_rate_limit_rpm'] ?? 10),
+      smart_upload_max_concurrent: Number(settings['smart_upload_max_concurrent'] ?? 3),
+      smart_upload_max_pages: Number(settings['smart_upload_max_pages'] ?? 20),
+      smart_upload_max_file_size_mb: Number(settings['smart_upload_max_file_size_mb'] ?? 50),
+      smart_upload_allowed_mime_types: settings['smart_upload_allowed_mime_types'] || JSON.stringify(['application/pdf']),
+      vision_model_params: settings['vision_model_params'] || settings['llm_vision_model_params'] || JSON.stringify({ temperature: 0.1, max_tokens: 4000 }),
+      verification_model_params: settings['verification_model_params'] || settings['llm_verification_model_params'] || JSON.stringify({ temperature: 0.1, max_tokens: 4000 }),
       llm_two_pass_enabled: (settings['llm_two_pass_enabled'] ?? 'true') === 'true',
       llm_vision_system_prompt: settings['llm_vision_system_prompt'] || '',
       llm_verification_system_prompt: settings['llm_verification_system_prompt'] || '',
@@ -184,43 +291,52 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
     form.setValue('llm_provider', value);
     const config = LLM_PROVIDERS.find(p => p.value === value);
     if (!config) return;
+    // Auto-populate endpoint for every provider, clear for custom
+    if (value === 'custom') {
+      form.setValue('llm_endpoint_url', '');
+    } else {
+      form.setValue('llm_endpoint_url', config.defaultEndpoint);
+    }
     if (config.defaultVisionModel) {
       form.setValue('llm_vision_model', config.defaultVisionModel);
     }
     if (config.defaultVerificationModel) {
       form.setValue('llm_verification_model', config.defaultVerificationModel);
     }
-    if (value === 'ollama' && config.defaultEndpoint) {
-      form.setValue('llm_ollama_endpoint', config.defaultEndpoint);
-    }
-    if (value === 'custom') {
-      form.setValue('llm_custom_base_url', '');
-    }
   };
 
   const onSubmit = async (values: FormValues) => {
     setIsSaving(true);
     try {
-      const serialised: Record<string, string> = {
-        llm_provider: values.llm_provider,
-        llm_ollama_endpoint: values.llm_ollama_endpoint ?? '',
-        llm_openai_api_key: values.llm_openai_api_key ?? '',
-        llm_anthropic_api_key: values.llm_anthropic_api_key ?? '',
-        llm_openrouter_api_key: values.llm_openrouter_api_key ?? '',
-        llm_custom_base_url: values.llm_custom_base_url ?? '',
-        llm_custom_api_key: values.llm_custom_api_key ?? '',
-        llm_vision_model: values.llm_vision_model,
-        llm_verification_model: values.llm_verification_model,
-        llm_confidence_threshold: String(values.llm_confidence_threshold),
-        llm_two_pass_enabled: values.llm_two_pass_enabled ? 'true' : 'false',
-        llm_vision_system_prompt: values.llm_vision_system_prompt ?? '',
-        llm_verification_system_prompt: values.llm_verification_system_prompt ?? '',
-      };
+      // Build settings array for API
+      const settingsToUpdate = [
+        { key: 'llm_provider', value: values.llm_provider },
+        { key: 'llm_endpoint_url', value: values.llm_endpoint_url ?? '' },
+        { key: 'llm_openai_api_key', value: values.llm_openai_api_key ?? '' },
+        { key: 'llm_anthropic_api_key', value: values.llm_anthropic_api_key ?? '' },
+        { key: 'llm_openrouter_api_key', value: values.llm_openrouter_api_key ?? '' },
+        { key: 'llm_gemini_api_key', value: values.llm_gemini_api_key ?? '' },
+        { key: 'llm_custom_api_key', value: values.llm_custom_api_key ?? '' },
+        { key: 'llm_vision_model', value: values.llm_vision_model },
+        { key: 'llm_verification_model', value: values.llm_verification_model },
+        { key: 'smart_upload_confidence_threshold', value: String(values.smart_upload_confidence_threshold) },
+        { key: 'smart_upload_auto_approve_threshold', value: String(values.smart_upload_auto_approve_threshold) },
+        { key: 'smart_upload_rate_limit_rpm', value: String(values.smart_upload_rate_limit_rpm) },
+        { key: 'smart_upload_max_concurrent', value: String(values.smart_upload_max_concurrent) },
+        { key: 'smart_upload_max_pages', value: String(values.smart_upload_max_pages) },
+        { key: 'smart_upload_max_file_size_mb', value: String(values.smart_upload_max_file_size_mb) },
+        { key: 'smart_upload_allowed_mime_types', value: values.smart_upload_allowed_mime_types || JSON.stringify(['application/pdf']) },
+        { key: 'vision_model_params', value: values.vision_model_params || JSON.stringify({ temperature: 0.1, max_tokens: 4000 }) },
+        { key: 'verification_model_params', value: values.verification_model_params || JSON.stringify({ temperature: 0.1, max_tokens: 4000 }) },
+        { key: 'llm_two_pass_enabled', value: values.llm_two_pass_enabled ? 'true' : 'false' },
+        { key: 'llm_vision_system_prompt', value: values.llm_vision_system_prompt ?? '' },
+        { key: 'llm_verification_system_prompt', value: values.llm_verification_system_prompt ?? '' },
+      ];
 
       const res = await fetch('/api/admin/uploads/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(serialised),
+        body: JSON.stringify({ settings: settingsToUpdate }),
       });
 
       if (!res.ok) {
@@ -237,6 +353,25 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
     }
   };
 
+  const restoreDefaults = () => {
+    const ollamaDefaults = LLM_PROVIDERS.find(p => p.value === 'ollama')!;
+    form.setValue('llm_provider', 'ollama');
+    form.setValue('llm_endpoint_url', ollamaDefaults.defaultEndpoint);
+    form.setValue('llm_vision_model', ollamaDefaults.defaultVisionModel);
+    form.setValue('llm_verification_model', ollamaDefaults.defaultVerificationModel);
+    form.setValue('smart_upload_confidence_threshold', 70);
+    form.setValue('smart_upload_auto_approve_threshold', 90);
+    form.setValue('smart_upload_rate_limit_rpm', 10);
+    form.setValue('smart_upload_max_concurrent', 3);
+    form.setValue('smart_upload_max_pages', 20);
+    form.setValue('smart_upload_max_file_size_mb', 50);
+    form.setValue('smart_upload_allowed_mime_types', JSON.stringify(['application/pdf']));
+    form.setValue('vision_model_params', JSON.stringify({ temperature: 0.1, max_tokens: 4000 }));
+    form.setValue('verification_model_params', JSON.stringify({ temperature: 0.1, max_tokens: 4000 }));
+
+    toast.info('Defaults restored. Click Save to apply.');
+  };
+
   const testConnection = async () => {
     setTestStatus('testing');
     setTestMessage('');
@@ -247,11 +382,12 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           provider: values.llm_provider,
-          endpoint: values.llm_ollama_endpoint || values.llm_custom_base_url || '',
+          endpoint: values.llm_endpoint_url || '',
           apiKey:
             values.llm_openai_api_key ||
             values.llm_anthropic_api_key ||
             values.llm_openrouter_api_key ||
+            values.llm_gemini_api_key ||
             values.llm_custom_api_key ||
             '',
           model: values.llm_vision_model,
@@ -320,164 +456,84 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
               )}
             />
 
-            {/* Ollama endpoint */}
-            {provider === 'ollama' && (
-              <FormField
-                control={form.control}
-                name="llm_ollama_endpoint"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Ollama Endpoint</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="http://localhost:11434"
-                        {...field}
-                        value={field.value ?? ''}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      Base URL of your Ollama server (no trailing slash).
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
+            {/* Endpoint URL */}
+            <FormField
+              control={form.control}
+              name="llm_endpoint_url"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Endpoint URL</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder={provider === 'ollama' ? 'http://localhost:11434' : 'https://api.example.com/v1'}
+                      {...field}
+                      value={field.value ?? ''}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    {provider === 'ollama' 
+                      ? 'Base URL of your Ollama server (no trailing slash).'
+                      : 'Base URL for the API endpoint (OpenAI-compatible).'}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-            {/* OpenAI API key */}
-            {provider === 'openai' && (
-              <FormField
-                control={form.control}
-                name="llm_openai_api_key"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>OpenAI API Key</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="password"
-                        placeholder="sk-…"
-                        {...field}
-                        value={field.value ?? ''}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      Your OpenAI secret key.{' '}
-                      <a
-                        href="https://platform.openai.com/api-keys"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary inline-flex items-center gap-0.5 underline-offset-2 hover:underline"
-                      >
-                        Get one here <ExternalLink className="h-3 w-3" />
-                      </a>
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
-
-            {/* Anthropic API key */}
-            {provider === 'anthropic' && (
-              <FormField
-                control={form.control}
-                name="llm_anthropic_api_key"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Anthropic API Key</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="password"
-                        placeholder="sk-ant-…"
-                        {...field}
-                        value={field.value ?? ''}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      Your Anthropic secret key.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
-
-            {/* OpenRouter API key */}
-            {provider === 'openrouter' && (
-              <FormField
-                control={form.control}
-                name="llm_openrouter_api_key"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>OpenRouter API Key</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="password"
-                        placeholder="sk-or-…"
-                        {...field}
-                        value={field.value ?? ''}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      Your OpenRouter API key.{' '}
-                      <a
-                        href="https://openrouter.ai/keys"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary inline-flex items-center gap-0.5 underline-offset-2 hover:underline"
-                      >
-                        Get one here <ExternalLink className="h-3 w-3" />
-                      </a>
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
-
-            {/* Custom base URL + key */}
-            {provider === 'custom' && (
-              <>
+            {/* API Keys Section */}
+            <div className="space-y-4 pt-4 border-t">
+              <h4 className="text-sm font-medium">API Keys</h4>
+              
+              {SECRET_KEYS.map(({ key, label, placeholder }) => (
                 <FormField
+                  key={key}
                   control={form.control}
-                  name="llm_custom_base_url"
+                  name={key as keyof FormValues}
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Base URL</FormLabel>
+                      <FormLabel>{label}</FormLabel>
                       <FormControl>
-                        <Input
-                          placeholder="https://your-gateway.example.com/v1"
-                          {...field}
-                          value={field.value ?? ''}
+                        <SecretInput
+                          value={String(field.value || '')}
+                          onChange={field.onChange}
+                          placeholder={placeholder}
+                          label={label}
                         />
                       </FormControl>
                       <FormDescription>
-                        OpenAI-compatible base URL (e.g. vLLM, TGI, Groq, Fireworks, LM Studio).
+                        {key === 'llm_openai_api_key' && (
+                          <>
+                            Your OpenAI secret key.{' '}
+                            <a
+                              href="https://platform.openai.com/api-keys"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary inline-flex items-center gap-0.5 underline-offset-2 hover:underline"
+                            >
+                              Get one here <ExternalLink className="h-3 w-3" />
+                            </a>
+                          </>
+                        )}
+                        {key === 'llm_openrouter_api_key' && (
+                          <>
+                            Your OpenRouter API key.{' '}
+                            <a
+                              href="https://openrouter.ai/keys"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary inline-flex items-center gap-0.5 underline-offset-2 hover:underline"
+                            >
+                              Get one here <ExternalLink className="h-3 w-3" />
+                            </a>
+                          </>
+                        )}
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={form.control}
-                  name="llm_custom_api_key"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>API Key (optional)</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="password"
-                          placeholder="Bearer token or API key"
-                          {...field}
-                          value={field.value ?? ''}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </>
-            )}
+              ))}
+            </div>
           </CardContent>
         </Card>
 
@@ -531,14 +587,125 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
                 )}
               />
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Thresholds & Limits */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Thresholds & Limits</CardTitle>
+            <CardDescription>
+              Configure confidence thresholds and processing limits.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="smart_upload_confidence_threshold"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Confidence Threshold (%)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        {...field}
+                        value={field.value}
+                        onChange={e => field.onChange(Number(e.target.value))}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Minimum confidence to accept without verification (0-100).
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="smart_upload_auto_approve_threshold"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Auto-Approve Threshold (%)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        {...field}
+                        value={field.value}
+                        onChange={e => field.onChange(Number(e.target.value))}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Confidence required for automatic approval (0-100).
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
 
             <div className="grid gap-4 md:grid-cols-2">
               <FormField
                 control={form.control}
-                name="llm_confidence_threshold"
+                name="smart_upload_rate_limit_rpm"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Confidence Threshold (%)</FormLabel>
+                    <FormLabel>Rate Limit (RPM)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={1000}
+                        {...field}
+                        value={field.value}
+                        onChange={e => field.onChange(Number(e.target.value))}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Maximum LLM requests per minute.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="smart_upload_max_concurrent"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Max Concurrent Jobs</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={50}
+                        {...field}
+                        value={field.value}
+                        onChange={e => field.onChange(Number(e.target.value))}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Maximum simultaneous upload processing jobs.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="smart_upload_max_pages"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Max Pages for Analysis</FormLabel>
                     <FormControl>
                       <Input
                         type="number"
@@ -550,8 +717,7 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
                       />
                     </FormControl>
                     <FormDescription>
-                      Trigger 2nd-pass verification when confidence is below this value (1–100).
-                      Default: 90.
+                      Maximum PDF pages to analyze with LLM.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -560,38 +726,62 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
 
               <FormField
                 control={form.control}
-                name="llm_two_pass_enabled"
+                name="smart_upload_max_file_size_mb"
                 render={({ field }) => (
-                  <FormItem className="flex flex-row items-start space-x-3 space-y-0 pt-6">
+                  <FormItem>
+                    <FormLabel>Max File Size (MB)</FormLabel>
                     <FormControl>
-                      <Switch
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
+                      <Input
+                        type="number"
+                        min={1}
+                        max={500}
+                        {...field}
+                        value={field.value}
+                        onChange={e => field.onChange(Number(e.target.value))}
                       />
                     </FormControl>
-                    <div className="space-y-1 leading-none">
-                      <FormLabel>Enable Two-Pass Verification</FormLabel>
-                      <FormDescription>
-                        Run a second LLM pass when confidence is below threshold.
-                      </FormDescription>
-                    </div>
+                    <FormDescription>
+                      Maximum file size for uploaded PDFs.
+                    </FormDescription>
+                    <FormMessage />
                   </FormItem>
                 )}
               />
             </div>
+
+            <FormField
+              control={form.control}
+              name="llm_two_pass_enabled"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-start space-x-3 space-y-0 pt-2">
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                  <div className="space-y-1 leading-none">
+                    <FormLabel>Enable Two-Pass Verification</FormLabel>
+                    <FormDescription>
+                      Run a second LLM pass when confidence is below threshold.
+                    </FormDescription>
+                  </div>
+                </FormItem>
+              )}
+            />
           </CardContent>
         </Card>
 
-        {/* Advanced: System Prompts */}
+        {/* Advanced: JSON Parameters & System Prompts */}
         <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
           <Card>
             <CollapsibleTrigger asChild>
               <CardHeader className="cursor-pointer select-none">
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="text-base">Advanced: Custom System Prompts</CardTitle>
+                    <CardTitle className="text-base">Advanced Settings</CardTitle>
                     <CardDescription>
-                      Override the default prompts sent to the LLM. Leave blank to use defaults.
+                      Model parameters and custom system prompts.
                     </CardDescription>
                   </div>
                   <ChevronDown
@@ -608,10 +798,74 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
                 <div className="rounded-md border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800 flex gap-2">
                   <Info className="h-4 w-4 mt-0.5 flex-shrink-0" />
                   <p>
-                    Custom prompts must instruct the LLM to return valid JSON. Avoid including any
-                    content from uploaded PDFs in static prompt text (prompt injection risk).
+                    These settings are for advanced users. Incorrect values may cause processing failures.
                   </p>
                 </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <FormField
+                    control={form.control}
+                    name="vision_model_params"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Vision Model Parameters (JSON)</FormLabel>
+                        <FormControl>
+                          <JsonEditor
+                            value={field.value || ''}
+                            onChange={field.onChange}
+                            placeholder='{\n  "temperature": 0.1,\n  "max_tokens": 4000\n}'
+                          />
+                        </FormControl>
+                        <FormDescription className="text-xs">
+                          Provider-specific parameters for the vision model.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="verification_model_params"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Verification Model Parameters (JSON)</FormLabel>
+                        <FormControl>
+                          <JsonEditor
+                            value={field.value || ''}
+                            onChange={field.onChange}
+                            placeholder='{\n  "temperature": 0.1,\n  "max_tokens": 4000\n}'
+                          />
+                        </FormControl>
+                        <FormDescription className="text-xs">
+                          Provider-specific parameters for the verification model.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name="smart_upload_allowed_mime_types"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Allowed MIME Types (JSON Array)</FormLabel>
+                      <FormControl>
+                        <JsonEditor
+                          value={field.value || ''}
+                          onChange={field.onChange}
+                          placeholder='[\n  "application/pdf"\n]'
+                        />
+                      </FormControl>
+                      <FormDescription className="text-xs">
+                        JSON array of allowed MIME types for upload.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
                 <FormField
                   control={form.control}
@@ -622,12 +876,15 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
                       <FormControl>
                         <Textarea
                           rows={8}
-                          placeholder="Leave blank to use the built-in prompt…"
+                          placeholder="Leave blank to use the built-in prompt..."
                           className="font-mono text-xs"
                           {...field}
                           value={field.value ?? ''}
                         />
                       </FormControl>
+                      <FormDescription className="text-xs">
+                        Custom system prompt for the vision model. Must instruct the LLM to return valid JSON.
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -642,12 +899,15 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
                       <FormControl>
                         <Textarea
                           rows={6}
-                          placeholder="Leave blank to use the built-in prompt…"
+                          placeholder="Leave blank to use the built-in prompt..."
                           className="font-mono text-xs"
                           {...field}
                           value={field.value ?? ''}
                         />
                       </FormControl>
+                      <FormDescription className="text-xs">
+                        Custom system prompt for the verification model.
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -677,7 +937,7 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
               ) : (
                 <Wifi className="mr-2 h-4 w-4" />
               )}
-              {testStatus === 'testing' ? 'Testing…' : 'Test Connection'}
+              {testStatus === 'testing' ? 'Testing...' : 'Test Connection'}
             </Button>
 
             {testStatus === 'ok' && (
@@ -695,30 +955,22 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
           </CardContent>
         </Card>
 
-        {/* Environment variable hint */}
-        <div className="rounded-md border p-4 text-sm text-muted-foreground space-y-1">
-          <p className="flex items-center gap-2 font-medium text-foreground">
-            <Info className="h-4 w-4" />
-            Environment Variable Overrides
-          </p>
-          <p>
-            Settings saved here are stored in the database. The following environment variables
-            take precedence when set:
-          </p>
-          <ul className="mt-1 space-y-0.5 font-mono text-xs list-disc list-inside">
-            <li>LLM_OLLAMA_ENDPOINT</li>
-            <li>LLM_VISION_MODEL</li>
-            <li>LLM_VERIFICATION_MODEL</li>
-          </ul>
-        </div>
+        {/* Action Buttons */}
+        <div className="flex justify-between pt-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={restoreDefaults}
+          >
+            <RotateCcw className="mr-2 h-4 w-4" />
+            Restore Defaults
+          </Button>
 
-        {/* Save */}
-        <div className="flex justify-end gap-3 pt-2">
           <Button type="submit" disabled={isSaving}>
             {isSaving ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Saving…
+                Saving...
               </>
             ) : (
               <>

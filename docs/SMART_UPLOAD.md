@@ -256,28 +256,72 @@ Rejects an upload.
 
 ## Configuration
 
+### Supported LLM Providers
+
+Smart Upload supports six LLM providers. The active provider and its models are configured in **Admin → Uploads → LLM Settings**. When you select a provider in the settings form, the default endpoint URL is auto-populated.
+
+| Provider | Default Endpoint | Free Tier | Vision |
+|----------|-----------------|-----------|--------|
+| **Ollama** (default) | `http://localhost:11434` | ✅ Local | ✅ |
+| **OpenAI** | `https://api.openai.com/v1` | ❌ | ✅ GPT-4o |
+| **Anthropic** | `https://api.anthropic.com` | ❌ | ✅ Claude 3.5 |
+| **Google Gemini** | `https://generativelanguage.googleapis.com/v1beta` | ✅ Flash | ✅ |
+| **OpenRouter** | `https://openrouter.ai/api/v1` | ✅ Some models | ✅ |
+| **Custom** | _(enter manually)_ | — | ✅ (OpenAI-compat) |
+
 ### Environment Variables
 
-Add these variables to your `.env` file:
+These vars provide fallback defaults; the database (via Admin settings) takes precedence.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `LLM_OLLAMA_ENDPOINT` | `http://localhost:11434` | Ollama API endpoint |
+| `LLM_PROVIDER` | `ollama` | Active provider (`ollama`, `openai`, `anthropic`, `gemini`, `openrouter`, `custom`) |
+| `LLM_ENDPOINT_URL` | _(provider default)_ | Override the provider's default endpoint URL |
+| `LLM_OLLAMA_ENDPOINT` | `http://localhost:11434` | _(deprecated)_ Use `LLM_ENDPOINT_URL` |
+| `LLM_OPENAI_API_KEY` | `` | OpenAI API key |
+| `LLM_ANTHROPIC_API_KEY` | `` | Anthropic API key |
+| `LLM_OPENROUTER_API_KEY` | `` | OpenRouter API key |
+| `LLM_GEMINI_API_KEY` | `` | Google Gemini API key |
+| `LLM_CUSTOM_API_KEY` | `` | Custom provider API key/bearer token |
+| `LLM_CUSTOM_BASE_URL` | `` | Custom OpenAI-compatible base URL |
 | `LLM_VISION_MODEL` | `llama3.2-vision` | Vision model for first-pass extraction |
 | `LLM_VERIFICATION_MODEL` | `qwen2.5:7b` | Verification model for second-pass |
 
-### Example Configuration
+### Example Configurations
 
+**Ollama (local, free)**
 ```bash
-# LLM Configuration (Smart Upload)
-LLM_OLLAMA_ENDPOINT="http://localhost:11434"
+LLM_PROVIDER="ollama"
+LLM_ENDPOINT_URL="http://localhost:11434"
 LLM_VISION_MODEL="llama3.2-vision"
 LLM_VERIFICATION_MODEL="qwen2.5:7b"
 ```
 
-### Ollama Setup
+**OpenAI**
+```bash
+LLM_PROVIDER="openai"
+LLM_OPENAI_API_KEY="sk-..."
+LLM_VISION_MODEL="gpt-4o"
+LLM_VERIFICATION_MODEL="gpt-4o-mini"
+```
 
-Smart Upload requires [Ollama](https://github.com/ollama/ollama) to be running locally or on a remote server:
+**Google Gemini (free tier available)**
+```bash
+LLM_PROVIDER="gemini"
+LLM_GEMINI_API_KEY="AIza..."
+LLM_VISION_MODEL="gemini-2.0-flash-exp"
+LLM_VERIFICATION_MODEL="gemini-2.0-flash-exp"
+```
+
+**Anthropic**
+```bash
+LLM_PROVIDER="anthropic"
+LLM_ANTHROPIC_API_KEY="sk-ant-..."
+LLM_VISION_MODEL="claude-3-5-sonnet-20241022"
+LLM_VERIFICATION_MODEL="claude-3-haiku-20240307"
+```
+
+**Ollama Setup**
 
 ```bash
 # Install Ollama
@@ -291,6 +335,10 @@ ollama pull qwen2.5:7b
 ollama serve
 ```
 
+### Settings Form Auto-Population
+
+When changing the LLM provider in **Admin → Uploads → LLM Settings**, the endpoint URL and default model names are **automatically filled** based on the canonical provider defaults in `src/lib/llm/providers.ts`. You can override these after selection.
+
 ---
 
 ## Security
@@ -303,6 +351,7 @@ Smart Upload inherits all security measures from the existing platform:
 - Upload requires `MUSIC_UPLOAD` permission
 - Review/Approve requires `music:create` permission
 - Reject requires `music:edit` permission
+- SSE progress endpoint requires authenticated session
 
 ### CSRF Protection
 
@@ -311,6 +360,12 @@ All mutating endpoints (POST, PUT, DELETE) validate CSRF tokens via [`src/lib/cs
 ### Rate Limiting
 
 Smart upload is rate-limited to 10 requests per minute via [`src/lib/rate-limit.ts`](src/lib/rate-limit.ts).
+
+### API Key Security
+
+- Each provider uses its own dedicated API key stored in `systemSetting` DB rows
+- Keys are **never** shared across providers (e.g., an OpenAI key is never sent to OpenRouter)
+- The canonical key mapping lives in `src/lib/llm/config-loader.ts`
 
 ### File Validation
 
@@ -325,6 +380,7 @@ All upload events are logged with user context for audit purposes:
 - Upload attempts (success/failure)
 - Approval/rejection actions
 - LLM processing errors
+- Token usage per LLM call
 
 ---
 
@@ -334,29 +390,29 @@ The system uses two LLMs in sequence:
 
 ### Vision Model (First Pass)
 
-| Model | Purpose | Strengths |
-|-------|---------|-----------|
-| `llama3.2-vision` | Initial metadata extraction | Vision-capable, understands sheet music layout |
-
-The vision model receives the first page of the PDF as an image and extracts:
+Receives up to 8 intelligently-sampled pages of the PDF (always includes first 2 and last page) and extracts:
 - Title (from header/footer)
 - Composer name
 - Publisher information
 - Instrumentation
 - Part numbers
 - Score type classification
+- Proposed cutting instructions with page ranges
 
 ### Verification Model (Second Pass)
 
-| Model | Purpose | Strengths |
-|-------|---------|-----------|
-| `qwen2.5:7b` | Metadata verification | Fast, accurate, good at JSON output |
-
-The verification model reviews the first-pass extraction and:
+Reviews the first-pass extraction against the actual PDF pages and:
 - Checks for typos in title/composer
 - Validates file type classification
 - Ensures instrument identification is correct
-- Identifies any missing parts
+- Assigns a verification confidence score
+- Identifies any corrections needed
+
+### Gap Detection
+
+After the vision model returns cutting instructions, the processor checks for **uncovered page ranges**. Any pages not assigned to a part are surfaced as `Unlabelled Pages X–Y` entries (part numbers 9900+). These appear as **yellow warning banners** in the review dialog so an admin can investigate.
+
+
 
 ### Why Two Models?
 

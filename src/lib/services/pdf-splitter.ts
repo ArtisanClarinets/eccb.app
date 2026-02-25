@@ -214,10 +214,17 @@ function sanitizeFileName(fileName: string): string {
  * @param instructions - Array of CuttingInstruction objects
  * @returns Array of split parts with instructions, buffers, page counts, and filenames
  */
+export interface SplitPdfOptions {
+  pdfBuffer: Buffer;
+  instructions: CuttingInstruction[];
+  generateFilename?: (partName: string, pageStart: number, pageEnd: number, index: number) => string;
+}
+
 export async function splitPdfByCuttingInstructions(
   pdfBuffer: Buffer,
   originalBaseName: string,
-  instructions: CuttingInstruction[]
+  instructions: CuttingInstruction[],
+  generateFilename?: (partName: string, pageStart: number, pageEnd: number, index: number) => string
 ): Promise<Array<{
   instruction: CuttingInstruction;
   buffer: Buffer;
@@ -296,9 +303,9 @@ export async function splitPdfByCuttingInstructions(
         const buffer = Buffer.from(pdfBytes);
 
         // Generate filename
-        const fileName = sanitizeFileName(
-          `${sanitizedBaseName} - ${instruction.partName}.pdf`
-        );
+        const fileName = generateFilename
+          ? generateFilename(instruction.partName, clampedStart, clampedEnd, results.length)
+          : sanitizeFileName(`${sanitizedBaseName} - ${instruction.partName}.pdf`);
 
         results.push({
           instruction,

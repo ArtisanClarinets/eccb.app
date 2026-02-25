@@ -1,0 +1,366 @@
+{
+  "session_id": "ses_6fhs9nn5",
+  "browser_session_id": "ses_shdbhw3k",
+  "request": "Implement the complete Smart Upload pipeline fix for eccb.app - addressing PDF rendering failures, LLM authentication 401s, second-pass 403s, JSON handling bugs, and making all settings database-driven with background job support",
+  "created_at": 1772001521143,
+  "updated_at": 1772001700670,
+  "branches": {
+    "pdf-rendering": {
+      "id": "pdf-rendering",
+      "scope": "PDF Rendering & Core Services - Fix the workerSrc bug, improve error handling, and ensure preview routes work correctly",
+      "status": "done",
+      "questions": [
+        {
+          "id": "q_evk0lpyk",
+          "type": "pick_one",
+          "text": "PDF Rendering Fix Strategy",
+          "config": {
+            "question": "PDF Rendering Fix Strategy",
+            "context": "Fix the 'No GlobalWorkerOptions.workerSrc specified' error in pdfjs-dist v5. The fix requires removing workerSrc='' and using disableWorker: true in getDocument calls.",
+            "options": [
+              {
+                "id": "direct_fix",
+                "label": "Apply direct fix to pdf-renderer.ts and pdf-part-detector.ts",
+                "description": "Remove GlobalWorkerOptions.workerSrc = '' and add disableWorker: true to getDocument calls"
+              },
+              {
+                "id": "comprehensive",
+                "label": "Comprehensive fix with error logging and validation",
+                "description": "Apply the fix plus add comprehensive error logging, stack traces, and validation to help debug future PDF issues"
+              }
+            ]
+          },
+          "answer": {
+            "selected": "comprehensive"
+          },
+          "answeredAt": 1772001610646
+        }
+      ],
+      "finding": "Use a comprehensive PDF rendering fix: address the workerSrc bug, strengthen error handling, and ensure preview routes render reliably across the pipeline."
+    },
+    "llm-auth": {
+      "id": "llm-auth",
+      "scope": "LLM Authentication & Provider Adapters - Fix 401 errors, implement provider-specific formatting, create adapter pattern",
+      "status": "done",
+      "questions": [
+        {
+          "id": "q_mfm4umlt",
+          "type": "pick_one",
+          "text": "LLM Authentication Architecture",
+          "config": {
+            "question": "LLM Authentication Architecture",
+            "context": "Need to fix: 1) Auth header selection bug (choosing wrong key), 2) Missing env fallback, 3) Provider-specific request formatting (OpenAI vs Anthropic vs Gemini)",
+            "options": [
+              {
+                "id": "minimal_fix",
+                "label": "Minimal fix - just fix the immediate 401 bugs",
+                "description": "Fix header selection logic and add env fallback only"
+              },
+              {
+                "id": "full_adapter",
+                "label": "Full adapter pattern with provider modules",
+                "description": "Create src/lib/llm/types.ts and provider modules (openai.ts, anthropic.ts, gemini.ts) with standardized interfaces"
+              }
+            ]
+          },
+          "answer": {
+            "selected": "full_adapter"
+          },
+          "answeredAt": 1772001610665
+        },
+        {
+          "id": "q_0algm69o",
+          "type": "pick_many",
+          "text": "Which LLM providers should the adapter support for auth + request formatting in this fix?",
+          "config": {
+            "question": "Which LLM providers should the adapter support for auth + request formatting in this fix?",
+            "options": [
+              {
+                "id": "openai",
+                "label": "OpenAI",
+                "description": "Use OpenAI API key auth + responses API formatting"
+              },
+              {
+                "id": "anthropic",
+                "label": "Anthropic",
+                "description": "Use Anthropic API key auth + messages API formatting"
+              },
+              {
+                "id": "openrouter",
+                "label": "OpenRouter",
+                "description": "Use OpenRouter API key + provider routing headers"
+              },
+              {
+                "id": "azure-openai",
+                "label": "Azure OpenAI",
+                "description": "Use Azure key + endpoint + deployment id"
+              },
+              {
+                "id": "google",
+                "label": "Google",
+                "description": "Use Google AI Studio / Gemini API auth + formatting"
+              }
+            ],
+            "recommended": [
+              "openai",
+              "anthropic"
+            ],
+            "context": "[LLM Authentication & Provider Adapters - Fix 401 errors, implement provider-specific formatting, create adapter pattern] I’ll build adapters for the selected providers and wire auth/headers and payload shape accordingly."
+          },
+          "answer": {
+            "selected": [
+              "openai",
+              "anthropic",
+              "openrouter",
+              "google"
+            ]
+          },
+          "answeredAt": 1772001694947
+        }
+      ],
+      "finding": "Implement a full adapter-based LLM authentication and request-formatting layer supporting OpenAI, Anthropic, OpenRouter, and Google providers to resolve 401s with provider-specific auth/format handling."
+    },
+    "second-pass": {
+      "id": "second-pass",
+      "scope": "Second-Pass Workflow & API Routes - Fix 403 errors, JSON parsing bugs, and split logic gaps",
+      "status": "done",
+      "questions": [
+        {
+          "id": "q_dsmgnqiz",
+          "type": "pick_one",
+          "text": "Second-Pass Implementation Strategy",
+          "config": {
+            "question": "Second-Pass Implementation Strategy",
+            "context": "Need to fix: 1) 403 from missing cookies/CSRF in server-to-server fetch, 2) JSON.parse on already-parsed Json columns, 3) Split logic never running for low-confidence uploads with no_parse_second_pass",
+            "options": [
+              {
+                "id": "header_forward",
+                "label": "Header forwarding fix (short-term)",
+                "description": "Forward cookie, origin, referer headers in the fetch call"
+              },
+              {
+                "id": "queue_based",
+                "label": "Queue-based background job (recommended)",
+                "description": "Implement BullMQ job for second-pass, remove HTTP call entirely"
+              }
+            ]
+          },
+          "answer": {
+            "selected": "queue_based"
+          },
+          "answeredAt": 1772001610671
+        },
+        {
+          "id": "q_1x496emp",
+          "type": "pick_one",
+          "text": "Second-pass 403 handling: what should be the required auth context for the second-pass route/worker?",
+          "config": {
+            "question": "Second-pass 403 handling: what should be the required auth context for the second-pass route/worker?",
+            "options": [
+              {
+                "id": "service_token",
+                "label": "Service token (Recommended)",
+                "description": "Worker/job uses a server-side token; no user session required."
+              },
+              {
+                "id": "user_session",
+                "label": "User session",
+                "description": "Only authenticated users can trigger second pass."
+              },
+              {
+                "id": "either",
+                "label": "Either",
+                "description": "Accept user session or service token."
+              }
+            ],
+            "context": "[Second-Pass Workflow & API Routes - Fix 403 errors, JSON parsing bugs, and split logic gaps] Clarifies how to eliminate 403s and enforce correct access control for second-pass processing."
+          },
+          "answer": {
+            "selected": "service_token"
+          },
+          "answeredAt": 1772001677364
+        }
+      ],
+      "finding": "Second-pass should be queue-based and require a service token for auth on the second-pass route/worker, addressing 403s and aligning workflow execution with background processing."
+    },
+    "db-settings": {
+      "id": "db-settings",
+      "scope": "Database Schema & Settings UI - Make all configuration database-driven with secure secret handling",
+      "status": "done",
+      "questions": [
+        {
+          "id": "q_zaeugxvq",
+          "type": "pick_one",
+          "text": "Settings Architecture",
+          "config": {
+            "question": "Settings Architecture",
+            "context": "All constants must be database-driven. Need secure secret handling (masking in UI), env fallback support, comprehensive settings form",
+            "options": [
+              {
+                "id": "basic_db",
+                "label": "Basic database settings only",
+                "description": "Store settings in DB but keep some hardcoded defaults"
+              },
+              {
+                "id": "complete_db",
+                "label": "100% database-driven with validation",
+                "description": "Every configurable value in DB, comprehensive validation, secure secret masking, env fallback chain"
+              }
+            ]
+          },
+          "answer": {
+            "selected": "complete_db"
+          },
+          "answeredAt": 1772001610672
+        }
+      ],
+      "finding": "User wants a complete database-driven settings architecture for Smart Upload, with all configuration stored in DB and secure secret handling instead of file/env-based settings."
+    },
+    "queue-system": {
+      "id": "queue-system",
+      "scope": "Background Jobs & BullMQ Integration - Move pipeline to durable job queue",
+      "status": "done",
+      "questions": [
+        {
+          "id": "q_sgvt7bjo",
+          "type": "pick_one",
+          "text": "Queue Implementation Scope",
+          "config": {
+            "question": "Queue Implementation Scope",
+            "context": "Current void fetch() is fragile. Need durable job queue for: render -> vision -> split -> verify pipeline",
+            "options": [
+              {
+                "id": "second_pass_only",
+                "label": "Queue for second-pass only",
+                "description": "Only move second-pass to queue, keep rest inline"
+              },
+              {
+                "id": "full_pipeline",
+                "label": "Full pipeline queue",
+                "description": "Move entire smart upload pipeline to BullMQ jobs with progress reporting"
+              }
+            ]
+          },
+          "answer": {
+            "selected": "full_pipeline"
+          },
+          "answeredAt": 1772001610684
+        },
+        {
+          "id": "q_6kpbro4l",
+          "type": "pick_one",
+          "text": "For the full pipeline queue, how should jobs be structured?",
+          "config": {
+            "question": "For the full pipeline queue, how should jobs be structured?",
+            "options": [
+              {
+                "id": "chained_jobs",
+                "label": "Chained jobs",
+                "description": "Separate jobs for each stage (ingest, parse, LLM) with dependencies"
+              },
+              {
+                "id": "single_job",
+                "label": "Single job",
+                "description": "One job runs the entire pipeline sequentially in a worker"
+              },
+              {
+                "id": "hybrid",
+                "label": "Hybrid",
+                "description": "Single job for core stages, separate jobs for retries/second-pass"
+              }
+            ],
+            "recommended": "chained_jobs",
+            "context": "[Background Jobs & BullMQ Integration - Move pipeline to durable job queue] This determines how BullMQ queues and retries are organized."
+          },
+          "answer": {
+            "selected": "chained_jobs"
+          },
+          "answeredAt": 1772001682945
+        }
+      ],
+      "finding": "Queue system should cover the full Smart Upload pipeline using BullMQ with chained jobs to model each stage as a dependent step in the workflow."
+    },
+    "testing": {
+      "id": "testing",
+      "scope": "Testing & Validation - Comprehensive test coverage for all fixes",
+      "status": "done",
+      "questions": [
+        {
+          "id": "q_sjqucz4t",
+          "type": "pick_many",
+          "text": "Test Coverage Requirements",
+          "config": {
+            "question": "Test Coverage Requirements",
+            "context": "Need tests for: PDF rendering, LLM auth, second-pass workflow, settings API, provider adapters, cutting instructions validation",
+            "options": [
+              {
+                "id": "unit_tests",
+                "label": "Unit tests for services",
+                "description": "Test pdf-renderer, pdf-splitter, cutting-instructions, provider adapters"
+              },
+              {
+                "id": "integration_tests",
+                "label": "Integration tests for API routes",
+                "description": "Test smart-upload route, second-pass route, settings routes with mocked DB"
+              },
+              {
+                "id": "e2e_tests",
+                "label": "E2E tests for full workflow",
+                "description": "End-to-end tests covering upload -> parse -> review -> approve flow"
+              }
+            ]
+          },
+          "answer": {
+            "selected": [
+              "e2e_tests"
+            ]
+          },
+          "answeredAt": 1772001610691
+        }
+      ],
+      "finding": "User wants E2E test coverage for the Smart Upload pipeline fixes; no other test types were requested for this branch."
+    },
+    "types-validation": {
+      "id": "types-validation",
+      "scope": "Type Definitions & Validation Services - Cutting instructions validation and type safety",
+      "status": "done",
+      "questions": [
+        {
+          "id": "q_j76lefc8",
+          "type": "pick_one",
+          "text": "Cutting Instructions Architecture",
+          "config": {
+            "question": "Cutting Instructions Architecture",
+            "context": "Need to handle: 0-indexed vs 1-indexed pages, filename collisions, overlapping ranges, gaps in coverage",
+            "options": [
+              {
+                "id": "basic_validation",
+                "label": "Basic validation only",
+                "description": "Simple bounds checking and 1-indexed to 0-indexed conversion"
+              },
+              {
+                "id": "comprehensive",
+                "label": "Comprehensive validation with auto-fix",
+                "description": "Full validation: clamp ranges, split overlaps, detect gaps, auto-generate unique filenames with page ranges"
+              }
+            ]
+          },
+          "answer": {
+            "selected": "comprehensive"
+          },
+          "answeredAt": 1772001610734
+        }
+      ],
+      "finding": "Implement comprehensive cutting instructions validation with strict type safety across the pipeline, ensuring robust schema enforcement and validation services."
+    }
+  },
+  "branch_order": [
+    "pdf-rendering",
+    "llm-auth",
+    "second-pass",
+    "db-settings",
+    "queue-system",
+    "testing",
+    "types-validation"
+  ]
+}

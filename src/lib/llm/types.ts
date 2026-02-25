@@ -1,0 +1,37 @@
+export type LLMProvider = 'openai' | 'anthropic' | 'openrouter' | 'gemini' | 'ollama' | 'custom';
+
+export interface LLMConfig {
+  llm_provider: LLMProvider;
+  llm_endpoint_url?: string;
+  llm_openai_api_key?: string;
+  llm_anthropic_api_key?: string;
+  llm_openrouter_api_key?: string;
+  llm_gemini_api_key?: string;
+  llm_custom_api_key?: string;
+  llm_vision_model?: string;
+  llm_verification_model?: string;
+}
+
+export interface VisionRequest {
+  images: Array<{ mimeType: string; base64Data: string }>;
+  prompt: string;
+  maxTokens?: number;
+  temperature?: number;
+}
+
+export interface VisionResponse {
+  content: string;
+  usage?: { promptTokens: number; completionTokens: number };
+}
+
+export interface LLMAdapter {
+  buildRequest(
+    config: LLMConfig,
+    request: VisionRequest
+  ): {
+    url: string;
+    headers: Record<string, string>;
+    body: unknown;
+  };
+  parseResponse(response: unknown): VisionResponse;
+}

@@ -2,6 +2,8 @@ import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { auth } from '@/lib/auth/config';
+import { getDefaultEndpointForProvider } from '@/lib/llm/providers';
+import type { LLMProviderValue } from '@/lib/llm/providers';
 import {
   ALL_PERMISSIONS,
   MUSIC_VIEW_ALL,
@@ -200,33 +202,181 @@ async function main() {
 
   console.log(`✅ Created ${instruments.length} instruments`);
 
-  // 4.5. Smart Upload LLM Settings
-  const smartUploadSettings = [
-    { key: 'llm_provider', value: process.env.LLM_PROVIDER || 'ollama' },
-    { key: 'llm_ollama_endpoint', value: process.env.LLM_OLLAMA_ENDPOINT || 'http://localhost:11434' },
-    { key: 'llm_openai_api_key', value: process.env.LLM_OPENAI_API_KEY || '' },
-    { key: 'llm_anthropic_api_key', value: process.env.LLM_ANTHROPIC_API_KEY || '' },
-    { key: 'llm_openrouter_api_key', value: process.env.LLM_OPENROUTER_API_KEY || '' },
-    { key: 'llm_custom_base_url', value: process.env.LLM_CUSTOM_BASE_URL || '' },
-    { key: 'llm_custom_api_key', value: process.env.LLM_CUSTOM_API_KEY || '' },
-    { key: 'llm_vision_model', value: process.env.LLM_VISION_MODEL || 'llama3.2-vision' },
-    { key: 'llm_verification_model', value: process.env.LLM_VERIFICATION_MODEL || 'qwen2.5:7b' },
-    { key: 'llm_confidence_threshold', value: '85' },
-    { key: 'llm_two_pass_enabled', value: 'true' },
-    { key: 'llm_enable_ocr_fallback', value: 'true' },
-    { key: 'llm_vision_system_prompt', value: '' },
-    { key: 'llm_verification_system_prompt', value: '' },
+  // 4.5. Smart Upload Settings - Database-driven configuration
+  const defaultSettings = [
+    // LLM Provider Configuration
+    { 
+      key: 'llm_provider', 
+      value: process.env.LLM_PROVIDER || 'ollama',
+      description: 'AI provider for metadata extraction: openai, anthropic, openrouter, gemini, ollama, or custom'
+    },
+    { 
+      key: 'llm_endpoint_url', 
+      value: (() => {
+        const seedProvider = (process.env.LLM_PROVIDER || 'ollama') as LLMProviderValue;
+        return process.env.LLM_ENDPOINT_URL || process.env.LLM_OLLAMA_ENDPOINT || getDefaultEndpointForProvider(seedProvider);
+      })(),
+      description: 'Custom endpoint URL for the LLM provider'
+    },
+    // API Keys (stored encrypted, masked in API)
+    { 
+      key: 'llm_openai_api_key', 
+      value: process.env.LLM_OPENAI_API_KEY || '',
+      description: 'OpenAI API key for GPT models'
+    },
+    { 
+      key: 'llm_anthropic_api_key', 
+      value: process.env.LLM_ANTHROPIC_API_KEY || '',
+      description: 'Anthropic API key for Claude models'
+    },
+    { 
+      key: 'llm_openrouter_api_key', 
+      value: process.env.LLM_OPENROUTER_API_KEY || '',
+      description: 'OpenRouter API key for multi-provider access'
+    },
+    { 
+      key: 'llm_gemini_api_key', 
+      value: process.env.LLM_GEMINI_API_KEY || '',
+      description: 'Google Gemini API key'
+    },
+    { 
+      key: 'llm_custom_api_key', 
+      value: process.env.LLM_CUSTOM_API_KEY || '',
+      description: 'API key for custom OpenAI-compatible endpoints'
+    },
+    // Model Configuration
+    { 
+      key: 'llm_vision_model', 
+      value: process.env.LLM_VISION_MODEL || 'llama3.2-vision',
+      description: 'Vision model for first-pass metadata extraction from PDF images'
+    },
+    { 
+      key: 'llm_verification_model', 
+      value: process.env.LLM_VERIFICATION_MODEL || 'qwen2.5:7b',
+      description: 'Verification model for second-pass confidence checking'
+    },
+    // Smart Upload Thresholds & Limits
+    { 
+      key: 'smart_upload_confidence_threshold', 
+      value: '70',
+      description: 'Minimum confidence score (0-100) to accept metadata without verification'
+    },
+    { 
+      key: 'smart_upload_auto_approve_threshold', 
+      value: '90',
+      description: 'Confidence score (0-100) required for automatic approval without review'
+    },
+    { 
+      key: 'smart_upload_rate_limit_rpm', 
+      value: '10',
+      description: 'Rate limit: maximum LLM requests per minute'
+    },
+    { 
+      key: 'smart_upload_max_concurrent', 
+      value: '3',
+      description: 'Maximum number of concurrent upload processing jobs'
+    },
+    { 
+      key: 'smart_upload_max_pages', 
+      value: '20',
+      description: 'Maximum number of PDF pages to analyze with LLM'
+    },
+    { 
+      key: 'smart_upload_max_file_size_mb', 
+      value: '50',
+      description: 'Maximum file size in MB for uploaded PDFs'
+    },
+    { 
+      key: 'smart_upload_allowed_mime_types', 
+      value: JSON.stringify(['application/pdf']),
+      description: 'JSON array of allowed MIME types for upload'
+    },
+    // Model Parameters (JSON blobs for provider-specific settings)
+    { 
+      key: 'vision_model_params', 
+      value: JSON.stringify({ temperature: 0.1, max_tokens: 4000 }),
+      description: 'JSON parameters for vision model (temperature, max_tokens, etc.)'
+    },
+    { 
+      key: 'verification_model_params', 
+      value: JSON.stringify({ temperature: 0.1, max_tokens: 4000 }),
+      description: 'JSON parameters for verification model'
+    },
+    // Legacy compatibility keys (for smooth migration)
+    { 
+      key: 'llm_ollama_endpoint', 
+      value: process.env.LLM_OLLAMA_ENDPOINT || 'http://localhost:11434',
+      description: '[Deprecated] Use llm_endpoint_url instead'
+    },
+    { 
+      key: 'llm_custom_base_url', 
+      value: process.env.LLM_CUSTOM_BASE_URL || '',
+      description: '[Deprecated] Use llm_endpoint_url instead'
+    },
+    { 
+      key: 'llm_confidence_threshold', 
+      value: '70',
+      description: '[Deprecated] Use smart_upload_confidence_threshold instead'
+    },
+    { 
+      key: 'llm_two_pass_enabled', 
+      value: 'true',
+      description: 'Enable two-pass verification for low-confidence extractions'
+    },
+    { 
+      key: 'llm_rate_limit_rpm', 
+      value: '10',
+      description: '[Deprecated] Use smart_upload_rate_limit_rpm instead'
+    },
+    { 
+      key: 'llm_auto_approve_threshold', 
+      value: '90',
+      description: '[Deprecated] Use smart_upload_auto_approve_threshold instead'
+    },
+    { 
+      key: 'llm_skip_parse_threshold', 
+      value: '60',
+      description: 'Confidence threshold below which to skip auto-parsing'
+    },
+    // System Prompts
+    { 
+      key: 'llm_vision_system_prompt', 
+      value: '',
+      description: 'Custom system prompt for vision model (leave empty for default)'
+    },
+    { 
+      key: 'llm_verification_system_prompt', 
+      value: '',
+      description: 'Custom system prompt for verification model (leave empty for default)'
+    },
+    { 
+      key: 'llm_vision_model_params', 
+      value: JSON.stringify({}),
+      description: '[Deprecated] Use vision_model_params instead'
+    },
+    { 
+      key: 'llm_verification_model_params', 
+      value: JSON.stringify({}),
+      description: '[Deprecated] Use verification_model_params instead'
+    },
   ];
 
-  for (const setting of smartUploadSettings) {
+  for (const setting of defaultSettings) {
     await prisma.systemSetting.upsert({
       where: { key: setting.key },
-      update: { value: setting.value },
-      create: { key: setting.key, value: setting.value },
+      update: { 
+        value: setting.value,
+        description: setting.description,
+      },
+      create: { 
+        key: setting.key, 
+        value: setting.value,
+        description: setting.description,
+      },
     });
   }
 
-  console.log(`✅ Created ${smartUploadSettings.length} smart upload LLM settings`);
+  console.log(`✅ Created/updated ${defaultSettings.length} Smart Upload settings`);
 
   // 5. Sections
   const sections = [

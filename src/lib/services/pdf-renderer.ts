@@ -6,19 +6,20 @@ import { logger } from '@/lib/logger';
 // ---------------------------------------------------------------------------
 // Server-side (Node.js) pdfjs configuration.
 //
-// Setting workerSrc to an empty string instructs pdfjs-dist to run
-// PDF parsing synchronously on the main thread ("FakeWorker" / in-process
-// mode) instead of spawning a web-worker.  This is the correct mode for
+// Using disableWorker: true in getDocument options to run PDF parsing
+// synchronously on the main thread ("FakeWorker" / in-process mode)
+// instead of spawning a web-worker. This is the correct mode for
 // server-side rendering where neither a DOM nor a SharedArrayBuffer worker
-// is available.
+// is available (pdfjs-dist v5 compatibility).
 // ---------------------------------------------------------------------------
-pdfjsLib.GlobalWorkerOptions.workerSrc = '';
 
 export interface RenderOptions {
   pageIndex?: number;
   quality?: number;
   maxWidth?: number;
   format?: 'png' | 'jpeg';
+  /** DPI multiplier. Default 2 → ~192 DPI for sharp sheet music OCR */
+  scale?: number;
 }
 
 export async function renderPdfToImage(
@@ -28,14 +29,18 @@ export async function renderPdfToImage(
   const {
     pageIndex = 0,
     quality = 85,
-    maxWidth = 1920,
+    maxWidth = 1024,
     format = 'png',
+    scale = 2,
   } = options;
 
   try {
     // pdfjs-dist requires Uint8Array, not Buffer
     const pdfData = new Uint8Array(pdfBuffer);
-    const loadingTask = pdfjsLib.getDocument({ data: pdfData });
+    const loadingTask = pdfjsLib.getDocument({
+      data: pdfData,
+      disableWorker: true,
+    } as unknown as Parameters<typeof pdfjsLib.getDocument>[0]);
     const pdfDocument = await loadingTask.promise;
 
     const numPages = pdfDocument.numPages;
@@ -46,7 +51,6 @@ export async function renderPdfToImage(
     }
 
     const page = await pdfDocument.getPage(pageIndex + 1);
-    const scale = 1;
     const viewport = page.getViewport({ scale });
 
     const canvasWidth = Math.floor(viewport.width);
@@ -82,7 +86,78 @@ export async function renderPdfToImage(
     return imageBuffer.toString('base64');
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
-    logger.error('Failed to render PDF to image:', err);
+    logger.error('Failed to render PDF to image:', {
+      message: err.message,
+      stack: err.stack,
+      name: err.name,
+    });
     throw err;
   }
+}
+
+// Minimal 1×1 white PNG used as a placeholder for pages that fail to render
+const PLACEHOLDER_IMAGE =
+  'iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAYAAABw4pVUAAAADUlEQVR42u3BMQEAAADCoPVPbQhfoAAAAOA1v9QJZX6z/sIAAAAASUVORK5CYII=';
+
+/**
+ * Render multiple PDF pages in one call, reusing a single parsed pdfjs document.
+ * Much faster than calling renderPdfToImage() N times for large documents.
+ *
+ * @param pdfBuffer  - Raw PDF bytes
+ * @param pageIndices - 0-based page indices to render
+ * @param options    - Shared render options (pageIndex is ignored here)
+ * @returns Base64-encoded PNG images in the same order as pageIndices
+ */
+export async function renderPdfPageBatch(
+  pdfBuffer: Buffer,
+  pageIndices: number[],
+  options: Omit<RenderOptions, 'pageIndex'> = {}
+): Promise<string[]> {
+  const { scale = 2, maxWidth = 1024, quality = 85, format = 'png' } = options;
+
+  const pdfData = new Uint8Array(pdfBuffer);
+  const loadingTask = pdfjsLib.getDocument({
+    data: pdfData,
+    disableWorker: true,
+  } as unknown as Parameters<typeof pdfjsLib.getDocument>[0]);
+  const pdfDocument = await loadingTask.promise;
+
+  const results: string[] = [];
+
+  for (const idx of pageIndices) {
+    try {
+      const page = await pdfDocument.getPage(idx + 1);
+      const viewport = page.getViewport({ scale });
+
+      const canvas = createCanvas(Math.floor(viewport.width), Math.floor(viewport.height));
+      const context = canvas.getContext('2d');
+
+      await page.render({
+        canvasContext: context as unknown as CanvasRenderingContext2D,
+        viewport,
+        canvas: canvas as unknown as HTMLCanvasElement,
+      }).promise;
+
+      const rawBuffer = canvas.toBuffer('image/png');
+
+      let imageBuffer: Buffer;
+      if (Math.floor(viewport.width) > maxWidth) {
+        imageBuffer = await sharp(rawBuffer)
+          .resize({ width: maxWidth, fit: 'inside' })
+          .toFormat(format, { quality })
+          .toBuffer();
+      } else if (format === 'jpeg') {
+        imageBuffer = await sharp(rawBuffer).toFormat('jpeg', { quality }).toBuffer();
+      } else {
+        imageBuffer = rawBuffer;
+      }
+
+      results.push(imageBuffer.toString('base64'));
+    } catch (err) {
+      logger.warn('renderPdfPageBatch: failed to render page', { idx, err });
+      results.push(PLACEHOLDER_IMAGE);
+    }
+  }
+
+  return results;
 }

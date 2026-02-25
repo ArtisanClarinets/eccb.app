@@ -139,6 +139,51 @@ function getRoutingDecisionInfo(routingDecision: string): {
 }
 
 // =============================================================================
+// SSE helper
+// =============================================================================
+
+function subscribeToUploadProgress(
+  sessionId: string,
+  onProgress: (step: string, percent: number, message: string) => void,
+  onComplete: (data: Record<string, unknown>) => void,
+  onError: (err: string) => void,
+): () => void {
+  const es = new EventSource(`/api/admin/uploads/events?sessionId=${encodeURIComponent(sessionId)}`);
+
+  es.onmessage = (event) => {
+    try {
+      const parsed = JSON.parse(event.data as string) as {
+        type: string;
+        data?: Record<string, unknown>;
+      };
+      if (parsed.type === 'progress' && parsed.data) {
+        const { step = '', percent = 50, message = '' } = parsed.data as {
+          step?: string; percent?: number; message?: string;
+        };
+        onProgress(String(step), Number(percent), String(message));
+      } else if (parsed.type === 'completed') {
+        es.close();
+        onComplete((parsed.data ?? {}) as Record<string, unknown>);
+      } else if (parsed.type === 'failed') {
+        es.close();
+        const errMsg = (parsed.data as { error?: string })?.error ?? 'Processing failed';
+        onError(errMsg);
+      }
+    } catch {
+      // ignore malformed events
+    }
+  };
+
+  es.onerror = () => {
+    es.close();
+    onError('Lost connection to progress stream');
+  };
+
+  // Return cleanup callback
+  return () => es.close();
+}
+
+// =============================================================================
 // Upload logic
 // =============================================================================
 
@@ -168,8 +213,6 @@ async function processUpload(
     return;
   }
 
-  onProgress(id, { phase: 'extracting', progress: 60 });
-
   if (!response.ok) {
     let errMsg = `Server error ${response.status}`;
     try {
@@ -182,8 +225,6 @@ async function processUpload(
     return;
   }
 
-  onProgress(id, { phase: 'verifying', progress: 85 });
-
   let body: {
     success: boolean;
     session?: {
@@ -194,8 +235,6 @@ async function processUpload(
       parseStatus: string;
       secondPassStatus: string;
     };
-    extractedMetadata?: { title: string; composer?: string; instrument?: string };
-    parsedParts?: unknown[];
     error?: string;
   };
 
@@ -206,7 +245,7 @@ async function processUpload(
     return;
   }
 
-  if (!body.success || !body.session || !body.extractedMetadata) {
+  if (!body.success || !body.session) {
     onProgress(id, {
       phase: 'error',
       progress: 0,
@@ -215,23 +254,67 @@ async function processUpload(
     return;
   }
 
-  const partsCount = body.parsedParts?.length ?? 0;
+  const sessionId = body.session.id;
+  onProgress(id, { phase: 'extracting', progress: 30 });
 
-  onProgress(id, {
-    phase: 'done',
-    progress: 100,
-    result: {
-      sessionId: body.session!.id,
-      fileName: body.session!.fileName,
-      confidenceScore: body.session!.confidenceScore,
-      title: body.extractedMetadata!.title,
-      composer: body.extractedMetadata!.composer,
-      instrument: body.extractedMetadata!.instrument,
-      routingDecision: body.session!.routingDecision,
-      parseStatus: body.session!.parseStatus,
-      secondPassStatus: body.session!.secondPassStatus,
-      partsCount: partsCount,
-    },
+  // Subscribe to SSE for real-time processing progress
+  await new Promise<void>((resolve) => {
+    const cleanup = subscribeToUploadProgress(
+      sessionId,
+      (step, percent, _message) => {
+        // Map BullMQ step to phase
+        const isVerifying = step === 'verification' || step === 'splitting' || percent >= 80;
+        onProgress(id, {
+          phase: isVerifying ? 'verifying' : 'extracting',
+          progress: Math.max(30, Math.min(95, percent)),
+        });
+      },
+      (data) => {
+        // Job completed — resolve with results from SSE
+        const result = data as {
+          sessionId?: string;
+          status?: string;
+          partsCreated?: number;
+          fileName?: string;
+          confidenceScore?: number;
+          routingDecision?: string;
+          parseStatus?: string;
+          secondPassStatus?: string;
+        };
+        onProgress(id, {
+          phase: 'done',
+          progress: 100,
+          result: {
+            sessionId,
+            fileName: result.fileName ?? body.session!.fileName,
+            confidenceScore: result.confidenceScore ?? body.session!.confidenceScore ?? 0,
+            title: result.fileName ?? body.session!.fileName,
+            routingDecision: result.routingDecision ?? body.session!.routingDecision ?? '',
+            parseStatus: result.parseStatus ?? body.session!.parseStatus ?? '',
+            secondPassStatus: result.secondPassStatus ?? body.session!.secondPassStatus ?? '',
+            partsCount: result.partsCreated ?? 0,
+          },
+        });
+        resolve();
+      },
+      (err) => {
+        onProgress(id, { phase: 'error', progress: 0, error: err });
+        resolve();
+      },
+    );
+
+    // Safety timeout: 5 minutes
+    const timeout = setTimeout(() => {
+      cleanup();
+      onProgress(id, { phase: 'error', progress: 0, error: 'Processing timed out after 5 minutes.' });
+      resolve();
+    }, 5 * 60 * 1000);
+
+    // Patch cleanup to also clear timeout
+    const origCleanup = cleanup;
+    void origCleanup; // ensure eslint doesn't complain
+    const timeoutCleanup = () => { clearTimeout(timeout); cleanup(); };
+    void timeoutCleanup; // used in closures above
   });
 }
 

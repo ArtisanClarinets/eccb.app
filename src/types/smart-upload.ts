@@ -37,6 +37,9 @@ export interface ExtractedMetadata {
   cuttingInstructions?: CuttingInstruction[];
   verificationConfidence?: number;
   corrections?: string | null;
+  subtitle?: string;
+  arranger?: string;
+  notes?: string;
 }
 
 export type RoutingDecision =

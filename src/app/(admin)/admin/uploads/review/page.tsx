@@ -127,8 +127,8 @@ function formatDate(date: Date | string): string {
 function getConfidenceColor(score: number | null): string {
   if (score === null) return 'bg-gray-100 text-gray-700';
   if (score >= 85) return 'bg-green-100 text-green-700';
-  if (score >= 70) return 'bg-yellow-100 text-yellow-700';
-  return 'bg-red-100 text-red-700';
+  if (score >= 60) return 'bg-yellow-100 text-yellow-700 border border-yellow-400';
+  return 'bg-red-100 text-red-700 border border-red-400';
 }
 
 function getParseStatusBadge(parseStatus: ParseStatus | null): React.ReactNode {
@@ -670,9 +670,6 @@ function UploadReviewClient({
                       <Badge
                         className={cn(
                           getConfidenceColor(session.confidenceScore),
-                          session.confidenceScore !== null &&
-                            session.confidenceScore < 85 &&
-                            'bg-yellow-100 text-yellow-700 border-2 border-yellow-400'
                         )}
                       >
                         {session.confidenceScore !== null
@@ -983,10 +980,7 @@ function UploadReviewClient({
                 <Badge
                   className={cn(
                     'text-lg px-3 py-1',
-                    editingSession.confidenceScore !== null &&
-                      editingSession.confidenceScore < 85
-                      ? 'bg-yellow-100 text-yellow-700 border-2 border-yellow-400'
-                      : 'bg-green-100 text-green-700'
+                    getConfidenceColor(editingSession.confidenceScore)
                   )}
                 >
                   {editingSession.confidenceScore !== null
@@ -1001,6 +995,25 @@ function UploadReviewClient({
                     </span>
                   )}
               </div>
+
+              {/* Gap Warning */}
+              {editingSession.cuttingInstructions?.some(inst => (inst.partNumber ?? 0) >= 9900) && (
+                <div className="flex items-start gap-3 rounded-md border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-800">
+                  <AlertCircle className="h-4 w-4 mt-0.5 shrink-0 text-yellow-600" />
+                  <div>
+                    <p className="font-medium">Uncovered page gaps detected</p>
+                    <p className="text-xs mt-0.5">
+                      The following page ranges were not assigned to any part:
+                      {' '}
+                      {editingSession.cuttingInstructions
+                        .filter(inst => (inst.partNumber ?? 0) >= 9900)
+                        .map(inst => `pages ${inst.pageRange[0]}–${inst.pageRange[1]}`)
+                        .join(', ')}
+                      . Review the cutting instructions or re-run AI analysis.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Metadata Form */}
               <div className="grid gap-4 md:grid-cols-2">

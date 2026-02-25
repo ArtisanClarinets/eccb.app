@@ -5,6 +5,7 @@ import { validateCSRF } from '@/lib/csrf';
 import { logger } from '@/lib/logger';
 import { SYSTEM_CONFIG } from '@/lib/auth/permission-constants';
 import { z } from 'zod';
+import { getDefaultEndpointForProvider } from '@/lib/llm/providers';
 
 // =============================================================================
 // Schema
@@ -71,13 +72,15 @@ export async function POST(request: NextRequest) {
       }
 
       case 'openai': {
-        testUrl = 'https://api.openai.com/v1/models';
+        const base = (endpoint?.trim() || getDefaultEndpointForProvider('openai')).replace(/\/$/, '');
+        testUrl = `${base}/models`;
         if (apiKey) testHeaders['Authorization'] = `Bearer ${apiKey}`;
         break;
       }
 
       case 'anthropic': {
-        testUrl = 'https://api.anthropic.com/v1/models';
+        const base = (endpoint?.trim() || getDefaultEndpointForProvider('anthropic')).replace(/\/$/, '');
+        testUrl = `${base}/v1/models`;
         if (apiKey) {
           testHeaders['x-api-key'] = apiKey;
           testHeaders['anthropic-version'] = '2023-06-01';
@@ -86,13 +89,15 @@ export async function POST(request: NextRequest) {
       }
 
       case 'gemini': {
+        const base = (endpoint?.trim() || getDefaultEndpointForProvider('gemini')).replace(/\/$/, '');
         const key = apiKey ? `?key=${encodeURIComponent(apiKey)}` : '';
-        testUrl = `https://generativelanguage.googleapis.com/v1beta/models${key}`;
+        testUrl = `${base}/models${key}`;
         break;
       }
 
       case 'openrouter': {
-        testUrl = 'https://openrouter.ai/api/v1/models';
+        const base = (endpoint?.trim() || getDefaultEndpointForProvider('openrouter')).replace(/\/$/, '');
+        testUrl = `${base}/models`;
         if (apiKey) testHeaders['Authorization'] = `Bearer ${apiKey}`;
         break;
       }

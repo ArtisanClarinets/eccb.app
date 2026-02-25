@@ -18,7 +18,9 @@ export type JobType =
   | 'publish.scheduled'
   | 'cleanup.sessions'
   | 'cleanup.files'
-  | 'reminder.event';
+  | 'reminder.event'
+  | 'smartupload.process'
+  | 'smartupload.secondPass';
 
 export interface JobTypeNameMap {
   'email.send': EmailSendJobData;
@@ -28,6 +30,8 @@ export interface JobTypeNameMap {
   'cleanup.sessions': CleanupSessionsJobData;
   'cleanup.files': CleanupFilesJobData;
   'reminder.event': EventReminderJobData;
+  'smartupload.process': SmartUploadProcessJobData;
+  'smartupload.secondPass': SmartUploadSecondPassJobData;
 }
 
 // ============================================================================
@@ -125,6 +129,18 @@ export interface EventReminderJobData {
   customMessage?: string;
   /** Member IDs to send reminder to (if empty, sends to all RSVP'd) */
   memberIds?: string[];
+}
+
+export interface SmartUploadProcessJobData {
+  /** Smart upload session ID */
+  sessionId: string;
+  /** File record ID */
+  fileId: string;
+}
+
+export interface SmartUploadSecondPassJobData {
+  /** Smart upload session ID */
+  sessionId: string;
 }
 
 // ============================================================================
@@ -230,6 +246,28 @@ export const JOB_CONFIGS: Record<JobType, JobConfig> = {
     removeOnFail: 100,
     concurrency: 3,
   },
+  'smartupload.process': {
+    priority: 5,
+    attempts: 3,
+    backoff: {
+      type: 'exponential',
+      delay: 5000,
+    },
+    removeOnComplete: 100,
+    removeOnFail: 50,
+    concurrency: 2,
+  },
+  'smartupload.secondPass': {
+    priority: 10,
+    attempts: 3,
+    backoff: {
+      type: 'exponential',
+      delay: 5000,
+    },
+    removeOnComplete: 100,
+    removeOnFail: 50,
+    concurrency: 2,
+  },
 };
 
 // ============================================================================
@@ -242,6 +280,7 @@ export const QUEUE_NAMES = {
   SCHEDULED: 'eccb:scheduled',
   CLEANUP: 'eccb:cleanup',
   DEAD_LETTER: 'eccb:dead-letter',
+  SMART_UPLOAD: 'eccb:smart-upload',
 } as const;
 
 export type QueueName = typeof QUEUE_NAMES[keyof typeof QUEUE_NAMES];
@@ -280,6 +319,9 @@ export function getQueueNameForJob(jobType: JobType): QueueName {
     case 'cleanup.sessions':
     case 'cleanup.files':
       return QUEUE_NAMES.CLEANUP;
+    case 'smartupload.process':
+    case 'smartupload.secondPass':
+      return QUEUE_NAMES.SMART_UPLOAD;
     default:
       return QUEUE_NAMES.EMAIL;
   }

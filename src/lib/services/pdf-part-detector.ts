@@ -8,8 +8,8 @@
 import { logger } from '@/lib/logger';
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 
-// Disable worker for server-side Node.js rendering
-pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+// Server-side rendering uses disableWorker: true option in getDocument
+// instead of setting workerSrc (pdfjs-dist v5 compatibility)
 
 export interface PartInfo {
   pageRange: [number, number]; // [startPage, endPage] (0-indexed)
@@ -47,7 +47,10 @@ export async function analyzePdfParts(
   try {
     // Load PDF - convert Buffer to Uint8Array for pdfjs-dist compatibility
     const pdfData = new Uint8Array(pdfBuffer);
-    const loadingTask = pdfjsLib.getDocument({ data: pdfData });
+    const loadingTask = pdfjsLib.getDocument({
+      data: pdfData,
+      disableWorker: true,
+    } as unknown as Parameters<typeof pdfjsLib.getDocument>[0]);
     const pdfDocument = await loadingTask.promise;
     const totalPages = pdfDocument.numPages;
 
@@ -121,7 +124,11 @@ export async function analyzePdfParts(
     };
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
-    logger.error('Failed to analyze PDF parts', err);
+    logger.error('Failed to analyze PDF parts', {
+      message: err.message,
+      stack: err.stack,
+      name: err.name,
+    });
     return {
       isMultiPart: false,
       totalPages: 0,

@@ -19,6 +19,7 @@ import {
   getQueueNameForJob,
   type EmailSendJobData,
   type EmailBulkJobData,
+  type SmartUploadSecondPassJobData,
 } from './definitions';
 import { logger } from '@/lib/logger';
 
@@ -53,6 +54,7 @@ interface QueueInstances {
   scheduled: Queue | null;
   cleanup: Queue | null;
   deadLetter: Queue | null;
+  smartUpload: Queue | null;
 }
 
 const queues: QueueInstances = {
@@ -61,6 +63,7 @@ const queues: QueueInstances = {
   scheduled: null,
   cleanup: null,
   deadLetter: null,
+  smartUpload: null,
 };
 
 const queueEvents: Map<string, QueueEvents> = new Map();
@@ -91,6 +94,10 @@ export function initializeQueues(): void {
   queues.deadLetter = new Queue(QUEUE_NAMES.DEAD_LETTER, { connection });
   queueEvents.set(QUEUE_NAMES.DEAD_LETTER, new QueueEvents(QUEUE_NAMES.DEAD_LETTER, { connection }));
 
+  // Smart Upload queue
+  queues.smartUpload = new Queue(QUEUE_NAMES.SMART_UPLOAD, { connection });
+  queueEvents.set(QUEUE_NAMES.SMART_UPLOAD, new QueueEvents(QUEUE_NAMES.SMART_UPLOAD, { connection }));
+
   logger.info('All job queues initialized');
 }
 
@@ -109,6 +116,8 @@ export function getQueue(name: keyof typeof QUEUE_NAMES): Queue | null {
       return queues.cleanup;
     case 'DEAD_LETTER':
       return queues.deadLetter;
+    case 'SMART_UPLOAD':
+      return queues.smartUpload;
     default:
       return null;
   }
@@ -167,6 +176,13 @@ export async function queueEmail(data: EmailSendJobData, options?: { delay?: num
  */
 export async function queueBulkEmail(data: EmailBulkJobData, options?: { delay?: number }): Promise<Job> {
   return addJob('email.bulk', data, options);
+}
+
+/**
+ * Add a smart upload second pass job
+ */
+export async function queueSmartUploadSecondPass(data: SmartUploadSecondPassJobData, options?: { delay?: number }): Promise<Job> {
+  return addJob('smartupload.secondPass', data, options);
 }
 
 // ============================================================================
