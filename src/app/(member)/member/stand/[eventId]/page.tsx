@@ -29,8 +29,10 @@ interface DbAnnotation {
 interface DbNavigationLink {
   id: string;
   musicId: string;
+  fromPage: number;
   fromX: number;
   fromY: number;
+  toPage: number;
   toX: number;
   toY: number;
   label: string | null;
@@ -68,9 +70,13 @@ function transformNavigationLink(link: DbNavigationLink) {
   return {
     id: link.id,
     fromPieceId: link.musicId,
-    fromPage: 1,
+    fromPage: link.fromPage,
+    fromX: link.fromX,
+    fromY: link.fromY,
     toPieceId: link.musicId,
-    toPage: 1,
+    toPage: link.toPage,
+    toX: link.toX,
+    toY: link.toY,
     label: link.label ?? '',
   };
 }

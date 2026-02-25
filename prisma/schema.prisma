@@ -1066,8 +1066,10 @@ enum AnnotationLayer {
 model NavigationLink {
   id        String     @id @default(cuid())
   musicId   String
+  fromPage  Int        @default(1)
   fromX     Float
   fromY     Float
+  toPage    Int        @default(1)
   toX       Float
   toY       Float
   label     String?

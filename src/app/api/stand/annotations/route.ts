@@ -99,6 +99,17 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const validated = annotationCreateSchema.parse(body);
 
+    // Only directors / super-admins may write to the DIRECTOR layer
+    if (validated.layer === 'DIRECTOR') {
+      const roles = await getUserRoles(session.user.id);
+      if (!roles.includes('DIRECTOR') && !roles.includes('SUPER_ADMIN')) {
+        return NextResponse.json(
+          { error: 'Forbidden: only directors may write to the DIRECTOR annotation layer' },
+          { status: 403 }
+        );
+      }
+    }
+
     const annotation = await prisma.annotation.create({
       data: {
         musicId: validated.musicId,

@@ -16,6 +16,7 @@ import { Tuner } from './Tuner';
 import { AudioPlayer } from './AudioPlayer';
 import { PitchPipe } from './PitchPipe';
 import { AudioTrackerSettings } from './AudioTrackerSettings';
+import { SmartNavEditor } from './SmartNavEditor';
 
 // Type for music assignment with piece and files (from Prisma)
 interface MusicAssignment {
@@ -51,8 +52,12 @@ interface StandNavigationLink {
   id: string;
   fromPieceId: string;
   fromPage: number;
+  fromX: number;
+  fromY: number;
   toPieceId: string;
   toPage: number;
+  toX: number;
+  toY: number;
   label: string;
 }
 
@@ -139,8 +144,12 @@ function transformNavigationLink(link: StandNavigationLink): NavigationLink {
     id: link.id,
     fromPieceId: link.fromPieceId,
     fromPage: link.fromPage,
+    fromX: link.fromX,
+    fromY: link.fromY,
     toPieceId: link.toPieceId,
     toPage: link.toPage,
+    toX: link.toX,
+    toY: link.toY,
     label: link.label,
   };
 }
@@ -315,6 +324,8 @@ export function StandViewer({ data }: StandViewerProps) {
         <GestureHandler />
         <StandCanvas />
         <RosterOverlay />
+        {/* Smart Navigation Editor — for creating/editing nav hotspots */}
+        <SmartNavEditor />
         {/* Rehearsal utilities */}
         <Metronome />
         <Tuner />

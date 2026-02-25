@@ -24,8 +24,16 @@ export interface NavigationLink {
   id: string;
   fromPieceId: string;
   fromPage: number;
+  /** Hotspot rect left edge, 0-1 normalised to page width */
+  fromX: number;
+  /** Hotspot rect top edge, 0-1 normalised to page height */
+  fromY: number;
   toPieceId: string;
   toPage: number;
+  /** Hotspot rect right edge, 0-1 normalised */
+  toX: number;
+  /** Hotspot rect bottom edge, 0-1 normalised */
+  toY: number;
   label: string;
 }
 
@@ -77,6 +85,8 @@ export interface StandState {
   toolColor: string;
   strokeWidth: number;
   pressureScale: number;
+  /** Currently selected stamp id for Tool.STAMP (must match a StampDefinition.id) */
+  selectedStampId: string;
 
   // Navigation links (smart nav)
   navigationLinks: NavigationLink[];
@@ -126,6 +136,7 @@ export interface StandState {
   setToolColor: (color: string) => void;
   setStrokeWidth: (width: number) => void;
   setPressureScale: (scale: number) => void;
+  setSelectedStampId: (id: string) => void;
 
   addNavigationLink: (link: NavigationLink) => void;
   removeNavigationLink: (id: string) => void;
@@ -265,6 +276,7 @@ const initialState = {
   toolColor: '#ff0000',
   strokeWidth: 3,
   pressureScale: 5,
+  selectedStampId: 'forte',
 
   navigationLinks: [],
   settings: DEFAULT_SETTINGS,
@@ -688,6 +700,7 @@ export const useStandStore = create<StandState>((set, get) => ({
   setToolColor: (color: string) => set({ toolColor: color }),
   setStrokeWidth: (width: number) => set({ strokeWidth: Math.max(1, Math.min(50, width)) }),
   setPressureScale: (scale: number) => set({ pressureScale: Math.max(0, Math.min(20, scale)) }),
+  setSelectedStampId: (id: string) => set({ selectedStampId: id }),
 
   addNavigationLink: (link: NavigationLink) =>
     set((state) => ({

@@ -216,6 +216,83 @@ export async function GET(request: NextRequest) {
 }
 
 /**
+ * Convert the first page of a PDF buffer to a PNG base64 string.
+ * Uses pdfjs-dist v5 (ESM) with the `canvas` package for server-side rendering.
+ * Scale of 2.0 produces ~150 dpi equivalent which is sufficient for AI vision models.
+ */
+async function pdfBufferToPngBase64(pdfBuffer: Buffer): Promise<string> {
+  // Use dynamic import for pdfjs-dist v5 (ESM-only) and canvas
+  const pdfjsLib = await import('pdfjs-dist');
+  // Disable worker for server-side Node.js usage
+  pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { createCanvas } = require('canvas');
+
+  const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(pdfBuffer) });
+  const pdfDoc = await loadingTask.promise;
+  const page = await pdfDoc.getPage(1);
+
+  const SCALE = 2.0;
+  const viewport = page.getViewport({ scale: SCALE });
+
+  const canvas = createCanvas(Math.floor(viewport.width), Math.floor(viewport.height));
+  const ctx = canvas.getContext('2d');
+
+  // NodeCanvasFactory bridge for pdfjs-dist
+  const renderContext = {
+    canvasContext: ctx,
+    canvas: canvas as unknown as HTMLCanvasElement, // required in pdfjs-dist v5
+    viewport,
+  };
+
+  await page.render(renderContext).promise;
+
+  // Convert to PNG buffer, then base64
+  const pngBuffer: Buffer = canvas.toBuffer('image/png');
+  return pngBuffer.toString('base64');
+}
+
+/**
+ * Download a file from a URL (absolute or relative to app base) and return its buffer.
+ */
+async function fetchFileBuffer(fileUrl: string): Promise<{ buffer: Buffer; mimeType: string }> {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  const fullUrl = fileUrl.startsWith('http') ? fileUrl : `${baseUrl}${fileUrl}`;
+
+  const res = await fetch(fullUrl);
+  if (!res.ok) throw new Error(`Failed to fetch file: ${res.status} ${res.statusText}`);
+
+  const contentType = res.headers.get('content-type') || '';
+  const buffer = Buffer.from(await res.arrayBuffer());
+  return { buffer, mimeType: contentType };
+}
+
+/**
+ * Resolve file to a base64 PNG image, converting PDFs on the fly.
+ * Returns { base64: string, mimeType: 'image/png' | 'image/jpeg' }
+ */
+async function resolveToBase64Image(
+  fileUrl: string
+): Promise<{ base64: string; mimeType: 'image/png' | 'image/jpeg' }> {
+  const { buffer, mimeType } = await fetchFileBuffer(fileUrl);
+
+  // Check if the content is a PDF by magic bytes (%PDF)
+  const isPdf =
+    mimeType.includes('pdf') ||
+    (buffer.length > 4 && buffer.slice(0, 4).toString('ascii') === '%PDF');
+
+  if (isPdf) {
+    const base64 = await pdfBufferToPngBase64(buffer);
+    return { base64, mimeType: 'image/png' };
+  }
+
+  // It's already an image; detect format from magic bytes
+  const isJpeg = buffer[0] === 0xff && buffer[1] === 0xd8;
+  const imgMime = isJpeg ? 'image/jpeg' : 'image/png';
+  return { base64: buffer.toString('base64'), mimeType: imgMime };
+}
+
+/**
  * Perform OMR analysis using the configured AI provider
  */
 async function performOMRAnalysis(
@@ -223,17 +300,17 @@ async function performOMRAnalysis(
   apiKey: string,
   provider: string
 ): Promise<OMRMetadata> {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-  const fullUrl = `${baseUrl}${fileUrl}`;
+  // Resolve the file to a base64-encoded PNG/JPEG, converting PDFs automatically
+  const { base64, mimeType } = await resolveToBase64Image(fileUrl);
 
-  // Provider-specific analysis
+  // Provider-specific analysis using base64 image data
   switch (provider.toLowerCase()) {
     case 'openai':
-      return analyzeWithOpenAI(fullUrl, apiKey);
+      return analyzeWithOpenAI(base64, mimeType, apiKey);
     case 'anthropic':
-      return analyzeWithAnthropic(fullUrl, apiKey);
+      return analyzeWithAnthropic(base64, mimeType, apiKey);
     case 'google':
-      return analyzeWithGoogle(fullUrl, apiKey);
+      return analyzeWithGoogle(base64, mimeType, apiKey);
     default:
       throw new Error(`Unsupported OMR provider: ${provider}`);
   }
@@ -241,8 +318,15 @@ async function performOMRAnalysis(
 
 /**
  * Analyze sheet music using OpenAI Vision API
+ * Accepts pre-converted base64 image data for reliable PDF support.
  */
-async function analyzeWithOpenAI(fileUrl: string, apiKey: string): Promise<OMRMetadata> {
+async function analyzeWithOpenAI(
+  base64Image: string,
+  mimeType: string,
+  apiKey: string
+): Promise<OMRMetadata> {
+  const dataUrl = `data:${mimeType};base64,${base64Image}`;
+
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -276,7 +360,7 @@ Be conservative - only include fields you can determine with high confidence.`,
             },
             {
               type: 'image_url',
-              image_url: { url: fileUrl },
+              image_url: { url: dataUrl },
             },
           ],
         },
@@ -308,14 +392,13 @@ Be conservative - only include fields you can determine with high confidence.`,
 
 /**
  * Analyze sheet music using Anthropic Claude API
+ * Accepts pre-converted base64 image data.
  */
-async function analyzeWithAnthropic(fileUrl: string, apiKey: string): Promise<OMRMetadata> {
-  // First, fetch the image and convert to base64
-  const imageResponse = await fetch(fileUrl);
-  const imageBuffer = await imageResponse.arrayBuffer();
-  const base64Image = Buffer.from(imageBuffer).toString('base64');
-  const mediaType = fileUrl.endsWith('.png') ? 'image/png' : 'image/jpeg';
-
+async function analyzeWithAnthropic(
+  base64Image: string,
+  mimeType: string,
+  apiKey: string
+): Promise<OMRMetadata> {
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -324,7 +407,7 @@ async function analyzeWithAnthropic(fileUrl: string, apiKey: string): Promise<OM
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-opus-4-5',
       max_tokens: 1000,
       messages: [
         {
@@ -334,7 +417,7 @@ async function analyzeWithAnthropic(fileUrl: string, apiKey: string): Promise<OM
               type: 'image',
               source: {
                 type: 'base64',
-                media_type: mediaType,
+                media_type: mimeType as 'image/png' | 'image/jpeg',
                 data: base64Image,
               },
             },
@@ -386,13 +469,13 @@ Return only valid JSON.`,
 
 /**
  * Analyze sheet music using Google Gemini API
+ * Accepts pre-converted base64 image data.
  */
-async function analyzeWithGoogle(fileUrl: string, apiKey: string): Promise<OMRMetadata> {
-  // Fetch the image and convert to base64
-  const imageResponse = await fetch(fileUrl);
-  const imageBuffer = await imageResponse.arrayBuffer();
-  const base64Image = Buffer.from(imageBuffer).toString('base64');
-
+async function analyzeWithGoogle(
+  base64Image: string,
+  mimeType: string,
+  apiKey: string
+): Promise<OMRMetadata> {
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
     {
@@ -406,7 +489,7 @@ async function analyzeWithGoogle(fileUrl: string, apiKey: string): Promise<OMRMe
             parts: [
               {
                 inline_data: {
-                  mime_type: 'image/jpeg',
+                  mime_type: mimeType,
                   data: base64Image,
                 },
               },

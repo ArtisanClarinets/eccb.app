@@ -2,6 +2,7 @@
 import type React from 'react';
 import { useCallback, useEffect, useState, useRef, useMemo, type RefObject } from 'react';
 import { useStandStore, Tool, Annotation, StrokePoint, StrokeData } from '@/store/standStore';
+import { STAMPS, loadStampImage } from '@/lib/stamps';
 
 // Generate unique ID for strokes
 function generateId(): string {
@@ -39,6 +40,9 @@ export function AnnotationLayer() {
     strokeWidth,
     pressureScale,
     addAnnotation,
+    selectedStampId,
+    setSelectedStampId,
+    setCurrentTool,
   } = useStandStore();
 
   const pieceId = useStandStore((s) => s.pieces[s.currentPieceIndex]?.id);
@@ -56,6 +60,12 @@ export function AnnotationLayer() {
   // Track if we need to render (for RAF scheduling)
   const needsRenderRef = useRef(false);
   const renderCancelRef = useRef<(() => void) | null>(null);
+
+  // Cache of loaded HTMLImageElement instances for stamps, keyed by stampId
+  const stampCacheRef = useRef<Map<string, HTMLImageElement>>(new Map());
+
+  // Stamp palette visibility
+  const [showStampPalette, setShowStampPalette] = useState(false);
 
   // text input overlay state
   const [textInput, setTextInput] = useState<{
@@ -94,6 +104,39 @@ export function AnnotationLayer() {
   const drawStroke = useCallback(
     (ctx: CanvasRenderingContext2D, stroke: StrokeData) => {
       const { type, points, color, baseWidth: _baseWidth, opacity } = stroke;
+
+      // ── Stamp tool ────────────────────────────────────────────────────────
+      if (type === Tool.STAMP && stroke.stampId && points.length > 0) {
+        const pt = points[0];
+        const size = (stroke.width ?? strokeWidth * 10) || 48;
+        const cached = stampCacheRef.current.get(stroke.stampId);
+        if (cached) {
+          ctx.save();
+          ctx.globalAlpha = opacity ?? 1;
+          // Apply colour filter using CSS composite trick: tint to toolColor
+          ctx.fillStyle = color;
+          const hw = size / 2;
+          if (stroke.rotation) {
+            ctx.translate(pt.x, pt.y);
+            ctx.rotate((stroke.rotation * Math.PI) / 180);
+            ctx.drawImage(cached, -hw, -hw, size, size);
+          } else {
+            ctx.drawImage(cached, pt.x - hw, pt.y - hw, size, size);
+          }
+          ctx.restore();
+        } else {
+          // Load and cache; re-render after load
+          loadStampImage(stroke.stampId)
+            .then((img) => {
+              stampCacheRef.current.set(stroke.stampId!, img);
+              // Force a re-render
+              needsRenderRef.current = true;
+            })
+            .catch(console.error);
+        }
+        return;
+      }
+
       if (points.length < 2) return;
 
       ctx.save();
@@ -137,7 +180,7 @@ export function AnnotationLayer() {
 
       ctx.restore();
     },
-    [computeWidth]
+    [computeWidth, strokeWidth]
   );
 
   // RAF-based render function for performance
@@ -223,11 +266,40 @@ export function AnnotationLayer() {
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      // Handle stamp tool: single-click place stamp (no dragging)
+      if (currentTool === Tool.STAMP) {
+        const stroke: StrokeData = {
+          id: generateId(),
+          type: Tool.STAMP,
+          points: [{ x, y, pressure: 1, timestamp: Date.now() }],
+          color: toolColor,
+          baseWidth: strokeWidth,
+          opacity: 1,
+          stampId: selectedStampId,
+          width: strokeWidth * 12,
+        };
+        drawStroke(ctx, stroke);
+        const annotation: Annotation = {
+          id: stroke.id,
+          pieceId: pieceId || '',
+          pageNumber: currentPage,
+          x: x / canvas.width,
+          y: y / canvas.height,
+          content: JSON.stringify(stroke),
+          color: toolColor,
+          layer: selectedLayer,
+          createdAt: new Date(),
+        };
+        addAnnotation?.(annotation);
+        return;
+      }
+
       // Handle text tool separately
       if (currentTool === Tool.TEXT) {
-        const rect = canvas.getBoundingClientRect();
-        const _x = e.clientX - rect.left;
-        const _y = e.clientY - rect.top;
         setTextInput({
           visible: true,
           x: e.clientX,
@@ -238,9 +310,6 @@ export function AnnotationLayer() {
       }
 
       isDrawingRef.current = true;
-      const rect = canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
 
       currentPointsRef.current = [
         {
@@ -263,7 +332,7 @@ export function AnnotationLayer() {
       // Capture pointer for smooth drawing
       canvas.setPointerCapture(e.pointerId);
     },
-    [editMode, currentTool, toolColor, strokeWidth]
+    [editMode, currentTool, toolColor, strokeWidth, selectedStampId, drawStroke, pieceId, currentPage, selectedLayer, addAnnotation]
   );
 
   // Handle pointer move - continue drawing with RAF
@@ -495,6 +564,39 @@ export function AnnotationLayer() {
       <div id="text-annotation-help" className="sr-only">
         Press Enter to save text annotation, Escape to cancel
       </div>
+
+      {/* Stamp palette — shown when STAMP tool is active and editMode is on */}
+      {editMode && currentTool === Tool.STAMP && (
+        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-50">
+          <button
+            onClick={() => setShowStampPalette((v) => !v)}
+            className="px-3 py-1 bg-card border rounded shadow text-xs font-medium hover:bg-muted transition-colors"
+            title="Select stamp"
+          >
+            Stamp: {STAMPS.find((s) => s.id === selectedStampId)?.label ?? selectedStampId}
+          </button>
+          {showStampPalette && (
+            <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-card border rounded shadow-lg p-2 grid grid-cols-4 gap-1 w-64">
+              {STAMPS.map((stamp) => (
+                <button
+                  key={stamp.id}
+                  onClick={() => {
+                    setSelectedStampId(stamp.id);
+                    setCurrentTool(Tool.STAMP);
+                    setShowStampPalette(false);
+                  }}
+                  className={`px-1 py-1 text-xs border rounded hover:bg-primary/10 transition-colors truncate ${
+                    selectedStampId === stamp.id ? 'border-primary bg-primary/10 font-semibold' : ''
+                  }`}
+                  title={stamp.label}
+                >
+                  {stamp.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -8,10 +8,12 @@ import { z } from 'zod';
 // Zod schemas for validation
 const navigationLinkCreateSchema = z.object({
   musicId: z.string().min(1),
-  fromX: z.number(),
-  fromY: z.number(),
-  toX: z.number(),
-  toY: z.number(),
+  fromPage: z.number().int().positive().default(1),
+  fromX: z.number().min(0).max(1),
+  fromY: z.number().min(0).max(1),
+  toPage: z.number().int().positive().default(1),
+  toX: z.number().min(0).max(1),
+  toY: z.number().min(0).max(1),
   label: z.string().optional(),
 });
 
@@ -93,8 +95,10 @@ export async function POST(request: NextRequest) {
     const navigationLink = await prisma.navigationLink.create({
       data: {
         musicId: validated.musicId,
+        fromPage: validated.fromPage,
         fromX: validated.fromX,
         fromY: validated.fromY,
+        toPage: validated.toPage,
         toX: validated.toX,
         toY: validated.toY,
         label: validated.label,
