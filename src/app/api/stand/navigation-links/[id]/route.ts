@@ -6,8 +6,11 @@ import { getUserRoles } from '@/lib/auth/permissions';
 import { z } from 'zod';
 
 const navigationLinkUpdateSchema = z.object({
+  fromPage: z.number().int().positive().optional(),
   fromX: z.number().optional(),
   fromY: z.number().optional(),
+  toPage: z.number().int().positive().optional(),
+  toMusicId: z.string().nullable().optional(),
   toX: z.number().optional(),
   toY: z.number().optional(),
   label: z.string().optional(),
@@ -55,8 +58,11 @@ export async function PUT(
     const navigationLink = await prisma.navigationLink.update({
       where: { id },
       data: {
+        ...(validated.fromPage !== undefined && { fromPage: validated.fromPage }),
         ...(validated.fromX !== undefined && { fromX: validated.fromX }),
         ...(validated.fromY !== undefined && { fromY: validated.fromY }),
+        ...(validated.toPage !== undefined && { toPage: validated.toPage }),
+        ...(validated.toMusicId !== undefined && { toMusicId: validated.toMusicId }),
         ...(validated.toX !== undefined && { toX: validated.toX }),
         ...(validated.toY !== undefined && { toY: validated.toY }),
         ...(validated.label !== undefined && { label: validated.label }),

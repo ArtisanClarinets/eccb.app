@@ -1,8 +1,9 @@
 import { Metadata } from 'next';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { prisma } from '@/lib/db';
 import { StandViewer, StandLoaderData } from '@/components/member/stand/StandViewer';
 import { auth } from '@/lib/auth/config';
+import { getUserRoles } from '@/lib/auth/permissions';
 import { headers } from 'next/headers';
 
 export const metadata: Metadata = {
@@ -13,84 +14,35 @@ interface PageProps {
   params: Promise<{ eventId: string }>;
 }
 
-// Type for annotations from database (Prisma)
-interface DbAnnotation {
-  id: string;
-  musicId: string;
-  page: number;
-  layer: 'PERSONAL' | 'SECTION' | 'DIRECTOR';
-  strokeData: unknown;
-  userId: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
+/** Privileged role types that can access any event's stand */
+const PRIVILEGED_ROLE_TYPES = ['DIRECTOR', 'SUPER_ADMIN', 'ADMIN', 'STAFF'];
 
-// Type for navigation links from database (Prisma)
-interface DbNavigationLink {
-  id: string;
-  musicId: string;
-  fromPage: number;
-  fromX: number;
-  fromY: number;
-  toPage: number;
-  toX: number;
-  toY: number;
-  label: string | null;
-  createdAt: Date;
-}
+/**
+ * Check whether a user may open this event's music stand.
+ * Directors / admins / staff always can; regular members need an attendance record.
+ */
+async function canAccessEvent(
+  userId: string,
+  eventId: string
+): Promise<boolean> {
+  // Check privileged roles first
+  const privilegedRole = await prisma.userRole.findFirst({
+    where: {
+      userId,
+      role: { type: { in: PRIVILEGED_ROLE_TYPES as any } },
+      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+    },
+  });
+  if (privilegedRole) return true;
 
-// Type for audio links from database (Prisma)
-interface DbAudioLink {
-  id: string;
-  pieceId: string;
-  fileKey: string;
-  url: string | null;
-  description: string | null;
-  createdAt: Date;
-}
+  // Regular member path – need attendance record
+  const member = await prisma.member.findFirst({ where: { userId } });
+  if (!member) return false;
 
-// Transform Prisma annotation to viewer format
-function transformAnnotation(annotation: DbAnnotation) {
-  const strokeData = annotation.strokeData as { x?: number; y?: number; content?: string; color?: string; layer?: string } | null;
-  return {
-    id: annotation.id,
-    pieceId: annotation.musicId,
-    pageNumber: annotation.page,
-    x: strokeData?.x ?? 0,
-    y: strokeData?.y ?? 0,
-    content: strokeData?.content ?? '',
-    color: strokeData?.color ?? '#000000',
-    layer: (strokeData?.layer as 'PERSONAL' | 'SECTION' | 'DIRECTOR') ?? 'PERSONAL',
-    createdAt: annotation.createdAt,
-  };
-}
-
-// Transform Prisma navigation link to viewer format
-function transformNavigationLink(link: DbNavigationLink) {
-  return {
-    id: link.id,
-    fromPieceId: link.musicId,
-    fromPage: link.fromPage,
-    fromX: link.fromX,
-    fromY: link.fromY,
-    toPieceId: link.musicId,
-    toPage: link.toPage,
-    toX: link.toX,
-    toY: link.toY,
-    label: link.label ?? '',
-  };
-}
-
-// Transform Prisma audio link to viewer format
-function transformAudioLink(link: DbAudioLink) {
-  return {
-    id: link.id,
-    pieceId: link.pieceId,
-    fileKey: link.fileKey,
-    url: link.url,
-    description: link.description,
-    createdAt: link.createdAt,
-  };
+  const attendance = await prisma.attendance.findFirst({
+    where: { eventId, memberId: member.id },
+  });
+  return !!attendance;
 }
 
 export default async function StandPage({ params }: PageProps) {
@@ -99,89 +51,197 @@ export default async function StandPage({ params }: PageProps) {
   });
 
   if (!session?.user) {
-    return notFound();
+    redirect('/login');
   }
 
   const { eventId } = await params;
+  const userId = session.user.id;
 
-  // Fetch event with music and piece files
-  const event = await prisma.event.findUnique({
-    where: { id: eventId },
-    include: {
-      music: {
-        include: {
-          piece: {
-            include: {
-              files: true,
+  // ── Authorization ─────────────────────────────────────────────
+  const hasAccess = await canAccessEvent(userId, eventId);
+  if (!hasAccess) {
+    notFound();
+  }
+
+  // ── Parallel data fetches ─────────────────────────────────────
+  const [event, roles, member] = await Promise.all([
+    prisma.event.findUnique({
+      where: { id: eventId },
+      include: {
+        music: {
+          include: {
+            piece: {
+              include: {
+                files: {
+                  where: { mimeType: 'application/pdf', isArchived: false },
+                  select: {
+                    id: true,
+                    mimeType: true,
+                    storageKey: true,
+                    storageUrl: true,
+                    pageCount: true,
+                  },
+                },
+                composer: { select: { fullName: true } },
+              },
             },
           },
+          orderBy: { sortOrder: 'asc' },
         },
-        orderBy: { sortOrder: 'asc' },
       },
-    },
-  });
+    }),
+    getUserRoles(userId),
+    prisma.member.findFirst({
+      where: { userId },
+      include: {
+        sections: { include: { section: true } },
+      },
+    }),
+  ]);
 
   if (!event) {
     notFound();
   }
 
-  // Get piece IDs for related queries
+  // Derive role flags & section ids
+  const isDirector = roles.some(
+    (r) => PRIVILEGED_ROLE_TYPES.includes(r) || r === 'DIRECTOR'
+  );
+  const isSectionLeader = roles.includes('SECTION_LEADER');
+  const userSectionIds = member?.sections.map((ms) => ms.sectionId) ?? [];
+
+  // ── Piece IDs ─────────────────────────────────────────────────
   const pieceIds = event.music.map((m) => m.piece.id);
 
-  // Fetch annotations for all pieces (ordered by createdAt)
-  const annotations = pieceIds.length > 0
-    ? await prisma.annotation.findMany({
+  // ── Annotations – privacy-filtered ────────────────────────────
+  let annotations: any[] = [];
+  if (pieceIds.length > 0) {
+    if (isDirector) {
+      // Directors see everything
+      annotations = await prisma.annotation.findMany({
+        where: { musicId: { in: pieceIds } },
+        orderBy: { createdAt: 'asc' },
+      });
+    } else {
+      // Regular members:
+      //   PERSONAL → own only
+      //   SECTION  → matching sectionId only
+      //   DIRECTOR → all (they're shared downward)
+      annotations = await prisma.annotation.findMany({
         where: {
           musicId: { in: pieceIds },
+          OR: [
+            { layer: 'PERSONAL', userId },
+            {
+              layer: 'SECTION',
+              ...(userSectionIds.length > 0
+                ? { sectionId: { in: userSectionIds } }
+                : { sectionId: '__none__' }),
+            },
+            { layer: 'DIRECTOR' },
+          ],
         },
         orderBy: { createdAt: 'asc' },
-      })
-    : [];
+      });
+    }
+  }
 
-  // Fetch navigation links for all pieces
-  const navigationLinks = pieceIds.length > 0
-    ? await prisma.navigationLink.findMany({
-        where: {
-          musicId: { in: pieceIds },
-        },
-      })
-    : [];
+  // ── Navigation links, audio links, preferences, roster ───────
+  const [navigationLinks, audioLinks, preferences, roster] =
+    await Promise.all([
+      pieceIds.length > 0
+        ? prisma.navigationLink.findMany({
+            where: { musicId: { in: pieceIds } },
+          })
+        : [],
+      pieceIds.length > 0
+        ? prisma.audioLink.findMany({
+            where: { pieceId: { in: pieceIds } },
+          })
+        : [],
+      prisma.userPreferences.findUnique({ where: { userId } }),
+      prisma.standSession.findMany({
+        where: { eventId },
+        orderBy: { lastSeenAt: 'desc' },
+      }),
+    ]);
 
-  // Fetch audio links for all pieces
-  const audioLinks = pieceIds.length > 0
-    ? await prisma.audioLink.findMany({
-        where: {
-          pieceId: { in: pieceIds },
-        },
-      })
-    : [];
-
-  // Fetch user preferences
-  const preferences = await prisma.userPreferences.findUnique({
-    where: { userId: session.user.id },
-  });
-
-  // Fetch stand session roster for presence
-  const roster = await prisma.standSession.findMany({
-    where: { eventId },
-    orderBy: { lastSeenAt: 'desc' },
-  });
-
-  // Transform data for the viewer
+  // ── Serialise – strip Date objects ────────────────────────────
   const loaderData: StandLoaderData = {
     eventTitle: event.title,
     eventId,
-    userId: session.user.id,
-    music: event.music,
-    annotations: annotations.map(transformAnnotation),
-    navigationLinks: navigationLinks.map(transformNavigationLink),
-    audioLinks: audioLinks.map(transformAudioLink),
+    userId,
+    roles,
+    isDirector,
+    isSectionLeader,
+    userSectionIds,
+    music: event.music.map((m) => ({
+      id: m.id,
+      piece: {
+        id: m.piece.id,
+        title: m.piece.title,
+        composer: m.piece.composer?.fullName ?? null,
+        files: m.piece.files.map((f) => ({
+          id: f.id,
+          mimeType: f.mimeType,
+          storageKey: f.storageKey,
+          storageUrl: f.storageUrl ?? null,
+          pageCount: f.pageCount ?? null,
+        })),
+      },
+    })),
+    annotations: annotations.map((a) => ({
+      id: a.id,
+      pieceId: a.musicId,
+      page: a.page,
+      layer: a.layer as 'PERSONAL' | 'SECTION' | 'DIRECTOR',
+      strokeData: a.strokeData,
+      userId: a.userId,
+      sectionId: a.sectionId ?? null,
+      createdAt: a.createdAt.toISOString(),
+      updatedAt: a.updatedAt.toISOString(),
+    })),
+    navigationLinks: navigationLinks.map((nl) => ({
+      id: nl.id,
+      musicId: nl.musicId,
+      fromPage: nl.fromPage,
+      fromX: nl.fromX,
+      fromY: nl.fromY,
+      toPage: nl.toPage,
+      toMusicId: nl.toMusicId ?? null,
+      toX: nl.toX,
+      toY: nl.toY,
+      label: nl.label ?? '',
+      createdAt: nl.createdAt.toISOString(),
+    })),
+    audioLinks: audioLinks.map((al) => ({
+      id: al.id,
+      pieceId: al.pieceId,
+      fileKey: al.fileKey,
+      url: al.url ?? null,
+      description: al.description ?? null,
+      createdAt: al.createdAt.toISOString(),
+    })),
     preferences: preferences
       ? {
           nightMode: preferences.nightMode,
-          metronomeSettings: (preferences.metronomeSettings as Record<string, any>) ?? {},
-          tunerSettings: (preferences.otherSettings as any)?.tunerSettings || {},
-          pitchPipeSettings: (preferences.otherSettings as any)?.pitchPipeSettings || {},
+          metronomeSettings:
+            (preferences.metronomeSettings as Record<string, unknown>) ?? {},
+          midiMappings:
+            (preferences.midiMappings as Record<string, unknown>) ?? {},
+          tunerSettings:
+            ((preferences.otherSettings as any)?.tunerSettings as Record<
+              string,
+              unknown
+            >) || {},
+          pitchPipeSettings:
+            ((preferences.otherSettings as any)?.pitchPipeSettings as Record<
+              string,
+              unknown
+            >) || {},
+          audioTrackerSettings:
+            ((preferences.otherSettings as any)
+              ?.audioTrackerSettings as Record<string, unknown>) || {},
         }
       : null,
     roster: roster.map((r) => ({
@@ -189,7 +249,7 @@ export default async function StandPage({ params }: PageProps) {
       eventId: r.eventId,
       userId: r.userId,
       section: r.section,
-      lastSeenAt: r.lastSeenAt,
+      lastSeenAt: r.lastSeenAt.toISOString(),
     })),
   };
 

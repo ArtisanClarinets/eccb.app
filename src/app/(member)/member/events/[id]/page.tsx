@@ -194,13 +194,23 @@ export default async function EventPage({ params }: PageProps) {
                   {event.music.length > 0 && (
                     <Card>
                       <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                          <Music className="h-5 w-5" />
-                          Music Program
-                        </CardTitle>
-                        <CardDescription>
-                          {event.music.length} piece{event.music.length !== 1 ? 's' : ''} scheduled
-                        </CardDescription>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <CardTitle className="flex items-center gap-2">
+                              <Music className="h-5 w-5" />
+                              Music Program
+                            </CardTitle>
+                            <CardDescription>
+                              {event.music.length} piece{event.music.length !== 1 ? 's' : ''} scheduled
+                            </CardDescription>
+                          </div>
+                          <Button size="sm" asChild>
+                            <Link href={`/member/stand/${event.id}`}>
+                              <FileMusic className="h-4 w-4 mr-2" />
+                              Open Music Stand
+                            </Link>
+                          </Button>
+                        </div>
                       </CardHeader>
                       <CardContent>
                         <Table>

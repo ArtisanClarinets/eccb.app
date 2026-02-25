@@ -241,6 +241,7 @@ model Section {
   updatedAt   DateTime        @updatedAt
   members     MemberSection[]
   messages    SectionMessage[]
+  annotations Annotation[]
 
   @@index([sortOrder])
 }
@@ -293,7 +294,8 @@ model MusicPiece {
   composer           Person?           @relation("ComposerPieces", fields: [composerId], references: [id])
   publisher          Publisher?        @relation(fields: [publisherId], references: [id])
   annotations        Annotation[]
-  navigationLinks    NavigationLink[]
+  navigationLinksFrom NavigationLink[] @relation("NavigationLinksFrom")
+  navigationLinksTo   NavigationLink[] @relation("NavigationLinksTo")
   audioLinks        AudioLink[]
 
   @@index([title])
@@ -1041,20 +1043,23 @@ model SmartUploadSetting {
 // ====================================
 
 model Annotation {
-  id        String           @id @default(cuid())
-  musicId   String
-  page      Int
-  layer     AnnotationLayer
+  id         String          @id @default(cuid())
+  musicId    String
+  page       Int
+  layer      AnnotationLayer
   strokeData Json
-  userId    String
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
-  music     MusicPiece       @relation(fields: [musicId], references: [id], onDelete: Cascade)
-  user      User             @relation(fields: [userId], references: [id])
+  userId     String
+  sectionId  String?
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+  music      MusicPiece      @relation(fields: [musicId], references: [id], onDelete: Cascade)
+  user       User            @relation(fields: [userId], references: [id])
+  section    Section?        @relation(fields: [sectionId], references: [id])
 
   @@index([musicId])
   @@index([userId])
   @@index([layer])
+  @@index([sectionId])
 }
 
 enum AnnotationLayer {
@@ -1070,13 +1075,16 @@ model NavigationLink {
   fromX     Float
   fromY     Float
   toPage    Int        @default(1)
+  toMusicId String?
   toX       Float
   toY       Float
   label     String?
   createdAt DateTime   @default(now())
-  music     MusicPiece @relation(fields: [musicId], references: [id], onDelete: Cascade)
+  music     MusicPiece @relation("NavigationLinksFrom", fields: [musicId], references: [id], onDelete: Cascade)
+  toMusic   MusicPiece? @relation("NavigationLinksTo", fields: [toMusicId], references: [id])
 
   @@index([musicId])
+  @@index([toMusicId])
 }
 
 model StandSession {

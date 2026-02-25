@@ -31,6 +31,12 @@ vi.mock('@/lib/db', () => ({
         user: { id: 'user-1', name: 'Test User', email: 'test@example.com' },
       }),
     },
+    member: {
+      findFirst: vi.fn().mockResolvedValue({
+        id: 'member-1',
+        sections: [],
+      }),
+    },
   },
 }));
 
@@ -125,6 +131,10 @@ describe('Annotations API', () => {
       });
 
       vi.mocked(getUserRoles).mockResolvedValueOnce(['MEMBER']);
+      vi.mocked(prisma.member.findFirst).mockResolvedValueOnce({
+        id: 'member-1',
+        sections: [{ id: 'section-1' }],
+      });
       vi.mocked(prisma.annotation.findMany).mockResolvedValueOnce([]);
 
       const request = new NextRequest(
@@ -136,8 +146,9 @@ describe('Annotations API', () => {
       expect(response.status).toBe(200);
       const callArgs = vi.mocked(prisma.annotation.findMany).mock.calls[0][0];
       expect(callArgs.where.OR).toBeDefined();
-      expect(callArgs.where.OR).toContainEqual({ userId: 'user-1' });
-      expect(callArgs.where.OR).toContainEqual({ layer: 'SECTION' });
+      expect(callArgs.where.OR).toContainEqual({ userId: 'user-1', layer: 'PERSONAL' });
+      expect(callArgs.where.OR).toContainEqual(expect.objectContaining({ layer: 'SECTION' }));
+      expect(callArgs.where.OR).toContainEqual({ layer: 'DIRECTOR' });
     });
 
     it('should allow directors to see all annotations', async () => {
@@ -292,6 +303,8 @@ describe('Annotations API', () => {
       mockAuth.api.getSession.mockResolvedValue({
         user: { id: 'user-1' },
       });
+
+      vi.mocked(getUserRoles).mockResolvedValueOnce(['DIRECTOR']);
 
       const request = new NextRequest(
         new URL('http://localhost:3000/api/stand/annotations'),

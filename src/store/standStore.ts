@@ -12,12 +12,12 @@ export interface Annotation {
   id: string;
   pieceId: string;
   pageNumber: number;
-  x: number;
-  y: number;
-  content: string;
-  color: string;
   layer: 'PERSONAL' | 'SECTION' | 'DIRECTOR';
-  createdAt: Date;
+  strokeData: StrokeData | Record<string, unknown>;
+  sectionId?: string | null;
+  userId?: string;
+  createdAt: string;
+  updatedAt?: string;
 }
 
 export interface NavigationLink {
@@ -35,6 +35,9 @@ export interface NavigationLink {
   /** Hotspot rect bottom edge, 0-1 normalised */
   toY: number;
   label: string;
+  /** Cross-piece navigation target (null = same piece) */
+  toMusicId: string | null;
+  createdAt?: string;
 }
 
 export interface StandSettings {
@@ -139,9 +142,16 @@ export interface StandState {
   setSelectedStampId: (id: string) => void;
 
   addNavigationLink: (link: NavigationLink) => void;
+  setNavigationLinks: (links: NavigationLink[]) => void;
   removeNavigationLink: (id: string) => void;
+  updateNavigationLink: (link: NavigationLink) => void;
   updateSettings: (settings: Partial<StandSettings>) => void;
   setEventInfo: (eventId: string, eventTitle: string) => void;
+  // User context for role-based features
+  userContext: UserContext | null;
+  setUserContext: (ctx: UserContext) => void;
+  // Update totalPages after PDF load
+  updatePieceTotalPages: (pieceId: string, totalPages: number) => void;
   // roster actions
   setRoster: (entries: StandRosterMember[]) => void;
   addRosterEntry: (entry: StandRosterMember) => void;
@@ -249,6 +259,14 @@ export interface StrokeData {
   rotation?: number;
 }
 
+export interface UserContext {
+  userId: string;
+  roles: string[];
+  isDirector: boolean;
+  isSectionLeader: boolean;
+  userSectionIds: string[];
+}
+
 const DEFAULT_SETTINGS: StandSettings = {
   autoTurnPage: false,
   turnPageDelay: 3000,
@@ -284,6 +302,7 @@ const initialState = {
   eventTitle: null,
   roster: [],
   editMode: false,
+  userContext: null,
 
   // audio
   audioLinks: [],
@@ -530,12 +549,12 @@ export const useStandStore = create<StandState>((set, get) => ({
         id: a.id,
         pieceId: a.musicId,
         pageNumber: a.page,
-        x: a.strokeData.x,
-        y: a.strokeData.y,
-        content: a.strokeData.content,
-        color: a.strokeData.color,
         layer: a.layer,
-        createdAt: new Date(a.createdAt),
+        strokeData: a.strokeData ?? {},
+        sectionId: a.sectionId ?? null,
+        userId: a.userId,
+        createdAt: a.createdAt,
+        updatedAt: a.updatedAt,
       }));
       set((state) => ({
         annotations: {
@@ -549,13 +568,15 @@ export const useStandStore = create<StandState>((set, get) => ({
   },
 
   setAnnotations: (annotations: Annotation[]) => {
-    const layer = get().selectedLayer.toLowerCase() as 'personal' | 'section' | 'director';
-    set((state) => ({
-      annotations: {
-        ...state.annotations,
-        [layer]: { ...state.annotations[layer], ...annotations },
-      },
-    }));
+    // Group by layer + piece:page key
+    const grouped: StandState['annotations'] = { personal: {}, section: {}, director: {} };
+    for (const ann of annotations) {
+      const layer = ann.layer.toLowerCase() as 'personal' | 'section' | 'director';
+      const key = annotationKey(ann.pieceId, ann.pageNumber);
+      if (!grouped[layer][key]) grouped[layer][key] = [];
+      grouped[layer][key].push(ann);
+    }
+    set({ annotations: grouped });
   },
 
   addAnnotation: async (annotation: Annotation) => {
@@ -567,20 +588,14 @@ export const useStandStore = create<StandState>((set, get) => ({
           musicId: annotation.pieceId,
           page: annotation.pageNumber,
           layer: annotation.layer,
-          strokeData: {
-            x: annotation.x,
-            y: annotation.y,
-            content: annotation.content,
-            color: annotation.color,
-          },
+          strokeData: annotation.strokeData,
+          sectionId: annotation.sectionId,
         }),
       });
       if (!res.ok) throw new Error('Failed to create annotation');
       const json = await res.json();
       const saved = json.annotation;
-      // API may return musicId or pieceId depending on context; normalize
       const musicId = saved.musicId ?? saved.pieceId;
-      // annotations sometimes return page or pageNumber fields
       const pageNum = saved.page ?? saved.pageNumber;
       const key = annotationKey(musicId, pageNum);
       const layer = saved.layer.toLowerCase() as 'personal' | 'section' | 'director';
@@ -588,12 +603,12 @@ export const useStandStore = create<StandState>((set, get) => ({
         id: saved.id,
         pieceId: musicId,
         pageNumber: pageNum,
-        x: saved.strokeData.x,
-        y: saved.strokeData.y,
-        content: saved.strokeData.content,
-        color: saved.strokeData.color,
         layer: saved.layer,
-        createdAt: new Date(saved.createdAt),
+        strokeData: saved.strokeData ?? {},
+        sectionId: saved.sectionId ?? null,
+        userId: saved.userId,
+        createdAt: saved.createdAt,
+        updatedAt: saved.updatedAt,
       };
       set((state) => ({
         annotations: {
@@ -615,19 +630,14 @@ export const useStandStore = create<StandState>((set, get) => ({
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          strokeData: {
-            x: annotation.x,
-            y: annotation.y,
-            content: annotation.content,
-            color: annotation.color,
-          },
+          strokeData: annotation.strokeData,
           layer: annotation.layer,
+          sectionId: annotation.sectionId,
         }),
       });
       if (!res.ok) throw new Error('Failed to update annotation');
       const json = await res.json();
       const saved = json.annotation;
-      // normalize musicId similar to addAnnotation
       const musicId = saved.musicId ?? saved.pieceId;
       const pageNum = saved.page ?? saved.pageNumber;
       const key = annotationKey(musicId, pageNum);
@@ -644,14 +654,13 @@ export const useStandStore = create<StandState>((set, get) => ({
           id: saved.id,
           pieceId: musicId,
           pageNumber: pageNum,
-          x: saved.strokeData.x,
-          y: saved.strokeData.y,
-          content: saved.strokeData.content,
-          color: saved.strokeData.color,
           layer: saved.layer,
-          createdAt: new Date(saved.createdAt),
+          strokeData: saved.strokeData ?? {},
+          sectionId: saved.sectionId ?? null,
+          userId: saved.userId,
+          createdAt: saved.createdAt,
+          updatedAt: saved.updatedAt,
         };
-        // ensure layer object exists (should always, but guard in case)
         if (!updated[newLayer]) {
           updated[newLayer] = {} as Record<string, Annotation[]>;
         }
@@ -707,9 +716,18 @@ export const useStandStore = create<StandState>((set, get) => ({
       navigationLinks: [...state.navigationLinks, link],
     })),
 
+  setNavigationLinks: (links: NavigationLink[]) => set({ navigationLinks: links }),
+
   removeNavigationLink: (id: string) =>
     set((state) => ({
       navigationLinks: state.navigationLinks.filter((l) => l.id !== id),
+    })),
+
+  updateNavigationLink: (link: NavigationLink) =>
+    set((state) => ({
+      navigationLinks: state.navigationLinks.map((l) =>
+        l.id === link.id ? link : l
+      ),
     })),
 
   updateSettings: (newSettings: Partial<StandSettings>) =>
@@ -719,6 +737,15 @@ export const useStandStore = create<StandState>((set, get) => ({
 
   setEventInfo: (eventId: string, eventTitle: string) =>
     set({ eventId, eventTitle }),
+
+  setUserContext: (ctx: UserContext) => set({ userContext: ctx }),
+
+  updatePieceTotalPages: (pieceId: string, totalPages: number) =>
+    set((state) => ({
+      pieces: state.pieces.map((p) =>
+        p.id === pieceId ? { ...p, totalPages } : p
+      ),
+    })),
 
   setRoster: (entries: StandRosterMember[]) => set({ roster: entries }),
   addRosterEntry: (entry: StandRosterMember) =>
@@ -801,6 +828,6 @@ export interface StandAudioLink {
   fileKey: string;
   url: string | null;
   description: string | null;
-  createdAt: Date;
+  createdAt: string;
 }
 // ... existing code ...

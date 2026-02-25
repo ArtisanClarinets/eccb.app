@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useStandStore, StandPiece, Annotation, NavigationLink } from '@/store/standStore';
+import { useStandStore, StandPiece } from '@/store/standStore';
 import { useStandSync } from '@/hooks/use-stand-sync';
 import { useAudioTracker } from '@/hooks/useAudioTracker';
 import { NavigationControls } from './NavigationControls';
@@ -18,140 +18,117 @@ import { PitchPipe } from './PitchPipe';
 import { AudioTrackerSettings } from './AudioTrackerSettings';
 import { SmartNavEditor } from './SmartNavEditor';
 
-// Type for music assignment with piece and files (from Prisma)
-interface MusicAssignment {
+// ── Serialised types coming from the server page ────────────────
+// All Date fields are pre-serialised to ISO strings on the server.
+
+interface SerializedMusicFile {
+  id: string;
+  mimeType: string;
+  storageKey: string;
+  storageUrl: string | null;
+  pageCount: number | null;
+}
+
+interface SerializedMusicAssignment {
   id: string;
   piece: {
     id: string;
     title: string;
-    composer?: string | null;
-    files?: Array<{
-      id: string;
-      mimeType: string;
-      storageKey: string;
-      storageUrl?: string | null;
-    }>;
+    composer: string | null;
+    files: SerializedMusicFile[];
   };
 }
 
-// Type for annotation from loader (database format transformed)
-interface StandAnnotation {
+interface SerializedAnnotation {
   id: string;
   pieceId: string;
-  pageNumber: number;
-  x: number;
-  y: number;
-  content: string;
-  color: string;
+  page: number;
   layer: 'PERSONAL' | 'SECTION' | 'DIRECTOR';
-  createdAt: Date;
+  strokeData: unknown;
+  userId: string;
+  sectionId: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
-// Type for navigation link from loader
-interface StandNavigationLink {
+interface SerializedNavigationLink {
   id: string;
-  fromPieceId: string;
+  musicId: string;
   fromPage: number;
   fromX: number;
   fromY: number;
-  toPieceId: string;
   toPage: number;
+  toMusicId: string | null;
   toX: number;
   toY: number;
   label: string;
+  createdAt: string;
 }
 
-// Type for audio link from loader
-interface StandAudioLink {
+interface SerializedAudioLink {
   id: string;
   pieceId: string;
   fileKey: string;
   url: string | null;
   description: string | null;
-  createdAt: Date;
+  createdAt: string;
 }
 
-// Type for user preferences from loader
-interface StandUserPreferences {
+interface SerializedPreferences {
   nightMode: boolean;
-  metronomeSettings?: Record<string, any>;
-  tunerSettings?: Record<string, any>;
-  pitchPipeSettings?: Record<string, any>;
+  metronomeSettings?: Record<string, unknown>;
+  midiMappings?: Record<string, unknown>;
+  tunerSettings?: Record<string, unknown>;
+  pitchPipeSettings?: Record<string, unknown>;
+  audioTrackerSettings?: Record<string, unknown>;
 }
 
-// Type for stand session (roster presence)
-interface StandSessionPresence {
+interface SerializedRosterEntry {
   id: string;
   eventId: string;
   userId: string;
   section: string | null;
-  lastSeenAt: Date;
+  lastSeenAt: string;
 }
 
-// Aggregated loader data type
 export interface StandLoaderData {
   eventId: string;
   userId: string;
   eventTitle: string;
-  music: MusicAssignment[];
-  annotations: StandAnnotation[];
-  navigationLinks: StandNavigationLink[];
-  audioLinks: StandAudioLink[];
-  preferences: StandUserPreferences | null;
-  roster: StandSessionPresence[];
+  roles: string[];
+  isDirector: boolean;
+  isSectionLeader: boolean;
+  userSectionIds: string[];
+  music: SerializedMusicAssignment[];
+  annotations: SerializedAnnotation[];
+  navigationLinks: SerializedNavigationLink[];
+  audioLinks: SerializedAudioLink[];
+  preferences: SerializedPreferences | null;
+  roster: SerializedRosterEntry[];
 }
 
 interface StandViewerProps {
   data: StandLoaderData;
 }
 
-// Transform music data to StandPiece format
-function transformToStandPieces(music: MusicAssignment[]): StandPiece[] {
+/**
+ * Build StandPiece[] from serialized music assignments.
+ * Uses piece.id (MusicPiece PK) as the identity – NOT EventMusic.id.
+ * PDF URLs go through the authenticated file proxy.
+ */
+function buildStandPieces(music: SerializedMusicAssignment[]): StandPiece[] {
   return music.map((m) => {
-    const pdfFile = m.piece?.files?.find((f) => f.mimeType === 'application/pdf');
+    const pdf = m.piece.files.find((f) => f.mimeType === 'application/pdf');
     return {
-      id: m.id,
-      title: m.piece?.title || 'Untitled',
-      composer: m.piece?.composer || '',
-      pdfUrl: pdfFile
-        ? // prefer explicit URL when provided, otherwise fall back to download route
-          pdfFile.storageUrl ||
-          (pdfFile.storageKey ? `/api/files/download/${pdfFile.storageKey}` : null)
+      id: m.piece.id,
+      title: m.piece.title ?? 'Untitled',
+      composer: m.piece.composer ?? '',
+      pdfUrl: pdf
+        ? `/api/stand/files/${encodeURIComponent(pdf.storageKey)}`
         : null,
-      totalPages: 1,
+      totalPages: pdf?.pageCount ?? 1,
     };
   });
-}
-
-// Transform annotation from loader to store format
-function transformAnnotation(annotation: StandAnnotation): Annotation {
-  return {
-    id: annotation.id,
-    pieceId: annotation.pieceId,
-    pageNumber: annotation.pageNumber,
-    x: annotation.x,
-    y: annotation.y,
-    content: annotation.content,
-    color: annotation.color,
-    layer: annotation.layer,
-    createdAt: annotation.createdAt,
-  };
-}
-
-// Transform navigation link from loader to store format
-function transformNavigationLink(link: StandNavigationLink): NavigationLink {
-  return {
-    id: link.id,
-    fromPieceId: link.fromPieceId,
-    fromPage: link.fromPage,
-    fromX: link.fromX,
-    fromY: link.fromY,
-    toPieceId: link.toPieceId,
-    toPage: link.toPage,
-    toX: link.toX,
-    toY: link.toY,
-    label: link.label,
-  };
 }
 
 export function StandViewer({ data }: StandViewerProps) {
@@ -162,8 +139,7 @@ export function StandViewer({ data }: StandViewerProps) {
     showControls,
     gigMode,
     setAnnotations,
-    addAnnotation,
-    addNavigationLink,
+    setNavigationLinks,
     toggleNightMode,
     setRoster,
     addRosterEntry,
@@ -172,89 +148,110 @@ export function StandViewer({ data }: StandViewerProps) {
     updateMetronomeSettings,
     updateTunerSettings,
     updatePitchPipeSettings,
-    toggleMetronome: _toggleMetronome,
-    toggleTuner: _toggleTuner,
-    toggleAudioPlayer: _toggleAudioPlayer,
-    togglePitchPipe: _togglePitchPipe,
     updateAudioTrackerSettings,
+    setUserContext,
   } = useStandStore();
 
-  const { eventId, userId, eventTitle, music, annotations, navigationLinks, audioLinks, preferences, roster } = data;
+  const {
+    eventId,
+    userId,
+    eventTitle,
+    roles,
+    isDirector,
+    isSectionLeader,
+    userSectionIds,
+    music,
+    annotations,
+    navigationLinks,
+    audioLinks,
+    preferences,
+    roster,
+  } = data;
 
-  // Initialize audio tracker hook - auto-starts when enabled in settings
+  // Initialize audio tracker hook
   useAudioTracker();
 
-  // Initialize store with music data
+  // ── Hydrate store with server data (runs once) ──────────────
   useEffect(() => {
-    if (music && music.length > 0) {
-      const standPieces = transformToStandPieces(music);
-      setPieces(standPieces);
+    // User context (roles, sections)
+    setUserContext({ userId, roles, isDirector, isSectionLeader, userSectionIds });
+
+    // Pieces
+    if (music.length > 0) {
+      setPieces(buildStandPieces(music));
       setEventInfo(eventId, eventTitle);
     }
-  }, [music, eventTitle, setPieces, setEventInfo, eventId]);
 
-  // Initialize annotations
-  useEffect(() => {
-    if (annotations && annotations.length > 0) {
-      const transformedAnnotations = annotations.map(transformAnnotation);
-      setAnnotations(transformedAnnotations);
+    // Annotations – stored keyed by pieceId:page:layer in store
+    if (annotations.length > 0) {
+      const mappedAnnotations = annotations.map((a) => ({
+        id: a.id,
+        pieceId: a.pieceId,
+        pageNumber: a.page,
+        layer: a.layer,
+        strokeData: (a.strokeData || {}) as Record<string, unknown>,
+        userId: a.userId,
+        sectionId: a.sectionId,
+        createdAt: a.createdAt,
+        updatedAt: a.updatedAt,
+      }));
+      setAnnotations(mappedAnnotations);
     }
-  }, [annotations, setAnnotations]);
 
-  // Initialize navigation links
-  useEffect(() => {
-    if (navigationLinks && navigationLinks.length > 0) {
-      const transformedLinks = navigationLinks.map(transformNavigationLink);
-      transformedLinks.forEach((link) => addNavigationLink(link));
+    // Navigation links – bulk set
+    if (navigationLinks.length > 0) {
+      const mappedLinks = navigationLinks.map((nl) => ({
+        id: nl.id,
+        fromPieceId: nl.musicId,
+        fromPage: nl.fromPage,
+        fromX: nl.fromX,
+        fromY: nl.fromY,
+        toPieceId: nl.toMusicId || nl.musicId,
+        toPage: nl.toPage,
+        toX: nl.toX,
+        toY: nl.toY,
+        label: nl.label,
+        createdAt: nl.createdAt,
+        toMusicId: nl.toMusicId,
+      }));
+      setNavigationLinks(mappedLinks);
     }
-  }, [navigationLinks, addNavigationLink]);
 
-  // Apply user preferences (night mode)
-  useEffect(() => {
-    if (preferences?.nightMode) {
-      toggleNightMode();
-    }
-    // load other preferences if available
-    if (preferences?.metronomeSettings) {
-      updateMetronomeSettings(preferences.metronomeSettings as any);
-    }
-    if (preferences?.tunerSettings) {
-      updateTunerSettings(preferences.tunerSettings as any);
-    }
-    if (preferences?.pitchPipeSettings) {
-      updatePitchPipeSettings(preferences.pitchPipeSettings as any);
-    }
-    if ((preferences as any)?.midiMappings) {
-      useStandStore.getState().setMidiMappings((preferences as any).midiMappings);
-    }
-    // Load audio tracker settings from preferences
-    if (preferences && (preferences as any).audioTrackerSettings) {
-      updateAudioTrackerSettings((preferences as any).audioTrackerSettings);
-    }
-  }, [preferences, toggleNightMode, updateMetronomeSettings, updateTunerSettings, updatePitchPipeSettings, updateAudioTrackerSettings]);
-
-  // initialize audio links
-  useEffect(() => {
-    if (audioLinks && audioLinks.length > 0) {
+    // Audio links – per-piece map built inside store
+    if (audioLinks.length > 0) {
       setAudioLinks(audioLinks);
     }
-  }, [audioLinks, setAudioLinks]);
 
-  // initialize roster from loader data
-  useEffect(() => {
-    if (roster && roster.length > 0) {
-      // convert to StandRosterMember
-      const entries = roster.map((r) => ({
-        userId: r.userId,
-        name: '', // loader doesn't include name; will be filled by sync
-        section: r.section || undefined,
-        joinedAt: r.lastSeenAt.toISOString(),
-      }));
-      setRoster(entries);
+    // Roster (serialized strings, no Date conversion needed)
+    if (roster.length > 0) {
+      setRoster(
+        roster.map((r) => ({
+          userId: r.userId,
+          name: '',
+          section: r.section ?? undefined,
+          joinedAt: r.lastSeenAt,
+        }))
+      );
     }
-  }, [roster, setRoster]);
 
-  // real-time sync
+    // Preferences
+    if (preferences) {
+      if (preferences.nightMode) toggleNightMode();
+      if (preferences.metronomeSettings)
+        updateMetronomeSettings(preferences.metronomeSettings as any);
+      if (preferences.tunerSettings)
+        updateTunerSettings(preferences.tunerSettings as any);
+      if (preferences.pitchPipeSettings)
+        updatePitchPipeSettings(preferences.pitchPipeSettings as any);
+      if (preferences.midiMappings)
+        useStandStore.getState().setMidiMappings(preferences.midiMappings as any);
+      if (preferences.audioTrackerSettings)
+        updateAudioTrackerSettings(preferences.audioTrackerSettings as any);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Real-time sync ──────────────────────────────────────────
   useStandSync({
     eventId,
     userId,
@@ -271,24 +268,9 @@ export function StandViewer({ data }: StandViewerProps) {
         removeRosterEntry(presence.userId);
       }
     },
-    onAnnotation: (msg) => {
-      const d = msg.data as any;
-      // convert to our Annotation type and insert
-      addAnnotation({
-        id: d.id,
-        pieceId: d.musicId,
-        pageNumber: d.page,
-        x: d.x,
-        y: d.y,
-        content: d.content,
-        color: d.color,
-        layer: d.layer,
-        createdAt: new Date(d.createdAt),
-      });
-    },
   });
 
-  // Early return for empty music
+  // Empty state
   if (!music || music.length === 0) {
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground">
@@ -303,7 +285,7 @@ export function StandViewer({ data }: StandViewerProps) {
         isFullscreen ? 'fixed inset-0 z-50 bg-background h-screen' : ''
       }`}
     >
-      {/* Controls Bar - Navigation and Toolbar */}
+      {/* Controls Bar */}
       <div
         className={`p-4 border-b flex items-center justify-between bg-card ${
           gigMode || (!showControls && isFullscreen) ? 'hidden' : ''
@@ -312,26 +294,20 @@ export function StandViewer({ data }: StandViewerProps) {
         <NavigationControls />
         <Toolbar />
       </div>
-      {/* Utilities toggle sidebar could be placed here if needed */}
 
-      {/* Keyboard Handler - Global keyboard navigation */}
       <KeyboardHandler />
       <MidiHandler />
 
-      {/* Viewer Area - StandCanvas */}
+      {/* Viewer area */}
       <div className="flex-1 bg-muted/20 relative overflow-hidden">
-        {/* Gesture Handler overlay - positioned over canvas */}
         <GestureHandler />
         <StandCanvas />
         <RosterOverlay />
-        {/* Smart Navigation Editor — for creating/editing nav hotspots */}
         <SmartNavEditor />
-        {/* Rehearsal utilities */}
         <Metronome />
         <Tuner />
         <AudioPlayer />
         <PitchPipe />
-        {/* Audio Tracker Settings Panel */}
         <AudioTrackerSettings />
       </div>
     </div>

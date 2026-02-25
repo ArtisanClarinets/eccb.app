@@ -50,7 +50,7 @@ export function usePdf(options: UsePdfOptions): UsePdfReturn {
   const { url, pageNumber, scale, enablePreload = true, enableAutoCrop = false } = options;
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const containerRef = useRef<HTMLCanvasElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const documentRef = useRef<PdfDocument | null>(null);
 
   const [document, setDocument] = useState<PdfDocument | null>(null);

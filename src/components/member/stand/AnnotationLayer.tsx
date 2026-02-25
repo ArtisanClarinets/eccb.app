@@ -215,14 +215,6 @@ export function AnnotationLayer() {
               return;
             }
           }
-
-          // Fallback: draw simple circles for legacy annotations
-          ctx.fillStyle = a.color || '#f00';
-          const x = a.x * ref.current!.width;
-          const y = a.y * ref.current!.height;
-          ctx.beginPath();
-          ctx.arc(x, y, 5, 0, Math.PI * 2);
-          ctx.fill();
         });
       });
     });
@@ -287,12 +279,9 @@ export function AnnotationLayer() {
           id: stroke.id,
           pieceId: pieceId || '',
           pageNumber: currentPage,
-          x: x / canvas.width,
-          y: y / canvas.height,
-          content: JSON.stringify(stroke),
-          color: toolColor,
           layer: selectedLayer,
-          createdAt: new Date(),
+          strokeData: stroke,
+          createdAt: new Date().toISOString(),
         };
         addAnnotation?.(annotation);
         return;
@@ -408,12 +397,9 @@ export function AnnotationLayer() {
         id: stroke.id,
         pieceId: pieceId || '',
         pageNumber: currentPage,
-        x: stroke.points[0]?.x / canvas.width || 0,
-        y: stroke.points[0]?.y / canvas.height || 0,
-        content: JSON.stringify(stroke),
-        color: stroke.color,
         layer: selectedLayer,
-        createdAt: new Date(),
+        strokeData: stroke,
+        createdAt: new Date().toISOString(),
       };
 
       await addAnnotation(annotation);
@@ -466,12 +452,9 @@ export function AnnotationLayer() {
       id: stroke.id,
       pieceId: pieceId,
       pageNumber: currentPage,
-      x: textInput.x / canvas.width,
-      y: textInput.y / canvas.height,
-      content: JSON.stringify(stroke),
-      color: toolColor,
       layer: selectedLayer,
-      createdAt: new Date(),
+      strokeData: stroke,
+      createdAt: new Date().toISOString(),
     };
 
     await addAnnotation(annotation);

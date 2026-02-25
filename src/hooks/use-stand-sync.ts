@@ -179,28 +179,43 @@ export function useStandSync({
 
   const fetchState = useCallback(async () => {
     try {
-      const response = await fetch(`/api/stand/sync?eventId=${eventId}&userId=${userId}`);
+      const response = await fetch(`/api/stand/sync?eventId=${eventId}`);
       if (response.ok) {
         const data = await response.json();
-        
-        if (data.state) {
-          setCurrentState(data.state);
-          onStateChange?.(data.state);
+
+        // Build StandState from the flat response
+        const state: StandState = {
+          eventId: data.eventId ?? eventId,
+          currentPage: data.currentPage,
+          currentPieceIndex: data.currentPieceIndex,
+          nightMode: data.nightMode,
+          lastUpdated: data.lastSyncAt,
+        };
+        setCurrentState(state);
+        onStateChange?.(state);
+
+        // Build roster from activeUserList
+        if (data.activeUserList) {
+          const rosterMembers: StandRosterMember[] = data.activeUserList.map(
+            (u: { userId: string; name: string; section?: string }) => ({
+              userId: u.userId,
+              name: u.name,
+              section: u.section,
+              joinedAt: new Date().toISOString(),
+            })
+          );
+          setRoster(rosterMembers);
+          onRosterChange?.(rosterMembers);
+          useStandStore.getState().setRoster(rosterMembers);
         }
-        
-        if (data.roster) {
-          setRoster(data.roster);
-          onRosterChange?.(data.roster);
-          useStandStore.getState().setRoster(data.roster);
-        }
-        
+
         setIsConnected(true);
         setConnectionError(null);
       }
     } catch (error) {
       console.error('[useStandSync] Polling error:', error);
     }
-  }, [eventId, userId, onStateChange, onRosterChange]);
+  }, [eventId, onStateChange, onRosterChange]);
 
   const startPollingFallback = useCallback(() => {
     if (pollingIntervalRef.current) {
@@ -210,12 +225,19 @@ export function useStandSync({
     setIsPollingFallback(true);
     console.log('[useStandSync] Starting polling fallback - WebSocket unavailable');
 
+    // Send join presence so server tracks us
+    fetch('/api/stand/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ eventId, presence: { type: 'presence', status: 'joined' } }),
+    }).catch(() => {/* ignore */});
+
     // Initial fetch
     fetchState();
 
     // Set up polling interval
     pollingIntervalRef.current = setInterval(fetchState, pollingInterval);
-  }, [fetchState, pollingInterval]);
+  }, [eventId, fetchState, pollingInterval]);
 
   const stopPollingFallback = useCallback(() => {
     if (pollingIntervalRef.current) {
@@ -394,11 +416,11 @@ export function useStandSync({
   const sendCommand = useCallback(
     (command: Omit<CommandMessage, 'type'>) => {
       if (isPollingFallback) {
-        // Use HTTP for commands when polling
-        fetch('/api/stand/sync/command', {
+        // Use the main sync endpoint with command payload
+        fetch('/api/stand/sync', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ eventId, ...command }),
+          body: JSON.stringify({ eventId, command: { type: 'command', ...command } }),
         }).catch((err) => console.error('[useStandSync] Failed to send command:', err));
         return;
       }
@@ -420,10 +442,14 @@ export function useStandSync({
   const sendMode = useCallback(
     (name: string, value: unknown) => {
       if (isPollingFallback) {
-        fetch('/api/stand/sync/mode', {
+        // Use the main sync endpoint for mode changes
+        fetch('/api/stand/sync', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ eventId, name, value }),
+          body: JSON.stringify({
+            eventId,
+            command: { type: 'command', action: 'toggleNightMode', value: name === 'nightMode' ? value : undefined },
+          }),
         }).catch((err) => console.error('[useStandSync] Failed to send mode:', err));
         return;
       }

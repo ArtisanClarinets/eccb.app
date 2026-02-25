@@ -71,7 +71,6 @@ export const StandCanvas = forwardRef<StandCanvasRef, StandCanvasProps>(
     ref
   ) => {
     const canvasContainerRef = useRef<HTMLDivElement>(null);
-    const canvasRef = useRef<HTMLCanvasElement>(null);
     const renderFrameRef = useRef<number | null>(null);
 
     const {
@@ -97,6 +96,7 @@ export const StandCanvas = forwardRef<StandCanvasRef, StandCanvasProps>(
       prevPageCanvas,
       nextPageCanvas,
       renderCurrentPage,
+      canvasRef,
     } = usePdf({
       url: currentPiece?.pdfUrl ?? null,
       pageNumber: currentPage,
@@ -131,7 +131,7 @@ export const StandCanvas = forwardRef<StandCanvasRef, StandCanvasProps>(
         },
         requestRender: () => renderCurrentPage(),
       }),
-      [numPages, cropRect, renderCurrentPage, setCurrentPage]
+      [canvasRef, numPages, cropRect, renderCurrentPage, setCurrentPage]
     );
 
     // Handle canvas click with RAF for performance
@@ -152,7 +152,7 @@ export const StandCanvas = forwardRef<StandCanvasRef, StandCanvasProps>(
           onPageClick(currentPage, x, y);
         });
       },
-      [currentPage, onPageClick]
+      [canvasRef, currentPage, onPageClick]
     );
 
     // Keyboard navigation for canvas

@@ -2,13 +2,14 @@
 
 import * as pdfjs from 'pdfjs-dist';
 
-// Configure PDF.js worker
-// In production, use a CDN or local worker file
-const PDFJS_VERSION = pdfjs.version;
+// Configure PDF.js worker from our own public/ copy (CSP-safe).
+let workerInitialised = false;
 
 export function initializePdfJs(): void {
-  // Set up the worker source - use CDN for reliable loading
-  pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/pdf.worker.min.mjs`;
+  if (workerInitialised) return;
+  // Served from public/pdf.worker.min.mjs – same origin, so CSP 'self' allows it.
+  pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+  workerInitialised = true;
 }
 
 export interface PdfDocument {
@@ -78,8 +79,9 @@ export async function loadPdfDocument(url: string): Promise<PdfDocument> {
 
   const loadingTask = pdfjs.getDocument({
     url,
-    cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+    // cMaps are bundled into the worker in pdfjs-dist >= 4; no external URL needed.
     cMapPacked: true,
+    withCredentials: false, // same-origin proxy, cookies travel automatically
   });
 
   const pdfDoc = await loadingTask.promise;

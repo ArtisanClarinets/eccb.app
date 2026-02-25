@@ -12,6 +12,7 @@ const annotationCreateSchema = z.object({
   layer: z.enum(['PERSONAL', 'SECTION', 'DIRECTOR']),
   strokeData: z.record(z.string(), z.any()),
   userId: z.string().optional(),
+  sectionId: z.string().optional(),
 });
 
 const _annotationUpdateSchema = z.object({
@@ -49,13 +50,25 @@ export async function GET(request: NextRequest) {
     if (layer) where.layer = layer;
     if (userId) where.userId = userId;
 
-    // If not a director, only show personal and section annotations
+    // If not a director, scope annotations properly
     const roles = await getUserRoles(session.user.id);
-    if (!roles.includes('DIRECTOR') && !roles.includes('SUPER_ADMIN')) {
-      // Show personal annotations (own) and section annotations
+    const isDirector = roles.includes('DIRECTOR') || roles.includes('SUPER_ADMIN') || roles.includes('ADMIN');
+
+    if (!isDirector) {
+      // Look up user's section memberships via Member → Section
+      const member = await prisma.member.findFirst({
+        where: { userId: session.user.id },
+        select: {
+          sections: { select: { id: true } },
+        },
+      });
+      const userSectionIds = member?.sections.map((s: { id: string }) => s.id) ?? [];
+
+      // Show: own PERSONAL, matching SECTION by sectionId, all DIRECTOR
       where.OR = [
-        { userId: session.user.id },
-        { layer: 'SECTION' },
+        { userId: session.user.id, layer: 'PERSONAL' },
+        { layer: 'SECTION', sectionId: { in: userSectionIds } },
+        { layer: 'DIRECTOR' },
       ];
     }
 
@@ -117,6 +130,7 @@ export async function POST(request: NextRequest) {
         layer: validated.layer,
         strokeData: validated.strokeData,
         userId: validated.userId || session.user.id,
+        sectionId: validated.sectionId ?? null,
       },
       include: {
         user: {

@@ -34,6 +34,7 @@ export function SmartNavEditor() {
     currentPieceIndex,
     setCurrentPage,
     setCurrentPieceIndex,
+    userContext,
   } = useStandStore();
 
   const currentPiece = pieces[currentPieceIndex];
@@ -50,6 +51,9 @@ export function SmartNavEditor() {
   const [formDestPage, setFormDestPage] = useState(1);
   const [formDestPieceIdx, setFormDestPieceIdx] = useState(currentPieceIndex);
   const [saving, setSaving] = useState(false);
+
+  // Only directors/admins can edit navigation links
+  const canEdit = userContext?.isDirector ?? false;
 
   const overlayRef = useRef<HTMLDivElement>(null);
   const startPosRef = useRef<{ x: number; y: number } | null>(null);
@@ -150,13 +154,14 @@ export function SmartNavEditor() {
           fromX: x1,
           fromY: y1,
           toPage: formDestPage,
+          toMusicId: destPiece.id !== currentPiece.id ? destPiece.id : null,
           toX: x2,
           toY: y2,
           label: formLabel || undefined,
         }),
       });
       if (!res.ok) throw new Error(`Save failed: ${res.status}`);
-      const { link } = await res.json() as { link: { id: string; fromPage: number; fromX: number; fromY: number; toPage: number; toX: number; toY: number; label: string | null; musicId: string } };
+      const { navigationLink: link } = await res.json() as { navigationLink: { id: string; fromPage: number; fromX: number; fromY: number; toPage: number; toMusicId: string | null; toX: number; toY: number; label: string | null; musicId: string } };
 
       const navLink: NavigationLink = {
         id: link.id,
@@ -164,11 +169,12 @@ export function SmartNavEditor() {
         fromPage: link.fromPage,
         fromX: link.fromX,
         fromY: link.fromY,
-        toPieceId: destPiece.id,
+        toPieceId: link.toMusicId ?? destPiece.id,
         toPage: link.toPage,
         toX: link.toX,
         toY: link.toY,
         label: link.label ?? '',
+        toMusicId: link.toMusicId ?? null,
       };
       addNavigationLink(navLink);
     } catch (err) {
@@ -185,7 +191,7 @@ export function SmartNavEditor() {
   const handleDelete = useCallback(
     async (id: string) => {
       try {
-        await fetch(`/api/stand/navigation-links?id=${id}`, { method: 'DELETE' });
+        await fetch(`/api/stand/navigation-links/${id}`, { method: 'DELETE' });
       } catch (err) {
         console.error('Failed to delete nav link:', err);
       }
@@ -282,22 +288,24 @@ export function SmartNavEditor() {
         ))}
       </div>
 
-      {/* Edit mode toggle button */}
-      <button
-        className={`absolute bottom-12 right-2 z-30 px-2 py-1 text-xs rounded shadow border transition-colors ${
-          editMode
-            ? 'bg-primary text-primary-foreground border-primary'
-            : 'bg-card text-foreground border-border hover:bg-muted'
-        }`}
-        onClick={() => {
-          setEditMode((v) => !v);
-          setDrawRect(null);
-          setDrawing(false);
-        }}
-        title={editMode ? 'Exit nav editor' : 'Edit navigation hotspots'}
-      >
-        {editMode ? 'Done' : '🔗 Nav'}
-      </button>
+      {/* Edit mode toggle button — directors only */}
+      {canEdit && (
+        <button
+          className={`absolute bottom-12 right-2 z-30 px-2 py-1 text-xs rounded shadow border transition-colors ${
+            editMode
+              ? 'bg-primary text-primary-foreground border-primary'
+              : 'bg-card text-foreground border-border hover:bg-muted'
+          }`}
+          onClick={() => {
+            setEditMode((v) => !v);
+            setDrawRect(null);
+            setDrawing(false);
+          }}
+          title={editMode ? 'Exit nav editor' : 'Edit navigation hotspots'}
+        >
+          {editMode ? 'Done' : '🔗 Nav'}
+        </button>
+      )}
 
       {/* Configuration dialog */}
       {dialogOpen && (

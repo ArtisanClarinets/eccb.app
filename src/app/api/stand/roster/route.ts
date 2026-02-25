@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth/config';
 import { headers } from 'next/headers';
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
+import { getUserRoles } from '@/lib/auth/permissions';
 
 // Zod schemas for validation
 const rosterCreateSchema = z.object({
@@ -18,6 +19,21 @@ const rosterUpdateSchema = z.object({
 
 export type RosterCreateInput = z.infer<typeof rosterCreateSchema>;
 export type RosterUpdateInput = z.infer<typeof rosterUpdateSchema>;
+
+const PRIVILEGED_ROLES = ['SUPER_ADMIN', 'ADMIN', 'DIRECTOR', 'STAFF'];
+
+async function canAccessEvent(userId: string, eventId: string): Promise<boolean> {
+  const roles = await getUserRoles(userId);
+  if (roles.some((r) => PRIVILEGED_ROLES.includes(r))) return true;
+
+  const member = await prisma.member.findFirst({ where: { userId } });
+  if (!member) return false;
+
+  const attendance = await prisma.event.findFirst({
+    where: { id: eventId, attendance: { some: { memberId: member.id } } },
+  });
+  return !!attendance;
+}
 
 /**
  * GET /api/stand/roster
@@ -41,6 +57,11 @@ export async function GET(request: NextRequest) {
         { error: 'eventId query parameter is required' },
         { status: 400 }
       );
+    }
+
+    const hasAccess = await canAccessEvent(session.user.id, eventId);
+    if (!hasAccess) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
     const roster = await prisma.standSession.findMany({
@@ -82,19 +103,9 @@ export async function POST(request: NextRequest) {
 
     const userId = validated.userId || session.user.id;
 
-    // Check if user is attending the event
-    const attendance = await prisma.attendance.findFirst({
-      where: {
-        eventId: validated.eventId,
-        member: {
-          userId: userId,
-        },
-      },
-    });
-
-    if (!attendance) {
-      // Allow registration but don't enforce attendance check
-      // This lets stand be flexible for rehearsals
+    const hasAccess = await canAccessEvent(session.user.id, validated.eventId);
+    if (!hasAccess) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
     const standSession = await prisma.standSession.upsert({

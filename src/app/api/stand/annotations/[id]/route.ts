@@ -9,6 +9,7 @@ import type { Prisma } from '@prisma/client';
 const annotationUpdateSchema = z.object({
   strokeData: z.record(z.string(), z.any()).optional(),
   layer: z.enum(['PERSONAL', 'SECTION', 'DIRECTOR']).optional(),
+  sectionId: z.string().nullable().optional(),
 });
 
 export type AnnotationUpdateInput = z.infer<typeof annotationUpdateSchema>;
@@ -69,6 +70,7 @@ export async function PUT(
           strokeData: validated.strokeData as Prisma.InputJsonValue,
         }),
         ...(validated.layer && { layer: validated.layer }),
+        ...(validated.sectionId !== undefined && { sectionId: validated.sectionId }),
       },
       include: {
         user: {
