@@ -34,13 +34,18 @@ export class EventService {
   }
 
   /**
-   * List upcoming events
+   * List upcoming events.
+   * @param publishedOnly - When true (default), returns only published events.
+   *                        Pass false to include unpublished (admin use only).
    */
-  static async listUpcomingEvents(includePublished: boolean = true) {
+  static async listUpcomingEvents(publishedOnly: boolean = true) {
     return prisma.event.findMany({
       where: {
         startTime: { gte: new Date() },
-        ...(includePublished ? {} : { isPublished: false }),
+        ...(publishedOnly ? { isPublished: true } : {}),
+      },
+      include: {
+        _count: { select: { music: true } },
       },
       orderBy: { startTime: 'asc' },
     });

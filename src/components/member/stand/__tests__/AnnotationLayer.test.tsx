@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, act } from '@testing-library/react';
+import { render } from '@testing-library/react';
 import { AnnotationLayer } from '../AnnotationLayer';
 import { useStandStore, Tool } from '@/store/standStore';
 
@@ -14,14 +14,14 @@ describe('AnnotationLayer component', () => {
   });
 
   it('renders three canvas elements', () => {
-    setupStore({ pieces: [{ id: 'p1', title: '', composer: '', pdfUrl: null, totalPages: 1 }], currentPieceIndex: 0, currentPage: 1 });
+    setupStore({ pieces: [{ id: 'p1', title: '', composer: '', pdfUrl: null, totalPages: 1 }], currentPieceIndex: 0, _currentPage: 1 });
     const { container } = render(<div style={{ width: 100, height: 100 }}><AnnotationLayer /></div>);
     const canvases = container.querySelectorAll('canvas');
     expect(canvases.length).toBe(3);
   });
 
   it('all canvases have pointer-events none by default', () => {
-    setupStore({ pieces: [{ id: 'p1', title: '', composer: '', pdfUrl: null, totalPages: 1 }], currentPieceIndex: 0, currentPage: 1, editMode: false, selectedLayer: 'PERSONAL' });
+    setupStore({ pieces: [{ id: 'p1', title: '', composer: '', pdfUrl: null, totalPages: 1 }], currentPieceIndex: 0, _currentPage: 1, editMode: false, selectedLayer: 'PERSONAL' });
     const { container } = render(<div style={{ width: 100, height: 100 }}><AnnotationLayer /></div>);
     const canvases = container.querySelectorAll('canvas');
     canvases.forEach((c) => {
@@ -30,7 +30,7 @@ describe('AnnotationLayer component', () => {
   });
 
   it('only selected layer canvas gets pointer-events auto when editMode true', () => {
-    setupStore({ pieces: [{ id: 'p1', title: '', composer: '', pdfUrl: null, totalPages: 1 }], currentPieceIndex: 0, currentPage: 1, editMode: true, selectedLayer: 'SECTION' });
+    setupStore({ pieces: [{ id: 'p1', title: '', composer: '', pdfUrl: null, totalPages: 1 }], currentPieceIndex: 0, _currentPage: 1, editMode: true, selectedLayer: 'SECTION' });
     const { container } = render(<div style={{ width: 100, height: 100 }}><AnnotationLayer /></div>);
     const canvases = Array.from(container.querySelectorAll('canvas'));
     // section is index 1
@@ -41,7 +41,7 @@ describe('AnnotationLayer component', () => {
 
   // Tool interaction tests
   it('has correct default tool state', () => {
-    setupStore({ pieces: [{ id: 'p1', title: '', composer: '', pdfUrl: null, totalPages: 1 }], currentPieceIndex: 0, currentPage: 1 });
+    setupStore({ pieces: [{ id: 'p1', title: '', composer: '', pdfUrl: null, totalPages: 1 }], currentPieceIndex: 0, _currentPage: 1 });
     const state = useStandStore.getState();
     expect(state.currentTool).toBe(Tool.PENCIL);
     expect(state.toolColor).toBe('#ff0000');
@@ -49,21 +49,15 @@ describe('AnnotationLayer component', () => {
   });
 
   it('updates tool state via store actions', () => {
-    setupStore({ pieces: [{ id: 'p1', title: '', composer: '', pdfUrl: null, totalPages: 1 }], currentPieceIndex: 0, currentPage: 1 });
+    setupStore({ pieces: [{ id: 'p1', title: '', composer: '', pdfUrl: null, totalPages: 1 }], currentPieceIndex: 0, _currentPage: 1 });
     
-    act(() => {
-      useStandStore.getState().setCurrentTool(Tool.HIGHLIGHTER);
-    });
+    useStandStore.getState().setCurrentTool(Tool.HIGHLIGHTER);
     expect(useStandStore.getState().currentTool).toBe(Tool.HIGHLIGHTER);
 
-    act(() => {
-      useStandStore.getState().setToolColor('#00ff00');
-    });
+    useStandStore.getState().setToolColor('#00ff00');
     expect(useStandStore.getState().toolColor).toBe('#00ff00');
 
-    act(() => {
-      useStandStore.getState().setStrokeWidth(10);
-    });
+    useStandStore.getState().setStrokeWidth(10);
     expect(useStandStore.getState().strokeWidth).toBe(10);
   });
 
@@ -71,7 +65,7 @@ describe('AnnotationLayer component', () => {
     setupStore({ 
       pieces: [{ id: 'p1', title: '', composer: '', pdfUrl: null, totalPages: 1 }], 
       currentPieceIndex: 0, 
-      currentPage: 1,
+      _currentPage: 1,
       editMode: true,
     });
     
@@ -86,7 +80,7 @@ describe('AnnotationLayer component', () => {
     setupStore({ 
       pieces: [{ id: 'p1', title: '', composer: '', pdfUrl: null, totalPages: 1 }], 
       currentPieceIndex: 0, 
-      currentPage: 1,
+      _currentPage: 1,
       editMode: false,
       selectedLayer: 'PERSONAL',
     });
@@ -99,7 +93,3 @@ describe('AnnotationLayer component', () => {
   });
 });
 
-// Helper for act from React 18
-function act(callback: () => void) {
-  callback();
-}

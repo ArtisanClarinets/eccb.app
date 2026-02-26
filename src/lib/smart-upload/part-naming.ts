@@ -23,6 +23,8 @@ export interface NormalisedInstrument {
   transposition: 'C' | 'Bb' | 'Eb' | 'F' | 'G' | 'D' | 'A';
   /** Instrument family / section */
   section: 'Woodwinds' | 'Brass' | 'Percussion' | 'Strings' | 'Keyboard' | 'Vocals' | 'Score' | 'Other';
+  /** Optional inferred source-part type */
+  partType?: 'FULL_SCORE' | 'CONDUCTOR_SCORE' | 'CONDENSED_SCORE' | 'PART';
 }
 
 // =============================================================================
@@ -38,11 +40,55 @@ const CHAIR_PATTERNS: Array<{ pattern: RegExp; chair: NormalisedInstrument['chai
   { pattern: /\b(solo)\b/i, chair: 'Solo' },
 ];
 
+const CHAIR_NORMALIZATION_PATTERNS: Array<{ pattern: RegExp; replacement: string }> = [
+  {
+    pattern: /\bclarinet\s+in\s+bb\s*(i{1,3}|iv|1|2|3|4)\b/i,
+    replacement: '$1 Bb Clarinet',
+  },
+  {
+    pattern: /\bbb\s+clarinet\s*(i{1,3}|iv|1|2|3|4)\b/i,
+    replacement: '$1 Bb Clarinet',
+  },
+  {
+    pattern: /\bclarinet\s*(i{1,3}|iv|1|2|3|4)\s+in\s+bb\b/i,
+    replacement: '$1 Bb Clarinet',
+  },
+];
+
+function normaliseRomanChairToken(token: string): string {
+  const lower = token.toLowerCase();
+  if (lower === 'i' || lower === '1') return '1st';
+  if (lower === 'ii' || lower === '2') return '2nd';
+  if (lower === 'iii' || lower === '3') return '3rd';
+  if (lower === 'iv' || lower === '4') return '4th';
+  return token;
+}
+
+function normalizeChairPhrases(raw: string): string {
+  let normalized = raw.trim().replace(/\s+/g, ' ');
+
+  for (const { pattern, replacement } of CHAIR_NORMALIZATION_PATTERNS) {
+    normalized = normalized.replace(pattern, (_, chairToken: string) => {
+      return replacement.replace('$1', normaliseRomanChairToken(chairToken));
+    });
+  }
+
+  return normalized;
+}
+
 function inferChair(raw: string): NormalisedInstrument['chair'] {
   for (const { pattern, chair } of CHAIR_PATTERNS) {
     if (pattern.test(raw)) return chair;
   }
   return null;
+}
+
+function inferPartType(raw: string): NormalisedInstrument['partType'] {
+  const lower = raw.toLowerCase();
+  if (/\bconductor\b/.test(lower)) return 'CONDUCTOR_SCORE';
+  if (/\bcondensed\s+score\b/.test(lower)) return 'CONDENSED_SCORE';
+  if (/\b(full\s+score|score)\b/.test(lower)) return 'FULL_SCORE';
+  return 'PART';
 }
 
 // =============================================================================
@@ -112,22 +158,25 @@ const INSTRUMENT_MAPPINGS: InstrumentMapping[] = [
  * Extracts chair, canonical base instrument name, transposition, and section.
  */
 export function normalizeInstrumentLabel(raw: string): NormalisedInstrument {
-  const chair = inferChair(raw);
+  const normalizedRaw = normalizeChairPhrases(raw);
+  const chair = inferChair(normalizedRaw);
+  const partType = inferPartType(normalizedRaw);
 
   for (const { pattern, base, transposition, section } of INSTRUMENT_MAPPINGS) {
-    if (pattern.test(raw)) {
+    if (pattern.test(normalizedRaw)) {
       // If chair is in raw label, include it in instrument name
       const instrument = chair ? `${chair} ${base}` : base;
-      return { instrument, chair, transposition, section };
+      return { instrument, chair, transposition, section, partType };
     }
   }
 
   // Fallback: return cleaned raw string
   return {
-    instrument: raw.trim() || 'Unknown',
+    instrument: normalizedRaw.trim() || 'Unknown',
     chair,
     transposition: 'C',
     section: 'Other',
+    partType,
   };
 }
 

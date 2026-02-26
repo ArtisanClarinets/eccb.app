@@ -1,5 +1,37 @@
 import type { LLMAdapter, LLMConfig, VisionRequest, VisionResponse } from './types';
 
+const BLOCKED_BODY_PARAMS = new Set(['model', 'messages']);
+
+function buildLabelText(label: string): string {
+  return `[${label}]`;
+}
+
+function pushOpenRouterImageContent(
+  content: Array<{ type: string; image_url?: { url: string }; text?: string }>,
+  image: { mimeType: string; base64Data: string; label?: string }
+): void {
+  if (image.label?.trim()) {
+    content.push({ type: 'text', text: buildLabelText(image.label.trim()) });
+  }
+
+  content.push({
+    type: 'image_url',
+    image_url: { url: `data:${image.mimeType};base64,${image.base64Data}` },
+  });
+}
+
+function mergeModelParams(
+  body: Record<string, unknown>,
+  modelParams?: Record<string, unknown>
+): void {
+  if (!modelParams) return;
+
+  for (const [key, value] of Object.entries(modelParams)) {
+    if (BLOCKED_BODY_PARAMS.has(key)) continue;
+    body[key] = value;
+  }
+}
+
 /**
  * OpenRouter API adapter
  * OpenRouter is OpenAI-compatible but with a different base URL
@@ -25,16 +57,14 @@ export class OpenRouterAdapter implements LLMAdapter {
     // Build content array with images and text
     const content: Array<{ type: string; image_url?: { url: string }; text?: string }> = [];
 
-    // Include labeled inputs if provided
-    const allImages = request.labeledInputs
-      ? [...request.images, ...request.labeledInputs.map((li) => ({ mimeType: li.mimeType, base64Data: li.base64Data }))]
-      : request.images;
+    for (const image of request.images) {
+      pushOpenRouterImageContent(content, image);
+    }
 
-    for (const image of allImages) {
-      content.push({
-        type: 'image_url',
-        image_url: { url: `data:${image.mimeType};base64,${image.base64Data}` },
-      });
+    if (request.labeledInputs) {
+      for (const labeledInput of request.labeledInputs) {
+        pushOpenRouterImageContent(content, labeledInput);
+      }
     }
 
     content.push({ type: 'text', text: request.prompt });
@@ -51,6 +81,8 @@ export class OpenRouterAdapter implements LLMAdapter {
       max_tokens: request.maxTokens ?? 4096,
       temperature: request.temperature ?? 0.1,
     };
+
+    mergeModelParams(body, request.modelParams);
 
     if (request.responseFormat?.type === 'json') {
       body['response_format'] = { type: 'json_object' };

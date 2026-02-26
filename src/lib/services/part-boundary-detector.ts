@@ -14,6 +14,7 @@
 import { logger } from '@/lib/logger';
 import type { CuttingInstruction } from '@/types/smart-upload';
 import type { PageHeader } from './pdf-text-extractor';
+import { normalizeInstrumentLabel } from '@/lib/smart-upload/part-naming';
 
 // =============================================================================
 // Types
@@ -52,6 +53,10 @@ export interface SegmentationResult {
   segmentationConfidence: number;
   /** Whether this segmentation was done from text layer (true) or header OCR (false) */
   fromTextLayer: boolean;
+  /** Useful for debugging cut boundaries */
+  segmentBoundaries: Array<{ label: string; start: number; end: number }>;
+  /** Per-page confidence diagnostics */
+  perPageConfidence: Array<{ pageIndex: number; confidence: number; label: string }>;
 }
 
 // =============================================================================
@@ -133,6 +138,11 @@ export function normaliseLabelFromHeader(headerText: string): { label: string; c
     }
   }
 
+  const normalized = normalizeInstrumentLabel(text);
+  if (normalized.instrument && normalized.instrument.toLowerCase() !== 'unknown') {
+    return { label: normalized.instrument, confidence: 65 };
+  }
+
   return null;
 }
 
@@ -181,6 +191,8 @@ export function detectPartBoundaries(
       cuttingInstructions: [],
       segmentationConfidence: 0,
       fromTextLayer,
+      segmentBoundaries: [],
+      perPageConfidence: [],
     };
   }
 
@@ -220,20 +232,22 @@ export function detectPartBoundaries(
     }
   }
 
-  // Step 5: Add any pages not in pageHeaders (e.g., when maxPages was capped)
+  // Step 5: Add any pages not in pageHeaders with unknown labels.
+  // Do not propagate labels into pages that were never analyzed.
   const coveredIndices = new Set(pageLabels.map((p) => p.pageIndex));
-  if (totalPages > pageHeaders.length && pageLabels.length > 0) {
-    const lastKnownLabel = pageLabels[pageLabels.length - 1].label;
-    for (let i = pageHeaders.length; i < totalPages; i++) {
+  if (totalPages > pageHeaders.length) {
+    for (let i = 0; i < totalPages; i++) {
       if (!coveredIndices.has(i)) {
         pageLabels.push({
           pageIndex: i,
-          label: lastKnownLabel,
+          label: 'Unknown Part',
           rawHeader: '',
-          confidence: 25,
+          confidence: 0,
         });
       }
     }
+
+    pageLabels = pageLabels.sort((a, b) => a.pageIndex - b.pageIndex);
   }
 
   // Step 6: Group consecutive pages with the same label into segments
@@ -261,8 +275,8 @@ export function detectPartBoundaries(
   const cuttingInstructions: CuttingInstruction[] = segments.map((seg, idx) => ({
     partName: seg.label,
     instrument: seg.label,
-    section: inferSection(seg.label),
-    transposition: inferTransposition(seg.label),
+    section: normalizeInstrumentLabel(seg.label).section,
+    transposition: normalizeInstrumentLabel(seg.label).transposition,
     partNumber: idx + 1,
     pageRange: [seg.pageStart, seg.pageEnd] as [number, number],
   }));
@@ -280,34 +294,25 @@ export function detectPartBoundaries(
     fromTextLayer,
   });
 
+  const segmentBoundaries = segments.map((segment) => ({
+    label: segment.label,
+    start: segment.pageStart,
+    end: segment.pageEnd,
+  }));
+
+  const perPageConfidence = pageLabels.map((label) => ({
+    pageIndex: label.pageIndex,
+    confidence: label.confidence,
+    label: label.label,
+  }));
+
   return {
     pageLabels,
     segments,
     cuttingInstructions,
     segmentationConfidence,
     fromTextLayer,
+    segmentBoundaries,
+    perPageConfidence,
   };
-}
-
-// =============================================================================
-// Section / Transposition Inference
-// =============================================================================
-
-function inferSection(label: string): CuttingInstruction['section'] {
-  const l = label.toLowerCase();
-  if (/(flute|piccolo|oboe|clarinet|bassoon|saxophone|sax)/.test(l)) return 'Woodwinds';
-  if (/(trumpet|cornet|trombone|horn|tuba|euphonium|baritone)/.test(l)) return 'Brass';
-  if (/(percussion|timpani|drum|marimba|xyloph|vib|cymbal|mallet)/.test(l)) return 'Percussion';
-  if (/(violin|viola|cello|bass|harp|guitar|string)/.test(l)) return 'Strings';
-  if (/(piano|keyboard|organ)/.test(l)) return 'Keyboard';
-  if (/(score|conductor)/.test(l)) return 'Score';
-  return 'Other';
-}
-
-function inferTransposition(label: string): CuttingInstruction['transposition'] {
-  const l = label.toLowerCase();
-  if (/(bb\s+clarinet|bb\s+trumpet|bb\s+cornet|soprano\s+sax|tenor\s+sax|baritone\s+treble)/.test(l)) return 'Bb';
-  if (/(eb\s+clarinet|eb\s+alto|alto\s+sax|baritone\s+sax|eb\s+horn)/.test(l)) return 'Eb';
-  if (/(f\s+horn|french\s+horn|english\s+horn)/.test(l)) return 'F';
-  return 'C';
 }

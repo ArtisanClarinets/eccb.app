@@ -83,6 +83,58 @@ async function updateLLMConfig() {
       value: process.env.LLM_TWO_PASS_ENABLED || 'true',
       description: 'Enable two-pass verification',
     },
+
+    // Canonical Smart Upload keys (preferred over legacy llm_* equivalents)
+    {
+      key: 'smart_upload_confidence_threshold',
+      value: process.env.SMART_UPLOAD_CONFIDENCE_THRESHOLD || '70',
+      description: 'Minimum confidence score (0-100) to accept a first-pass parse result',
+    },
+    {
+      key: 'smart_upload_auto_approve_threshold',
+      value: process.env.SMART_UPLOAD_AUTO_APPROVE_THRESHOLD || '90',
+      description: 'Confidence score (0-100) at which a session is auto-approved without human review',
+    },
+    {
+      key: 'smart_upload_rate_limit_rpm',
+      value: process.env.SMART_UPLOAD_RATE_LIMIT_RPM || '15',
+      description: 'LLM rate limit in requests per minute for the smart-upload pipeline',
+    },
+    {
+      key: 'smart_upload_skip_parse_threshold',
+      value: process.env.SMART_UPLOAD_SKIP_PARSE_THRESHOLD || '60',
+      description: 'Confidence below which a second-pass re-extraction is always triggered',
+    },
+    {
+      key: 'smart_upload_max_pages',
+      value: process.env.SMART_UPLOAD_MAX_PAGES || '20',
+      description: 'Maximum number of PDF pages to send to the LLM in a single call',
+    },
+    {
+      key: 'smart_upload_max_concurrent',
+      value: process.env.SMART_UPLOAD_MAX_CONCURRENT || '3',
+      description: 'Maximum number of concurrent smart-upload BullMQ jobs',
+    },
+    {
+      key: 'smart_upload_allowed_mime_types',
+      value: process.env.SMART_UPLOAD_ALLOWED_MIME_TYPES || '["application/pdf"]',
+      description: 'JSON array of MIME types accepted by the upload endpoint',
+    },
+    {
+      key: 'vision_model_params',
+      value: process.env.VISION_MODEL_PARAMS || '{"temperature":0.1,"max_tokens":4096}',
+      description: 'Additional JSON parameters merged into the first-pass vision LLM request',
+    },
+    {
+      key: 'verification_model_params',
+      value: process.env.VERIFICATION_MODEL_PARAMS || '{"temperature":0.1,"max_tokens":4096}',
+      description: 'Additional JSON parameters merged into the second-pass verification LLM request',
+    },
+    {
+      key: 'llm_prompt_version',
+      value: '2.0.0',
+      description: 'Current prompt version used by the smart-upload pipeline',
+    },
   ];
 
   for (const setting of updates) {

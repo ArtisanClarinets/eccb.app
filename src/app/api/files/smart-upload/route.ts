@@ -85,11 +85,13 @@ export async function POST(request: NextRequest) {
   try {
     // Load DB-configured limits (fall back to defaults if DB unavailable)
     let maxFileSizeMb = DEFAULT_MAX_FILE_SIZE_MB;
-    const allowedMimeTypes = DEFAULT_ALLOWED_MIME_TYPES;
+    let allowedMimeTypes: string[] = DEFAULT_ALLOWED_MIME_TYPES;
     try {
       const cfg = await loadSmartUploadRuntimeConfig();
       maxFileSizeMb = cfg.maxFileSizeMb ?? DEFAULT_MAX_FILE_SIZE_MB;
-      // allowedMimeTypes is not yet on LLMRuntimeConfig; use default
+      if (cfg.allowedMimeTypes && cfg.allowedMimeTypes.length > 0) {
+        allowedMimeTypes = cfg.allowedMimeTypes;
+      }
     } catch {
       logger.warn('Could not load smart upload config from DB; using defaults for upload limits');
     }
@@ -195,9 +197,10 @@ export async function POST(request: NextRequest) {
         parseStatus: smartUploadSession.parseStatus,
         secondPassStatus: smartUploadSession.secondPassStatus,
         autoApproved: smartUploadSession.autoApproved,
-        routingDecision: 'auto_parse_second_pass' as RoutingDecision,
+        // routingDecision is determined by the worker; null until processing completes
+        routingDecision: null as RoutingDecision | null,
       },
-      message: getUploadMessage('auto_parse_second_pass', 'NOT_PARSED', 0),
+      message: 'Upload successful. Processing in background — check status endpoint for progress.',
       note: 'File is being processed in the background. Check status endpoint for progress.',
     });
   } catch (error) {

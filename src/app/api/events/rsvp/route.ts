@@ -7,11 +7,27 @@ import { AttendanceStatus } from '@prisma/client';
 import { validateCSRF } from '@/lib/csrf';
 import { applyRateLimit } from '@/lib/rate-limit';
 
+// Accept both human-friendly RSVP values (YES/NO/MAYBE) and raw attendance
+// statuses so both the member UI and admin tools work without a mismatch.
 const rsvpSchema = z.object({
   eventId: z.string(),
   memberId: z.string(),
-  status: z.enum(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED']),
+  status: z.enum(['YES', 'NO', 'MAYBE', 'PRESENT', 'ABSENT', 'LATE', 'EXCUSED']),
 });
+
+/** Map friendly RSVP strings to the AttendanceStatus enum values stored in DB */
+function mapRsvpStatus(status: string): AttendanceStatus {
+  switch (status) {
+    case 'YES':
+      return 'PRESENT' as AttendanceStatus;
+    case 'NO':
+      return 'ABSENT' as AttendanceStatus;
+    case 'MAYBE':
+      return 'EXCUSED' as AttendanceStatus;
+    default:
+      return status as AttendanceStatus;
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -40,6 +56,7 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const { eventId, memberId, status } = rsvpSchema.parse(body);
+    const attendanceStatus = mapRsvpStatus(status);
 
     // Verify the member belongs to the current user
     const member = await prisma.member.findFirst({
@@ -74,19 +91,19 @@ export async function POST(request: NextRequest) {
         },
       },
       update: {
-        status: status as AttendanceStatus,
+        status: attendanceStatus,
         markedAt: new Date(),
       },
       create: {
         eventId,
         memberId,
-        status: status as AttendanceStatus,
+        status: attendanceStatus,
         markedAt: new Date(),
       },
     });
 
     // Check if we need to notify subs
-    if (status === 'ABSENT' && event.type === 'CONCERT') {
+    if (attendanceStatus === 'ABSENT' && event.type === 'CONCERT') {
       // Find subs who play the same instruments
       const instrumentIds = member.instruments.map(i => i.instrumentId);
 

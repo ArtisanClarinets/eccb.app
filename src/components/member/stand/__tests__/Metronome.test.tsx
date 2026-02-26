@@ -14,8 +14,16 @@ beforeAll(() => {
   class FakeAudioContext {
     currentTime = 0;
     destination = {} as any;
+    state = 'running' as AudioContextState;
+    resume = vi.fn().mockResolvedValue(undefined);
     createOscillator() {
       return new FakeOscillator() as unknown as OscillatorNode;
+    }
+    createGain() {
+      return {
+        connect: vi.fn(),
+        gain: { setValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn(), value: 1 },
+      };
     }
   }
   // @ts-expect-error global AudioContext mock
@@ -37,15 +45,16 @@ describe('scheduleClick', () => {
     createOscillator() {
       return new FakeOscillator() as unknown as OscillatorNode;
     }
+    createGain() {
+      return { connect: vi.fn(), gain: { setValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn(), value: 1 } };
+    }
   }
 
   it('creates and schedules oscillator at correct time', () => {
     const ctx = new FakeAudioContext() as unknown as AudioContext;
-    const result = scheduleClick(ctx, 1.23, 120);
-    expect(result.startTime).toBe(1.23);
-    const osc: any = result.oscillator;
+    const osc = scheduleClick(ctx, 1.23, false) as any;
     expect(osc.start).toHaveBeenCalledWith(1.23);
-    expect(osc.stop).toHaveBeenCalledWith(1.28);
+    expect(osc.stop).toHaveBeenCalledWith(1.23 + 0.07);
   });
 });
 

@@ -1,179 +1,186 @@
 // src/lib/smart-upload/prompts.ts
 // ============================================================
 // Centralized Smart Upload prompt templates.
-// These are the canonical defaults written to DB on first setup or reset.
+// System prompts define behavior; user prompts define task input/output.
 // ============================================================
 
 export const PROMPT_VERSION = '2.0.0';
 
 // =============================================================================
-// Vision Pass (First Pass) Default Prompt
+// System Prompts
 // =============================================================================
 
-export const DEFAULT_VISION_SYSTEM_PROMPT = `You are an expert music librarian and sheet music analyst. Analyse the provided images from a music PDF and extract ALL metadata.
+export const DEFAULT_VISION_SYSTEM_PROMPT =
+  'You are an expert music librarian and sheet-music metadata extractor. Be precise, deterministic, and schema-compliant.';
 
-## YOUR TASK
-Return a single JSON object matching the schema below. Be as accurate as possible — this data will be used to catalogue music for a concert band library.
+export const DEFAULT_VERIFICATION_SYSTEM_PROMPT =
+  'You are a strict verification assistant. Reconcile metadata against provided pages and return corrected JSON only.';
 
-## JSON OUTPUT SCHEMA
-\`\`\`json
+export const DEFAULT_HEADER_LABEL_SYSTEM_PROMPT =
+  'You identify instrument-part labels from sheet-music page header crops with high precision.';
+
+export const DEFAULT_ADJUDICATOR_SYSTEM_PROMPT =
+  'You are a senior adjudicator that resolves disagreements between extraction passes and produces a single final JSON decision.';
+
+// =============================================================================
+// User Prompt Templates
+// =============================================================================
+
+export const DEFAULT_VISION_USER_PROMPT_TEMPLATE = `Analyze the sampled score pages and return ONE JSON object.
+
+Context:
+- Total pages in original PDF: {{totalPages}}
+- Sampled pages provided: {{sampledPages}}
+- Sampled page labels: {{pageList}}
+
+Rules:
+1. Page labels are authoritative ("Original Page 1" is the first page of the PDF).
+2. All page ranges MUST be 1-indexed.
+3. cuttingInstructions must cover all pages exactly once (no gaps, no overlaps).
+4. Return valid JSON only (no markdown fences).
+
+Required object schema:
 {
-  "title": "string — the full title exactly as printed on the score",
-  "subtitle": "string | null — subtitle or arrangement description if present",
-  "composer": "string | null — full name, e.g. 'John Philip Sousa'",
-  "arranger": "string | null — arranger name if different from composer",
-  "publisher": "string | null — e.g. 'Hal Leonard', 'Carl Fischer'",
-  "copyrightYear": "number | null",
-  "ensembleType": "string | null — e.g. 'Concert Band', 'Wind Ensemble', 'Brass Quintet'",
-  "keySignature": "string | null — e.g. 'Bb Major', 'G minor'",
-  "timeSignature": "string | null — e.g. '4/4', '6/8', '3/4'",
-  "tempo": "string | null — e.g. 'Allegro', '♩= 120'",
-  "fileType": "one of: FULL_SCORE | CONDUCTOR_SCORE | CONDENSED_SCORE | PART",
-  "isMultiPart": "boolean — true if this PDF contains multiple instrument parts",
+  "title": string,
+  "subtitle": string | null,
+  "composer": string | null,
+  "arranger": string | null,
+  "publisher": string | null,
+  "copyrightYear": number | null,
+  "ensembleType": string | null,
+  "keySignature": string | null,
+  "timeSignature": string | null,
+  "tempo": string | null,
+  "fileType": "FULL_SCORE" | "CONDUCTOR_SCORE" | "CONDENSED_SCORE" | "PART",
+  "isMultiPart": boolean,
   "parts": [
     {
-      "instrument": "string — specific instrument name, e.g. 'Bb Clarinet 1'",
-      "partName": "string — label as printed, e.g. 'Clarinet in Bb, Part 1'",
-      "section": "one of: Woodwinds | Brass | Percussion | Strings | Keyboard | Vocals | Score | Other",
-      "transposition": "one of: C | Bb | Eb | F | G | D | A — concert pitch transposition",
-      "partNumber": "integer — ordering index within the PDF, 1-based"
+      "instrument": string,
+      "partName": string,
+      "section": "Woodwinds" | "Brass" | "Percussion" | "Strings" | "Keyboard" | "Vocals" | "Score" | "Other",
+      "transposition": "C" | "Bb" | "Eb" | "F" | "G" | "D" | "A",
+      "partNumber": number
     }
   ],
   "cuttingInstructions": [
     {
-      "partName": "string — same as parts[n].partName",
-      "instrument": "string — same as parts[n].instrument",
-      "section": "string",
-      "transposition": "string",
-      "partNumber": "integer",
-      "pageRange": [startPage, endPage]
+      "partName": string,
+      "instrument": string,
+      "section": string,
+      "transposition": string,
+      "partNumber": number,
+      "pageRange": [number, number]
     }
   ],
-  "totalPageCount": "number",
-  "confidenceScore": "integer 0-100 — your confidence in the accuracy of ALL fields above",
-  "notes": "string | null — any caveats, ambiguities, or observations"
-}
-\`\`\`
+  "totalPageCount": number,
+  "confidenceScore": number,
+  "notes": string | null
+}`;
 
-## RULES
-1. pageRange values are **1-indexed** (page 1 = first page of PDF).
-2. Every page MUST be covered by exactly one cuttingInstruction — no overlaps, no gaps.
-3. If this is NOT a multi-part score, set isMultiPart=false and provide a single cuttingInstruction covering all pages.
-4. For transposition: Bb Clarinet/Trumpet/Soprano Sax → "Bb"; Eb Alto Sax/Horn in Eb → "Eb"; F Horn/English Horn → "F"; all others → "C".
-5. Set confidenceScore < 50 if you cannot clearly read the title or instrument names.
-6. Return ONLY valid JSON — no markdown fences, no prose before or after.`;
+export const DEFAULT_VERIFICATION_USER_PROMPT_TEMPLATE = `Verify and, if needed, correct extracted metadata against the provided images.
 
-// =============================================================================
-// Header Label Pass Default Prompt
-// =============================================================================
+Context:
+- Total pages: {{pageCount}}
+- Original metadata JSON:
+{{originalMetadataJson}}
 
-export const DEFAULT_HEADER_LABEL_PROMPT = `You are an expert music librarian. Identify the instrument part label shown at the top of each sheet music page image.
+Rules:
+1. Page labels are authoritative and 1-indexed.
+2. Keep correct values unchanged; only correct incorrect values.
+3. cuttingInstructions must cover all pages exactly once (no gaps, no overlaps).
+4. Return JSON only.
 
-Your task: given one or more page header crop images (labelled Page 1, Page 2, …), return a JSON array with one entry per image identifying what instrument part is printed at the top.
+Return a JSON object containing corrected metadata fields plus:
+- "verificationConfidence": integer 0-100
+- "corrections": string | null`;
 
-## OUTPUT SCHEMA
-Return ONLY a JSON array with no markdown fences or extra text:
+export const DEFAULT_HEADER_LABEL_USER_PROMPT_TEMPLATE = `You are given header-crop images from multiple pages.
+
+Page labels for this batch:
+{{pageLabels}}
+
+Rules:
+1. Each image is labeled "Page N" and page numbers are 1-indexed.
+2. Return one output entry for each provided page label.
+3. If unreadable, set label to null and confidence to 0.
+4. Return JSON only.
+
+Return exactly this JSON shape:
 [
-  { "page": 1, "label": "Bb Clarinet 1", "confidence": 95 },
-  { "page": 2, "label": "Bb Clarinet 1", "confidence": 90 },
-  ...
-]
+  { "page": 1, "label": "Bb Clarinet 1", "confidence": 95 }
+]`;
 
-## RULES
-1. "page" is the 1-based page number shown in the image label.
-2. "label" is the instrument name exactly as printed, normalised to Title Case (e.g. "Bb Clarinet 1", "Alto Saxophone", "1st Trombone").
-3. "confidence" is 0-100 indicating how clearly the instrument is identified.
-4. If you cannot determine the instrument, set label to null and confidence to 0.
-5. Return ONLY valid JSON — no prose, no markdown fences.`;
+export const DEFAULT_ADJUDICATOR_USER_PROMPT_TEMPLATE = `Adjudicate first-pass and second-pass extraction outputs and produce a final result.
 
-// =============================================================================
-// Adjudicator Pass Default Prompt
-// =============================================================================
+Rules:
+1. Prefer values supported by explicit page evidence.
+2. Keep confirmed values unchanged.
+3. cuttingInstructions must remain 1-indexed and fully cover pages.
+4. Return JSON only.
 
-export const DEFAULT_ADJUDICATOR_PROMPT = `You are a senior music librarian adjudicating an automated metadata extraction result.
-
-You will receive:
-1. The extracted metadata JSON from a first-pass LLM analysis.
-2. A second-pass verification JSON that may contain corrections.
-3. Optionally: boundary page images around each part boundary.
-
-Your task is to produce a single definitive metadata record by:
-- Cross-referencing both passes and resolving conflicts
-- Using visible evidence from boundary images when provided
-- Flagging any remaining uncertainties
-
-## OUTPUT SCHEMA
-Return ONLY a JSON object:
+Return:
 {
-  "adjudicatedMetadata": { /* same structure as the first-pass metadata */ },
-  "adjudicationNotes": "string | null — explain any conflicts resolved or remaining doubts",
-  "finalConfidence": "integer 0-100",
-  "requiresHumanReview": "boolean — true only if confident resolution was impossible"
-}
+  "adjudicatedMetadata": { ...same structure as extraction metadata... },
+  "adjudicationNotes": string | null,
+  "finalConfidence": number,
+  "requiresHumanReview": boolean
+}`;
 
-## RULES
-1. Prefer second-pass corrections over first-pass when the correction includes an explanation.
-2. If both passes agree, keep the value — do not second-guess clear data.
-3. Page ranges must cover all pages with no gaps or overlaps.
-4. Return ONLY valid JSON — no markdown fences, no additional text.`;
-
-// =============================================================================
-// Verification Pass (Second Pass) Default Prompt
-// =============================================================================
-
-export const DEFAULT_VERIFICATION_SYSTEM_PROMPT = `You are a verification assistant. Review the extracted metadata against the original images.
-
-Check for:
-1. Typos in title or composer name
-2. Misclassification of file type (FULL_SCORE vs PART vs CONDUCTOR_SCORE vs CONDENSED_SCORE)
-3. Incorrect instrument identification
-4. Missing parts that are visible in the pages
-5. Incorrect page ranges in cuttingInstructions
-6. Wrong section or transposition assignments
-
-Return the corrected JSON with improved confidenceScore.
-If you find errors, explain them in a "corrections" field.
-If no errors, set "corrections" to null.
-
-Include a "verificationConfidence" field (0-100) indicating your confidence in the corrected extraction.
-
-Return valid JSON only. No markdown fences, no additional text.`;
+// Backward-compatible aliases for existing settings keys/usages.
+export const DEFAULT_HEADER_LABEL_PROMPT = DEFAULT_HEADER_LABEL_USER_PROMPT_TEMPLATE;
+export const DEFAULT_ADJUDICATOR_PROMPT = DEFAULT_ADJUDICATOR_USER_PROMPT_TEMPLATE;
 
 // =============================================================================
 // Prompt Builder Functions
 // =============================================================================
 
 /**
- * Build the vision pass prompt with context
+ * Build the first-pass user prompt from template/context.
  */
 export function buildVisionPrompt(
-  basePrompt: string,
+  template: string,
   context: {
     totalPages: number;
     sampledPageNumbers: number[];
   }
 ): string {
+  const safeTemplate = template?.trim() || DEFAULT_VISION_USER_PROMPT_TEMPLATE;
   const pageList = context.sampledPageNumbers.map((n) => n + 1).join(', ');
-  
-  return basePrompt
+
+  return safeTemplate
     .replace(/{{totalPages}}/g, String(context.totalPages))
     .replace(/{{pageList}}/g, pageList)
     .replace(/{{sampledPages}}/g, String(context.sampledPageNumbers.length));
 }
 
 /**
- * Build the verification pass prompt with context
+ * Build the second-pass user prompt from template/context.
  */
 export function buildVerificationPrompt(
-  basePrompt: string,
-  _context: {
+  template: string,
+  context: {
     originalMetadata: Record<string, unknown>;
     pageCount: number;
   }
 ): string {
-  // For now, return base prompt as-is. In the future, we could inject
-  // the original metadata for comparison
-  return basePrompt;
+  const safeTemplate = template?.trim() || DEFAULT_VERIFICATION_USER_PROMPT_TEMPLATE;
+  return safeTemplate
+    .replace(/{{pageCount}}/g, String(context.pageCount))
+    .replace(/{{originalMetadataJson}}/g, JSON.stringify(context.originalMetadata, null, 2));
+}
+
+/**
+ * Build the header-label pass user prompt from template/context.
+ */
+export function buildHeaderLabelPrompt(
+  template: string,
+  context: {
+    pageNumbers: number[];
+  }
+): string {
+  const safeTemplate = template?.trim() || DEFAULT_HEADER_LABEL_USER_PROMPT_TEMPLATE;
+  const labels = context.pageNumbers.map((pageNumber) => `Page ${pageNumber}`).join(', ');
+  return safeTemplate.replace(/{{pageLabels}}/g, labels);
 }
 
 // =============================================================================
@@ -200,6 +207,6 @@ export function promptsNeedReset(currentSettings: Record<string, string>): boole
   const hasVisionPrompt = !!currentSettings.llm_vision_system_prompt?.trim();
   const hasVerificationPrompt = !!currentSettings.llm_verification_system_prompt?.trim();
   const versionMatch = currentSettings.llm_prompt_version === PROMPT_VERSION;
-  
+
   return !hasVisionPrompt || !hasVerificationPrompt || !versionMatch;
 }

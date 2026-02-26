@@ -49,7 +49,7 @@ import { auth } from '@/lib/auth/config';
 import { prisma } from '@/lib/db';
 import { getUserRoles } from '@/lib/auth/permissions';
 
-const mockAuth = auth as ReturnType<typeof vi.mock>;
+const mockAuth = auth as unknown as { api: { getSession: ReturnType<typeof vi.fn> } };
 
 describe('Annotations API', () => {
   beforeEach(() => {
@@ -85,7 +85,7 @@ describe('Annotations API', () => {
           strokeData: { points: [] },
           userId: 'user-1',
           user: { id: 'user-1', name: 'Test User', email: 'test@example.com' },
-        },
+        } as any,
       ]);
 
       const request = new NextRequest(
@@ -134,7 +134,7 @@ describe('Annotations API', () => {
       vi.mocked(prisma.member.findFirst).mockResolvedValueOnce({
         id: 'member-1',
         sections: [{ id: 'section-1' }],
-      });
+      } as any);
       vi.mocked(prisma.annotation.findMany).mockResolvedValueOnce([]);
 
       const request = new NextRequest(
@@ -144,11 +144,11 @@ describe('Annotations API', () => {
       const response = await GET(request);
 
       expect(response.status).toBe(200);
-      const callArgs = vi.mocked(prisma.annotation.findMany).mock.calls[0][0];
-      expect(callArgs.where.OR).toBeDefined();
-      expect(callArgs.where.OR).toContainEqual({ userId: 'user-1', layer: 'PERSONAL' });
-      expect(callArgs.where.OR).toContainEqual(expect.objectContaining({ layer: 'SECTION' }));
-      expect(callArgs.where.OR).toContainEqual({ layer: 'DIRECTOR' });
+      const callArgs = vi.mocked(prisma.annotation.findMany).mock.calls[0]?.[0];
+      expect(callArgs?.where?.OR).toBeDefined();
+      expect(callArgs?.where?.OR).toContainEqual({ userId: 'user-1', layer: 'PERSONAL' });
+      expect(callArgs?.where?.OR).toContainEqual(expect.objectContaining({ layer: 'SECTION' }));
+      expect(callArgs?.where?.OR).toContainEqual({ layer: 'DIRECTOR' });
     });
 
     it('should allow directors to see all annotations', async () => {
@@ -166,9 +166,9 @@ describe('Annotations API', () => {
       const response = await GET(request);
 
       expect(response.status).toBe(200);
-      const callArgs = vi.mocked(prisma.annotation.findMany).mock.calls[0][0];
+      const callArgs = vi.mocked(prisma.annotation.findMany).mock.calls[0]?.[0];
       // Directors should not have the OR restriction
-      expect(callArgs.where.OR).toBeUndefined();
+      expect(callArgs?.where?.OR).toBeUndefined();
     });
   });
 
@@ -299,7 +299,7 @@ describe('Annotations API', () => {
       );
     });
 
-    it('should allow specifying a different userId for director annotations', async () => {
+    it('should use session userId even for director annotations (security)', async () => {
       mockAuth.api.getSession.mockResolvedValue({
         user: { id: 'user-1' },
       });
@@ -315,17 +315,18 @@ describe('Annotations API', () => {
             page: 1,
             layer: 'DIRECTOR',
             strokeData: {},
-            userId: 'user-2',
+            userId: 'user-2',  // client-supplied; server should ignore this
           }),
         }
       );
 
       await POST(request);
 
+      // The API always uses session.user.id, ignoring any client-supplied userId
       expect(prisma.annotation.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            userId: 'user-2',
+            userId: 'user-1',  // from session, not 'user-2' from request body
           }),
         })
       );

@@ -118,14 +118,11 @@ describe('annotation store actions', () => {
       id: 'temp',
       pieceId: 'p2',
       pageNumber: 1,
-      x: 0.3,
-      y: 0.4,
-      content: 'hi',
-      color: '#fff',
       layer: 'SECTION',
-      createdAt: new Date(),
+      strokeData: { paths: [[0.3, 0.4, 0.5, 0.6]] },
+      createdAt: new Date().toISOString(),
     };
-    const saved = { ...ann, id: 'saved1', page: ann.pageNumber, strokeData: { x: ann.x, y: ann.y, content: ann.content, color: ann.color } };
+    const saved = { ...ann, id: 'saved1' };
     (global.fetch as any).mockResolvedValue({
       ok: true,
       json: async () => ({ annotation: saved }),
@@ -147,12 +144,9 @@ describe('annotation store actions', () => {
       id: 'orig',
       pieceId: 'p3',
       pageNumber: 1,
-      x: 0,
-      y: 0,
-      content: 'c',
-      color: '#000',
       layer: 'PERSONAL',
-      createdAt: new Date(),
+      strokeData: { paths: [[0, 0, 1, 1]] },
+      createdAt: new Date().toISOString(),
     };
     // preload into personal slot
     act(() => {
@@ -161,7 +155,7 @@ describe('annotation store actions', () => {
         return s;
       });
     });
-    const saved = { ...ann, id: 'orig', layer: 'SECTION', strokeData: { ...ann } };
+    const saved = { ...ann, id: 'orig', layer: 'SECTION' };
     (global.fetch as any).mockResolvedValue({
       ok: true,
       json: async () => ({ annotation: saved }),
@@ -178,10 +172,11 @@ describe('annotation store actions', () => {
 
   it('deleteAnnotation removes from all layers', async () => {
     // manually insert into state
+    const ts = new Date().toISOString();
     act(() => {
       useStandStore.setState((s) => {
-        s.annotations.personal['k'] = [{ id: 'x', pieceId: 'p', pageNumber: 1, x:0,y:0,content:'',color:'',layer:'PERSONAL',createdAt:new Date() }];
-        s.annotations.section['k'] = [{ id: 'x', pieceId: 'p', pageNumber: 1, x:0,y:0,content:'',color:'',layer:'SECTION',createdAt:new Date() }];
+        s.annotations.personal['k'] = [{ id: 'x', pieceId: 'p', pageNumber: 1, strokeData: {}, layer: 'PERSONAL', createdAt: ts }];
+        s.annotations.section['k'] = [{ id: 'x', pieceId: 'p', pageNumber: 1, strokeData: {}, layer: 'SECTION', createdAt: ts }];
         return s;
       });
     });

@@ -26,6 +26,7 @@ export interface CalendarEvent {
   endTime: Date | string;
   location?: string | null;
   isCancelled?: boolean;
+  musicCount?: number;
   venue?: {
     name: string;
   } | null;

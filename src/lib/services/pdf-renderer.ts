@@ -161,3 +161,79 @@ export async function renderPdfPageBatch(
 
   return results;
 }
+
+export interface HeaderCropBatchOptions extends Omit<RenderOptions, 'pageIndex'> {
+  cropHeightFraction?: number;
+}
+
+/**
+ * Render top-of-page header crops in batch for scanned/image PDFs.
+ *
+ * Returns base64 images ordered to match `pageIndices`.
+ */
+export async function renderPdfHeaderCropBatch(
+  pdfBuffer: Buffer,
+  pageIndices: number[],
+  options: HeaderCropBatchOptions = {}
+): Promise<string[]> {
+  const {
+    scale = 2,
+    maxWidth = 1024,
+    quality = 85,
+    format = 'png',
+    cropHeightFraction = 0.2,
+  } = options;
+
+  const safeCropHeightFraction = Math.min(0.8, Math.max(0.05, cropHeightFraction));
+
+  const pdfData = new Uint8Array(pdfBuffer);
+  const loadingTask = pdfjsLib.getDocument({
+    data: pdfData,
+    disableWorker: true,
+  } as unknown as Parameters<typeof pdfjsLib.getDocument>[0]);
+  const pdfDocument = await loadingTask.promise;
+
+  const results: string[] = [];
+
+  for (const idx of pageIndices) {
+    try {
+      const page = await pdfDocument.getPage(idx + 1);
+      const viewport = page.getViewport({ scale });
+
+      const canvas = createCanvas(Math.floor(viewport.width), Math.floor(viewport.height));
+      const context = canvas.getContext('2d');
+
+      await page.render({
+        canvasContext: context as unknown as CanvasRenderingContext2D,
+        viewport,
+        canvas: canvas as unknown as HTMLCanvasElement,
+      }).promise;
+
+      const rawBuffer = canvas.toBuffer('image/png');
+      const metadata = await sharp(rawBuffer).metadata();
+      const width = metadata.width ?? Math.floor(viewport.width);
+      const height = metadata.height ?? Math.floor(viewport.height);
+      const cropHeight = Math.max(1, Math.floor(height * safeCropHeightFraction));
+
+      let headerBuffer = await sharp(rawBuffer)
+        .extract({ left: 0, top: 0, width, height: cropHeight })
+        .toBuffer();
+
+      if (width > maxWidth) {
+        headerBuffer = await sharp(headerBuffer)
+          .resize({ width: maxWidth, fit: 'inside' })
+          .toFormat(format, { quality })
+          .toBuffer();
+      } else if (format === 'jpeg') {
+        headerBuffer = await sharp(headerBuffer).toFormat('jpeg', { quality }).toBuffer();
+      }
+
+      results.push(headerBuffer.toString('base64'));
+    } catch (err) {
+      logger.warn('renderPdfHeaderCropBatch: failed to render header crop', { idx, err });
+      results.push(PLACEHOLDER_IMAGE);
+    }
+  }
+
+  return results;
+}

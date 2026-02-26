@@ -34,6 +34,11 @@ vi.mock('@/lib/db', () => ({
 // Mock fetch for AI provider calls
 global.fetch = vi.fn();
 
+import { auth } from '@/lib/auth/config';
+import { prisma } from '@/lib/db';
+const mockAuth = auth as unknown as { api: { getSession: ReturnType<typeof vi.fn> } };
+const mockPrisma = prisma as any;
+
 describe('OMR API Route', () => {
   const mockSession = {
     user: {
@@ -63,7 +68,7 @@ describe('OMR API Route', () => {
 
   describe('GET /api/stand/omr', () => {
     it('should return 401 when not authenticated', async () => {
-      vi.mocked(await import('@/lib/auth/config')).auth.api.getSession.mockResolvedValue(null);
+      mockAuth.api.getSession.mockResolvedValue(null);
 
       const request = new NextRequest(
         new URL('http://localhost:3000/api/stand/omr?musicFileId=file-123'),
@@ -75,7 +80,7 @@ describe('OMR API Route', () => {
     });
 
     it('should return 400 when musicFileId is missing', async () => {
-      vi.mocked(await import('@/lib/auth/config')).auth.api.getSession.mockResolvedValue(mockSession);
+      mockAuth.api.getSession.mockResolvedValue(mockSession);
 
       const request = new NextRequest(new URL('http://localhost:3000/api/stand/omr'), {
         method: 'GET',
@@ -86,8 +91,8 @@ describe('OMR API Route', () => {
     });
 
     it('should return 404 when music file not found', async () => {
-      vi.mocked(await import('@/lib/auth/config')).auth.api.getSession.mockResolvedValue(mockSession);
-      vi.mocked(await import('@/lib/db')).prisma.musicFile.findUnique.mockResolvedValue(null);
+      mockAuth.api.getSession.mockResolvedValue(mockSession);
+      mockPrisma.musicFile.findUnique.mockResolvedValue(null);
 
       const request = new NextRequest(
         new URL('http://localhost:3000/api/stand/omr?musicFileId=file-123'),
@@ -99,8 +104,8 @@ describe('OMR API Route', () => {
     });
 
     it('should return processed: false when no metadata exists', async () => {
-      vi.mocked(await import('@/lib/auth/config')).auth.api.getSession.mockResolvedValue(mockSession);
-      vi.mocked(await import('@/lib/db')).prisma.musicFile.findUnique.mockResolvedValue({
+      mockAuth.api.getSession.mockResolvedValue(mockSession);
+      mockPrisma.musicFile.findUnique.mockResolvedValue({
         ...mockMusicFile,
         extractedMetadata: null,
       });
@@ -118,8 +123,8 @@ describe('OMR API Route', () => {
     });
 
     it('should return metadata when already processed', async () => {
-      vi.mocked(await import('@/lib/auth/config')).auth.api.getSession.mockResolvedValue(mockSession);
-      vi.mocked(await import('@/lib/db')).prisma.musicFile.findUnique.mockResolvedValue({
+      mockAuth.api.getSession.mockResolvedValue(mockSession);
+      mockPrisma.musicFile.findUnique.mockResolvedValue({
         ...mockMusicFile,
         extractedMetadata: JSON.stringify({
           tempo: 120,
@@ -145,8 +150,8 @@ describe('OMR API Route', () => {
 
   describe('POST /api/stand/omr', () => {
     it('should return 403 when API key not configured', async () => {
-      vi.mocked(await import('@/lib/auth/config')).auth.api.getSession.mockResolvedValue(mockSession);
-      vi.mocked(await import('@/lib/db')).prisma.userPreferences.findUnique.mockResolvedValue({
+      mockAuth.api.getSession.mockResolvedValue(mockSession);
+      mockPrisma.userPreferences.findUnique.mockResolvedValue({
         userId: 'user-123',
         otherSettings: {}, // No API key
       });
@@ -164,9 +169,9 @@ describe('OMR API Route', () => {
     });
 
     it('should return cached metadata when already processed', async () => {
-      vi.mocked(await import('@/lib/auth/config')).auth.api.getSession.mockResolvedValue(mockSession);
-      vi.mocked(await import('@/lib/db')).prisma.userPreferences.findUnique.mockResolvedValue(mockUserPrefs);
-      vi.mocked(await import('@/lib/db')).prisma.musicFile.findUnique.mockResolvedValue({
+      mockAuth.api.getSession.mockResolvedValue(mockSession);
+      mockPrisma.userPreferences.findUnique.mockResolvedValue(mockUserPrefs);
+      mockPrisma.musicFile.findUnique.mockResolvedValue({
         ...mockMusicFile,
         extractedMetadata: JSON.stringify({
           tempo: 120,
@@ -190,11 +195,11 @@ describe('OMR API Route', () => {
     });
 
     it('should process OMR when forceReprocess is true', async () => {
-      vi.mocked(await import('@/lib/auth/config')).auth.api.getSession.mockResolvedValue(mockSession);
-      vi.mocked(await import('@/lib/db')).prisma.userPreferences.findUnique.mockResolvedValue(mockUserPrefs);
-      vi.mocked(await import('@/lib/db')).prisma.musicFile.findUnique.mockResolvedValue(mockMusicFile);
-      vi.mocked(await import('@/lib/db')).prisma.musicFile.update.mockResolvedValue({});
-      vi.mocked(await import('@/lib/db')).prisma.musicPiece.update.mockResolvedValue({});
+      mockAuth.api.getSession.mockResolvedValue(mockSession);
+      mockPrisma.userPreferences.findUnique.mockResolvedValue(mockUserPrefs);
+      mockPrisma.musicFile.findUnique.mockResolvedValue(mockMusicFile);
+      mockPrisma.musicFile.update.mockResolvedValue({});
+      mockPrisma.musicPiece.update.mockResolvedValue({});
 
       // Mock fetch for OpenAI API
       vi.mocked(global.fetch).mockResolvedValue({

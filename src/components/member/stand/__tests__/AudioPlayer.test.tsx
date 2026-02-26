@@ -1,15 +1,16 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react';
+import { vi } from 'vitest';
 import { AudioPlayer } from '../AudioPlayer';
 import { useStandStore } from '@/store/standStore';
 
 // mock audio element methods
 class _MockAudio {
   currentTime = 0;
-  play = jest.fn();
-  pause = jest.fn();
-  addEventListener = jest.fn();
-  removeEventListener = jest.fn();
+  play = vi.fn();
+  pause = vi.fn();
+  addEventListener = vi.fn();
+  removeEventListener = vi.fn();
 }
 
 describe('AudioPlayer component', () => {
@@ -23,7 +24,7 @@ describe('AudioPlayer component', () => {
   });
 
   it('renders and allows setting loop points', () => {
-    const link = { id: '1', pieceId: 'p', fileKey: 'k', url: 'test.mp3', description: 'desc', createdAt: new Date() };
+    const link = { id: '1', pieceId: 'p', fileKey: 'k', url: 'test.mp3', description: 'desc', createdAt: new Date().toISOString() };
     useStandStore.setState({ audioLinks: [link], showAudioPlayer: true });
     const { getByText } = render(<AudioPlayer />);
     // set audio element ref manually

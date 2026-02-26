@@ -259,11 +259,43 @@ export async function removeMusicFromEvent(eventId: string, eventPieceId: string
     });
 
     revalidatePath(`/admin/events/${eventId}`);
+    revalidatePath(`/admin/events/${eventId}/music`);
 
     return { success: true };
   } catch (error) {
     console.error('Failed to remove music from event:', error);
     return { success: false, error: 'Failed to remove music' };
+  }
+}
+
+export async function reorderEventMusic(eventId: string, orderedIds: string[]) {
+  const _session = await requirePermission(EVENT_EDIT);
+
+  try {
+    // Update sortOrder for each entry in the given order
+    await Promise.all(
+      orderedIds.map((id, index) =>
+        prisma.eventMusic.update({
+          where: { id },
+          data: { sortOrder: index },
+        })
+      )
+    );
+
+    await auditLog({
+      action: 'event.music.reorder',
+      entityType: 'Event',
+      entityId: eventId,
+      newValues: { count: orderedIds.length },
+    });
+
+    revalidatePath(`/admin/events/${eventId}`);
+    revalidatePath(`/admin/events/${eventId}/music`);
+
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to reorder music:', error);
+    return { success: false, error: 'Failed to reorder music' };
   }
 }
 

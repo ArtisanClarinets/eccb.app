@@ -12,8 +12,10 @@ export type { CuttingInstruction };
 
 export interface NormalizedInstruction {
   partName: string;
-  pageStart: number;  // 0-indexed
-  pageEnd: number;    // 0-indexed
+  pageStart: number; // 0-indexed
+  pageEnd: number; // 0-indexed
+  originalIndex?: number;
+  originalMetadata?: Partial<CuttingInstruction>;
 }
 
 export interface ValidationOptions {
@@ -30,6 +32,14 @@ export interface ValidationResult {
   isValid: boolean;
   gaps?: Array<{ start: number; end: number }>;
   overlaps?: Array<{ part1: string; part2: string; overlap: [number, number] }>;
+}
+
+export function toZeroIndexed(range: [number, number]): [number, number] {
+  return [Math.max(0, range[0] - 1), Math.max(0, range[1] - 1)];
+}
+
+export function toOneIndexed(range: [number, number]): [number, number] {
+  return [range[0] + 1, range[1] + 1];
 }
 
 /**
@@ -108,8 +118,21 @@ export function validateAndNormalizeInstructions(
 
     if ('pageRange' in instruction && Array.isArray(instruction.pageRange) && instruction.pageRange.length >= 2) {
       // Use pageRange if available
-      pageStart = instruction.pageRange[0] as number;
-      pageEnd = instruction.pageRange[1] as number;
+      const start = instruction.pageRange[0];
+      const end = instruction.pageRange[1];
+
+      if (typeof start !== 'number' || !Number.isFinite(start) || !Number.isInteger(start)) {
+        errors.push(`Instruction ${i} (${partName}): pageRange[0] must be a finite integer`);
+        continue;
+      }
+
+      if (typeof end !== 'number' || !Number.isFinite(end) || !Number.isInteger(end)) {
+        errors.push(`Instruction ${i} (${partName}): pageRange[1] must be a finite integer`);
+        continue;
+      }
+
+      pageStart = start;
+      pageEnd = end;
     } else if ('pageStart' in instruction && 'pageEnd' in instruction) {
       // Fall back to pageStart/pageEnd
       if (typeof instruction.pageStart !== 'number' || !Number.isInteger(instruction.pageStart)) {
@@ -131,6 +154,25 @@ export function validateAndNormalizeInstructions(
       partName,
       pageStart,
       pageEnd,
+      originalIndex: i,
+      originalMetadata: {
+        instrument:
+          typeof instruction.instrument === 'string' && instruction.instrument.trim()
+            ? instruction.instrument
+            : 'Unknown',
+        section:
+          typeof instruction.section === 'string'
+            ? (instruction.section as CuttingInstruction['section'])
+            : 'Other',
+        transposition:
+          typeof instruction.transposition === 'string'
+            ? (instruction.transposition as CuttingInstruction['transposition'])
+            : 'C',
+        partNumber:
+          typeof instruction.partNumber === 'number' && Number.isFinite(instruction.partNumber)
+            ? instruction.partNumber
+            : undefined,
+      },
     });
   }
 
@@ -211,24 +253,8 @@ export function validateAndNormalizeInstructions(
     isValid,
   });
 
-  // Rebuild full CuttingInstruction objects using the validated+0-indexed page ranges.
-  // We track which raw instructions survived validation by building a separate
-  // list of valid raw entries aligned with normalizedInstructions.
-  const validRawInstructions: CuttingInstruction[] = [];
-  for (let i = 0; i < rawInstructions.length; i++) {
-    const raw = rawInstructions[i];
-    if (raw === null || typeof raw !== 'object') continue;
-    const instruction = raw as Record<string, unknown>;
-    if (!instruction.partName || typeof instruction.partName !== 'string') continue;
-    if (instruction.partName.toString().trim().length === 0) continue;
-    if (
-      !('pageRange' in instruction || ('pageStart' in instruction && 'pageEnd' in instruction))
-    ) continue;
-    validRawInstructions.push(raw as CuttingInstruction);
-  }
-
   const finalInstructions: CuttingInstruction[] = processedInstructions.map((processed, idx) => {
-    const original = validRawInstructions[idx] as CuttingInstruction | undefined;
+    const original = processed.originalMetadata;
     return {
       instrument: original?.instrument ?? 'Unknown',
       partName: processed.partName,
@@ -256,11 +282,17 @@ export function validateAndNormalizeInstructions(
  * @returns Instructions with 0-indexed page numbers
  */
 function convertOneToZeroIndexed(instructions: NormalizedInstruction[]): NormalizedInstruction[] {
-  return instructions.map(i => ({
-    ...i,
-    pageStart: Math.max(0, i.pageStart - 1),
-    pageEnd: Math.max(0, i.pageEnd - 1),
-  }));
+  return instructions.map((instruction) => {
+    const [pageStart, pageEnd] = toZeroIndexed([
+      instruction.pageStart,
+      instruction.pageEnd,
+    ] as [number, number]);
+    return {
+      ...instruction,
+      pageStart,
+      pageEnd,
+    };
+  });
 }
 
 /**
@@ -423,8 +455,7 @@ export function splitOverlappingRanges(instructions: NormalizedInstruction[]): N
       const adjustedEnd = next.pageStart - 1;
       if (adjustedEnd >= current.pageStart) {
         result.push({
-          partName: current.partName,
-          pageStart: current.pageStart,
+          ...current,
           pageEnd: adjustedEnd,
         });
       }
@@ -432,9 +463,7 @@ export function splitOverlappingRanges(instructions: NormalizedInstruction[]): N
     } else {
       // No overlap with immediate successor, keep as-is
       result.push({
-        partName: current.partName,
-        pageStart: current.pageStart,
-        pageEnd: current.pageEnd,
+        ...current,
       });
     }
   }

@@ -1,5 +1,64 @@
 import type { LLMAdapter, LLMConfig, VisionRequest, VisionResponse } from './types';
 
+function toFiniteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function toFiniteInteger(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.trunc(value) : undefined;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function mergeGenerationConfigParams(
+  generationConfig: Record<string, unknown>,
+  modelParams?: Record<string, unknown>
+): void {
+  if (!modelParams) return;
+
+  const maxOutputTokens =
+    toFiniteInteger(modelParams.maxOutputTokens) ??
+    toFiniteInteger(modelParams.max_tokens) ??
+    toFiniteInteger(modelParams.maxTokens);
+  if (maxOutputTokens !== undefined) {
+    generationConfig.maxOutputTokens = clamp(maxOutputTokens, 1, 65_536);
+  }
+
+  const temperature = toFiniteNumber(modelParams.temperature);
+  if (temperature !== undefined) {
+    generationConfig.temperature = clamp(temperature, 0, 2);
+  }
+
+  const topP = toFiniteNumber(modelParams.topP) ?? toFiniteNumber(modelParams.top_p);
+  if (topP !== undefined) {
+    generationConfig.topP = clamp(topP, 0, 1);
+  }
+
+  const topK = toFiniteInteger(modelParams.topK) ?? toFiniteInteger(modelParams.top_k);
+  if (topK !== undefined) {
+    generationConfig.topK = Math.max(1, topK);
+  }
+
+  const candidateCount =
+    toFiniteInteger(modelParams.candidateCount) ?? toFiniteInteger(modelParams.candidate_count);
+  if (candidateCount !== undefined) {
+    generationConfig.candidateCount = Math.max(1, candidateCount);
+  }
+
+  const seed = toFiniteInteger(modelParams.seed);
+  if (seed !== undefined) {
+    generationConfig.seed = Math.max(0, seed);
+  }
+
+  if (Array.isArray(modelParams.stopSequences)) {
+    generationConfig.stopSequences = modelParams.stopSequences;
+  } else if (Array.isArray(modelParams.stop)) {
+    generationConfig.stopSequences = modelParams.stop;
+  }
+}
+
 /**
  * Google Gemini API adapter
  * Uses API key as query parameter (not header)
@@ -29,15 +88,23 @@ export class GeminiAdapter implements LLMAdapter {
       | { text: string }
     > = [];
 
-    // Include labeled inputs if provided
-    const allImages = request.labeledInputs
-      ? [...request.images, ...request.labeledInputs.map((li) => ({ mimeType: li.mimeType, base64Data: li.base64Data }))]
-      : request.images;
-
-    for (const image of allImages) {
+    const pushLabeledImage = (image: { mimeType: string; base64Data: string; label?: string }) => {
+      if (image.label?.trim()) {
+        parts.push({ text: `[${image.label.trim()}]` });
+      }
       parts.push({
         inline_data: { mime_type: image.mimeType, data: image.base64Data },
       });
+    };
+
+    for (const image of request.images) {
+      pushLabeledImage(image);
+    }
+
+    if (request.labeledInputs) {
+      for (const labeledInput of request.labeledInputs) {
+        pushLabeledImage(labeledInput);
+      }
     }
 
     // If JSON mode requested, append instruction to prompt
@@ -49,16 +116,20 @@ export class GeminiAdapter implements LLMAdapter {
 
     const baseUrl = (config.llm_endpoint_url || 'https://generativelanguage.googleapis.com/v1beta').replace(/\/$/, '');
 
+    const generationConfig: Record<string, unknown> = {
+      maxOutputTokens: request.maxTokens ?? 4096,
+      temperature: request.temperature ?? 0.1,
+      // Request JSON output when responseFormat is json
+      ...(request.responseFormat?.type === 'json'
+        ? { response_mime_type: 'application/json' }
+        : {}),
+    };
+
+    mergeGenerationConfigParams(generationConfig, request.modelParams);
+
     const bodyObj: Record<string, unknown> = {
       contents: [{ parts }],
-      generationConfig: {
-        maxOutputTokens: request.maxTokens ?? 4096,
-        temperature: request.temperature ?? 0.1,
-        // Request JSON output when responseFormat is json
-        ...(request.responseFormat?.type === 'json'
-          ? { response_mime_type: 'application/json' }
-          : {}),
-      },
+      generationConfig,
     };
 
     // Gemini supports systemInstruction at the top level

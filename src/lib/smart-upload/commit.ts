@@ -98,8 +98,26 @@ export async function commitSmartUploadSessionToLibrary(
     throw new Error(`SmartUploadSession not found: ${sessionId}`);
   }
 
-  if (uploadSession.status !== 'PENDING_REVIEW') {
-    throw new Error(`Session ${sessionId} is not PENDING_REVIEW (status: ${uploadSession.status})`);
+  const isAutonomousCommit = approvedBy.startsWith('system:');
+  const allowedStatuses = new Set(
+    isAutonomousCommit
+      ? ['PENDING_REVIEW', 'PROCESSED', 'READY_TO_COMMIT', 'APPROVED']
+      : ['PENDING_REVIEW']
+  );
+
+  if (!allowedStatuses.has(uploadSession.status)) {
+    throw new Error(
+      `Session ${sessionId} is not commit-eligible (status: ${uploadSession.status})`
+    );
+  }
+
+  const existingImportedFile = await prisma.musicFile.findFirst({
+    where: { originalUploadId: sessionId },
+    select: { id: true },
+  });
+
+  if (existingImportedFile) {
+    throw new Error(`Session ${sessionId} is already committed to library`);
   }
 
   const extractedMetadata = uploadSession.extractedMetadata as ExtractedMetadata | null;

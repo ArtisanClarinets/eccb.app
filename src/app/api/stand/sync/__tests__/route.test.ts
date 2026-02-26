@@ -36,7 +36,7 @@ vi.mock('@/lib/db', () => ({
 import { auth } from '@/lib/auth/config';
 import { prisma } from '@/lib/db';
 
-const mockAuth = auth as ReturnType<typeof vi.mock>;
+const mockAuth = auth as unknown as { api: { getSession: ReturnType<typeof vi.fn> } };
 
 describe('Stand Sync API', () => {
   beforeEach(() => {
@@ -89,12 +89,12 @@ describe('Stand Sync API', () => {
         firstName: 'John',
         lastName: 'Doe',
         sections: [],
-      });
+      } as any);
 
       vi.mocked(prisma.event.findFirst).mockResolvedValueOnce({
         id: 'test-event',
         title: 'Test Event',
-      });
+      } as any);
 
       const request = new NextRequest(
         new URL('http://localhost:3000/api/stand/sync?eventId=test-event')
@@ -159,12 +159,12 @@ describe('Stand Sync API', () => {
         firstName: 'John',
         lastName: 'Doe',
         sections: [],
-      });
+      } as any);
 
       vi.mocked(prisma.event.findFirst).mockResolvedValueOnce({
         id: 'test-event',
         title: 'Test Event',
-      });
+      } as any);
 
       const request = new NextRequest(
         new URL('http://localhost:3000/api/stand/sync'),
@@ -200,12 +200,12 @@ describe('Stand Sync API', () => {
         firstName: 'John',
         lastName: 'Doe',
         sections: [],
-      });
+      } as any);
 
       vi.mocked(prisma.event.findFirst).mockResolvedValueOnce({
         id: 'test-event',
         title: 'Test Event',
-      });
+      } as any);
 
       const request = new NextRequest(
         new URL('http://localhost:3000/api/stand/sync'),

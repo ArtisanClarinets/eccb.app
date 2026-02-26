@@ -148,8 +148,8 @@ export async function POST(request: NextRequest) {
       if (row.value) existing[row.key] = row.value;
     }
 
-    const geminiKey = existing.llm_gemini_api_key || process.env.GEMINI_API_KEY;
-    const openrouterKey = existing.llm_openrouter_api_key || process.env.OPENROUTER_API_KEY;
+    const geminiKey = existing.llm_gemini_api_key || process.env.LLM_GEMINI_API_KEY;
+    const openrouterKey = existing.llm_openrouter_api_key || process.env.LLM_OPENROUTER_API_KEY;
     const currentProvider = existing.llm_provider;
 
     // Run all discovery checks in parallel

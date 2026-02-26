@@ -17,6 +17,7 @@ import { AudioPlayer } from './AudioPlayer';
 import { PitchPipe } from './PitchPipe';
 import { AudioTrackerSettings } from './AudioTrackerSettings';
 import { SmartNavEditor } from './SmartNavEditor';
+import { SetlistManager } from './SetlistManager';
 
 // ── Serialised types coming from the server page ────────────────
 // All Date fields are pre-serialised to ISO strings on the server.
@@ -27,6 +28,21 @@ interface SerializedMusicFile {
   storageKey: string;
   storageUrl: string | null;
   pageCount: number | null;
+  partLabel?: string | null;
+  instrumentName?: string | null;
+  section?: string | null;
+  partNumber?: number | null;
+}
+
+interface SerializedMusicPart {
+  id: string;
+  partName: string;
+  partLabel: string | null;
+  instrumentId: string;
+  instrumentName: string;
+  storageKey: string | null;
+  storageUrl?: string | null;
+  pageCount?: number | null;
 }
 
 interface SerializedMusicAssignment {
@@ -36,6 +52,7 @@ interface SerializedMusicAssignment {
     title: string;
     composer: string | null;
     files: SerializedMusicFile[];
+    parts: SerializedMusicPart[];
   };
 }
 
@@ -87,6 +104,7 @@ interface SerializedRosterEntry {
   id: string;
   eventId: string;
   userId: string;
+  name: string;
   section: string | null;
   lastSeenAt: string;
 }
@@ -114,18 +132,17 @@ interface StandViewerProps {
 /**
  * Build StandPiece[] from serialized music assignments.
  * Uses piece.id (MusicPiece PK) as the identity – NOT EventMusic.id.
- * PDF URLs go through the authenticated file proxy.
+ * PDF URLs go through the authenticated file proxy with eventId scope.
  */
-function buildStandPieces(music: SerializedMusicAssignment[]): StandPiece[] {
+function buildStandPieces(music: SerializedMusicAssignment[], eventId: string): StandPiece[] {
   return music.map((m) => {
     const pdf = m.piece.files.find((f) => f.mimeType === 'application/pdf');
+    const proxyBase = `/api/stand/files/${encodeURIComponent(pdf?.storageKey ?? '')}?eventId=${encodeURIComponent(eventId)}`;
     return {
       id: m.piece.id,
       title: m.piece.title ?? 'Untitled',
       composer: m.piece.composer ?? '',
-      pdfUrl: pdf
-        ? `/api/stand/files/${encodeURIComponent(pdf.storageKey)}`
-        : null,
+      pdfUrl: pdf ? proxyBase : null,
       totalPages: pdf?.pageCount ?? 1,
     };
   });
@@ -178,7 +195,7 @@ export function StandViewer({ data }: StandViewerProps) {
 
     // Pieces
     if (music.length > 0) {
-      setPieces(buildStandPieces(music));
+      setPieces(buildStandPieces(music, eventId));
       setEventInfo(eventId, eventTitle);
     }
 
@@ -227,7 +244,7 @@ export function StandViewer({ data }: StandViewerProps) {
       setRoster(
         roster.map((r) => ({
           userId: r.userId,
-          name: '',
+          name: r.name || r.userId.slice(0, 8),
           section: r.section ?? undefined,
           joinedAt: r.lastSeenAt,
         }))
@@ -299,16 +316,21 @@ export function StandViewer({ data }: StandViewerProps) {
       <MidiHandler />
 
       {/* Viewer area */}
-      <div className="flex-1 bg-muted/20 relative overflow-hidden">
-        <GestureHandler />
-        <StandCanvas />
-        <RosterOverlay />
-        <SmartNavEditor />
-        <Metronome />
-        <Tuner />
-        <AudioPlayer />
-        <PitchPipe />
-        <AudioTrackerSettings />
+      <div className="flex-1 bg-muted/20 relative overflow-hidden flex">
+        {/* Setlist sidebar */}
+        <SetlistManager />
+
+        <div className="flex-1 relative overflow-hidden">
+          <GestureHandler />
+          <StandCanvas />
+          <RosterOverlay />
+          <SmartNavEditor />
+          <Metronome />
+          <Tuner />
+          <AudioPlayer />
+          <PitchPipe />
+          <AudioTrackerSettings />
+        </div>
       </div>
     </div>
   );

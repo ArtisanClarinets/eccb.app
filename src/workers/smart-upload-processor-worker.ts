@@ -9,6 +9,7 @@ import { createWorker } from '@/lib/jobs/queue';
 import { processSmartUpload } from './smart-upload-processor';
 import { commitSmartUploadSessionToLibrary } from '@/lib/smart-upload/commit';
 import { SMART_UPLOAD_JOB_NAMES } from '@/lib/jobs/smart-upload';
+import { loadSmartUploadRuntimeConfig } from '@/lib/llm/config-loader';
 import { logger } from '@/lib/logger';
 
 // =============================================================================
@@ -24,14 +25,18 @@ let smartUploadProcessorWorker: ReturnType<typeof createWorker> | null = null;
 /**
  * Start the smart upload processor worker
  */
-export function startSmartUploadProcessorWorker(): void {
+export async function startSmartUploadProcessorWorker(): Promise<void> {
+  // Load concurrency from DB config so operators can tune it without redeploying
+  const llmCfg = await loadSmartUploadRuntimeConfig().catch(() => null);
+  const concurrency = llmCfg?.maxConcurrent ?? 2;
+
   const config = {
     priority: 5,
     attempts: 3,
     backoff: { type: 'exponential' as const, delay: 5000 },
     removeOnComplete: 100,
     removeOnFail: 50,
-    concurrency: 2,
+    concurrency,
   };
 
   smartUploadProcessorWorker = createWorker({

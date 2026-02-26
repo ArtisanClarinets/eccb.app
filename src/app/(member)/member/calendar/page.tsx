@@ -39,6 +39,7 @@ export default async function MemberCalendarPage() {
     endTime: event.endTime,
     location: event.location,
     isCancelled: event.isCancelled,
+    musicCount: event._count.music,
     venue: event.venue,
   }));
 

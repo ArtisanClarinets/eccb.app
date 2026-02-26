@@ -1,5 +1,45 @@
 import type { LLMAdapter, LLMConfig, VisionRequest, VisionResponse } from './types';
 
+function toFiniteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function toFiniteInteger(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.trunc(value) : undefined;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function mergeAnthropicModelParams(
+  body: Record<string, unknown>,
+  modelParams?: Record<string, unknown>
+): void {
+  if (!modelParams) return;
+
+  const temperature = toFiniteNumber(modelParams.temperature);
+  if (temperature !== undefined) {
+    body.temperature = clamp(temperature, 0, 1);
+  }
+
+  const topP = toFiniteNumber(modelParams.top_p) ?? toFiniteNumber(modelParams.topP);
+  if (topP !== undefined) {
+    body.top_p = clamp(topP, 0, 1);
+  }
+
+  const topK = toFiniteInteger(modelParams.top_k) ?? toFiniteInteger(modelParams.topK);
+  if (topK !== undefined) {
+    body.top_k = Math.max(0, topK);
+  }
+
+  if (Array.isArray(modelParams.stop_sequences)) {
+    body.stop_sequences = modelParams.stop_sequences;
+  } else if (Array.isArray(modelParams.stopSequences)) {
+    body.stop_sequences = modelParams.stopSequences;
+  }
+}
+
 /**
  * Anthropic API adapter for Messages API
  * Uses x-api-key header and anthropic-version header
@@ -27,12 +67,11 @@ export class AnthropicAdapter implements LLMAdapter {
       | { type: 'text'; text: string }
     > = [];
 
-    // Include labeled inputs if provided
-    const allImages = request.labeledInputs
-      ? [...request.images, ...request.labeledInputs.map((li) => ({ mimeType: li.mimeType, base64Data: li.base64Data }))]
-      : request.images;
+    const pushLabeledImage = (image: { mimeType: string; base64Data: string; label?: string }) => {
+      if (image.label?.trim()) {
+        content.push({ type: 'text', text: `[${image.label.trim()}]` });
+      }
 
-    for (const image of allImages) {
       content.push({
         type: 'image',
         source: {
@@ -41,6 +80,16 @@ export class AnthropicAdapter implements LLMAdapter {
           data: image.base64Data,
         },
       });
+    };
+
+    for (const image of request.images) {
+      pushLabeledImage(image);
+    }
+
+    if (request.labeledInputs) {
+      for (const labeledInput of request.labeledInputs) {
+        pushLabeledImage(labeledInput);
+      }
     }
 
     // If JSON mode requested, append instruction to prompt
@@ -58,6 +107,8 @@ export class AnthropicAdapter implements LLMAdapter {
       max_tokens: request.maxTokens ?? 4096,
       temperature: request.temperature ?? 0.1,
     };
+
+    mergeAnthropicModelParams(bodyObj, request.modelParams);
 
     // Anthropic supports a top-level system field (not inside messages)
     if (request.system) {

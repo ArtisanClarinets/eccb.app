@@ -260,6 +260,7 @@ async function processUpload(
   // Subscribe to SSE for real-time processing progress
   await new Promise<void>((resolve) => {
     // safety timeout will be cleared when either completion or failure occurs
+    // eslint-disable-next-line prefer-const
     let timeout: ReturnType<typeof setTimeout>;
 
     const cleanup = subscribeToUploadProgress(

@@ -11,8 +11,8 @@ const annotationCreateSchema = z.object({
   page: z.number().int().positive(),
   layer: z.enum(['PERSONAL', 'SECTION', 'DIRECTOR']),
   strokeData: z.record(z.string(), z.any()),
-  userId: z.string().optional(),
-  sectionId: z.string().optional(),
+  // userId and sectionId are intentionally excluded from the client schema;
+  // they are computed server-side to prevent spoofing.
 });
 
 const _annotationUpdateSchema = z.object({
@@ -55,14 +55,14 @@ export async function GET(request: NextRequest) {
     const isDirector = roles.includes('DIRECTOR') || roles.includes('SUPER_ADMIN') || roles.includes('ADMIN');
 
     if (!isDirector) {
-      // Look up user's section memberships via Member → Section
+      // Look up user's section memberships via Member → MemberSection → sectionId
       const member = await prisma.member.findFirst({
         where: { userId: session.user.id },
         select: {
-          sections: { select: { id: true } },
+          sections: { select: { sectionId: true } },
         },
       });
-      const userSectionIds = member?.sections.map((s: { id: string }) => s.id) ?? [];
+      const userSectionIds = member?.sections.map((s: { sectionId: string }) => s.sectionId) ?? [];
 
       // Show: own PERSONAL, matching SECTION by sectionId, all DIRECTOR
       where.OR = [
@@ -123,14 +123,24 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Compute sectionId server-side for SECTION layer (prevents client spoofing)
+    let serverSectionId: string | null = null;
+    if (validated.layer === 'SECTION') {
+      const member = await prisma.member.findFirst({
+        where: { userId: session.user.id },
+        select: { sections: { select: { sectionId: true }, take: 1 } },
+      });
+      serverSectionId = member?.sections[0]?.sectionId ?? null;
+    }
+
     const annotation = await prisma.annotation.create({
       data: {
         musicId: validated.musicId,
         page: validated.page,
         layer: validated.layer,
         strokeData: validated.strokeData,
-        userId: validated.userId || session.user.id,
-        sectionId: validated.sectionId ?? null,
+        userId: session.user.id,          // always from session, never client
+        sectionId: serverSectionId,
       },
       include: {
         user: {

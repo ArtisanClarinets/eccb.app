@@ -29,28 +29,26 @@ describe('useStandSync', () => {
   });
 
   it('receives roster and presence messages and updates store', async () => {
-    const { result: _result, waitForNextUpdate: _waitForNextUpdate } = renderHook(() =>
+    const { result: _result } = renderHook(() =>
       useStandSync({
         eventId: 'evt1',
         userId: 'usr1',
-        // onAnnotation should not perform network calls during tests; just write directly
+        // onAnnotation writes directly to store to avoid network calls
         onAnnotation: (msg) => {
           const d = msg.data as any;
           const key = `${d.musicId}-${d.page}`;
+          type LayerKey = 'personal' | 'section' | 'director';
+          const layerKey = (d.layer as string).toLowerCase() as LayerKey;
           useStandStore.setState((s) => {
-            const layerKey = d.layer.toLowerCase();
             s.annotations[layerKey][key] = [
               ...(s.annotations[layerKey][key] || []),
               {
                 id: d.id,
                 pieceId: d.musicId,
                 pageNumber: d.page,
-                x: d.x,
-                y: d.y,
-                content: d.content,
-                color: d.color,
+                strokeData: { x: d.x, y: d.y, content: d.content, color: d.color },
                 layer: d.layer,
-                createdAt: new Date(d.createdAt),
+                createdAt: d.createdAt,
               },
             ];
             return s;

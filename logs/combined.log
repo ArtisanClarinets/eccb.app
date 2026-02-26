@@ -30,3 +30,6 @@
 {"hostname":"frappe","level":"info","message":"Starting MCP server...","service":"opencode-tools","timestamp":"2026-02-26T02:53:48.341Z","version":"1.0.0"}
 {"hostname":"frappe","level":"info","message":"Starting MCP server...","service":"opencode-tools","timestamp":"2026-02-26T03:48:07.011Z","version":"1.0.0"}
 {"hostname":"frappe","level":"info","message":"Starting MCP server...","service":"opencode-tools","timestamp":"2026-02-26T05:01:20.753Z","version":"1.0.0"}
+{"hostname":"frappe","level":"info","message":"Starting MCP server...","service":"opencode-tools","timestamp":"2026-02-26T20:13:08.979Z","version":"1.0.0"}
+{"hostname":"frappe","level":"info","message":"Starting MCP server...","service":"opencode-tools","timestamp":"2026-02-26T20:31:15.268Z","version":"1.0.0"}
+{"hostname":"frappe","level":"info","message":"Starting MCP server...","service":"opencode-tools","timestamp":"2026-02-26T21:17:54.453Z","version":"1.0.0"}

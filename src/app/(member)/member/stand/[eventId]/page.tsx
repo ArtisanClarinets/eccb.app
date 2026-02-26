@@ -18,14 +18,19 @@ interface PageProps {
 const PRIVILEGED_ROLE_TYPES = ['DIRECTOR', 'SUPER_ADMIN', 'ADMIN', 'STAFF'];
 
 /**
- * Check whether a user may open this event's music stand.
- * Directors / admins / staff always can; regular members need an attendance record.
+ * Check whether a user may open a music stand.
+ *
+ * Access policy (open / practice-friendly):
+ *   - Directors / admins / staff always have access.
+ *   - Any active Member may open the stand for any published event with music,
+ *     without needing an attendance/RSVP record. This lets members practice on
+ *     their own time and browse the full library stand.
  */
 async function canAccessEvent(
   userId: string,
   eventId: string
 ): Promise<boolean> {
-  // Check privileged roles first
+  // Check privileged roles first (no further checks needed)
   const privilegedRole = await prisma.userRole.findFirst({
     where: {
       userId,
@@ -35,14 +40,16 @@ async function canAccessEvent(
   });
   if (privilegedRole) return true;
 
-  // Regular member path – need attendance record
+  // Any member with an active record can view a published event's stand.
   const member = await prisma.member.findFirst({ where: { userId } });
   if (!member) return false;
 
-  const attendance = await prisma.attendance.findFirst({
-    where: { eventId, memberId: member.id },
+  // Verify the event exists and is published (or has ended — allow reviewing past events)
+  const event = await prisma.event.findFirst({
+    where: { id: eventId, isPublished: true },
+    select: { id: true },
   });
-  return !!attendance;
+  return !!event;
 }
 
 export default async function StandPage({ params }: PageProps) {
@@ -80,6 +87,25 @@ export default async function StandPage({ params }: PageProps) {
                     storageKey: true,
                     storageUrl: true,
                     pageCount: true,
+                    partLabel: true,
+                    instrumentName: true,
+                    section: true,
+                    partNumber: true,
+                  },
+                },
+                parts: {
+                  include: {
+                    instrument: { select: { id: true, name: true } },
+                    file: {
+                      select: {
+                        id: true,
+                        mimeType: true,
+                        storageKey: true,
+                        storageUrl: true,
+                        pageCount: true,
+                        partLabel: true,
+                      },
+                    },
                   },
                 },
                 composer: { select: { fullName: true } },
@@ -95,6 +121,10 @@ export default async function StandPage({ params }: PageProps) {
       where: { userId },
       include: {
         sections: { include: { section: true } },
+        instruments: {
+          include: { instrument: true },
+          where: { isPrimary: true },
+        },
       },
     }),
   ]);
@@ -147,7 +177,7 @@ export default async function StandPage({ params }: PageProps) {
   }
 
   // ── Navigation links, audio links, preferences, roster ───────
-  const [navigationLinks, audioLinks, preferences, roster] =
+  const [navigationLinks, audioLinks, preferences, rosterSessions] =
     await Promise.all([
       pieceIds.length > 0
         ? prisma.navigationLink.findMany({
@@ -165,6 +195,18 @@ export default async function StandPage({ params }: PageProps) {
         orderBy: { lastSeenAt: 'desc' },
       }),
     ]);
+
+  // Resolve display names for roster sessions
+  const rosterUserIds = rosterSessions.map((r) => r.userId);
+  const rosterUsers =
+    rosterUserIds.length > 0
+      ? await prisma.user.findMany({
+          where: { id: { in: rosterUserIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+  const rosterUserMap = new Map(rosterUsers.map((u) => [u.id, u.name ?? '']));
+  const roster = rosterSessions;
 
   // ── Serialise – strip Date objects ────────────────────────────
   const loaderData: StandLoaderData = {
@@ -187,6 +229,20 @@ export default async function StandPage({ params }: PageProps) {
           storageKey: f.storageKey,
           storageUrl: f.storageUrl ?? null,
           pageCount: f.pageCount ?? null,
+          partLabel: f.partLabel ?? null,
+          instrumentName: f.instrumentName ?? null,
+          section: f.section ?? null,
+          partNumber: f.partNumber ?? null,
+        })),
+        parts: m.piece.parts.map((p) => ({
+          id: p.id,
+          partName: p.partName,
+          partLabel: p.partLabel ?? null,
+          instrumentId: p.instrumentId,
+          instrumentName: p.instrument.name,
+          storageKey: p.storageKey ?? p.file?.storageKey ?? null,
+          storageUrl: p.file?.storageUrl ?? null,
+          pageCount: p.pageCount ?? p.file?.pageCount ?? null,
         })),
       },
     })),
@@ -248,6 +304,7 @@ export default async function StandPage({ params }: PageProps) {
       id: r.id,
       eventId: r.eventId,
       userId: r.userId,
+      name: rosterUserMap.get(r.userId) ?? '',
       section: r.section,
       lastSeenAt: r.lastSeenAt.toISOString(),
     })),

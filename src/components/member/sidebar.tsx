@@ -13,12 +13,14 @@ import {
   Bell,
   X,
   Menu,
+  BookOpen,
 } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 
 const navigation = [
   { name: 'Dashboard', href: '/member', icon: Home },
+  { name: 'Music Stand', href: '/member/stand', icon: BookOpen },
   { name: 'My Music', href: '/member/music', icon: Music },
   { name: 'Calendar', href: '/member/calendar', icon: Calendar },
   { name: 'Attendance', href: '/member/attendance', icon: ClipboardCheck },

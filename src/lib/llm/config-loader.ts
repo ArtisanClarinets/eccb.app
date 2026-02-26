@@ -10,6 +10,7 @@ import { prisma } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { getDefaultEndpointForProvider } from './providers';
 import type { LLMProviderValue } from './providers';
+import { PROMPT_VERSION } from '@/lib/smart-upload/prompts';
 
 export interface LLMRuntimeConfig {
   provider: LLMProviderValue;
@@ -37,6 +38,7 @@ export interface LLMRuntimeConfig {
   maxPages: number;
   maxFileSizeMb: number;
   maxConcurrent: number;
+  allowedMimeTypes: string[];
   enableFullyAutonomousMode: boolean;
   autonomousApprovalThreshold: number;
   visionModelParams: Record<string, unknown>;
@@ -63,9 +65,11 @@ const DB_KEYS = [
   'smart_upload_confidence_threshold',
   'smart_upload_auto_approve_threshold',
   'smart_upload_rate_limit_rpm',
+  'smart_upload_skip_parse_threshold',
   'smart_upload_max_concurrent',
   'smart_upload_max_pages',
   'smart_upload_max_file_size_mb',
+  'smart_upload_allowed_mime_types',
   'smart_upload_enable_autonomous_mode',
   'smart_upload_autonomous_approval_threshold',
   'llm_adjudicator_model',
@@ -95,6 +99,20 @@ function parseJsonParam(raw: string | undefined): Record<string, unknown> {
     return JSON.parse(raw) as Record<string, unknown>;
   } catch {
     return {};
+  }
+}
+
+function parseMimeTypes(raw: string | undefined): string[] {
+  if (!raw || raw.trim() === '') return ['application/pdf'];
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return ['application/pdf'];
+
+    const mimeTypes = parsed.filter((entry): entry is string => typeof entry === 'string');
+    return mimeTypes.length > 0 ? mimeTypes : ['application/pdf'];
+  } catch {
+    return ['application/pdf'];
   }
 }
 
@@ -208,15 +226,20 @@ export async function loadLLMConfig(): Promise<LLMRuntimeConfig> {
       db['llm_auto_approve_threshold'] ||
       90
     ),
-    skipParseThreshold: Number(db['llm_skip_parse_threshold'] ?? 60),
+    skipParseThreshold: Number(
+      db['smart_upload_skip_parse_threshold'] ||
+      db['llm_skip_parse_threshold'] ||
+      60
+    ),
     maxPages: Number(db['smart_upload_max_pages'] ?? 20),
     maxFileSizeMb: Number(db['smart_upload_max_file_size_mb'] ?? 50),
     maxConcurrent: Number(db['smart_upload_max_concurrent'] ?? 3),
+    allowedMimeTypes: parseMimeTypes(db['smart_upload_allowed_mime_types']),
     enableFullyAutonomousMode: (db['smart_upload_enable_autonomous_mode'] ?? 'false') === 'true',
     autonomousApprovalThreshold: Number(db['smart_upload_autonomous_approval_threshold'] ?? 95),
     visionModelParams,
     verificationModelParams,
-    promptVersion: db['llm_prompt_version'] || '1.0.0',
+    promptVersion: db['llm_prompt_version'] || PROMPT_VERSION,
   };
 }
 

@@ -51,7 +51,7 @@ vi.mock('next/cache', () => ({
 import { requirePermission } from '@/lib/auth/guards';
 
 // Define types for mocks
-type MockSession = {
+type _MockSession = {
   user: { id: string };
   session: { id: string };
 };
@@ -83,7 +83,7 @@ describe('Announcement Actions', () => {
     vi.mocked(requirePermission).mockResolvedValue({
       user: { id: mockUserId },
       session: { id: 'session-123' },
-    } as MockSession);
+    } as any);
   });
 
   afterEach(() => {

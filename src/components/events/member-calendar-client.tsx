@@ -152,7 +152,11 @@ export function MemberCalendarClient({ events, stats }: MemberCalendarClientProp
         events={filteredEvents}
         viewMode={viewMode}
         onViewModeChange={handleViewModeChange}
-        eventHref={(event) => `/member/events/${event.id}`}
+        eventHref={(event) =>
+          (event.musicCount ?? 0) > 0
+            ? `/member/stand/${event.id}`
+            : `/member/events/${event.id}`
+        }
         showViewToggle={true}
       />
 

@@ -215,8 +215,7 @@ function sanitizeFileName(fileName: string): string {
  * @returns Array of split parts with instructions, buffers, page counts, and filenames
  */
 export interface SplitPdfOptions {
-  pdfBuffer: Buffer;
-  instructions: CuttingInstruction[];
+  indexing?: 'zero' | 'one';
   generateFilename?: (partName: string, pageStart: number, pageEnd: number, index: number) => string;
 }
 
@@ -224,7 +223,7 @@ export async function splitPdfByCuttingInstructions(
   pdfBuffer: Buffer,
   originalBaseName: string,
   instructions: CuttingInstruction[],
-  generateFilename?: (partName: string, pageStart: number, pageEnd: number, index: number) => string
+  options: SplitPdfOptions = {}
 ): Promise<Array<{
   instruction: CuttingInstruction;
   buffer: Buffer;
@@ -237,6 +236,8 @@ export async function splitPdfByCuttingInstructions(
   }
 
   try {
+    const { generateFilename, indexing = 'zero' } = options;
+
     // Convert Buffer to Uint8Array for pdf-lib compatibility
     const pdfData = new Uint8Array(pdfBuffer);
     const sourcePdf = await PDFDocument.load(pdfData);
@@ -256,7 +257,12 @@ export async function splitPdfByCuttingInstructions(
     });
 
     for (const instruction of instructions) {
-      const [startPage, endPage] = instruction.pageRange;
+      let [startPage, endPage] = instruction.pageRange;
+
+      if (indexing === 'one') {
+        startPage -= 1;
+        endPage -= 1;
+      }
 
       // Validate and clamp page range
       let clampedStart = startPage;

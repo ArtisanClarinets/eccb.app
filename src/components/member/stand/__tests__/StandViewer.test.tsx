@@ -50,6 +50,23 @@ vi.mock('../GestureHandler', () => ({
   GestureHandler: () => <div data-testid="gesture-handler" />,
 }));
 
+// Mock utility components that require browser APIs
+vi.mock('../Metronome', () => ({
+  Metronome: () => <div data-testid="metronome"><button>Start</button></div>,
+}));
+
+vi.mock('../Tuner', () => ({
+  Tuner: () => <div data-testid="tuner"><span>Note:</span></div>,
+}));
+
+vi.mock('../AudioPlayer', () => ({
+  AudioPlayer: () => <div data-testid="audio-player"><span>Progress:</span></div>,
+}));
+
+vi.mock('../PitchPipe', () => ({
+  PitchPipe: () => <div data-testid="pitch-pipe"><span>C4</span></div>,
+}));
+
 // Reset store before each test
 beforeEach(() => {
   useStandStore.getState().reset();
@@ -57,6 +74,21 @@ beforeEach(() => {
 });
 
 describe('StandViewer', () => {
+  const baseData = {
+    eventId: 'evt',
+    userId: 'u1',
+    eventTitle: 'Test Event',
+    roles: [] as string[],
+    isDirector: false,
+    isSectionLeader: false,
+    userSectionIds: [] as string[],
+    annotations: [] as never[],
+    navigationLinks: [] as never[],
+    audioLinks: [] as never[],
+    preferences: null,
+    roster: [] as never[],
+  };
+
   const mockMusic = [
     {
       id: '1',
@@ -70,8 +102,10 @@ describe('StandViewer', () => {
             mimeType: 'application/pdf',
             storageKey: 'test-file-1.pdf',
             storageUrl: null,
+            pageCount: null,
           },
         ],
+        parts: [],
       },
     },
     {
@@ -86,20 +120,22 @@ describe('StandViewer', () => {
             mimeType: 'application/pdf',
             storageKey: 'test-file-2.pdf',
             storageUrl: 'https://example.com/test-file-2.pdf',
+            pageCount: null,
           },
         ],
+        parts: [],
       },
     },
   ];
 
   it('renders empty state when no music is provided', () => {
-    const { container } = render(<StandViewer data={{ eventId: 'evt', userId: 'u1', eventTitle: 'Test Event', music: [], annotations: [], navigationLinks: [], audioLinks: [], preferences: null, roster: [] }} />);
+    const { container } = render(<StandViewer data={{ ...baseData, music: [] }} />);
     
     expect(container.textContent).toContain('No music scheduled for this event.');
   });
 
   it('renders the viewer with music data', () => {
-    const { container: _container } = render(<StandViewer data={{ eventId: 'evt', userId: 'u1', eventTitle: 'Test Event', music: mockMusic, annotations: [], navigationLinks: [], audioLinks: [], preferences: null, roster: [] }} />);
+    const { container: _container } = render(<StandViewer data={{ ...baseData, music: mockMusic }} />);
     
     // Check that child components are rendered
     expect(screen.getByTestId('navigation-controls')).toBeInTheDocument();
@@ -110,7 +146,7 @@ describe('StandViewer', () => {
   });
 
   it('initializes the store with music data', () => {
-    render(<StandViewer data={{ eventId: 'evt', userId: 'u1', eventTitle: 'Test Event', music: mockMusic, annotations: [], navigationLinks: [], audioLinks: [], preferences: null, roster: [] }} />);
+    render(<StandViewer data={{ ...baseData, music: mockMusic }} />);
     
     const state = useStandStore.getState();
     expect(state.pieces).toHaveLength(2);
@@ -119,37 +155,39 @@ describe('StandViewer', () => {
   });
 
   it('sets the event title in the store', () => {
-    render(<StandViewer data={{ eventId: 'evt', userId: 'u1', eventTitle: 'My Test Event', music: mockMusic, annotations: [], navigationLinks: [], audioLinks: [], preferences: null, roster: [] }} />);
+    render(<StandViewer data={{ ...baseData, eventTitle: 'My Test Event', music: mockMusic }} />);
     
     const state = useStandStore.getState();
     expect(state.eventTitle).toBe('My Test Event');
   });
 
   it('transforms music data to stand pieces correctly', () => {
-    render(<StandViewer data={{ eventId: 'evt', userId: 'u1', eventTitle: 'Test Event', music: mockMusic, annotations: [], navigationLinks: [], audioLinks: [], preferences: null, roster: [] }} />);
+    render(<StandViewer data={{ ...baseData, music: mockMusic }} />);
     
     const state = useStandStore.getState();
     const piece = state.pieces[0];
     
-    expect(piece.id).toBe('1');
+    expect(piece.id).toBe('piece-1');  // piece.id is MusicPiece.id, not EventMusic.id
     expect(piece.title).toBe('Test Piece 1');
     expect(piece.composer).toBe('Test Composer');
     expect(piece.pdfUrl).toContain('test-file-1.pdf');
     expect(piece.totalPages).toBe(1);
   });
 
-  it('uses storageUrl when available', () => {
-    render(<StandViewer data={{ eventId: 'evt', userId: 'u1', eventTitle: 'Test Event', music: mockMusic, annotations: [], navigationLinks: [], audioLinks: [], preferences: null, roster: [] }} />);
+  it('uses proxy URL for PDF (storageUrl is bypassed for security)', () => {
+    render(<StandViewer data={{ ...baseData, music: mockMusic }} />);
     
     const state = useStandStore.getState();
     const piece = state.pieces[1];
     
-    expect(piece.pdfUrl).toBe('https://example.com/test-file-2.pdf');
+    // PDF always goes through authenticated proxy, even when storageUrl is available
+    expect(piece.pdfUrl).toContain('test-file-2.pdf');
+    expect(piece.pdfUrl).toMatch(/^\/api\/stand\/files\//);
   });
 
   it('loads audio links into store', () => {
-    const audio = [{ id: 'a1', pieceId: 'p', fileKey: 'k', url: 'u', description: 'd', createdAt: new Date() }];
-    render(<StandViewer data={{ eventId: 'evt', userId: 'u1', eventTitle: 'Test Event', music: mockMusic, annotations: [], navigationLinks: [], audioLinks: audio, preferences: null, roster: [] }} />);
+    const audio = [{ id: 'a1', pieceId: 'p', fileKey: 'k', url: 'u', description: 'd', createdAt: new Date().toISOString() }];
+    render(<StandViewer data={{ ...baseData, music: mockMusic, audioLinks: audio }} />);
     const state = useStandStore.getState();
     expect(state.audioLinks).toEqual(audio);
   });
@@ -162,12 +200,12 @@ describe('StandViewer', () => {
         showTuner: true,
         showAudioPlayer: true,
         showPitchPipe: true,
-        audioLinks: [{ id: 'a1', pieceId: 'p', fileKey: 'k', url: 'u', description: 'd', createdAt: new Date() }],
+        audioLinks: [{ id: 'a1', pieceId: 'p', fileKey: 'k', url: 'u', description: 'd', createdAt: new Date().toISOString() }],
         selectedAudioLinkId: 'a1',
       });
     });
-    const audio = [{ id: 'a1', pieceId: 'p', fileKey: 'k', url: 'u', description: 'd', createdAt: new Date() }];
-    const { queryByText } = render(<StandViewer data={{ eventId: 'evt', userId: 'u1', eventTitle: 'Test Event', music: mockMusic, annotations: [], navigationLinks: [], audioLinks: audio, preferences: null, roster: [] }} />);
+    const audio = [{ id: 'a1', pieceId: 'p', fileKey: 'k', url: 'u', description: 'd', createdAt: new Date().toISOString() }];
+    const { queryByText } = render(<StandViewer data={{ ...baseData, music: mockMusic, audioLinks: audio }} />);
     // debug store after render
      
     console.log('store after render', useStandStore.getState());

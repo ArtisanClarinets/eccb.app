@@ -2,10 +2,11 @@ import { prisma } from '@/lib/db';
 import { requirePermission } from '@/lib/auth/guards';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Settings, Database, Mail, Shield, Users, Globe } from 'lucide-react';
+import { Settings, Database, Mail, Shield, Users, Globe, BookOpen } from 'lucide-react';
 import { GeneralSettingsForm } from '@/components/admin/settings/general-settings-form';
 import { EmailSettingsForm } from '@/components/admin/settings/email-settings-form';
 import { SecuritySettingsForm } from '@/components/admin/settings/security-settings-form';
+import { MusicStandSettingsForm } from '@/components/admin/settings/music-stand-settings-form';
 
 export default async function AdminSettingsPage() {
   await requirePermission('settings:read');
@@ -92,6 +93,10 @@ export default async function AdminSettingsPage() {
             <Shield className="h-4 w-4" />
             Security
           </TabsTrigger>
+          <TabsTrigger value="music-stand" className="gap-2">
+            <BookOpen className="h-4 w-4" />
+            Music Stand
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="general" className="space-y-4">
@@ -132,6 +137,20 @@ export default async function AdminSettingsPage() {
             </CardHeader>
             <CardContent>
               <SecuritySettingsForm settings={settingsMap} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="music-stand" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Music Stand Settings</CardTitle>
+              <CardDescription>
+                Configure the digital music stand behaviour for members
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <MusicStandSettingsForm settings={settingsMap} />
             </CardContent>
           </Card>
         </TabsContent>

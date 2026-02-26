@@ -40,6 +40,7 @@ const DEFAULT_NUMERIC_SETTINGS: Record<string, string> = {
   smart_upload_confidence_threshold: '70',
   smart_upload_auto_approve_threshold: '90',
   smart_upload_rate_limit_rpm: '15',
+  smart_upload_skip_parse_threshold: '60',
   smart_upload_max_concurrent: '3',
   smart_upload_max_pages: '20',
   smart_upload_max_file_size_mb: '50',
@@ -150,6 +151,9 @@ export async function bootstrapSmartUploadSettings(
     // 9. Migration bridge: copy legacy key values to canonical smart_upload_* keys
     const legacyMigrations: Array<[string, string]> = [
       ['llm_auto_approve_threshold', 'smart_upload_auto_approve_threshold'],
+      ['llm_rate_limit_rpm', 'smart_upload_rate_limit_rpm'],
+      ['llm_skip_parse_threshold', 'smart_upload_skip_parse_threshold'],
+      ['llm_confidence_threshold', 'smart_upload_confidence_threshold'],
     ];
     for (const [legacyKey, newKey] of legacyMigrations) {
       const legacyValue = existingSettings[legacyKey];

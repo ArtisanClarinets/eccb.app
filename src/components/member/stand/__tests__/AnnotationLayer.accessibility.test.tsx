@@ -31,7 +31,7 @@ describe('AnnotationLayer accessibility', () => {
       setupStore({
         pieces: [{ id: 'p1', title: 'Test', composer: '', pdfUrl: null, totalPages: 1 }],
         currentPieceIndex: 0,
-        currentPage: 1,
+        _currentPage: 1,
       });
       
       const { container } = render(
@@ -49,7 +49,7 @@ describe('AnnotationLayer accessibility', () => {
       setupStore({
         pieces: [{ id: 'p1', title: 'Test', composer: '', pdfUrl: null, totalPages: 1 }],
         currentPieceIndex: 0,
-        currentPage: 1,
+        _currentPage: 1,
         editMode: false,
         selectedLayer: 'PERSONAL',
       });
@@ -70,7 +70,7 @@ describe('AnnotationLayer accessibility', () => {
       setupStore({
         pieces: [{ id: 'p1', title: 'Test', composer: '', pdfUrl: null, totalPages: 1 }],
         currentPieceIndex: 0,
-        currentPage: 1,
+        _currentPage: 1,
         editMode: true,
         selectedLayer: 'SECTION',
       });
@@ -89,7 +89,7 @@ describe('AnnotationLayer accessibility', () => {
       setupStore({
         pieces: [{ id: 'p1', title: 'Test', composer: '', pdfUrl: null, totalPages: 1 }],
         currentPieceIndex: 0,
-        currentPage: 1,
+        _currentPage: 1,
         editMode: false,
         selectedLayer: 'PERSONAL',
       });
@@ -112,7 +112,7 @@ describe('AnnotationLayer accessibility', () => {
       setupStore({
         pieces: [{ id: 'p1', title: 'Test', composer: '', pdfUrl: null, totalPages: 1 }],
         currentPieceIndex: 0,
-        currentPage: 1,
+        _currentPage: 1,
         editMode: true,
         selectedLayer: 'PERSONAL',
         currentTool: Tool.TEXT,
@@ -143,7 +143,7 @@ describe('AnnotationLayer accessibility', () => {
       setupStore({
         pieces: [{ id: 'p1', title: 'Test', composer: '', pdfUrl: null, totalPages: 1 }],
         currentPieceIndex: 0,
-        currentPage: 1,
+        _currentPage: 1,
         editMode: true,
         selectedLayer: 'PERSONAL',
         currentTool: Tool.TEXT,
@@ -166,7 +166,7 @@ describe('AnnotationLayer accessibility', () => {
       setupStore({
         pieces: [{ id: 'p1', title: 'Test', composer: '', pdfUrl: null, totalPages: 1 }],
         currentPieceIndex: 0,
-        currentPage: 1,
+        _currentPage: 1,
         editMode: true,
         selectedLayer: 'PERSONAL',
       });
@@ -187,7 +187,7 @@ describe('AnnotationLayer accessibility', () => {
       setupStore({
         pieces: [{ id: 'p1', title: 'Test', composer: '', pdfUrl: null, totalPages: 1 }],
         currentPieceIndex: 0,
-        currentPage: 1,
+        _currentPage: 1,
         editMode: true,
         selectedLayer: 'PERSONAL',
         currentTool: Tool.TEXT,

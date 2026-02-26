@@ -14,16 +14,17 @@ import { Job } from 'bullmq';
 import { PDFDocument } from 'pdf-lib';
 import { prisma } from '@/lib/db';
 import { downloadFile, uploadFile } from '@/lib/services/storage';
-import { renderPdfPageBatch } from '@/lib/services/pdf-renderer';
+import { renderPdfHeaderCropBatch, renderPdfPageBatch } from '@/lib/services/pdf-renderer';
 import { callVisionModel } from '@/lib/llm';
 import { loadSmartUploadRuntimeConfig, runtimeToAdapterConfig } from '@/lib/llm/config-loader';
 import type { LLMRuntimeConfig } from '@/lib/llm/config-loader';
 import {
+  toOneIndexed,
   validateAndNormalizeInstructions,
   buildGapInstructions,
 } from '@/lib/services/cutting-instructions';
 import { splitPdfByCuttingInstructions } from '@/lib/services/pdf-splitter';
-import { extractPdfPageHeaders } from '@/lib/services/pdf-text-extractor';
+import { extractPdfPageHeaders, type PageHeader } from '@/lib/services/pdf-text-extractor';
 import { detectPartBoundaries } from '@/lib/services/part-boundary-detector';
 import {
   queueSmartUploadSecondPass,
@@ -32,7 +33,14 @@ import {
 } from '@/lib/jobs/smart-upload';
 import { buildPartFilename, buildPartStorageSlug, normalizeInstrumentLabel } from '@/lib/smart-upload/part-naming';
 import { logger } from '@/lib/logger';
-import { buildVisionPrompt } from '@/lib/smart-upload/prompts';
+import {
+  buildHeaderLabelPrompt,
+  buildVisionPrompt,
+  DEFAULT_HEADER_LABEL_SYSTEM_PROMPT,
+  DEFAULT_VISION_SYSTEM_PROMPT,
+  DEFAULT_VISION_USER_PROMPT_TEMPLATE,
+  PROMPT_VERSION,
+} from '@/lib/smart-upload/prompts';
 import type {
   CuttingInstruction,
   ExtractedMetadata,
@@ -105,6 +113,67 @@ async function samplePdfPages(
   });
 
   return { images, totalPages, sampledIndices: indices };
+}
+
+interface HeaderLabelEntry {
+  page: number;
+  label: string | null;
+  confidence: number;
+}
+
+function parseHeaderLabelResponse(content: string): HeaderLabelEntry[] {
+  const cleaned = content
+    .replace(/^```(?:json)?\s*/im, '')
+    .replace(/\s*```\s*$/im, '')
+    .trim();
+
+  const arrayMatch = cleaned.match(/\[[\s\S]*\]/);
+  if (!arrayMatch) {
+    logger.warn('parseHeaderLabelResponse: no JSON array found', {
+      contentPreview: content.slice(0, 200),
+    });
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(arrayMatch[0]) as unknown[];
+    return parsed
+      .map((entry) => {
+        if (!entry || typeof entry !== 'object') return null;
+        const value = entry as Record<string, unknown>;
+        const page = Number(value.page);
+        const confidence = Number(value.confidence);
+        const label =
+          typeof value.label === 'string' && value.label.trim().length > 0
+            ? value.label.trim()
+            : null;
+
+        if (!Number.isFinite(page) || !Number.isInteger(page) || page < 1) {
+          return null;
+        }
+
+        return {
+          page,
+          label,
+          confidence: Number.isFinite(confidence)
+            ? Math.max(0, Math.min(100, Math.round(confidence)))
+            : 0,
+        };
+      })
+      .filter((entry): entry is HeaderLabelEntry => entry !== null);
+  } catch (error) {
+    logger.warn('parseHeaderLabelResponse: invalid JSON', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return [];
+  }
+}
+
+function toOneIndexedInstructions(instructions: CuttingInstruction[]): CuttingInstruction[] {
+  return instructions.map((instruction) => ({
+    ...instruction,
+    pageRange: toOneIndexed(instruction.pageRange),
+  }));
 }
 
 
@@ -266,6 +335,7 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
 
   // Load LLM config (uses smart_upload_* settings from DB)
   const llmConfig = await loadSmartUploadRuntimeConfig();
+  const adapterConfig = runtimeToAdapterConfig(llmConfig);
 
   // Step 1: Download and render PDF to images
   await progress('downloading', 5, 'Downloading PDF from storage');
@@ -288,7 +358,7 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
 
   const pageHeaderResult = await extractPdfPageHeaders(
     pdfBuffer,
-    Math.min(totalPages, llmConfig.maxPages || 50)
+    totalPages
   );
 
   let deterministicInstructions: CuttingInstruction[] | null = null;
@@ -312,18 +382,88 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
     }
   }
 
+  // For scanned/image PDFs, try a header-crop labeling pass to recover boundaries.
+  if (!deterministicInstructions || deterministicConfidence < llmConfig.skipParseThreshold) {
+    await progress('analyzing', 25, 'Running header-label pass for scanned pages');
+
+    try {
+      const allPageIndices = Array.from({ length: totalPages }, (_, i) => i);
+      const headerCropImages = await renderPdfHeaderCropBatch(pdfBuffer, allPageIndices, {
+        scale: 2,
+        maxWidth: 1024,
+        quality: 85,
+        format: 'png',
+        cropHeightFraction: 0.2,
+      });
+
+      const headerLabelPrompt = buildHeaderLabelPrompt(llmConfig.headerLabelPrompt || '', {
+        pageNumbers: allPageIndices.map((index) => index + 1),
+      });
+
+      const headerAdapterConfig = {
+        ...adapterConfig,
+        llm_vision_model: llmConfig.verificationModel,
+      };
+
+      const headerResult = await callVisionModel(
+        headerAdapterConfig,
+        headerCropImages.map((base64Data, index) => ({
+          mimeType: 'image/png' as const,
+          base64Data,
+          label: `Page ${index + 1}`,
+        })),
+        headerLabelPrompt,
+        {
+          system: DEFAULT_HEADER_LABEL_SYSTEM_PROMPT,
+          responseFormat: { type: 'json' },
+          maxTokens: 2048,
+          temperature: 0.1,
+          modelParams: llmConfig.verificationModelParams,
+        }
+      );
+
+      const parsedHeaderLabels = parseHeaderLabelResponse(headerResult.content);
+      const pageHeaders: PageHeader[] = parsedHeaderLabels.map((entry) => ({
+        pageIndex: entry.page - 1,
+        headerText: entry.label ?? '',
+        fullText: entry.label ?? '',
+        hasText: Boolean(entry.label),
+      }));
+
+      if (pageHeaders.length > 0) {
+        const segResult = detectPartBoundaries(pageHeaders, totalPages, false);
+        if (segResult.segments.length > 1 || segResult.segmentationConfidence >= 55) {
+          deterministicInstructions = segResult.cuttingInstructions;
+          deterministicConfidence = Math.max(
+            deterministicConfidence,
+            segResult.segmentationConfidence
+          );
+          logger.info('Header-label segmentation succeeded', {
+            sessionId,
+            segments: segResult.segments.length,
+            confidence: segResult.segmentationConfidence,
+          });
+        }
+      }
+    } catch (error) {
+      logger.warn('Header-label segmentation failed; continuing with first-pass vision', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   // Step 2: Vision LLM analysis
   await progress('analyzing', 30, 'Running AI vision analysis on pages');
 
-  const images = pageImages.map((base64Data) => ({
+  const images = pageImages.map((base64Data, index) => ({
     mimeType: 'image/png' as const,
     base64Data,
+    label: `Original Page ${sampledIndices[index] + 1}`,
   }));
 
-  const adapterConfig = runtimeToAdapterConfig(llmConfig);
-
   const visionPrompt = buildVisionPrompt(
-    llmConfig.visionSystemPrompt || '',
+    DEFAULT_VISION_USER_PROMPT_TEMPLATE,
     {
       totalPages,
       sampledPageNumbers: sampledIndices,
@@ -335,6 +475,9 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
     images,
     visionPrompt,
     {
+      system: llmConfig.visionSystemPrompt || DEFAULT_VISION_SYSTEM_PROMPT,
+      responseFormat: { type: 'json' },
+      modelParams: llmConfig.visionModelParams,
       maxTokens: 4096,
       temperature: 0.1,
     }
@@ -344,7 +487,7 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
 
   // If deterministic segmentation produced instructions, overlay them on the LLM extraction
   if (deterministicInstructions && deterministicInstructions.length > 0) {
-    extraction.cuttingInstructions = deterministicInstructions;
+    extraction.cuttingInstructions = toOneIndexedInstructions(deterministicInstructions);
     // Boost confidence when deterministic path used
     extraction.confidenceScore = Math.max(
       extraction.confidenceScore,
@@ -379,6 +522,13 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
     );
   }
 
+  const normalizedInstructionsZero = validation.instructions;
+  const normalizedInstructionsOne = toOneIndexedInstructions(normalizedInstructionsZero);
+
+  if (validation.isValid) {
+    extraction.cuttingInstructions = normalizedInstructionsOne;
+  }
+
   // Determine routing decision based on confidence
   const { decision: routingDecision, autoApproved: _autoApproved } = determineRoutingDecision(
     extraction.confidenceScore,
@@ -401,12 +551,17 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
         routingDecision: 'no_parse_second_pass',
         parseStatus: 'NOT_PARSED',
         secondPassStatus: 'QUEUED',
-        cuttingInstructions: JSON.parse(JSON.stringify(cuttingInstructions)),
+        cuttingInstructions: JSON.parse(JSON.stringify(normalizedInstructionsOne)),
         llmProvider: llmConfig.provider,
         llmVisionModel: llmConfig.visionModel,
         llmVerifyModel: llmConfig.verificationModel,
-        llmModelParams: { temperature: 0.1, max_tokens: 4096 },
-        llmPromptVersion: llmConfig.promptVersion || '1.0.0',
+        llmModelParams: JSON.parse(
+          JSON.stringify({
+            vision: llmConfig.visionModelParams,
+            verification: llmConfig.verificationModelParams,
+          })
+        ),
+        llmPromptVersion: llmConfig.promptVersion || PROMPT_VERSION,
       },
     });
 
@@ -421,24 +576,13 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
   // Step 4: Split PDF
   await progress('splitting', 70, `Splitting PDF into ${validation.instructions.length} parts`);
 
-  // Convert validation instructions to full CuttingInstruction format
-  // Gap instructions (from buildGapInstructions) already carry their own metadata
-  const validatedInstructions: CuttingInstruction[] = validation.instructions.map((inst, idx) => {
-    const originalCut = cuttingInstructions[idx];
-    return {
-      instrument: inst.instrument || originalCut?.instrument || 'Unknown',
-      partName: inst.partName,
-      section: inst.section || originalCut?.section || 'Other',
-      transposition: inst.transposition || originalCut?.transposition || 'C',
-      partNumber: inst.partNumber || originalCut?.partNumber || idx + 1,
-      pageRange: inst.pageRange,
-    };
-  });
+  const validatedInstructions = normalizedInstructionsZero;
 
   const splitResults = await splitPdfByCuttingInstructions(
     pdfBuffer,
     smartSession.fileName.replace(/\.pdf$/i, ''),
-    validatedInstructions
+    validatedInstructions,
+    { indexing: 'zero' }
   );
 
   // Step 5: Create part records
@@ -477,7 +621,7 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
       fileName: partFileName,
       fileSize: result.buffer.length,
       pageCount: result.pageCount,
-      pageRange: result.instruction.pageRange,
+      pageRange: toOneIndexed(result.instruction.pageRange),
     });
   }
 
@@ -503,15 +647,20 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
       routingDecision,
       parseStatus: 'PARSED',
       parsedParts: JSON.parse(JSON.stringify(parsedParts)),
-      cuttingInstructions: JSON.parse(JSON.stringify(validatedInstructions)),
+      cuttingInstructions: JSON.parse(JSON.stringify(normalizedInstructionsOne)),
       tempFiles: JSON.parse(JSON.stringify(tempFiles)),
       autoApproved: shouldAutoCommit,
       secondPassStatus: secondPassStatus === 'NOT_NEEDED' ? null : secondPassStatus,
       llmProvider: llmConfig.provider,
       llmVisionModel: llmConfig.visionModel,
       llmVerifyModel: llmConfig.verificationModel,
-      llmModelParams: { temperature: 0.1, max_tokens: 4096 },
-      llmPromptVersion: llmConfig.promptVersion || '2.0.0',
+      llmModelParams: JSON.parse(
+        JSON.stringify({
+          vision: llmConfig.visionModelParams,
+          verification: llmConfig.verificationModelParams,
+        })
+      ),
+      llmPromptVersion: llmConfig.promptVersion || PROMPT_VERSION,
       ...(firstPassRaw ? { firstPassRaw } : {}),
     },
   });

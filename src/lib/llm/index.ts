@@ -1,5 +1,5 @@
 import { logger } from '@/lib/logger';
-import type { LLMAdapter, LLMConfig, VisionRequest, VisionResponse } from './types';
+import type { LLMAdapter, LLMConfig, LabeledImage, VisionRequest, VisionResponse } from './types';
 import { OpenAIAdapter } from './openai';
 import { AnthropicAdapter } from './anthropic';
 import { GeminiAdapter } from './gemini';
@@ -34,6 +34,18 @@ export function getAdapter(provider: string): LLMAdapter {
 
 const MAX_RETRIES = 3;
 const RETRY_BASE_MS = 1_000;
+const MIN_MAX_TOKENS = 64;
+const MAX_MAX_TOKENS = 16_384;
+const MIN_TEMPERATURE = 0;
+const MAX_TEMPERATURE = 2;
+
+function toFiniteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
 
 /**
  * Unified function to call vision models.
@@ -43,20 +55,55 @@ const RETRY_BASE_MS = 1_000;
  */
 export async function callVisionModel(
   config: LLMConfig,
-  images: Array<{ mimeType: string; base64Data: string }>,
+  images: Array<{ mimeType: string; base64Data: string; label?: string }>,
   prompt: string,
   options?: {
+    system?: string;
+    responseFormat?: { type: 'json' | 'text' };
+    labeledInputs?: LabeledImage[];
+    modelParams?: Record<string, unknown>;
     maxTokens?: number;
     temperature?: number;
   }
 ): Promise<VisionResponse> {
   const adapter = getAdapter(config.llm_provider);
 
+  const inputModelParams = { ...(options?.modelParams ?? {}) };
+
+  const paramMaxTokens =
+    toFiniteNumber(inputModelParams.max_tokens) ?? toFiniteNumber(inputModelParams.maxTokens);
+  const paramTemperature = toFiniteNumber(inputModelParams.temperature);
+
+  const boundedMaxTokens = clamp(
+    Math.round(paramMaxTokens ?? options?.maxTokens ?? 4096),
+    MIN_MAX_TOKENS,
+    MAX_MAX_TOKENS
+  );
+  const boundedTemperature = clamp(
+    paramTemperature ?? options?.temperature ?? 0.1,
+    MIN_TEMPERATURE,
+    MAX_TEMPERATURE
+  );
+
+  if ('max_tokens' in inputModelParams) {
+    inputModelParams.max_tokens = boundedMaxTokens;
+  }
+  if ('maxTokens' in inputModelParams) {
+    inputModelParams.maxTokens = boundedMaxTokens;
+  }
+  if ('temperature' in inputModelParams) {
+    inputModelParams.temperature = boundedTemperature;
+  }
+
   const request: VisionRequest = {
     images,
+    labeledInputs: options?.labeledInputs,
     prompt,
-    maxTokens: options?.maxTokens ?? 4096,
-    temperature: options?.temperature ?? 0.1,
+    system: options?.system,
+    responseFormat: options?.responseFormat,
+    maxTokens: boundedMaxTokens,
+    temperature: boundedTemperature,
+    modelParams: inputModelParams,
   };
 
   let lastError: Error | undefined;
@@ -65,12 +112,14 @@ export async function callVisionModel(
     try {
       const { url, headers, body } = adapter.buildRequest(config, request);
 
-      logger.debug('Calling vision LLM', {
-        provider: config.llm_provider,
-        model: config.llm_vision_model,
-        imageCount: images.length,
-        attempt,
-      });
+        logger.debug('Calling vision LLM', {
+          provider: config.llm_provider,
+          model: config.llm_vision_model,
+          imageCount: images.length,
+          labeledInputCount: request.labeledInputs?.length ?? 0,
+          responseFormat: request.responseFormat?.type ?? 'text',
+          attempt,
+        });
 
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 90_000); // 90 s

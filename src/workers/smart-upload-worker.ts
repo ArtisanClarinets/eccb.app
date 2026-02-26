@@ -16,7 +16,10 @@ import { splitPdfByCuttingInstructions } from '@/lib/services/pdf-splitter';
 import { createWorker } from '@/lib/jobs/queue';
 import { queueSmartUploadAutoCommit } from '@/lib/jobs/smart-upload';
 import { logger } from '@/lib/logger';
-import { buildVerificationPrompt } from '@/lib/smart-upload/prompts';
+import {
+  buildVerificationPrompt,
+  DEFAULT_VERIFICATION_SYSTEM_PROMPT,
+} from '@/lib/smart-upload/prompts';
 import type {
   CuttingInstruction,
   ExtractedMetadata,
@@ -104,7 +107,7 @@ async function callVerificationLLM(
   cfg: LLMRuntimeConfig,
   prompt: string,
   labeledImages?: Array<{ label: string; base64Data: string }>,
-): Promise<ExtractedMetadata> {
+): Promise<{ parsed: ExtractedMetadata; raw: string }> {
   // setLimit BEFORE consume (rate limiter fix)
   llmRateLimiter.setLimit(cfg.rateLimit);
   await llmRateLimiter.consume();
@@ -121,8 +124,11 @@ async function callVerificationLLM(
   }));
 
   const response = await callVisionModel(adapterConfig, images, prompt, {
+    system: cfg.verificationSystemPrompt || DEFAULT_VERIFICATION_SYSTEM_PROMPT,
+    responseFormat: { type: 'json' as const },
     maxTokens: 4096,
     temperature: 0.1,
+    modelParams: cfg.verificationModelParams,
     ...(labeledImages && labeledImages.length > 0
       ? {
           labeledInputs: labeledImages.map(({ label, base64Data }) => ({
@@ -134,7 +140,8 @@ async function callVerificationLLM(
       : {}),
   });
 
-  return parseVerificationResponse(response.content);
+  const raw = response.content;
+  return { parsed: parseVerificationResponse(raw), raw };
 }
 
 function parseVerificationResponse(content: string): ExtractedMetadata {
@@ -200,7 +207,8 @@ async function handleSecondPassResult(
       const splitResults = await splitPdfByCuttingInstructions(
         originalPdfBuffer,
         smartSession.fileName.replace(/\.pdf$/i, ''),
-        correctedCuttingInstructions
+        correctedCuttingInstructions,
+        { indexing: 'one' }
       );
       const newParsedParts: ParsedPartRecord[] = [];
       const tempFiles: string[] = [];
@@ -228,7 +236,8 @@ async function handleSecondPassResult(
       const splitResults = await splitPdfByCuttingInstructions(
         originalPdfBuffer,
         smartSession.fileName.replace(/\.pdf$/i, ''),
-        correctedCuttingInstructions
+        correctedCuttingInstructions,
+        { indexing: 'one' }
       );
       const newParsedParts: ParsedPartRecord[] = [];
       for (const part of splitResults) {
@@ -419,7 +428,7 @@ async function processSecondPass(job: Job<SmartUploadSecondPassJobData>): Promis
       ) + '\n\n' + promptContent;
 
       // Call the verification LLM with labeled part images
-      const secondPassResult = await callVerificationLLM(
+      const { parsed: secondPassResult, raw: secondPassRaw } = await callVerificationLLM(
         originalPageImages,
         llmConfig,
         verificationPrompt,
@@ -428,7 +437,6 @@ async function processSecondPass(job: Job<SmartUploadSecondPassJobData>): Promis
 
       const verificationConfidence = (secondPassResult as unknown as Record<string, unknown>).verificationConfidence as number
         ?? secondPassResult.confidenceScore;
-      const secondPassRaw = JSON.stringify(secondPassResult);
       const correctedCuttingInstructions = secondPassResult.cuttingInstructions;
 
       await progress('verification', 70, 'Verification complete with parts');
@@ -455,10 +463,9 @@ Include a "corrections" field explaining any corrections made from the first pas
 
       await progress('analyzing', 50, 'Running full vision re-extraction');
 
-      const secondPassResult = await callVerificationLLM(originalPageImages, llmConfig, fallbackPrompt);
+      const { parsed: secondPassResult, raw: secondPassRaw } = await callVerificationLLM(originalPageImages, llmConfig, fallbackPrompt);
       const verificationConfidence = (secondPassResult as unknown as Record<string, unknown>).verificationConfidence as number
         ?? secondPassResult.confidenceScore;
-      const secondPassRaw = JSON.stringify(secondPassResult);
       const correctedCuttingInstructions = secondPassResult.cuttingInstructions;
 
       await progress('verification', 70, 'Fallback verification complete');

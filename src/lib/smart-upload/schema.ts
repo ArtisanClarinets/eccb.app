@@ -5,13 +5,14 @@
 // ============================================================
 
 import { z } from 'zod';
+import { PROMPT_VERSION as DEFAULT_PROMPT_VERSION } from './prompts';
 
 // =============================================================================
 // Version Constants
 // =============================================================================
 
 export const SMART_UPLOAD_SCHEMA_VERSION = '1.0.0';
-export const PROMPT_VERSION = '1.0.0';
+export const PROMPT_VERSION = DEFAULT_PROMPT_VERSION;
 
 // =============================================================================
 // Provider-specific validation
@@ -52,6 +53,7 @@ export const SMART_UPLOAD_SETTING_KEYS = [
   'smart_upload_confidence_threshold',
   'smart_upload_auto_approve_threshold',
   'smart_upload_rate_limit_rpm',
+  'smart_upload_skip_parse_threshold',
   'smart_upload_max_concurrent',
   'smart_upload_max_pages',
   'smart_upload_max_file_size_mb',
@@ -137,6 +139,14 @@ export const SmartUploadSettingsSchema = z.object({
       return Math.max(1, Math.min(1000, num));
     })
     .default(15),
+
+  smart_upload_skip_parse_threshold: z
+    .union([z.string(), z.number()])
+    .transform((v) => {
+      const num = typeof v === 'string' ? Number(v) : v;
+      return Math.max(0, Math.min(100, num));
+    })
+    .default(60),
   
   smart_upload_max_concurrent: z
     .union([z.string(), z.number()])

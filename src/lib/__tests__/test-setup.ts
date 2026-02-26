@@ -102,7 +102,7 @@ global.AudioContext = class {
   createGain() {
     return { connect: () => {}, gain: { value: 1 } };
   }
-};
+} as unknown as typeof AudioContext;
 
 afterEach(() => {
   vi.clearAllMocks();

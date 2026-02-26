@@ -9,6 +9,7 @@
  */
 
 import { logger } from '@/lib/logger';
+import { extractPdfPageHeaders } from '@/lib/services/pdf-text-extractor';
 
 export interface OCRMetadata {
   title: string;
@@ -21,14 +22,33 @@ export interface OCRMetadata {
 /**
  * Check if PDF appears to be scanned/image-based (not searchable text)
  *
- * For MVP, we assume the PDF is not image-based since we're rendering it.
- * In a production system, this would use pdfjs text extraction to detect
- * if the PDF contains no selectable text.
+ * Uses text-layer coverage from pdfjs extraction.
  */
-export async function isImageBasedPdf(_pdfBuffer: Buffer | string): Promise<boolean> {
-  // Placeholder - in production, this would use pdfjs text extraction
-  // to determine if the PDF contains extractable text or is purely image-based
-  return false;
+export async function isImageBasedPdf(pdfBuffer: Buffer | string): Promise<boolean> {
+  if (typeof pdfBuffer === 'string') {
+    logger.warn('isImageBasedPdf called with string input; expected Buffer', {
+      inputType: 'string',
+    });
+    return false;
+  }
+
+  try {
+    const extraction = await extractPdfPageHeaders(pdfBuffer);
+    const isImageBased = !extraction.hasTextLayer || extraction.textLayerCoverage < 0.4;
+
+    logger.info('isImageBasedPdf evaluated', {
+      hasTextLayer: extraction.hasTextLayer,
+      textLayerCoverage: extraction.textLayerCoverage,
+      isImageBased,
+    });
+
+    return isImageBased;
+  } catch (error) {
+    logger.warn('isImageBasedPdf failed to inspect PDF text layer; assuming image-based', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return true;
+  }
 }
 
 /**

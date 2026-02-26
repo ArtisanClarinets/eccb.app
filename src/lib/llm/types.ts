@@ -13,7 +13,6 @@ export interface LLMConfig {
 }
 
 export interface LabeledImage {
-  kind: 'image';
   mimeType: string;
   base64Data: string;
   /** Optional label to reference this image in the prompt */
@@ -25,7 +24,7 @@ export interface ResponseFormat {
 }
 
 export interface VisionRequest {
-  images: Array<{ mimeType: string; base64Data: string }>;
+  images: Array<{ mimeType: string; base64Data: string; label?: string }>;
   /** Labeled inputs for multi-source verification (images with context labels) */
   labeledInputs?: LabeledImage[];
   prompt: string;
@@ -35,6 +34,8 @@ export interface VisionRequest {
   responseFormat?: ResponseFormat;
   maxTokens?: number;
   temperature?: number;
+  /** Provider-specific model parameters (top_p, top_k, seed, etc.) */
+  modelParams?: Record<string, unknown>;
 }
 
 export interface VisionResponse {
