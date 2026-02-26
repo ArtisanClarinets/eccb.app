@@ -397,8 +397,10 @@ export function MusicFilesList({ pieceId, files, instruments }: MusicFilesListPr
                   )}
 
                   <div className="space-y-2">
-                    <Label>File</Label>
+                    <Label htmlFor="uploadFile">File</Label>
                     <Input
+                      id="uploadFile"
+                      name="uploadFile"
                       type="file"
                       accept=".pdf,.mp3,.wav,.mxl,.musicxml"
                       onChange={(e) => setUploadFile(e.target.files?.[0] || null)}

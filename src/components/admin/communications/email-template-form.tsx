@@ -417,8 +417,10 @@ export function EmailTemplateForm({ template, onSubmit, isSubmitting }: EmailTem
                   <div className="space-y-2">
                     {detectedVars.map((varName) => (
                       <div key={varName} className="flex items-center gap-2">
-                        <Label className="w-32 text-sm font-mono">{varName}</Label>
+                        <Label htmlFor={`preview-${varName}`} className="w-32 text-sm font-mono">{varName}</Label>
                         <Input
+                          id={`preview-${varName}`}
+                          name={`preview-${varName}`}
                           value={previewVars[varName] || ''}
                           onChange={(e) =>
                             setPreviewVars((prev) => ({

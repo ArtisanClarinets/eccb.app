@@ -15,6 +15,7 @@ import type { LLMRuntimeConfig } from '@/lib/llm/config-loader';
 import { splitPdfByCuttingInstructions } from '@/lib/services/pdf-splitter';
 import { createWorker } from '@/lib/jobs/queue';
 import { logger } from '@/lib/logger';
+import { buildVerificationPrompt } from '@/lib/smart-upload/prompts';
 import type {
   CuttingInstruction,
   ExtractedMetadata,
@@ -30,24 +31,7 @@ import type { SmartUploadSecondPassJobData } from '@/lib/jobs/definitions';
 const MAX_PDF_PAGES_FOR_LLM = 50;
 const MAX_SAMPLED_PARTS = 3;
 
-// =============================================================================
-// Verification System Prompt
-// =============================================================================
 
-const _DEFAULT_VERIFICATION_SYSTEM_PROMPT = `You are a verification assistant. Review the extracted metadata against the original images.
-Check for:
-1. Typos in title or composer name
-2. Misclassification of file type (FULL_SCORE vs PART vs CONDUCTOR_SCORE vs CONDENSED_SCORE)
-3. Incorrect instrument identification
-4. Missing parts that are visible in the pages
-5. Incorrect page ranges in cuttingInstructions
-6. Wrong section or transposition assignments
-
-Return the corrected JSON with improved confidenceScore.
-If you find errors, explain them in a "corrections" field.
-If no errors, set "corrections" to null.
-
-Return valid JSON only.`;
 
 // =============================================================================
 // Helper Functions
@@ -257,8 +241,7 @@ async function processSecondPass(job: Job<SmartUploadSecondPassJobData>): Promis
       });
 
       // Build verification prompt with original pages and sampled parts
-      let promptContent = `You are verifying the extracted metadata against the original score and sampled parts.\n\n`;
-      promptContent += `## ORIGINAL SCORE (ALL PAGES)\n`;
+      let promptContent = `## ORIGINAL SCORE (ALL PAGES)\n`;
       promptContent += `Analyze all ${originalPageImages.length} pages of the original score above.\n\n`;
 
       // Download and convert each sampled part to images
@@ -299,15 +282,29 @@ async function processSecondPass(job: Job<SmartUploadSecondPassJobData>): Promis
 Return the corrected JSON with an improved confidenceScore in a "verificationConfidence" field (0-100).
 Include a "corrections" field explaining any changes made, or null if no corrections were needed.`;
 
-      verificationPrompt = promptContent;
+      verificationPrompt = buildVerificationPrompt(
+        llmConfig.verificationSystemPrompt || '',
+        {
+          originalMetadata: metadata as unknown as Record<string, unknown>,
+          pageCount: originalPageImages.length,
+        }
+      ) + '\n\n' + promptContent;
     } else {
       // No parts parsed yet - re-run full vision extraction as second opinion
-      verificationPrompt = `Extract metadata from ALL ${originalPageImages.length} pages of this music score.
+      const fallbackContext = `Extract metadata from ALL ${originalPageImages.length} pages of this music score.
 This is a second-pass verification - please review carefully and provide any corrections.
 
 Return JSON with title, composer, confidenceScore, fileType, isMultiPart, ensembleType, keySignature, timeSignature, tempo, parts, and cuttingInstructions.
 Include a "verificationConfidence" field (0-100) indicating your confidence in this extraction.
 Include a "corrections" field explaining any corrections made from the first pass, or null if no corrections were needed.`;
+
+      verificationPrompt = buildVerificationPrompt(
+        llmConfig.verificationSystemPrompt || '',
+        {
+          originalMetadata: metadata as unknown as Record<string, unknown>,
+          pageCount: originalPageImages.length,
+        }
+      ) + '\n\n' + fallbackContext;
     }
 
     await job.updateProgress(50);
@@ -329,6 +326,11 @@ Include a "corrections" field explaining any corrections made from the first pas
       secondPassResult: secondPassResult,
       secondPassRaw: secondPassRaw,
       secondPassStatus: 'COMPLETE',
+      llmProvider: llmConfig.provider,
+      llmVisionModel: llmConfig.verificationModel,
+      llmVerifyModel: llmConfig.verificationModel,
+      llmModelParams: { temperature: 0.1, max_tokens: 4096 },
+      llmPromptVersion: llmConfig.promptVersion || '1.0.0',
     };
 
     // If corrections were made to cutting instructions, update them

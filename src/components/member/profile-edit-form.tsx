@@ -274,6 +274,8 @@ export function ProfileEditForm({ member, instruments, sections }: ProfileEditFo
             <div className="space-y-2">
               <input
                 ref={fileInputRef}
+                id="profilePhoto"
+                name="profilePhoto"
                 type="file"
                 accept="image/jpeg,image/png,image/gif,image/webp"
                 className="hidden"

@@ -161,7 +161,7 @@ export function EventForm({
                   defaultValue={initialData?.eventType || 'REHEARSAL'}
                   onValueChange={(value) => setValue('eventType', value)}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="eventType" name="eventType">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -180,7 +180,7 @@ export function EventForm({
                   defaultValue={initialData?.status || 'SCHEDULED'}
                   onValueChange={(value) => setValue('status', value)}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="status" name="status">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -266,7 +266,7 @@ export function EventForm({
                 defaultValue={initialData?.venueId}
                 onValueChange={(value) => setValue('venueId', value)}
               >
-                <SelectTrigger>
+                <SelectTrigger id="venueId" name="venueId">
                   <SelectValue placeholder="Select venue" />
                 </SelectTrigger>
                 <SelectContent>
@@ -285,7 +285,7 @@ export function EventForm({
                 defaultValue={initialData?.dressCode || ''}
                 onValueChange={(value) => setValue('dressCode', value)}
               >
-                <SelectTrigger>
+                <SelectTrigger id="dressCode" name="dressCode">
                   <SelectValue placeholder="Select dress code" />
                 </SelectTrigger>
                 <SelectContent>
@@ -311,12 +311,14 @@ export function EventForm({
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label>Public Event</Label>
+                <Label htmlFor="isPublished">Public Event</Label>
                 <p className="text-sm text-muted-foreground">
                   Show this event on the public website
                 </p>
               </div>
               <Switch
+                id="isPublished"
+                name="isPublished"
                 checked={isPublished}
                 onCheckedChange={setIsPublished}
               />
@@ -324,12 +326,14 @@ export function EventForm({
 
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label>Requires RSVP</Label>
+                <Label htmlFor="requiresRSVP">Requires RSVP</Label>
                 <p className="text-sm text-muted-foreground">
                   Members must confirm attendance
                 </p>
               </div>
               <Switch
+                id="requiresRSVP"
+                name="requiresRSVP"
                 checked={requiresRSVP}
                 onCheckedChange={setRequiresRSVP}
               />

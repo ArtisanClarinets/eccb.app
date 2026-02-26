@@ -107,7 +107,7 @@ export function ContactForm() {
       <div className="space-y-2">
         <Label htmlFor="subject">Subject</Label>
         <Select onValueChange={(value) => setValue('subject', value)}>
-          <SelectTrigger>
+          <SelectTrigger id="subject" name="subject">
             <SelectValue placeholder="Select a subject" />
           </SelectTrigger>
           <SelectContent>

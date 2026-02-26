@@ -223,7 +223,7 @@ export default async function AdminEventsPage({
               />
             </div>
             <Select name="type" defaultValue={type}>
-              <SelectTrigger className="w-[150px]">
+              <SelectTrigger id="type" name="type" className="w-[150px]">
                 <SelectValue placeholder="All Types" />
               </SelectTrigger>
               <SelectContent>
@@ -236,7 +236,7 @@ export default async function AdminEventsPage({
               </SelectContent>
             </Select>
             <Select name="status" defaultValue={status}>
-              <SelectTrigger className="w-[150px]">
+              <SelectTrigger id="status" name="status" className="w-[150px]">
                 <SelectValue placeholder="All Status" />
               </SelectTrigger>
               <SelectContent>

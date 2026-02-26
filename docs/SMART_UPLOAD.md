@@ -11,9 +11,10 @@ This document describes the Smart Upload feature, which uses Large Language Mode
 5. [Configuration](#configuration)
 6. [Security](#security)
 7. [LLM Models](#llm-models)
-8. [Confidence Scoring](#confidence-scoring)
-9. [Testing](#testing)
-10. [Troubleshooting](#troubleshooting)
+8. [System Prompts](#system-prompts)
+9. [Confidence Scoring](#confidence-scoring)
+10. [Testing](#testing)
+11. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -71,6 +72,10 @@ The Smart Upload system consists of several interconnected components:
 | API Route | [`src/app/api/files/smart-upload/route.ts`](src/app/api/files/smart-upload/route.ts) | Main upload endpoint with two-pass LLM extraction |
 | Review UI | [`src/app/(admin)/admin/uploads/review/page.tsx`](src/app/(admin)/admin/uploads/review/page.tsx) | Admin interface for reviewing extracted metadata |
 | Review API | [`src/app/api/admin/uploads/review/`](src/app/api/admin/uploads/review/) | Endpoints for listing, approving, and rejecting uploads |
+| **Settings Form** | [`src/app/(admin)/admin/uploads/settings/page.tsx`](src/app/(admin)/admin/uploads/settings/page.tsx) | Admin UI for configuring LLM provider, models, and prompts |
+| **Settings API** | [`src/app/api/admin/uploads/settings/`](src/app/api/admin/uploads/settings/) | Endpoints for settings CRUD, model fetching, and testing |
+| **Model Fetching** | [`src/lib/llm/model-fetcher.ts`](src/lib/llm/model-fetcher.ts) | Unified API for fetching models from all providers |
+| **Bootstrap/Init** | [`src/lib/llm/bootstrap.ts`](src/lib/llm/bootstrap.ts) | Initializes default settings on first run |
 | Database | [`prisma/migrations/20260221192207_smart_upload_staging/`](prisma/migrations/20260221192207_smart_upload_staging/) | SmartUploadSession table and related schema |
 
 ### Database Schema
@@ -252,92 +257,159 @@ Rejects an upload.
 }
 ```
 
+### Settings API Endpoints
+
+**GET** `/api/admin/uploads/settings`
+
+Returns current Smart Upload settings.
+
+| Aspect | Details |
+|--------|---------|
+| Authentication | Required |
+| Permission | `admin:read` |
+
+**Response:**
+
+```typescript
+{
+  provider: string;
+  endpoint: string;
+  apiKey: string;        // Masked as "__SET__" or "__UNSET__"
+  visionModel: string;
+  verificationModel: string;
+  visionSystemPrompt: string;
+  verificationSystemPrompt: string;
+}
+```
+
 ---
 
-## Configuration
+**PUT** `/api/admin/uploads/settings`
 
-### Supported LLM Providers
+Updates Smart Upload settings. Validates all inputs using strict schema and rejects invalid provider/model combinations. Secrets are preserved when using placeholder values (`__SET__`).
 
-Smart Upload supports six LLM providers. The active provider and its models are configured in **Admin → Uploads → LLM Settings**. When you select a provider in the settings form, the default endpoint URL is auto-populated.
+| Aspect | Details |
+|--------|---------|
+| Authentication | Required |
+| Permission | `admin:write` |
+| Content-Type | `application/json` |
 
-| Provider | Default Endpoint | Free Tier | Vision |
-|----------|-----------------|-----------|--------|
-| **Ollama** (default) | `http://localhost:11434` | ✅ Local | ✅ |
-| **OpenAI** | `https://api.openai.com/v1` | ❌ | ✅ GPT-4o |
-| **Anthropic** | `https://api.anthropic.com` | ❌ | ✅ Claude 3.5 |
-| **Google Gemini** | `https://generativelanguage.googleapis.com/v1beta` | ✅ Flash | ✅ |
-| **OpenRouter** | `https://openrouter.ai/api/v1` | ✅ Some models | ✅ |
-| **Custom** | _(enter manually)_ | — | ✅ (OpenAI-compat) |
+**Request Body:**
 
-### Environment Variables
-
-These vars provide fallback defaults; the database (via Admin settings) takes precedence.
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `LLM_PROVIDER` | `ollama` | Active provider (`ollama`, `openai`, `anthropic`, `gemini`, `openrouter`, `custom`) |
-| `LLM_ENDPOINT_URL` | _(provider default)_ | Override the provider's default endpoint URL |
-| `LLM_OLLAMA_ENDPOINT` | `http://localhost:11434` | _(deprecated)_ Use `LLM_ENDPOINT_URL` |
-| `LLM_OPENAI_API_KEY` | `` | OpenAI API key |
-| `LLM_ANTHROPIC_API_KEY` | `` | Anthropic API key |
-| `LLM_OPENROUTER_API_KEY` | `` | OpenRouter API key |
-| `LLM_GEMINI_API_KEY` | `` | Google Gemini API key |
-| `LLM_CUSTOM_API_KEY` | `` | Custom provider API key/bearer token |
-| `LLM_CUSTOM_BASE_URL` | `` | Custom OpenAI-compatible base URL |
-| `LLM_VISION_MODEL` | `llama3.2-vision` | Vision model for first-pass extraction |
-| `LLM_VERIFICATION_MODEL` | `qwen2.5:7b` | Verification model for second-pass |
-
-### Example Configurations
-
-**Ollama (local, free)**
-```bash
-LLM_PROVIDER="ollama"
-LLM_ENDPOINT_URL="http://localhost:11434"
-LLM_VISION_MODEL="llama3.2-vision"
-LLM_VERIFICATION_MODEL="qwen2.5:7b"
+```typescript
+{
+  provider: 'ollama' | 'openai' | 'anthropic' | 'gemini' | 'openrouter' | 'custom';
+  endpoint?: string;           // Optional, uses provider default
+  apiKey?: string;             // Use "__SET__" to preserve existing
+  visionModel: string;
+  verificationModel: string;
+  visionSystemPrompt?: string;
+  verificationSystemPrompt?: string;
+}
 ```
 
-**OpenAI**
-```bash
-LLM_PROVIDER="openai"
-LLM_OPENAI_API_KEY="sk-..."
-LLM_VISION_MODEL="gpt-4o"
-LLM_VERIFICATION_MODEL="gpt-4o-mini"
+**Response:**
+
+```typescript
+{
+  success: true;
+  settings: {
+    provider: string;
+    endpoint: string;
+    visionModel: string;
+    verificationModel: string;
+  };
+}
 ```
 
-**Google Gemini (free tier available)**
-```bash
-LLM_PROVIDER="gemini"
-LLM_GEMINI_API_KEY="AIza..."
-LLM_VISION_MODEL="gemini-2.0-flash-exp"
-LLM_VERIFICATION_MODEL="gemini-2.0-flash-exp"
+---
+
+**POST** `/api/admin/uploads/settings/reset-prompts`
+
+Resets system prompts to canonical defaults.
+
+| Aspect | Details |
+|--------|---------|
+| Authentication | Required |
+| Permission | `admin:write` |
+
+**Response:**
+
+```typescript
+{
+  success: true;
+  prompts: {
+    visionSystemPrompt: string;
+    verificationSystemPrompt: string;
+  };
+}
 ```
 
-**Anthropic**
-```bash
-LLM_PROVIDER="anthropic"
-LLM_ANTHROPIC_API_KEY="sk-ant-..."
-LLM_VISION_MODEL="claude-3-5-sonnet-20241022"
-LLM_VERIFICATION_MODEL="claude-3-haiku-20240307"
+---
+
+**POST** `/api/admin/uploads/settings/test`
+
+Tests connectivity to the configured LLM provider.
+
+| Aspect | Details |
+|--------|---------|
+| Authentication | Required |
+| Permission | `admin:write` |
+| Content-Type | `application/json` |
+
+**Request Body:**
+
+```typescript
+{
+  provider: string;
+  endpoint: string;
+  apiKey?: string;
+  model: string;
+}
 ```
 
-**Ollama Setup**
+**Response:**
 
-```bash
-# Install Ollama
-curl -fsSL https://ollama.com/install.sh | sh
-
-# Pull required models
-ollama pull llama3.2-vision
-ollama pull qwen2.5:7b
-
-# Start Ollama service
-ollama serve
+```typescript
+{
+  ok: boolean;
+  message?: string;      // Success message
+  error?: string;        // Error details if failed
+}
 ```
 
-### Settings Form Auto-Population
+---
 
-When changing the LLM provider in **Admin → Uploads → LLM Settings**, the endpoint URL and default model names are **automatically filled** based on the canonical provider defaults in `src/lib/llm/providers.ts`. You can override these after selection.
+**GET** `/api/admin/uploads/models`
+
+Fetches available models from the provider with recommendation metadata.
+
+| Aspect | Details |
+|--------|---------|
+| Authentication | Required |
+| Permission | `admin:read` |
+| Query Params | `provider`, `apiKey` (optional), `endpoint` (optional) |
+
+**Response:**
+
+```typescript
+{
+  models: Array<{
+    id: string;
+    name: string;
+    description?: string;
+    contextWindow?: number;
+    pricing?: {
+      prompt: number;
+      completion: number;
+    };
+    vision?: boolean;
+    deprecated?: boolean;
+    recommended?: boolean;     // System recommendation flag
+  }>;
+  recommended: string | null;  // ID of recommended model
+}
+```
 
 ---
 
@@ -412,6 +484,17 @@ Reviews the first-pass extraction against the actual PDF pages and:
 
 After the vision model returns cutting instructions, the processor checks for **uncovered page ranges**. Any pages not assigned to a part are surfaced as `Unlabelled Pages X–Y` entries (part numbers 9900+). These appear as **yellow warning banners** in the review dialog so an admin can investigate.
 
+### Automatic Model Recommendation
+
+The system automatically recommends the best model based on:
+1. **Vision capability** (required for reading PDFs)
+2. **Non-deprecated status**
+3. **Recency** (prefer newer models)
+4. **Cost** (prefer cheaper options)
+5. **Context window size**
+
+The recommendation algorithm scores models and selects the optimal choice. Admins can override the recommendation by selecting a different model from the dropdown.
+
 
 
 ### Why Two Models?
@@ -419,6 +502,37 @@ After the vision model returns cutting instructions, the processor checks for **
 1. **Specialization**: Vision models are larger and slower; using them only when necessary improves performance
 2. **Verification**: A second opinion catches errors the first model might miss
 3. **Cost/Performance**: Skipping verification for high-confidence (>90) extractions saves resources
+
+---
+
+## System Prompts
+
+The Smart Upload system uses two configurable system prompts to control AI behavior during metadata extraction.
+
+### Vision System Prompt (First Pass)
+
+Controls how the AI extracts metadata from PDF pages. The default prompt requests specific JSON output with fields for:
+- Title
+- Composer
+- Arranger
+- Publisher
+- Parts (instrument, partName, pageRange, notes)
+- Cutting instructions with page ranges
+- Additional metadata (key, tempo, duration, difficulty, genre, year)
+
+### Verification System Prompt (Second Pass)
+
+Controls how the AI verifies and corrects the first-pass extraction. The verification prompt instructs the AI to check for:
+- Typos in titles or composer names
+- Misclassifications of file types
+- Incorrect instrument identification
+- Missing parts
+- Wrong page ranges
+- Illegible text
+
+### Resetting Prompts
+
+If custom prompts cause issues (e.g., malformed JSON output), use the **"Reset to Defaults"** button in the Smart Upload Settings page to restore the canonical prompts. This preserves all other settings while resetting only the prompt text.
 
 ---
 
@@ -552,6 +666,37 @@ ollama list
 **Symptom**: "Too many requests" error
 
 **Solution**: Wait 1 minute before retrying (default: 10 requests/minute)
+
+#### 6. Model Fetch Failed
+
+**Symptom**: Model dropdown shows "No models available"
+
+**Solutions**:
+- Verify API key is entered correctly
+- Check provider status page
+- For Ollama, ensure Ollama is running: `curl http://localhost:11434/api/tags`
+- Verify network connectivity to the provider endpoint
+- Check browser console for CORS errors
+
+#### 7. Prompt Reset Needed
+
+**Symptom**: Metadata extraction returns malformed JSON or unexpected format
+
+**Solution**: Go to **Smart Upload Settings** and click **"Reset to Defaults"** for system prompts
+
+### Execution Context
+
+Each upload session stores execution context for debugging purposes. This information is visible in the review interface to help diagnose extraction issues.
+
+**Stored Context:**
+- **Provider used** - Which LLM provider processed the upload
+- **Vision model** - Model used for first-pass extraction
+- **Verification model** - Model used for second-pass verification (if applicable)
+- **Prompt version** - Version of system prompts used
+- **Model parameters** - Temperature, max tokens, and other parameters
+
+**Accessing Context:**
+The execution context is displayed in the upload review dialog under the "Debug Info" section. This helps administrators understand why certain extractions may have failed or produced unexpected results.
 
 ### Debug Logging
 

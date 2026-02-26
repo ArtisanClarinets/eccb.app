@@ -6,13 +6,14 @@ import { logger } from '@/lib/logger';
 import { SYSTEM_CONFIG } from '@/lib/auth/permission-constants';
 import { z } from 'zod';
 import { getDefaultEndpointForProvider } from '@/lib/llm/providers';
+import { ProviderValueSchema } from '@/lib/smart-upload/schema';
 
 // =============================================================================
 // Schema
 // =============================================================================
 
 const testSchema = z.object({
-  provider: z.string(),
+  provider: ProviderValueSchema,
   endpoint: z.string().optional(),
   apiKey: z.string().optional(),
   model: z.string(),
@@ -91,7 +92,8 @@ export async function POST(request: NextRequest) {
       case 'gemini': {
         const base = (endpoint?.trim() || getDefaultEndpointForProvider('gemini')).replace(/\/$/, '');
         const key = apiKey ? `?key=${encodeURIComponent(apiKey)}` : '';
-        testUrl = `${base}/models${key}`;
+        // Gemini's model API tests for a specific model, not a general list
+        testUrl = `${base}/models/${model}${key}`;
         break;
       }
 

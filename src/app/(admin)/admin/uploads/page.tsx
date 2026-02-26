@@ -487,6 +487,8 @@ export default function SmartMusicUploadPage() {
 
       <input
         ref={fileInputRef}
+        id="uploadFiles"
+        name="uploadFiles"
         type="file"
         accept="application/pdf"
         multiple

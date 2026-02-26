@@ -244,7 +244,7 @@ export default async function AdminAuditPage({
               />
             </div>
             <Select name="action" defaultValue={actionFilter}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger id="action" name="action" className="w-[180px]">
                 <SelectValue placeholder="All Actions" />
               </SelectTrigger>
               <SelectContent>
@@ -257,7 +257,7 @@ export default async function AdminAuditPage({
               </SelectContent>
             </Select>
             <Select name="entityType" defaultValue={entityTypeFilter}>
-              <SelectTrigger className="w-[150px]">
+              <SelectTrigger id="entityType" name="entityType" className="w-[150px]">
                 <SelectValue placeholder="All Entities" />
               </SelectTrigger>
               <SelectContent>

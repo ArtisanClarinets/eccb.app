@@ -326,7 +326,7 @@ export default async function AdminMusicPage({
               />
             </div>
             <Select name="genre" defaultValue={genre}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger id="genre" name="genre" className="w-[180px]">
                 <SelectValue placeholder="All Genres" />
               </SelectTrigger>
               <SelectContent>
@@ -339,7 +339,7 @@ export default async function AdminMusicPage({
               </SelectContent>
             </Select>
             <Select name="difficulty" defaultValue={difficulty}>
-              <SelectTrigger className="w-[150px]">
+              <SelectTrigger id="difficulty" name="difficulty" className="w-[150px]">
                 <SelectValue placeholder="All Levels" />
               </SelectTrigger>
               <SelectContent>
@@ -352,7 +352,7 @@ export default async function AdminMusicPage({
               </SelectContent>
             </Select>
             <Select name="status" defaultValue={status || 'active'}>
-              <SelectTrigger className="w-[150px]">
+              <SelectTrigger id="status" name="status" className="w-[150px]">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>

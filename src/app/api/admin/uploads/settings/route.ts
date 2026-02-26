@@ -7,68 +7,20 @@ import { logger } from '@/lib/logger';
 import { auditLog } from '@/lib/services/audit';
 import { SYSTEM_CONFIG } from '@/lib/auth/permission-constants';
 import { z } from 'zod';
+import {
+  validateSmartUploadSettings,
+  mergeSettingsPreservingSecrets,
+  SMART_UPLOAD_SETTING_KEYS,
+} from '@/lib/smart-upload/schema';
+import { loadSmartUploadSettingsFromDB } from '@/lib/smart-upload/bootstrap';
+import {
+  DEFAULT_VISION_SYSTEM_PROMPT,
+  DEFAULT_VERIFICATION_SYSTEM_PROMPT,
+  PROMPT_VERSION,
+} from '@/lib/smart-upload/prompts';
 
 // =============================================================================
-// Constants
-// =============================================================================
-
-// All Smart Upload setting keys - supports both new and legacy naming
-const SMART_UPLOAD_SETTING_KEYS = [
-  // New database-driven settings
-  'llm_provider',
-  'llm_endpoint_url',
-  'llm_openai_api_key',
-  'llm_anthropic_api_key',
-  'llm_openrouter_api_key',
-  'llm_gemini_api_key',
-  'llm_custom_api_key',
-  'llm_vision_model',
-  'llm_verification_model',
-  'smart_upload_confidence_threshold',
-  'smart_upload_auto_approve_threshold',
-  'smart_upload_rate_limit_rpm',
-  'smart_upload_max_concurrent',
-  'smart_upload_max_pages',
-  'smart_upload_max_file_size_mb',
-  'smart_upload_allowed_mime_types',
-  'vision_model_params',
-  'verification_model_params',
-  // Legacy keys (for backward compatibility)
-  'llm_ollama_endpoint',
-  'llm_custom_base_url',
-  'llm_confidence_threshold',
-  'llm_two_pass_enabled',
-  'llm_rate_limit_rpm',
-  'llm_auto_approve_threshold',
-  'llm_skip_parse_threshold',
-  'llm_vision_system_prompt',
-  'llm_verification_system_prompt',
-  'llm_vision_model_params',
-  'llm_verification_model_params',
-] as const;
-
-type SmartUploadSettingKey = typeof SMART_UPLOAD_SETTING_KEYS[number];
-
-// Keys that contain secrets - these will be masked in GET responses
-const SECRET_KEYS: SmartUploadSettingKey[] = [
-  'llm_openai_api_key',
-  'llm_anthropic_api_key',
-  'llm_openrouter_api_key',
-  'llm_gemini_api_key',
-  'llm_custom_api_key',
-];
-
-// Keys that must contain valid JSON
-const JSON_KEYS: SmartUploadSettingKey[] = [
-  'smart_upload_allowed_mime_types',
-  'vision_model_params',
-  'verification_model_params',
-  'llm_vision_model_params',
-  'llm_verification_model_params',
-];
-
-// =============================================================================
-// Schema
+// Schema Validation
 // =============================================================================
 
 const settingUpdateSchema = z.object({
@@ -80,9 +32,58 @@ const settingsUpdateSchema = z.object({
   settings: z.array(settingUpdateSchema),
 });
 
+// Keys that must contain valid JSON
+const JSON_KEYS: string[] = [
+  'smart_upload_allowed_mime_types',
+  'vision_model_params',
+  'verification_model_params',
+];
+
+// =============================================================================
+// Helper Functions
+// =============================================================================
+
+/**
+ * Validate JSON fields in settings
+ */
+function validateJsonFields(settings: Array<{ key: string; value: string }>): { valid: boolean; error?: string } {
+  for (const { key, value } of settings) {
+    if (JSON_KEYS.includes(key) && value) {
+      try {
+        JSON.parse(value);
+      } catch {
+        return { valid: false, error: `Invalid JSON for setting: ${key}` };
+      }
+    }
+  }
+  return { valid: true };
+}
+
+/**
+ * Convert settings array to record format
+ */
+function settingsArrayToRecord(settings: Array<{ key: string; value: string }>): Record<string, string> {
+  const record: Record<string, string> = {};
+  for (const { key, value } of settings) {
+    record[key] = value;
+  }
+  return record;
+}
+
+
+
 // =============================================================================
 // GET /api/admin/uploads/settings
 // =============================================================================
+
+interface SystemSetting {
+  key: string;
+  value: string;
+  id: string;
+  description: string | null;
+  updatedAt: Date;
+  updatedBy: string | null;
+}
 
 export async function GET() {
   try {
@@ -96,22 +97,80 @@ export async function GET() {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    // Load settings from DB as array (matching page.tsx expectation)
     const rows = await prisma.systemSetting.findMany({
       where: { key: { in: [...SMART_UPLOAD_SETTING_KEYS] } },
     });
 
-    // Sanitize settings - mask secrets with __SET__ or __UNSET__
-    const sanitizedSettings = rows.map((row) => {
-      const isSecret = SECRET_KEYS.includes(row.key as SmartUploadSettingKey);
-      return {
-        ...row,
-        value: isSecret
-          ? (row.value ? '__SET__' : '__UNSET__')
-          : row.value ?? '',
+    // Convert to array format expected by frontend
+    const settingsMap: Record<string, SystemSetting> = {};
+    for (const row of rows) {
+      settingsMap[row.key] = {
+        id: row.id,
+        key: row.key,
+        value: row.value ?? '',
+        description: row.description,
+        updatedAt: row.updatedAt,
+        updatedBy: row.updatedBy,
       };
+    }
+
+    // Inject prompt defaults when DB values are missing (pre-bootstrap state)
+    const now = new Date();
+    if (!settingsMap['llm_vision_system_prompt'] || !settingsMap['llm_vision_system_prompt'].value) {
+      settingsMap['llm_vision_system_prompt'] = {
+        id: 'default',
+        key: 'llm_vision_system_prompt',
+        value: DEFAULT_VISION_SYSTEM_PROMPT,
+        description: null,
+        updatedAt: now,
+        updatedBy: null,
+      };
+    }
+    if (!settingsMap['llm_verification_system_prompt'] || !settingsMap['llm_verification_system_prompt'].value) {
+      settingsMap['llm_verification_system_prompt'] = {
+        id: 'default',
+        key: 'llm_verification_system_prompt',
+        value: DEFAULT_VERIFICATION_SYSTEM_PROMPT,
+        description: null,
+        updatedAt: now,
+        updatedBy: null,
+      };
+    }
+    if (!settingsMap['llm_prompt_version'] || !settingsMap['llm_prompt_version'].value) {
+      settingsMap['llm_prompt_version'] = {
+        id: 'default',
+        key: 'llm_prompt_version',
+        value: PROMPT_VERSION,
+        description: null,
+        updatedAt: now,
+        updatedBy: null,
+      };
+    }
+
+    const settingsArray: SystemSetting[] = Object.values(settingsMap);
+
+    // Mask secret values
+    const maskedSettings = settingsArray.map((setting) => {
+      if (SMART_UPLOAD_SETTING_KEYS.includes(setting.key as typeof SMART_UPLOAD_SETTING_KEYS[number])) {
+        const secretMapping: Record<string, boolean> = {
+          llm_openai_api_key: true,
+          llm_anthropic_api_key: true,
+          llm_openrouter_api_key: true,
+          llm_gemini_api_key: true,
+          llm_custom_api_key: true,
+        };
+        if (secretMapping[setting.key]) {
+          return {
+            ...setting,
+            value: setting.value ? '__SET__' : '__UNSET__',
+          };
+        }
+      }
+      return setting;
     });
 
-    return NextResponse.json({ settings: sanitizedSettings });
+    return NextResponse.json({ settings: maskedSettings });
   } catch (error) {
     logger.error('Failed to fetch smart upload settings', { error });
     return NextResponse.json({ error: 'Failed to fetch settings' }, { status: 500 });
@@ -146,63 +205,65 @@ export async function PUT(request: NextRequest) {
     const body = await request.json();
     const parsed = settingsUpdateSchema.safeParse(body);
     if (!parsed.success) {
-      return NextResponse.json({ error: 'Invalid request body', details: parsed.error }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Invalid request body', details: parsed.error },
+        { status: 400 }
+      );
     }
 
     const { settings } = parsed.data;
-    const allowedKeys = new Set<string>(SMART_UPLOAD_SETTING_KEYS);
+
+    // Validate JSON fields
+    const jsonValidation = validateJsonFields(settings);
+    if (!jsonValidation.valid) {
+      return NextResponse.json({ error: jsonValidation.error }, { status: 400 });
+    }
+
+    // Load existing settings for merging
+    const { settings: existingSettings } = await loadSmartUploadSettingsFromDB();
+
+    // Convert incoming settings to record
+    const incomingRecord = settingsArrayToRecord(settings);
+
+    // Merge settings while preserving secrets
+    const mergedRecord = mergeSettingsPreservingSecrets(existingSettings, incomingRecord);
+
+    // Validate the merged settings using the strict schema (partial for updates)
+    const validationResult = validateSmartUploadSettings(mergedRecord);
+    if (!validationResult.valid) {
+      return NextResponse.json(
+        {
+          error: 'Validation failed',
+          details: validationResult.errors,
+        },
+        { status: 400 }
+      );
+    }
+
+    // Filter to only allowed keys
+    const allowedKeys = new Set<string>([...SMART_UPLOAD_SETTING_KEYS]);
     const updates: Array<{ key: string; value: string }> = [];
     const skippedKeys: string[] = [];
 
-    for (const { key, value } of settings) {
+    for (const [key, value] of Object.entries(mergedRecord)) {
       // Skip if key is not allowed
       if (!allowedKeys.has(key)) {
         skippedKeys.push(key);
         continue;
       }
 
-      // Reject placeholder values (frontend masking)
-      if (value === '***' || value === '******' || value === '__SET__') {
-        skippedKeys.push(key);
-        continue; // Skip, preserve existing
-      }
-
-      // Handle clear instruction
-      if (value === '__CLEAR__') {
-        updates.push({ key, value: '' });
+      // Skip if no change from existing
+      if (existingSettings[key] === value) {
         continue;
-      }
-
-      // Validate JSON fields
-      if (JSON_KEYS.includes(key as SmartUploadSettingKey)) {
-        try {
-          JSON.parse(value);
-        } catch {
-          return NextResponse.json(
-            { error: `Invalid JSON for setting: ${key}` },
-            { status: 400 }
-          );
-        }
-      }
-
-      // Validate numeric fields
-      if (key.includes('threshold') || key.includes('limit') || key.includes('max_') || key.includes('rate_')) {
-        const numValue = Number(value);
-        if (isNaN(numValue)) {
-          return NextResponse.json(
-            { error: `Invalid number for setting: ${key}` },
-            { status: 400 }
-          );
-        }
       }
 
       updates.push({ key, value });
     }
 
     if (updates.length === 0) {
-      return NextResponse.json({ 
-        success: true, 
-        message: 'No valid settings to update',
+      return NextResponse.json({
+        success: true,
+        message: 'No changes to update',
         skipped: skippedKeys,
       });
     }
@@ -231,7 +292,7 @@ export async function PUT(request: NextRequest) {
       skipped: skippedKeys,
     });
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       success: true,
       updated: updates.map(({ key }) => key),
       skipped: skippedKeys.length > 0 ? skippedKeys : undefined,
@@ -242,6 +303,12 @@ export async function PUT(request: NextRequest) {
   }
 }
 
+// Note: POST sub-routes (reset-prompts, test) are handled by their own dedicated
+// route files:
+//   - POST /api/admin/uploads/settings/reset-prompts  →  ./reset-prompts/route.ts
+//   - POST /api/admin/uploads/settings/test           →  ./test/route.ts
+// The base POST /api/admin/uploads/settings is not used.
+
 // =============================================================================
 // OPTIONS
 // =============================================================================
@@ -250,7 +317,7 @@ export async function OPTIONS() {
   return new NextResponse(null, {
     status: 204,
     headers: {
-      'Access-Control-Allow-Methods': 'GET, PUT, OPTIONS',
+      'Access-Control-Allow-Methods': 'GET, PUT, POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     },
   });

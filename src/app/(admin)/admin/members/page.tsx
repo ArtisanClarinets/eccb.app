@@ -363,7 +363,7 @@ export default async function AdminMembersPage({
               />
             </div>
             <Select name="status" defaultValue={status}>
-              <SelectTrigger className="w-[150px]">
+              <SelectTrigger id="status" name="status" className="w-[150px]">
                 <SelectValue placeholder="All Status" />
               </SelectTrigger>
               <SelectContent>
@@ -377,7 +377,7 @@ export default async function AdminMembersPage({
               </SelectContent>
             </Select>
             <Select name="section" defaultValue={sectionId} disabled={isSectionLeaderScoped}>
-              <SelectTrigger className={`w-[180px] ${isSectionLeaderScoped ? 'opacity-60 cursor-not-allowed' : ''}`}>
+              <SelectTrigger id="section" name="section" className={`w-[180px] ${isSectionLeaderScoped ? 'opacity-60 cursor-not-allowed' : ''}`}>
                 <SelectValue placeholder="All Sections" />
               </SelectTrigger>
               <SelectContent>
@@ -390,7 +390,7 @@ export default async function AdminMembersPage({
               </SelectContent>
             </Select>
             <Select name="instrument" defaultValue={instrumentId}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger id="instrument" name="instrument" className="w-[180px]">
                 <SelectValue placeholder="All Instruments" />
               </SelectTrigger>
               <SelectContent>
@@ -403,7 +403,7 @@ export default async function AdminMembersPage({
               </SelectContent>
             </Select>
             <Select name="role" defaultValue={roleId}>
-              <SelectTrigger className="w-[150px]">
+              <SelectTrigger id="role" name="role" className="w-[150px]">
                 <SelectValue placeholder="All Roles" />
               </SelectTrigger>
               <SelectContent>

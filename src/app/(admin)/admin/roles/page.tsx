@@ -264,7 +264,7 @@ export default async function AdminRolesPage({
               />
             </div>
             <Select name="role" defaultValue={roleFilter}>
-              <SelectTrigger className="w-[200px]">
+              <SelectTrigger id="role" name="role" className="w-[200px]">
                 <SelectValue placeholder="All Roles" />
               </SelectTrigger>
               <SelectContent>

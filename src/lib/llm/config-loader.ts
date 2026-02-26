@@ -30,6 +30,7 @@ export interface LLMRuntimeConfig {
   skipParseThreshold: number;
   visionModelParams: Record<string, unknown>;
   verificationModelParams: Record<string, unknown>;
+  promptVersion?: string;
 }
 
 const DB_KEYS = [
@@ -61,6 +62,8 @@ const DB_KEYS = [
   // Legacy model param keys
   'llm_vision_model_params',
   'llm_verification_model_params',
+  // Prompt version
+  'llm_prompt_version',
 ] as const;
 
 function parseJsonParam(raw: string | undefined): Record<string, unknown> {
@@ -165,6 +168,7 @@ export async function loadLLMConfig(): Promise<LLMRuntimeConfig> {
     skipParseThreshold: Number(db['llm_skip_parse_threshold'] ?? 60),
     visionModelParams,
     verificationModelParams,
+    promptVersion: db['llm_prompt_version'] || '1.0.0',
   };
 }
 

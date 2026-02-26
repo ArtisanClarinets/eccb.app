@@ -3,9 +3,61 @@ import { getSession } from '@/lib/auth/guards';
 import { checkUserPermission } from '@/lib/auth/permissions';
 import { logger } from '@/lib/logger';
 import { SYSTEM_CONFIG } from '@/lib/auth/permission-constants';
+import { prisma } from '@/lib/db';
+import { getApiKeyFieldForProvider } from '@/lib/smart-upload/schema';
+import { LLM_PROVIDERS } from '@/lib/llm/providers';
 
 // =============================================================================
-// Types
+// DB Key Loader (fallback when API key is masked on the client)
+// =============================================================================
+
+/**
+ * Load a saved setting from the database.
+ * Returns null if not found or not set.
+ */
+async function loadSettingFromDB(key: string): Promise<string | null> {
+  try {
+    const row = await prisma.systemSetting.findUnique({ where: { key } });
+    return row?.value ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve the effective API key for a provider.
+ * If `clientKey` is provided and not masked, use it directly.
+ * Otherwise fall back to the stored key in the database.
+ */
+async function resolveApiKey(provider: Provider, clientKey?: string): Promise<string | undefined> {
+  if (clientKey && !clientKey.startsWith('__')) {
+    return clientKey;
+  }
+  // Fall back to DB
+  const dbField = getApiKeyFieldForProvider(provider);
+  if (!dbField) return undefined;
+  const stored = await loadSettingFromDB(dbField);
+  return stored ?? undefined;
+}
+
+/**
+ * Resolve the effective endpoint URL for a provider.
+ * If `clientEndpoint` is provided, use it; otherwise fall back to DB or provider default.
+ */
+async function resolveEndpoint(provider: Provider, clientEndpoint?: string): Promise<string | undefined> {
+  if (clientEndpoint && clientEndpoint.trim()) {
+    return clientEndpoint.trim();
+  }
+  // Try DB
+  const stored = await loadSettingFromDB('llm_endpoint_url');
+  if (stored && stored.trim()) return stored.trim();
+  // Fallback to provider default
+  const meta = LLM_PROVIDERS.find((p) => p.value === provider);
+  return meta?.defaultEndpoint || undefined;
+}
+
+// =============================================================================
+// Enhanced Types with Recommendation Support
 // =============================================================================
 
 type Provider = 'ollama' | 'openai' | 'anthropic' | 'gemini' | 'openrouter' | 'custom';
@@ -14,20 +66,138 @@ interface ModelInfo {
   id: string;
   name: string;
   isVision: boolean;
+  supportsStructuredOutput: boolean;
+  contextWindow: number | null;
   pricePerToken: number | null;
   priceDisplay: string;
+  isDeprecated: boolean;
+  releaseDate: string | null; // ISO date or null if unknown
   providerNote?: string;
+  // Recommendation fields
+  recommended: boolean;
+  recommendationReason?: string;
+  recommendationScore: number;
 }
 
 interface ModelsResponse {
   models: ModelInfo[];
   totalCount: number;
   filteredForVision: boolean;
+  recommendedModel: string | null;
   warning?: string;
 }
 
 // =============================================================================
-// Hard-coded Price Tables
+// Configuration Constants
+// =============================================================================
+
+const MIN_CONTEXT_WINDOW = 8000;
+const VISION_CAPABILITY_WEIGHT = 100;
+const COST_WEIGHT = 50;
+const RECENCY_WEIGHT = 30;
+// Stability weight reserved for future use in model scoring
+// const STABILITY_WEIGHT = 20;
+
+// =============================================================================
+// Provider Model Metadata
+// =============================================================================
+
+interface ModelMetadata {
+  releaseDate: string;
+  isDeprecated: boolean;
+  contextWindow: number;
+  supportsStructuredOutput: boolean;
+}
+
+const OPENAI_METADATA: Record<string, ModelMetadata> = {
+  'gpt-4o-mini': {
+    releaseDate: '2024-07-18',
+    isDeprecated: false,
+    contextWindow: 128000,
+    supportsStructuredOutput: true,
+  },
+  'gpt-4o': {
+    releaseDate: '2024-05-13',
+    isDeprecated: false,
+    contextWindow: 128000,
+    supportsStructuredOutput: true,
+  },
+  'gpt-4-turbo': {
+    releaseDate: '2024-04-09',
+    isDeprecated: true,
+    contextWindow: 128000,
+    supportsStructuredOutput: true,
+  },
+  'gpt-4-vision-preview': {
+    releaseDate: '2023-11-06',
+    isDeprecated: true,
+    contextWindow: 128000,
+    supportsStructuredOutput: false,
+  },
+};
+
+const GEMINI_METADATA: Record<string, ModelMetadata> = {
+  'gemini-2.0-flash': {
+    releaseDate: '2025-02-05',
+    isDeprecated: false,
+    contextWindow: 1000000,
+    supportsStructuredOutput: true,
+  },
+  'gemini-2.5-flash-preview': {
+    releaseDate: '2025-04-01',
+    isDeprecated: false,
+    contextWindow: 1000000,
+    supportsStructuredOutput: true,
+  },
+  'gemini-1.5-flash': {
+    releaseDate: '2024-09-24',
+    isDeprecated: false,
+    contextWindow: 1000000,
+    supportsStructuredOutput: true,
+  },
+  'gemini-2.5-pro-preview': {
+    releaseDate: '2025-04-01',
+    isDeprecated: false,
+    contextWindow: 1000000,
+    supportsStructuredOutput: true,
+  },
+  'gemini-1.5-pro': {
+    releaseDate: '2024-05-24',
+    isDeprecated: false,
+    contextWindow: 2000000,
+    supportsStructuredOutput: true,
+  },
+};
+
+const ANTHROPIC_METADATA: Record<string, ModelMetadata> = {
+  'claude-3-5-sonnet-20241022': {
+    releaseDate: '2024-10-22',
+    isDeprecated: false,
+    contextWindow: 200000,
+    supportsStructuredOutput: true,
+  },
+  'claude-3-5-haiku-20241022': {
+    releaseDate: '2024-10-22',
+    isDeprecated: false,
+    contextWindow: 200000,
+    supportsStructuredOutput: true,
+  },
+  'claude-3-opus-20240229': {
+    releaseDate: '2024-02-29',
+    isDeprecated: false,
+    contextWindow: 200000,
+    supportsStructuredOutput: true,
+  },
+  'claude-3-haiku-20240307': {
+    releaseDate: '2024-03-07',
+    isDeprecated: false,
+    contextWindow: 200000,
+    supportsStructuredOutput: true,
+  },
+};
+
+// =============================================================================
+// Hard-coded Price Tables (input price per token)
 // =============================================================================
 
 const OPENAI_PRICES: Record<string, number> = {
@@ -38,11 +208,11 @@ const OPENAI_PRICES: Record<string, number> = {
 };
 
 const GEMINI_PRICES: Record<string, number> = {
-  'gemini-2.0-flash': 0.00000010,
-  'gemini-2.5-flash-preview': 0.00000015,
-  'gemini-1.5-flash': 0.00000035,
-  'gemini-2.5-pro-preview': 0.00000125,
-  'gemini-1.5-pro': 0.00000175,
+  'models/gemini-2.0-flash': 0.00000010,
+  'models/gemini-2.5-flash-preview': 0.00000015,
+  'models/gemini-1.5-flash': 0.00000035,
+  'models/gemini-2.5-pro-preview': 0.00000125,
+  'models/gemini-1.5-pro': 0.00000175,
 };
 
 // =============================================================================
@@ -71,42 +241,144 @@ function formatPrice(pricePerToken: number | null): string {
 
 function getProviderNote(modelId: string, provider: Provider): string | undefined {
   if (provider === 'gemini') {
-    if (modelId === 'gemini-1.5-pro' || modelId === 'gemini-2.5-pro-preview') {
+    if (modelId.includes('pro')) {
       return 'Rate limit: 2 RPM (free tier) / 1,000 RPM (paid)';
     }
-    if (modelId === 'gemini-2.0-flash' || modelId === 'gemini-2.5-flash-preview') {
-      return 'Rate limit: 15 RPM (free tier) / 4,000 RPM (paid)';
-    }
+    return 'Rate limit: 15 RPM (free tier) / 4,000 RPM (paid)';
   }
   if (provider === 'openai') {
     return 'Rate limit: 500 RPM (Tier 1)';
   }
+  if (provider === 'openrouter') {
+    if (modelId.includes(':free')) {
+      return 'Rate limit: 20 RPM (free tier)';
+    }
+  }
   return undefined;
 }
 
-function isVisionModel(
-  modelName: string,
-  provider: Provider,
-  keywords: string[]
-): boolean {
+function isVisionModel(modelName: string, provider: Provider, keywords: string[]): boolean {
   const lowerName = modelName.toLowerCase();
-  return keywords.some((keyword) => lowerName.includes(keyword));
+  
+  if (provider === 'gemini') {
+    // All Gemini generateContent models support vision
+    return true;
+  }
+  
+  if (provider === 'anthropic') {
+    // All Claude 3+ models support vision
+    return lowerName.includes('claude-3');
+  }
+  
+  if (provider === 'openrouter') {
+    // Check modality hints from API or common patterns
+    return (
+      lowerName.includes('vision') ||
+      lowerName.includes('vl') ||
+      lowerName.includes('gpt-4o') ||
+      lowerName.includes('gemini') ||
+      lowerName.includes('claude-3')
+    );
+  }
+  
+  return keywords.some((keyword) => lowerName.includes(keyword.toLowerCase()));
 }
 
-function sortModelsByPrice(models: ModelInfo[]): ModelInfo[] {
-  return [...models].sort((a, b) => {
-    if (a.pricePerToken === null && b.pricePerToken === null) {
-      return a.id.localeCompare(b.id);
+function getModelMetadata(modelId: string, provider: Provider): Partial<ModelMetadata> {
+  if (provider === 'openai') {
+    return OPENAI_METADATA[modelId] || {};
+  }
+  if (provider === 'gemini') {
+    // Gemini returns model names with 'models/' prefix
+    const normalizedId = modelId.startsWith('models/') ? modelId : `models/${modelId}`;
+    return GEMINI_METADATA[normalizedId] || GEMINI_METADATA[modelId] || {};
+  }
+  if (provider === 'anthropic') {
+    return ANTHROPIC_METADATA[modelId] || {};
+  }
+  return {};
+}
+
+function calculateRecommendationScore(model: ModelInfo): number {
+  let score = 0;
+
+  // Vision capability is required
+  if (model.isVision) {
+    score += VISION_CAPABILITY_WEIGHT;
+  }
+
+  // Structured output support is important
+  if (model.supportsStructuredOutput) {
+    score += 20;
+  }
+
+  // Adequate context window
+  if (model.contextWindow && model.contextWindow >= MIN_CONTEXT_WINDOW) {
+    score += 15;
+  }
+
+  // Cost factor (lower is better)
+  if (model.pricePerToken === null || model.pricePerToken === 0) {
+    score += COST_WEIGHT; // Free tier bonus
+  } else if (model.pricePerToken < 0.000001) {
+    score += COST_WEIGHT * 0.8;
+  } else if (model.pricePerToken < 0.00001) {
+    score += COST_WEIGHT * 0.5;
+  } else if (model.pricePerToken < 0.0001) {
+    score += COST_WEIGHT * 0.2;
+  }
+
+  // Recency (prefer newer models)
+  if (model.releaseDate) {
+    const releaseDate = new Date(model.releaseDate);
+    const now = new Date();
+    const monthsOld = (now.getTime() - releaseDate.getTime()) / (1000 * 60 * 60 * 24 * 30);
+    
+    if (monthsOld < 3) {
+      score += RECENCY_WEIGHT;
+    } else if (monthsOld < 6) {
+      score += RECENCY_WEIGHT * 0.7;
+    } else if (monthsOld < 12) {
+      score += RECENCY_WEIGHT * 0.4;
+    } else if (monthsOld < 24) {
+      score += RECENCY_WEIGHT * 0.1;
     }
-    if (a.pricePerToken === null) return -1;
-    if (b.pricePerToken === null) return 1;
-    if (a.pricePerToken === 0 && b.pricePerToken === 0) {
-      return a.id.localeCompare(b.id);
-    }
-    if (a.pricePerToken === 0) return -1;
-    if (b.pricePerToken === 0) return 1;
-    return a.pricePerToken - b.pricePerToken;
-  });
+  }
+
+  // Deprecation penalty
+  if (model.isDeprecated) {
+    score -= 100;
+  }
+
+  return score;
+}
+
+function selectRecommendedModel(models: ModelInfo[]): ModelInfo | null {
+  // Filter to valid candidates (vision capable, not deprecated, adequate context)
+  const candidates = models.filter(
+    (m) => m.isVision && !m.isDeprecated && m.contextWindow && m.contextWindow >= MIN_CONTEXT_WINDOW
+  );
+
+  if (candidates.length === 0) {
+    // Fall back to any non-deprecated model with vision
+    const visionModels = models.filter((m) => m.isVision && !m.isDeprecated);
+    if (visionModels.length === 0) return null;
+    
+    // Pick cheapest
+    return visionModels.sort((a, b) => (a.pricePerToken ?? Infinity) - (b.pricePerToken ?? Infinity)
+    )[0];
+  }
+
+  // Score all candidates
+  const scored = candidates.map((model) => ({
+    model,
+    score: calculateRecommendationScore(model),
+  }));
+
+  // Sort by score descending
+  scored.sort((a, b) => b.score - a.score);
+
+  return scored[0].model;
 }
 
 // =============================================================================
@@ -131,10 +403,23 @@ async function fetchOllamaModels(endpoint: string): Promise<ModelInfo[]> {
       id: model.name,
       name: model.name,
       isVision,
+      supportsStructuredOutput: true, // Assume true for most Ollama models
+      contextWindow: null, // Unknown without inspecting model details
       pricePerToken: null,
-      priceDisplay: 'Unknown',
+      priceDisplay: 'Local (no cost)',
+      isDeprecated: false,
+      releaseDate: null,
+      recommended: false,
+      recommendationScore: 0,
     };
   });
+
+  // Mark recommended model
+  const recommended = selectRecommendedModel(models);
+  if (recommended) {
+    recommended.recommended = true;
+    recommended.recommendationReason = 'Best vision model available locally';
+  }
 
   return models;
 }
@@ -154,40 +439,69 @@ async function fetchOpenAIModels(apiKey: string): Promise<ModelInfo[]> {
   }
 
   const data = await response.json();
-  const models: ModelInfo[] = (data.data || []).map((model: { id: string }) => {
-    const isVision = isVisionModel(model.id, 'openai', OPENAI_VISION_KEYWORDS);
-    const pricePerToken = OPENAI_PRICES[model.id] ?? null;
-    return {
-      id: model.id,
-      name: model.id,
-      isVision,
-      pricePerToken,
-      priceDisplay: formatPrice(pricePerToken),
-      providerNote: getProviderNote(model.id, 'openai'),
-    };
-  });
+  const models: ModelInfo[] = (data.data || [])
+    .map((model: { id: string }) => {
+      const metadata = getModelMetadata(model.id, 'openai');
+      const isVision = isVisionModel(model.id, 'openai', OPENAI_VISION_KEYWORDS);
+      const pricePerToken = OPENAI_PRICES[model.id] ?? null;
+      
+      return {
+        id: model.id,
+        name: model.id,
+        isVision,
+        supportsStructuredOutput: metadata.supportsStructuredOutput ?? false,
+        contextWindow: metadata.contextWindow ?? null,
+        pricePerToken,
+        priceDisplay: formatPrice(pricePerToken),
+        isDeprecated: metadata.isDeprecated ?? false,
+        releaseDate: metadata.releaseDate ?? null,
+        providerNote: getProviderNote(model.id, 'openai'),
+        recommended: false,
+        recommendationScore: 0,
+      };
+    })
+    .filter((m: ModelInfo) => m.isVision); // Only return vision-capable models
+
+  // Mark recommended model
+  const recommended = selectRecommendedModel(models);
+  if (recommended) {
+    recommended.recommended = true;
+    recommended.recommendationReason = 'Best balance of cost, quality, and recency';
+  }
 
   return models;
 }
 
 function fetchAnthropicModels(): ModelInfo[] {
-  // Anthropic has no public list-models endpoint
-  const models = [
-    'claude-opus-4-5',
-    'claude-sonnet-4-5',
-    'claude-3-5-sonnet-20241022',
-    'claude-3-5-haiku-20241022',
-    'claude-3-opus-20240229',
-    'claude-3-haiku-20240307',
-  ];
+  // Anthropic has no public list-models endpoint - use curated list
+  const models = Object.keys(ANTHROPIC_METADATA);
 
-  return models.map((id) => ({
-    id,
-    name: id,
-    isVision: true,
-    pricePerToken: null,
-    priceDisplay: 'Unknown',
-  }));
+  const modelInfos: ModelInfo[] = models.map((id) => {
+    const metadata = ANTHROPIC_METADATA[id];
+    return {
+      id,
+      name: id,
+      isVision: true, // All Claude 3+ models support vision
+      supportsStructuredOutput: metadata.supportsStructuredOutput,
+      contextWindow: metadata.contextWindow,
+      pricePerToken: null, // Anthropic pricing varies by tier
+      priceDisplay: 'Pricing varies by usage tier',
+      isDeprecated: metadata.isDeprecated,
+      releaseDate: metadata.releaseDate,
+      providerNote: 'Requires Anthropic API key',
+      recommended: false,
+      recommendationScore: 0,
+    };
+  });
+
+  // Mark recommended model
+  const recommended = selectRecommendedModel(modelInfos);
+  if (recommended) {
+    recommended.recommended = true;
+    recommended.recommendationReason = 'Best vision model with strong OCR accuracy';
+  }
+
+  return modelInfos;
 }
 
 async function fetchGeminiModels(apiKey: string): Promise<ModelInfo[]> {
@@ -203,27 +517,43 @@ async function fetchGeminiModels(apiKey: string): Promise<ModelInfo[]> {
   }
 
   const data = await response.json();
-  const models: ModelInfo[] = (data.models || []).filter((model: { name: string; supportedGenerationMethods?: string[] }) => {
-    // Must support generateContent (not just embeddings)
-    if (!model.supportedGenerationMethods?.includes('generateContent')) {
-      return false;
-    }
-    // Exclude embed and aqa models
-    const name = model.name.toLowerCase();
-    return !name.includes('embed') && !name.includes('aqa');
-  }).map((model: { name: string }) => {
-    const modelId = model.name;
-    const isVision = true; // All Gemini models with generateContent support vision
-    const pricePerToken = GEMINI_PRICES[modelId] ?? null;
-    return {
-      id: modelId,
-      name: modelId,
-      isVision,
-      pricePerToken,
-      priceDisplay: formatPrice(pricePerToken),
-      providerNote: getProviderNote(modelId, 'gemini'),
-    };
-  });
+  const models: ModelInfo[] = (data.models || [])
+    .filter((model: { name: string; supportedGenerationMethods?: string[] }) => {
+      // Must support generateContent (not just embeddings)
+      if (!model.supportedGenerationMethods?.includes('generateContent')) {
+        return false;
+      }
+      // Exclude embed and aqa models
+      const name = model.name.toLowerCase();
+      return !name.includes('embed') && !name.includes('aqa');
+    })
+    .map((model: { name: string }) => {
+      const modelId = model.name;
+      const metadata = getModelMetadata(modelId, 'gemini');
+      const pricePerToken = GEMINI_PRICES[modelId] ?? null;
+      
+      return {
+        id: modelId,
+        name: modelId.replace('models/', ''),
+        isVision: true, // All Gemini models with generateContent support vision
+        supportsStructuredOutput: metadata.supportsStructuredOutput ?? true,
+        contextWindow: metadata.contextWindow ?? 1000000,
+        pricePerToken,
+        priceDisplay: formatPrice(pricePerToken),
+        isDeprecated: metadata.isDeprecated ?? false,
+        releaseDate: metadata.releaseDate ?? null,
+        providerNote: getProviderNote(modelId, 'gemini'),
+        recommended: false,
+        recommendationScore: 0,
+      };
+    });
+
+  // Mark recommended model
+  const recommended = selectRecommendedModel(models);
+  if (recommended) {
+    recommended.recommended = true;
+    recommended.recommendationReason = 'Generous free tier with excellent vision capabilities';
+  }
 
   return models;
 }
@@ -234,6 +564,9 @@ async function fetchOpenRouterModels(apiKey: string): Promise<ModelInfo[]> {
     headers: {
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
+      // OpenRouter recommends these headers for attribution
+      'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'https://eccb.app',
+      'X-Title': 'ECCB Smart Upload',
     },
   });
 
@@ -243,31 +576,61 @@ async function fetchOpenRouterModels(apiKey: string): Promise<ModelInfo[]> {
   }
 
   const data = await response.json();
-  const models: ModelInfo[] = (data.data || []).map((model: {
-    id: string;
-    architecture?: { modality?: string };
-    pricing?: { prompt?: number | null };
-  }) => {
-    const modality = model.architecture?.modality;
-    const isVision = modality === 'text+image->text' || model.id.toLowerCase().includes('vision') || model.id.toLowerCase().includes('vl');
-    const pricePerToken = model.pricing?.prompt ?? null;
-    
-    let providerNote: string | undefined;
-    if (pricePerToken === 0 || pricePerToken === null) {
-      providerNote = 'Rate limit: 20 RPM (free tier)';
-    }
+  const models: ModelInfo[] = (data.data || [])
+    .map((model: {
+      id: string;
+      name?: string;
+      architecture?: { modality?: string };
+      pricing?: { prompt?: number | null };
+      context_length?: number;
+    }) => {
+      const modality = model.architecture?.modality;
+      const isVision =
+        modality === 'text+image->text' ||
+        model.id.toLowerCase().includes('vision') ||
+        model.id.toLowerCase().includes('vl') ||
+        model.id.toLowerCase().includes('gpt-4o') ||
+        model.id.toLowerCase().includes('gemini') ||
+        model.id.toLowerCase().includes('claude-3');
+      const pricePerToken = model.pricing?.prompt ?? null;
 
-    return {
-      id: model.id,
-      name: model.id,
-      isVision,
-      pricePerToken,
-      priceDisplay: formatPrice(pricePerToken),
-      providerNote,
-    };
-  });
+      let providerNote: string | undefined;
+      if (pricePerToken === 0 || pricePerToken === null) {
+        providerNote = 'Rate limit: 20 RPM (free tier)';
+      }
+
+      return {
+        id: model.id,
+        name: model.name || model.id,
+        isVision,
+        supportsStructuredOutput: true, // Most OpenRouter models support this
+        contextWindow: model.context_length ?? null,
+        pricePerToken,
+        priceDisplay: formatPrice(pricePerToken),
+        isDeprecated: false, // OpenRouter filters deprecated models
+        releaseDate: null, // Not provided by OpenRouter API
+        providerNote,
+        recommended: false,
+        recommendationScore: 0,
+      };
+    })
+    .filter((m: ModelInfo) => m.isVision);
+
+  // Mark recommended model
+  const recommended = selectRecommendedModel(models);
+  if (recommended) {
+    recommended.recommended = true;
+    recommended.recommendationReason = pricePerTokenToDisplay(recommended.pricePerToken);
+  }
 
   return models;
+}
+
+function pricePerTokenToDisplay(price: number | null): string {
+  if (price === null || price === 0) return 'Free tier available';
+  if (price < 0.000001) return 'Very low cost option';
+  if (price < 0.00001) return 'Cost-effective choice';
+  return 'Premium quality model';
 }
 
 async function fetchCustomModels(endpoint: string, apiKey?: string): Promise<ModelInfo[]> {
@@ -287,8 +650,7 @@ async function fetchCustomModels(endpoint: string, apiKey?: string): Promise<Mod
   }
 
   const data = await response.json();
-  // Assume array of model objects with id/name fields, or object with models array
-  const modelArray = Array.isArray(data) ? data : (data.models || []);
+  const modelArray = Array.isArray(data) ? data : data.models || [];
 
   const models: ModelInfo[] = modelArray.map((model: { id?: string; name?: string }) => {
     const id = model.id ?? model.name ?? 'unknown';
@@ -296,8 +658,14 @@ async function fetchCustomModels(endpoint: string, apiKey?: string): Promise<Mod
       id,
       name: model.name ?? id,
       isVision: false, // Custom provider - no filtering
+      supportsStructuredOutput: false,
+      contextWindow: null,
       pricePerToken: null,
       priceDisplay: 'Unknown',
+      isDeprecated: false,
+      releaseDate: null,
+      recommended: false,
+      recommendationScore: 0,
     };
   });
 
@@ -324,8 +692,8 @@ export async function GET(request: NextRequest) {
     // Parse query parameters
     const { searchParams } = new URL(request.url);
     const provider = searchParams.get('provider') as Provider | null;
-    const apiKey = searchParams.get('apiKey') || undefined;
-    const endpoint = searchParams.get('endpoint') || undefined;
+    const clientApiKey = searchParams.get('apiKey') || undefined;
+    const clientEndpoint = searchParams.get('endpoint') || undefined;
 
     // Validate required parameters
     if (!provider) {
@@ -343,6 +711,10 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Resolve API key and endpoint (with DB fallback when client sends masked value)
+    const apiKey = await resolveApiKey(provider, clientApiKey);
+    const endpoint = await resolveEndpoint(provider, clientEndpoint);
+
     // Fetch models based on provider
     let models: ModelInfo[];
     let filteredForVision = false;
@@ -350,22 +722,9 @@ export async function GET(request: NextRequest) {
 
     switch (provider) {
       case 'ollama': {
-        if (!endpoint) {
-          return NextResponse.json(
-            { error: 'Missing required parameter: endpoint for ollama provider' },
-            { status: 400 }
-          );
-        }
-        models = await fetchOllamaModels(endpoint);
-        
-        // Filter for vision models
-        const visionModels = models.filter((m) => m.isVision);
-        if (visionModels.length > 0) {
-          models = visionModels;
-          filteredForVision = true;
-        } else {
-          warning = 'WARN: Unable to filter by vision capability';
-        }
+        const ollamaEndpoint = endpoint || 'http://localhost:11434';
+        models = await fetchOllamaModels(ollamaEndpoint);
+        filteredForVision = true;
         break;
       }
 
@@ -377,18 +736,11 @@ export async function GET(request: NextRequest) {
           );
         }
         models = await fetchOpenAIModels(apiKey);
-        
-        // Filter for vision models
-        const visionModels = models.filter((m) => m.isVision);
-        if (visionModels.length > 0) {
-          models = visionModels;
-          filteredForVision = true;
-        }
+        filteredForVision = true;
         break;
       }
 
       case 'anthropic': {
-        // Anthropic has no public API - return hard-coded list
         models = fetchAnthropicModels();
         filteredForVision = true;
         break;
@@ -414,13 +766,7 @@ export async function GET(request: NextRequest) {
           );
         }
         models = await fetchOpenRouterModels(apiKey);
-        
-        // Filter for vision models
-        const visionModels = models.filter((m) => m.isVision);
-        if (visionModels.length > 0) {
-          models = visionModels;
-          filteredForVision = true;
-        }
+        filteredForVision = true;
         break;
       }
 
@@ -432,7 +778,7 @@ export async function GET(request: NextRequest) {
           );
         }
         models = await fetchCustomModels(endpoint, apiKey);
-        // Custom provider returns all models unfiltered
+        warning = 'Custom provider: vision capability detection unavailable. Please verify model supports vision.';
         break;
       }
 
@@ -440,13 +786,20 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: 'Unknown provider' }, { status: 400 });
     }
 
-    // Sort models by price (cheapest first)
-    models = sortModelsByPrice(models);
+    // Sort models by recommendation (recommended first), then by price
+    models.sort((a, b) => {
+      if (a.recommended && !b.recommended) return -1;
+      if (!a.recommended && b.recommended) return 1;
+      return (a.pricePerToken ?? Infinity) - (b.pricePerToken ?? Infinity);
+    });
+
+    const recommendedModel = models.find((m) => m.recommended)?.id ?? null;
 
     const response: ModelsResponse = {
       models,
       totalCount: models.length,
       filteredForVision,
+      recommendedModel,
     };
 
     if (warning) {
@@ -457,6 +810,7 @@ export async function GET(request: NextRequest) {
       provider,
       modelCount: models.length,
       filteredForVision,
+      recommendedModel,
       userId: session.user.id,
     });
 

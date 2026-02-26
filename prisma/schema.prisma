@@ -395,6 +395,7 @@ model SmartUploadSession {
   llmVisionModel     String?
   llmVerifyModel     String?
   llmModelParams     Json?
+  llmPromptVersion   String?
   tempFiles          Json?
   firstPassRaw       String?          @db.LongText
   secondPassRaw      String?          @db.LongText

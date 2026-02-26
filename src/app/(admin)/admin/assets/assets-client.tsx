@@ -316,6 +316,8 @@ export function AssetsClient({ initialAssets, stats }: AssetsClientProps) {
         </Button>
         <input
           ref={fileInputRef}
+          id="assetsUpload"
+          name="assetsUpload"
           type="file"
           multiple
           accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"

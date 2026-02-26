@@ -184,7 +184,7 @@ export function MusicForm({
               <div className="space-y-2">
                 <Label htmlFor="difficulty">Difficulty</Label>
                 <Select onValueChange={(value) => setValue('difficulty', value)}>
-                  <SelectTrigger>
+                  <SelectTrigger id="difficulty" name="difficulty">
                     <SelectValue placeholder="Select grade" />
                   </SelectTrigger>
                   <SelectContent>
@@ -212,7 +212,7 @@ export function MusicForm({
             <div className="space-y-2">
               <Label htmlFor="genre">Genre</Label>
               <Select onValueChange={(value) => setValue('genre', value)}>
-                <SelectTrigger>
+                <SelectTrigger id="genre" name="genre">
                   <SelectValue placeholder="Select genre" />
                 </SelectTrigger>
                 <SelectContent>
@@ -239,7 +239,7 @@ export function MusicForm({
             <div className="space-y-2">
               <Label htmlFor="composerId">Composer</Label>
               <Select onValueChange={(value) => setValue('composerId', value)}>
-                <SelectTrigger>
+                <SelectTrigger id="composerId" name="composerId">
                   <SelectValue placeholder="Select composer" />
                 </SelectTrigger>
                 <SelectContent>
@@ -255,7 +255,7 @@ export function MusicForm({
             <div className="space-y-2">
               <Label htmlFor="arrangerId">Arranger</Label>
               <Select onValueChange={(value) => setValue('arrangerId', value)}>
-                <SelectTrigger>
+                <SelectTrigger id="arrangerId" name="arrangerId">
                   <SelectValue placeholder="Select arranger" />
                 </SelectTrigger>
                 <SelectContent>
@@ -271,7 +271,7 @@ export function MusicForm({
             <div className="space-y-2">
               <Label htmlFor="publisherId">Publisher</Label>
               <Select onValueChange={(value) => setValue('publisherId', value)}>
-                <SelectTrigger>
+                <SelectTrigger id="publisherId" name="publisherId">
                   <SelectValue placeholder="Select publisher" />
                 </SelectTrigger>
                 <SelectContent>

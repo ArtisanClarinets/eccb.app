@@ -285,7 +285,7 @@ export default async function AdminPermissionsPage({
               />
             </div>
             <Select name="resource" defaultValue={resourceFilter}>
-              <SelectTrigger className="w-[200px]">
+              <SelectTrigger id="resource" name="resource" className="w-[200px]">
                 <SelectValue placeholder="All Resources" />
               </SelectTrigger>
               <SelectContent>

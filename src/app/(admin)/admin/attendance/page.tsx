@@ -183,7 +183,7 @@ export default async function AdminAttendancePage({
               />
             </div>
             <Select name="type" defaultValue={type}>
-              <SelectTrigger className="w-[150px]">
+              <SelectTrigger id="type" name="type" className="w-[150px]">
                 <SelectValue placeholder="All Types" />
               </SelectTrigger>
               <SelectContent>
