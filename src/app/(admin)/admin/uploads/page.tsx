@@ -259,6 +259,9 @@ async function processUpload(
 
   // Subscribe to SSE for real-time processing progress
   await new Promise<void>((resolve) => {
+    // safety timeout will be cleared when either completion or failure occurs
+    let timeout: ReturnType<typeof setTimeout>;
+
     const cleanup = subscribeToUploadProgress(
       sessionId,
       (step, percent, _message) => {
@@ -271,6 +274,7 @@ async function processUpload(
       },
       (data) => {
         // Job completed — resolve with results from SSE
+        clearTimeout(timeout);
         const result = data as {
           sessionId?: string;
           status?: string;
@@ -298,23 +302,18 @@ async function processUpload(
         resolve();
       },
       (err) => {
+        clearTimeout(timeout);
         onProgress(id, { phase: 'error', progress: 0, error: err });
         resolve();
       },
     );
 
     // Safety timeout: 5 minutes
-    const timeout = setTimeout(() => {
+    timeout = setTimeout(() => {
       cleanup();
       onProgress(id, { phase: 'error', progress: 0, error: 'Processing timed out after 5 minutes.' });
       resolve();
     }, 5 * 60 * 1000);
-
-    // Patch cleanup to also clear timeout
-    const origCleanup = cleanup;
-    void origCleanup; // ensure eslint doesn't complain
-    const timeoutCleanup = () => { clearTimeout(timeout); cleanup(); };
-    void timeoutCleanup; // used in closures above
   });
 }
 

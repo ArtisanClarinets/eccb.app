@@ -1,10 +1,4 @@
-/**
- * Worker Entry Point for ECCB Platform
- * 
- * Starts all background workers and handles graceful shutdown.
- * This file is the main entry point for the worker process.
- */
-
+import 'dotenv/config';
 import http from 'http';
 import { initializeQueues, closeQueues, addJob, getAllQueueStats } from '@/lib/jobs/queue';
 import { startEmailWorker, stopEmailWorker, isEmailWorkerRunning } from './email-worker';
@@ -27,6 +21,22 @@ import {
   isSmartUploadProcessorWorkerRunning,
 } from './smart-upload-processor-worker';
 import { logger } from '@/lib/logger';
+
+/**
+ * Worker Entry Point for ECCB Platform
+ *
+ * Starts all background workers and handles graceful shutdown.
+ * This file is the main entry point for the worker process.
+ */
+
+// BullMQ emits a console.warn when the Redis server version is below 6.2.0.
+// Suppress those known advisory messages (Redis 6.0.x is installed) to avoid
+// flooding stderr until the system's Redis can be upgraded to ≥6.2.
+const _originalWarn = console.warn.bind(console);
+console.warn = (...args: unknown[]) => {
+  if (typeof args[0] === 'string' && args[0].includes('minimum Redis version')) return;
+  _originalWarn(...args);
+};
 
 // ============================================================================
 // Configuration
@@ -182,6 +192,15 @@ function startHealthServer(): void {
 
   healthServer.listen(HEALTH_CHECK_PORT, () => {
     logger.info(`Health check server listening on port ${HEALTH_CHECK_PORT}`);
+  });
+
+  healthServer.on('error', (err: NodeJS.ErrnoException) => {
+    if (err.code === 'EADDRINUSE') {
+      logger.warn(`Health check port ${HEALTH_CHECK_PORT} is already in use; health endpoint disabled for this instance`);
+      healthServer = null;
+    } else {
+      logger.error('Health check server error', { error: err.message });
+    }
   });
 }
 

@@ -55,7 +55,7 @@ export const prisma =
   globalForPrisma.prisma ??
   new PrismaClient({
     ...(adapter ? { adapter } : {}),
-    log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+    log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
   });
 
 // In all environments, cache the singleton on globalThis so that module

@@ -20,6 +20,8 @@ import {
   Sparkles,
   Wifi,
   FileText,
+  Zap,
+  Bot,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -205,6 +207,8 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
   const [isResettingPrompts, setIsResettingPrompts] = useState(false);
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'ok' | 'error'>('idle');
   const [testMessage, setTestMessage] = useState('');
+  const [discoverStatus, setDiscoverStatus] = useState<'idle' | 'discovering' | 'ok' | 'error'>('idle');
+  const [discoverMessage, setDiscoverMessage] = useState('');
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
   // Model fetching state
@@ -239,6 +243,10 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
       verification_model_params: settings['verification_model_params'] || '',
       llm_two_pass_enabled: (settings['llm_two_pass_enabled'] ?? 'true') === 'true',
       smart_upload_schema_version: settings['smart_upload_schema_version'] || '1.0.0',
+      // Autonomy settings
+      smart_upload_enable_autonomous_mode: (settings['smart_upload_enable_autonomous_mode'] ?? 'false') === 'true',
+      smart_upload_autonomous_approval_threshold: Number(settings['smart_upload_autonomous_approval_threshold'] ?? 95),
+      llm_adjudicator_model: settings['llm_adjudicator_model'] || '',
     },
   });
 
@@ -451,6 +459,33 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
     } catch (err) {
       setTestStatus('error');
       setTestMessage(err instanceof Error ? err.message : 'Network error');
+    }
+  };
+
+  const discoverProviders = async () => {
+    setDiscoverStatus('discovering');
+    setDiscoverMessage('');
+    try {
+      const res = await fetch('/api/admin/uploads/providers/discover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setDiscoverStatus('ok');
+        setDiscoverMessage(data.message ?? 'Discovery complete');
+        if (data.settingsWritten?.length > 0) {
+          toast.success(`Auto-configured: ${data.message}`);
+          // Reload to pick up newly written settings
+          window.location.reload();
+        }
+      } else {
+        setDiscoverStatus('error');
+        setDiscoverMessage(data.error ?? 'Discovery failed');
+      }
+    } catch (err) {
+      setDiscoverStatus('error');
+      setDiscoverMessage(err instanceof Error ? err.message : 'Network error');
     }
   };
 
@@ -890,26 +925,122 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
           </Card>
         </Collapsible>
 
+        {/* Autonomous Mode */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Bot className="h-5 w-5 text-primary" />
+              Autonomous Mode
+            </CardTitle>
+            <CardDescription>
+              When enabled, uploads whose confidence score meets the threshold are automatically
+              committed to the library without requiring human review.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <FormField
+              control={form.control}
+              name="smart_upload_enable_autonomous_mode"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-center space-x-3 space-y-0">
+                  <FormControl>
+                    <Switch
+                      checked={!!field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                  <div className="space-y-1 leading-none">
+                    <FormLabel>Enable Fully Autonomous Mode</FormLabel>
+                    <FormDescription className="text-xs">
+                      Automatically commit high-confidence uploads — no human approval needed.
+                    </FormDescription>
+                  </div>
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="smart_upload_autonomous_approval_threshold"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Autonomous Approval Threshold (%)</FormLabel>
+                  <FormControl>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={1}
+                      className="flex h-9 w-36 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      value={field.value as number ?? 95}
+                      onChange={(e) => field.onChange(Number(e.target.value))}
+                    />
+                  </FormControl>
+                  <FormDescription className="text-xs">
+                    Uploads with confidence ≥ this value are auto-committed (0–100).
+                  </FormDescription>
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="llm_adjudicator_model"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Adjudicator Model <span className="text-muted-foreground">(optional)</span></FormLabel>
+                  <FormControl>
+                    <input
+                      type="text"
+                      placeholder="e.g. gemma3:27b — defaults to vision model if blank"
+                      className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      value={(field.value as string) ?? ''}
+                      onChange={field.onChange}
+                    />
+                  </FormControl>
+                  <FormDescription className="text-xs">
+                    Model used for second-pass adjudication. Leave blank to reuse the vision model.
+                  </FormDescription>
+                </FormItem>
+              )}
+            />
+          </CardContent>
+        </Card>
+
         {/* Test Connection */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Test Connection</CardTitle>
-            <CardDescription>Verify that the configured endpoint and API key are reachable</CardDescription>
+            <CardTitle className="text-base">Test Connection &amp; Auto-Discovery</CardTitle>
+            <CardDescription>Verify your endpoint or let the system find a free provider automatically</CardDescription>
           </CardHeader>
-          <CardContent className="flex items-center gap-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={testConnection}
-              disabled={testStatus === 'testing'}
-            >
-              {testStatus === 'testing' ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Wifi className="mr-2 h-4 w-4" />
-              )}
-              {testStatus === 'testing' ? 'Testing...' : 'Test Connection'}
-            </Button>
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap items-center gap-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={testConnection}
+                disabled={testStatus === 'testing'}
+              >
+                {testStatus === 'testing' ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Wifi className="mr-2 h-4 w-4" />
+                )}
+                {testStatus === 'testing' ? 'Testing...' : 'Test Connection'}
+              </Button>
+
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={discoverProviders}
+                disabled={discoverStatus === 'discovering'}
+              >
+                {discoverStatus === 'discovering' ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Zap className="mr-2 h-4 w-4" />
+                )}
+                {discoverStatus === 'discovering' ? 'Discovering...' : 'Discover & Configure Free Providers'}
+              </Button>
+            </div>
 
             {testStatus === 'ok' && (
               <span className="flex items-center gap-1.5 text-sm text-green-600">
@@ -921,6 +1052,18 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
               <span className="flex items-center gap-1.5 text-sm text-red-600">
                 <AlertCircle className="h-4 w-4" />
                 {testMessage}
+              </span>
+            )}
+            {discoverStatus === 'ok' && (
+              <span className="flex items-center gap-1.5 text-sm text-green-600">
+                <CheckCircle2 className="h-4 w-4" />
+                {discoverMessage}
+              </span>
+            )}
+            {discoverStatus === 'error' && (
+              <span className="flex items-center gap-1.5 text-sm text-red-600">
+                <AlertCircle className="h-4 w-4" />
+                {discoverMessage}
               </span>
             )}
           </CardContent>

@@ -211,17 +211,33 @@ export function validateAndNormalizeInstructions(
     isValid,
   });
 
-  // Convert back to full CuttingInstruction type by preserving original data
-  const finalInstructions: CuttingInstruction[] = rawInstructions
-    .filter((_, i) => i < normalizedInstructions.length)
-    .map((raw, i) => {
-      const processed = processedInstructions[i];
-      const original = raw as CuttingInstruction;
-      return {
-        ...original,
-        pageRange: [processed.pageStart, processed.pageEnd] as [number, number],
-      };
-    });
+  // Rebuild full CuttingInstruction objects using the validated+0-indexed page ranges.
+  // We track which raw instructions survived validation by building a separate
+  // list of valid raw entries aligned with normalizedInstructions.
+  const validRawInstructions: CuttingInstruction[] = [];
+  for (let i = 0; i < rawInstructions.length; i++) {
+    const raw = rawInstructions[i];
+    if (raw === null || typeof raw !== 'object') continue;
+    const instruction = raw as Record<string, unknown>;
+    if (!instruction.partName || typeof instruction.partName !== 'string') continue;
+    if (instruction.partName.toString().trim().length === 0) continue;
+    if (
+      !('pageRange' in instruction || ('pageStart' in instruction && 'pageEnd' in instruction))
+    ) continue;
+    validRawInstructions.push(raw as CuttingInstruction);
+  }
+
+  const finalInstructions: CuttingInstruction[] = processedInstructions.map((processed, idx) => {
+    const original = validRawInstructions[idx] as CuttingInstruction | undefined;
+    return {
+      instrument: original?.instrument ?? 'Unknown',
+      partName: processed.partName,
+      section: (original?.section ?? 'Other') as CuttingInstruction['section'],
+      transposition: (original?.transposition ?? 'C') as CuttingInstruction['transposition'],
+      partNumber: original?.partNumber ?? idx + 1,
+      pageRange: [processed.pageStart, processed.pageEnd] as [number, number],
+    };
+  });
 
   return {
     instructions: finalInstructions,
@@ -432,11 +448,15 @@ export function splitOverlappingRanges(instructions: NormalizedInstruction[]): N
 
 /**
  * Build synthetic CuttingInstructions for any page ranges not covered by the
- * provided instructions.  Results are tagged as "Unlabelled Pages X-Y" and
- * assigned high part-numbers (9900+) so they sort after legitimate parts.
+ * provided instructions.
  *
- * @param instructions - 1-indexed page-range instructions already validated.
- * @param totalPages   - Total page count (1-indexed upper bound).
+ * IMPORTANT: This function expects **0-indexed** page ranges
+ * (i.e. instructions already processed by validateAndNormalizeInstructions).
+ * Results are tagged as “Unlabelled Pages {start+1}–{end+1}” for human display
+ * and assigned high part-numbers (9900+) so they sort after legitimate parts.
+ *
+ * @param instructions - 0-indexed page-range instructions already validated.
+ * @param totalPages   - Total page count (0-indexed upper bound = totalPages-1).
  */
 export function buildGapInstructions(
   instructions: CuttingInstruction[],
@@ -444,12 +464,14 @@ export function buildGapInstructions(
 ): CuttingInstruction[] {
   const covered = new Set<number>();
   for (const inst of instructions) {
+    // pageRange is 0-indexed after validation
     for (let p = inst.pageRange[0]; p <= inst.pageRange[1]; p++) covered.add(p);
   }
 
   const gaps: Array<[number, number]> = [];
   let gapStart: number | null = null;
-  for (let p = 1; p <= totalPages; p++) {
+  // Iterate 0-indexed
+  for (let p = 0; p < totalPages; p++) {
     if (!covered.has(p)) {
       if (gapStart === null) gapStart = p;
     } else if (gapStart !== null) {
@@ -457,10 +479,11 @@ export function buildGapInstructions(
       gapStart = null;
     }
   }
-  if (gapStart !== null) gaps.push([gapStart, totalPages]);
+  if (gapStart !== null) gaps.push([gapStart, totalPages - 1]);
 
   return gaps.map(([start, end], i) => ({
-    partName: `Unlabelled Pages ${start}-${end}`,
+    // Display pages using 1-based labels for readability
+    partName: `Unlabelled Pages ${start + 1}-${end + 1}`,
     instrument: 'Unknown',
     section: 'Other' as const,
     transposition: 'C' as const,

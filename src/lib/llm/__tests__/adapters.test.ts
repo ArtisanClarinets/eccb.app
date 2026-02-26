@@ -233,4 +233,46 @@ describe('LLM Adapters', () => {
       expect(result.url).toContain('key%20with%20spaces');
     });
   });
+
+  describe('Ollama Adapter (via OpenAIAdapter)', () => {
+    const adapter = new OpenAIAdapter();
+    const ollamaConfig = {
+      ...mockConfig,
+      llm_provider: 'ollama' as const,
+      llm_endpoint_url: 'http://localhost:11434',
+      // No API key supplied — Ollama doesn't need one
+      llm_openai_api_key: undefined,
+    };
+
+    it('does not include Authorization header when no API key is provided', () => {
+      const result = adapter.buildRequest(ollamaConfig, { images: [], prompt: 'test' });
+      expect(result.headers).not.toHaveProperty('Authorization');
+    });
+
+    it('normalises bare host to include /v1 automatically', () => {
+      const result = adapter.buildRequest(
+        { ...ollamaConfig, llm_endpoint_url: 'http://localhost:11434' },
+        { images: [], prompt: 'test' }
+      );
+      expect(result.url).toContain('/v1/');
+    });
+
+    it('does not double-add /v1 when endpoint already contains /v1', () => {
+      const result = adapter.buildRequest(
+        { ...ollamaConfig, llm_endpoint_url: 'http://localhost:11434/v1' },
+        { images: [], prompt: 'test' }
+      );
+      // Should not result in /v1/v1/
+      expect(result.url.replace('://', '')).not.toContain('/v1/v1');
+    });
+
+    it('never sets Authorization header for ollama — even when a key is supplied — because ollama does not require auth', () => {
+      const result = adapter.buildRequest(
+        { ...ollamaConfig, llm_openai_api_key: 'ollama-key' },
+        { images: [], prompt: 'test' }
+      );
+      // Ollama adapter hard-codes apiKey = undefined for the 'ollama' case
+      expect(result.headers).not.toHaveProperty('Authorization');
+    });
+  });
 });

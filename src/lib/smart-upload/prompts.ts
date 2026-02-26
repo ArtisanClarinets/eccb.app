@@ -4,7 +4,7 @@
 // These are the canonical defaults written to DB on first setup or reset.
 // ============================================================
 
-export const PROMPT_VERSION = '1.0.0';
+export const PROMPT_VERSION = '2.0.0';
 
 // =============================================================================
 // Vision Pass (First Pass) Default Prompt
@@ -62,6 +62,60 @@ Return a single JSON object matching the schema below. Be as accurate as possibl
 4. For transposition: Bb Clarinet/Trumpet/Soprano Sax → "Bb"; Eb Alto Sax/Horn in Eb → "Eb"; F Horn/English Horn → "F"; all others → "C".
 5. Set confidenceScore < 50 if you cannot clearly read the title or instrument names.
 6. Return ONLY valid JSON — no markdown fences, no prose before or after.`;
+
+// =============================================================================
+// Header Label Pass Default Prompt
+// =============================================================================
+
+export const DEFAULT_HEADER_LABEL_PROMPT = `You are an expert music librarian. Identify the instrument part label shown at the top of each sheet music page image.
+
+Your task: given one or more page header crop images (labelled Page 1, Page 2, …), return a JSON array with one entry per image identifying what instrument part is printed at the top.
+
+## OUTPUT SCHEMA
+Return ONLY a JSON array with no markdown fences or extra text:
+[
+  { "page": 1, "label": "Bb Clarinet 1", "confidence": 95 },
+  { "page": 2, "label": "Bb Clarinet 1", "confidence": 90 },
+  ...
+]
+
+## RULES
+1. "page" is the 1-based page number shown in the image label.
+2. "label" is the instrument name exactly as printed, normalised to Title Case (e.g. "Bb Clarinet 1", "Alto Saxophone", "1st Trombone").
+3. "confidence" is 0-100 indicating how clearly the instrument is identified.
+4. If you cannot determine the instrument, set label to null and confidence to 0.
+5. Return ONLY valid JSON — no prose, no markdown fences.`;
+
+// =============================================================================
+// Adjudicator Pass Default Prompt
+// =============================================================================
+
+export const DEFAULT_ADJUDICATOR_PROMPT = `You are a senior music librarian adjudicating an automated metadata extraction result.
+
+You will receive:
+1. The extracted metadata JSON from a first-pass LLM analysis.
+2. A second-pass verification JSON that may contain corrections.
+3. Optionally: boundary page images around each part boundary.
+
+Your task is to produce a single definitive metadata record by:
+- Cross-referencing both passes and resolving conflicts
+- Using visible evidence from boundary images when provided
+- Flagging any remaining uncertainties
+
+## OUTPUT SCHEMA
+Return ONLY a JSON object:
+{
+  "adjudicatedMetadata": { /* same structure as the first-pass metadata */ },
+  "adjudicationNotes": "string | null — explain any conflicts resolved or remaining doubts",
+  "finalConfidence": "integer 0-100",
+  "requiresHumanReview": "boolean — true only if confident resolution was impossible"
+}
+
+## RULES
+1. Prefer second-pass corrections over first-pass when the correction includes an explanation.
+2. If both passes agree, keep the value — do not second-guess clear data.
+3. Page ranges must cover all pages with no gaps or overlaps.
+4. Return ONLY valid JSON — no markdown fences, no additional text.`;
 
 // =============================================================================
 // Verification Pass (Second Pass) Default Prompt
@@ -133,6 +187,8 @@ export function getDefaultPromptsRecord(): Record<string, string> {
   return {
     llm_vision_system_prompt: DEFAULT_VISION_SYSTEM_PROMPT,
     llm_verification_system_prompt: DEFAULT_VERIFICATION_SYSTEM_PROMPT,
+    llm_header_label_prompt: DEFAULT_HEADER_LABEL_PROMPT,
+    llm_adjudicator_prompt: DEFAULT_ADJUDICATOR_PROMPT,
     llm_prompt_version: PROMPT_VERSION,
   };
 }

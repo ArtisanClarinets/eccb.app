@@ -27,7 +27,12 @@ export class AnthropicAdapter implements LLMAdapter {
       | { type: 'text'; text: string }
     > = [];
 
-    for (const image of request.images) {
+    // Include labeled inputs if provided
+    const allImages = request.labeledInputs
+      ? [...request.images, ...request.labeledInputs.map((li) => ({ mimeType: li.mimeType, base64Data: li.base64Data }))]
+      : request.images;
+
+    for (const image of allImages) {
       content.push({
         type: 'image',
         source: {
@@ -38,12 +43,27 @@ export class AnthropicAdapter implements LLMAdapter {
       });
     }
 
-    content.push({
-      type: 'text',
-      text: request.prompt,
-    });
+    // If JSON mode requested, append instruction to prompt
+    const promptText = request.responseFormat?.type === 'json'
+      ? `${request.prompt}\n\nIMPORTANT: Respond with valid JSON only, no markdown fences or prose.`
+      : request.prompt;
+
+    content.push({ type: 'text', text: promptText });
 
     const baseUrl = (config.llm_endpoint_url || 'https://api.anthropic.com').replace(/\/$/, '');
+
+    const bodyObj: Record<string, unknown> = {
+      model: config.llm_vision_model || 'claude-3-5-sonnet-20241022',
+      messages: [{ role: 'user', content }],
+      max_tokens: request.maxTokens ?? 4096,
+      temperature: request.temperature ?? 0.1,
+    };
+
+    // Anthropic supports a top-level system field (not inside messages)
+    if (request.system) {
+      bodyObj['system'] = request.system;
+    }
+
     return {
       url: `${baseUrl}/v1/messages`,
       headers: {
@@ -51,17 +71,7 @@ export class AnthropicAdapter implements LLMAdapter {
         'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
       },
-      body: {
-        model: config.llm_vision_model || 'claude-3-5-sonnet-20241022',
-        messages: [
-          {
-            role: 'user',
-            content,
-          },
-        ],
-        max_tokens: request.maxTokens ?? 4096,
-        temperature: request.temperature ?? 0.1,
-      },
+      body: bodyObj,
     };
   }
 

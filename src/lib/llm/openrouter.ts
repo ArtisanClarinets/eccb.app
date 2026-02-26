@@ -25,42 +25,46 @@ export class OpenRouterAdapter implements LLMAdapter {
     // Build content array with images and text
     const content: Array<{ type: string; image_url?: { url: string }; text?: string }> = [];
 
-    for (const image of request.images) {
+    // Include labeled inputs if provided
+    const allImages = request.labeledInputs
+      ? [...request.images, ...request.labeledInputs.map((li) => ({ mimeType: li.mimeType, base64Data: li.base64Data }))]
+      : request.images;
+
+    for (const image of allImages) {
       content.push({
         type: 'image_url',
-        image_url: {
-          url: `data:${image.mimeType};base64,${image.base64Data}`,
-        },
+        image_url: { url: `data:${image.mimeType};base64,${image.base64Data}` },
       });
     }
 
-    content.push({
-      type: 'text',
-      text: request.prompt,
-    });
+    content.push({ type: 'text', text: request.prompt });
 
-    const baseUrl = config.llm_endpoint_url || 'https://openrouter.ai/api/v1';
+    const baseUrl = (config.llm_endpoint_url || 'https://openrouter.ai/api/v1').replace(/\/$/, '');
+
+    const messages: Array<Record<string, unknown>> = [];
+    if (request.system) messages.push({ role: 'system', content: request.system });
+    messages.push({ role: 'user', content });
+
+    const body: Record<string, unknown> = {
+      model: config.llm_vision_model || 'openai/gpt-4o',
+      messages,
+      max_tokens: request.maxTokens ?? 4096,
+      temperature: request.temperature ?? 0.1,
+    };
+
+    if (request.responseFormat?.type === 'json') {
+      body['response_format'] = { type: 'json_object' };
+    }
 
     return {
-      url: `${baseUrl.replace(/\/$/, '')}/chat/completions`,
+      url: `${baseUrl}/chat/completions`,
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
-        // OpenRouter specific headers for analytics
         'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'https://eccb.app',
         'X-Title': 'ECCB Smart Upload',
       },
-      body: {
-        model: config.llm_vision_model || 'openai/gpt-4o',
-        messages: [
-          {
-            role: 'user',
-            content,
-          },
-        ],
-        max_tokens: request.maxTokens ?? 4096,
-        temperature: request.temperature ?? 0.1,
-      },
+      body,
     };
   }
 

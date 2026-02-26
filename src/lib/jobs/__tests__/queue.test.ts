@@ -92,11 +92,11 @@ describe('Job Queue System', () => {
     });
 
     it('should have correct queue names', () => {
-      expect(QUEUE_NAMES.EMAIL).toBe('eccb:email');
-      expect(QUEUE_NAMES.NOTIFICATION).toBe('eccb:notification');
-      expect(QUEUE_NAMES.SCHEDULED).toBe('eccb:scheduled');
-      expect(QUEUE_NAMES.CLEANUP).toBe('eccb:cleanup');
-      expect(QUEUE_NAMES.DEAD_LETTER).toBe('eccb:dead-letter');
+      expect(QUEUE_NAMES.EMAIL).toBe('eccb-email');
+      expect(QUEUE_NAMES.NOTIFICATION).toBe('eccb-notification');
+      expect(QUEUE_NAMES.SCHEDULED).toBe('eccb-scheduled');
+      expect(QUEUE_NAMES.CLEANUP).toBe('eccb-cleanup');
+      expect(QUEUE_NAMES.DEAD_LETTER).toBe('eccb-dead-letter');
     });
   });
 
@@ -177,7 +177,7 @@ describe('Job Queue System', () => {
       const stats = await getQueueStats('EMAIL');
 
       expect(stats).toBeDefined();
-      expect(stats?.name).toBe('eccb:email');
+      expect(stats?.name).toBe('eccb-email');
       expect(stats?.waiting).toBe(5);
       expect(stats?.active).toBe(2);
       expect(stats?.completed).toBe(100);

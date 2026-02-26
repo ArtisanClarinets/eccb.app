@@ -57,7 +57,12 @@ export const SMART_UPLOAD_SETTING_KEYS = [
   'smart_upload_max_file_size_mb',
   'smart_upload_allowed_mime_types',
   'llm_two_pass_enabled',
-  
+  // Autonomy settings
+  'smart_upload_enable_autonomous_mode',
+  'smart_upload_autonomous_approval_threshold',
+  'llm_adjudicator_model',
+  'llm_header_label_prompt',
+  'llm_adjudicator_prompt',  
   // Model parameters (JSON)
   'vision_model_params',
   'verification_model_params',
@@ -162,6 +167,24 @@ export const SmartUploadSettingsSchema = z.object({
     .union([z.boolean(), z.string()])
     .transform((v) => (typeof v === 'string' ? v === 'true' : v))
     .default(true),
+
+  // Autonomy settings
+  smart_upload_enable_autonomous_mode: z
+    .union([z.boolean(), z.string()])
+    .transform((v) => (typeof v === 'string' ? v === 'true' : v))
+    .default(false),
+
+  smart_upload_autonomous_approval_threshold: z
+    .union([z.string(), z.number()])
+    .transform((v) => {
+      const num = typeof v === 'string' ? Number(v) : v;
+      return Math.max(0, Math.min(100, isNaN(num) ? 95 : num));
+    })
+    .default(95),
+
+  llm_adjudicator_model: z.string().optional(),
+  llm_header_label_prompt: z.string().optional(),
+  llm_adjudicator_prompt: z.string().optional(),
   
   // Model parameters
   vision_model_params: JsonParamsSchema,
@@ -196,7 +219,7 @@ export function getApiKeyFieldForProvider(provider: ProviderValue): string {
  * Check if a provider requires an API key
  */
 export function providerRequiresApiKey(provider: ProviderValue): boolean {
-  return provider !== 'ollama';
+  return provider !== 'ollama' && provider !== 'custom';
 }
 
 /**

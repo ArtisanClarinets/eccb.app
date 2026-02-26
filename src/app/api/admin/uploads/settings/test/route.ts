@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Build the request depending on provider
-    let testUrl: string;
+    let testUrl = '';
     const testHeaders: Record<string, string> = {
       'Content-Type': 'application/json',
     };
@@ -68,8 +68,28 @@ export async function POST(request: NextRequest) {
     switch (provider) {
       case 'ollama': {
         const base = (endpoint || 'http://localhost:11434').replace(/\/$/, '');
-        testUrl = `${base}/api/tags`;
-        break;
+        // Try /api/tags first (native Ollama), then /v1/models (OpenAI-compat layer)
+        const ollamaUrls = [`${base}/api/tags`, `${base}/v1/models`];
+        let lastError = '';
+        for (const url of ollamaUrls) {
+          try {
+            const res = await fetch(url, {
+              method: 'GET',
+              headers: testHeaders,
+              signal: AbortSignal.timeout(5_000),
+            });
+            if (res.ok) {
+              return NextResponse.json({
+                ok: true,
+                message: `Successfully connected to Ollama (model: ${model}).`,
+              });
+            }
+            lastError = `${url} → HTTP ${res.status}`;
+          } catch (e) {
+            lastError = `${url} → ${e instanceof Error ? e.message : String(e)}`;
+          }
+        }
+        return NextResponse.json({ ok: false, error: `Could not reach Ollama. Last error: ${lastError}` });
       }
 
       case 'openai': {

@@ -45,6 +45,9 @@ const DEFAULT_NUMERIC_SETTINGS: Record<string, string> = {
   smart_upload_max_file_size_mb: '50',
   smart_upload_allowed_mime_types: JSON.stringify(['application/pdf']),
   llm_two_pass_enabled: 'true',
+  // Autonomy settings
+  smart_upload_enable_autonomous_mode: 'false',
+  smart_upload_autonomous_approval_threshold: '95',
 };
 
 const DEFAULT_JSON_SETTINGS: Record<string, string> = {
@@ -142,6 +145,18 @@ export async function bootstrapSmartUploadSettings(
     if (provider === 'custom' && !existingSettings.llm_endpoint_url) {
       await upsertSetting('llm_endpoint_url', '', options.updatedBy);
       actions.push('initialized empty endpoint_url for custom provider');
+    }
+
+    // 9. Migration bridge: copy legacy key values to canonical smart_upload_* keys
+    const legacyMigrations: Array<[string, string]> = [
+      ['llm_auto_approve_threshold', 'smart_upload_auto_approve_threshold'],
+    ];
+    for (const [legacyKey, newKey] of legacyMigrations) {
+      const legacyValue = existingSettings[legacyKey];
+      if (legacyValue && !existingSettings[newKey]) {
+        await upsertSetting(newKey, legacyValue, options.updatedBy);
+        actions.push(`migrated ${legacyKey} → ${newKey}`);
+      }
     }
     
     if (actions.length > 0) {

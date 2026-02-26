@@ -16,14 +16,21 @@ import { prisma } from '@/lib/db';
 import { downloadFile, uploadFile } from '@/lib/services/storage';
 import { renderPdfPageBatch } from '@/lib/services/pdf-renderer';
 import { callVisionModel } from '@/lib/llm';
-import { loadLLMConfig, runtimeToAdapterConfig } from '@/lib/llm/config-loader';
+import { loadSmartUploadRuntimeConfig, runtimeToAdapterConfig } from '@/lib/llm/config-loader';
 import type { LLMRuntimeConfig } from '@/lib/llm/config-loader';
 import {
   validateAndNormalizeInstructions,
   buildGapInstructions,
 } from '@/lib/services/cutting-instructions';
 import { splitPdfByCuttingInstructions } from '@/lib/services/pdf-splitter';
-import { queueSmartUploadSecondPass, SmartUploadJobProgress } from '@/lib/jobs/smart-upload';
+import { extractPdfPageHeaders } from '@/lib/services/pdf-text-extractor';
+import { detectPartBoundaries } from '@/lib/services/part-boundary-detector';
+import {
+  queueSmartUploadSecondPass,
+  queueSmartUploadAutoCommit,
+  SmartUploadJobProgress,
+} from '@/lib/jobs/smart-upload';
+import { buildPartFilename, buildPartStorageSlug, normalizeInstrumentLabel } from '@/lib/smart-upload/part-naming';
 import { logger } from '@/lib/logger';
 import { buildVisionPrompt } from '@/lib/smart-upload/prompts';
 import type {
@@ -239,12 +246,12 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
 }> {
   const { sessionId, fileId } = job.data;
 
+  /** Convenience wrapper that always includes sessionId in progress payloads */
+  const progress = (step: SmartUploadJobProgress['step'], percent: number, message: string) =>
+    job.updateProgress({ step, percent, message, sessionId } as SmartUploadJobProgress);
+
   // Step 0: Starting
-  await job.updateProgress({
-    step: 'starting',
-    percent: 0,
-    message: 'Initializing smart upload processing',
-  } as SmartUploadJobProgress);
+  await progress('starting', 0, 'Initializing smart upload processing');
 
   logger.info('Starting smart upload processing', { sessionId, fileId, jobId: job.id });
 
@@ -257,15 +264,11 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
     throw new Error(`Smart upload session not found: ${sessionId}`);
   }
 
-  // Load LLM config
-  const llmConfig = await loadLLMConfig();
+  // Load LLM config (uses smart_upload_* settings from DB)
+  const llmConfig = await loadSmartUploadRuntimeConfig();
 
   // Step 1: Download and render PDF to images
-  await job.updateProgress({
-    step: 'downloading',
-    percent: 5,
-    message: 'Downloading PDF from storage',
-  } as SmartUploadJobProgress);
+  await progress('downloading', 5, 'Downloading PDF from storage');
 
   const downloadResult = await downloadFile(smartSession.storageKey);
   if (typeof downloadResult === 'string') {
@@ -274,20 +277,43 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
 
   const pdfBuffer = await streamToBuffer(downloadResult.stream);
 
-  await job.updateProgress({
-    step: 'rendering',
-    percent: 10,
-    message: 'Rendering PDF pages to images',
-  } as SmartUploadJobProgress);
+  await progress('rendering', 10, 'Rendering PDF pages to images');
 
   const { images: pageImages, totalPages, sampledIndices } = await samplePdfPages(pdfBuffer);
 
+  // -----------------------------------------------------------------
+  // Text layer detection (deterministic segmentation when available)
+  // -----------------------------------------------------------------
+  await progress('analyzing', 20, 'Detecting text layer for deterministic segmentation');
+
+  const pageHeaderResult = await extractPdfPageHeaders(
+    pdfBuffer,
+    Math.min(totalPages, llmConfig.maxPages || 50)
+  );
+
+  let deterministicInstructions: CuttingInstruction[] | null = null;
+  let deterministicConfidence = 0;
+
+  if (pageHeaderResult.hasTextLayer) {
+    logger.info('Text layer detected — attempting deterministic segmentation', {
+      sessionId,
+      coverage: pageHeaderResult.textLayerCoverage,
+    });
+
+    const segResult = detectPartBoundaries(pageHeaderResult.pageHeaders, totalPages, true);
+    if (segResult.segments.length > 1 || segResult.segmentationConfidence >= 60) {
+      deterministicInstructions = segResult.cuttingInstructions;
+      deterministicConfidence = segResult.segmentationConfidence;
+      logger.info('Deterministic segmentation succeeded', {
+        sessionId,
+        segments: segResult.segments.length,
+        confidence: deterministicConfidence,
+      });
+    }
+  }
+
   // Step 2: Vision LLM analysis
-  await job.updateProgress({
-    step: 'analyzing',
-    percent: 30,
-    message: 'Running AI vision analysis on pages',
-  } as SmartUploadJobProgress);
+  await progress('analyzing', 30, 'Running AI vision analysis on pages');
 
   const images = pageImages.map((base64Data) => ({
     mimeType: 'image/png' as const,
@@ -316,12 +342,22 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
 
   const extraction = parseVisionResponse(visionResult.content, totalPages);
 
+  // If deterministic segmentation produced instructions, overlay them on the LLM extraction
+  if (deterministicInstructions && deterministicInstructions.length > 0) {
+    extraction.cuttingInstructions = deterministicInstructions;
+    // Boost confidence when deterministic path used
+    extraction.confidenceScore = Math.max(
+      extraction.confidenceScore,
+      deterministicConfidence
+    );
+    logger.info('Using deterministic cutting instructions', { sessionId, parts: deterministicInstructions.length });
+  }
+
+  // Store the raw first-pass LLM response for audit purposes
+  const firstPassRaw = visionResult.content;
+
   // Step 3: Validate cutting instructions
-  await job.updateProgress({
-    step: 'validating',
-    percent: 50,
-    message: 'Validating extracted cutting instructions',
-  } as SmartUploadJobProgress);
+  await progress('validating', 50, 'Validating extracted cutting instructions');
 
   const cuttingInstructions = extraction.cuttingInstructions || [];
   const validation = validateAndNormalizeInstructions(
@@ -344,7 +380,7 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
   }
 
   // Determine routing decision based on confidence
-  const { decision: routingDecision, autoApproved } = determineRoutingDecision(
+  const { decision: routingDecision, autoApproved: _autoApproved } = determineRoutingDecision(
     extraction.confidenceScore,
     llmConfig
   );
@@ -377,21 +413,13 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
     // Queue for second pass
     await queueSmartUploadSecondPass(sessionId);
 
-    await job.updateProgress({
-      step: 'queued_for_second_pass',
-      percent: 100,
-      message: 'Queued for second pass verification',
-    } as SmartUploadJobProgress);
+    await progress('queued_for_second_pass', 100, 'Queued for second pass verification');
 
     return { status: 'queued_for_second_pass', sessionId };
   }
 
   // Step 4: Split PDF
-  await job.updateProgress({
-    step: 'splitting',
-    percent: 70,
-    message: `Splitting PDF into ${validation.instructions.length} parts`,
-  } as SmartUploadJobProgress);
+  await progress('splitting', 70, `Splitting PDF into ${validation.instructions.length} parts`);
 
   // Convert validation instructions to full CuttingInstruction format
   // Gap instructions (from buildGapInstructions) already carry their own metadata
@@ -414,18 +442,17 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
   );
 
   // Step 5: Create part records
-  await job.updateProgress({
-    step: 'saving',
-    percent: 90,
-    message: 'Uploading split parts to storage',
-  } as SmartUploadJobProgress);
+  await progress('saving', 90, 'Uploading split parts to storage');
 
   const parsedParts: ParsedPartRecord[] = [];
   const tempFiles: string[] = [];
 
   for (const result of splitResults) {
-    const safePartName = result.instruction.partName.replace(/[^a-zA-Z0-9\-_ ]/g, '_');
-    const partStorageKey = `smart-upload/${sessionId}/parts/${safePartName}.pdf`;
+    const normalised = normalizeInstrumentLabel(result.instruction.instrument);
+    const displayName = `${smartSession.fileName.replace(/\.pdf$/i, '')} ${normalised.instrument}`;
+    const slug = buildPartStorageSlug(displayName);
+    const partStorageKey = `smart-upload/${sessionId}/parts/${slug}.pdf`;
+    const partFileName = buildPartFilename(displayName);
 
     await uploadFile(partStorageKey, result.buffer, {
       contentType: 'application/pdf',
@@ -447,7 +474,7 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
       transposition: result.instruction.transposition,
       partNumber: result.instruction.partNumber,
       storageKey: partStorageKey,
-      fileName: result.fileName,
+      fileName: partFileName,
       fileSize: result.buffer.length,
       pageCount: result.pageCount,
       pageRange: result.instruction.pageRange,
@@ -458,10 +485,14 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
   let secondPassStatus: SecondPassStatus = 'NOT_NEEDED';
   if (routingDecision === 'auto_parse_second_pass') {
     secondPassStatus = 'QUEUED';
-
-    // Queue for second pass
     await queueSmartUploadSecondPass(sessionId);
   }
+
+  // Determine if we should auto-commit (fully autonomous mode)
+  const shouldAutoCommit =
+    llmConfig.enableFullyAutonomousMode &&
+    extraction.confidenceScore >= llmConfig.autonomousApprovalThreshold &&
+    secondPassStatus === 'NOT_NEEDED';
 
   // Update session with results
   await prisma.smartUploadSession.update({
@@ -474,21 +505,28 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
       parsedParts: JSON.parse(JSON.stringify(parsedParts)),
       cuttingInstructions: JSON.parse(JSON.stringify(validatedInstructions)),
       tempFiles: JSON.parse(JSON.stringify(tempFiles)),
-      autoApproved,
+      autoApproved: shouldAutoCommit,
       secondPassStatus: secondPassStatus === 'NOT_NEEDED' ? null : secondPassStatus,
       llmProvider: llmConfig.provider,
       llmVisionModel: llmConfig.visionModel,
       llmVerifyModel: llmConfig.verificationModel,
       llmModelParams: { temperature: 0.1, max_tokens: 4096 },
-      llmPromptVersion: llmConfig.promptVersion || '1.0.0',
+      llmPromptVersion: llmConfig.promptVersion || '2.0.0',
+      ...(firstPassRaw ? { firstPassRaw } : {}),
     },
   });
 
-  await job.updateProgress({
-    step: 'complete',
-    percent: 100,
-    message: `Processing complete. Created ${parsedParts.length} parts.`,
-  } as SmartUploadJobProgress);
+  // Queue auto-commit if eligible
+  if (shouldAutoCommit) {
+    logger.info('Autonomous mode: queueing auto-commit', {
+      sessionId,
+      confidence: extraction.confidenceScore,
+      threshold: llmConfig.autonomousApprovalThreshold,
+    });
+    await queueSmartUploadAutoCommit(sessionId);
+  }
+
+  await progress('complete', 100, `Processing complete. Created ${parsedParts.length} parts.`);
 
   logger.info('Smart upload processing complete', {
     sessionId,

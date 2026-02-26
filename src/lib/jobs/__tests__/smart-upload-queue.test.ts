@@ -21,7 +21,7 @@ vi.mock('bullmq', () => {
         name,
         data,
         opts,
-        queueName: 'eccb:smart-upload',
+        queueName: 'eccb-smart-upload',
       } as unknown as Job);
     });
     getJobs = vi.fn().mockResolvedValue([]);
@@ -154,7 +154,7 @@ describe('Smart Upload Queue', () => {
 
   describe('Queue Configuration', () => {
     it('should use correct queue name', () => {
-      expect(QUEUE_NAMES.SMART_UPLOAD).toBe('eccb:smart-upload');
+      expect(QUEUE_NAMES.SMART_UPLOAD).toBe('eccb-smart-upload');
     });
 
     it('should map smartupload.secondPass to smart upload queue', async () => {

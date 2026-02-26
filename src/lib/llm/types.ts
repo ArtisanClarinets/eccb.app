@@ -12,9 +12,27 @@ export interface LLMConfig {
   llm_verification_model?: string;
 }
 
+export interface LabeledImage {
+  kind: 'image';
+  mimeType: string;
+  base64Data: string;
+  /** Optional label to reference this image in the prompt */
+  label?: string;
+}
+
+export interface ResponseFormat {
+  type: 'json' | 'text';
+}
+
 export interface VisionRequest {
   images: Array<{ mimeType: string; base64Data: string }>;
+  /** Labeled inputs for multi-source verification (images with context labels) */
+  labeledInputs?: LabeledImage[];
   prompt: string;
+  /** Optional system-level instruction (passed as system message or role-based) */
+  system?: string;
+  /** Request structured JSON output */
+  responseFormat?: ResponseFormat;
   maxTokens?: number;
   temperature?: number;
 }

@@ -1,8 +1,20 @@
 import type { LLMAdapter, LLMConfig, VisionRequest, VisionResponse } from './types';
 
 /**
+ * Normalise an Ollama or custom endpoint to include /v1 if needed.
+ * Ollama's OpenAI-compat API lives at /v1/* — if user supplies the bare
+ * host (http://localhost:11434) we add /v1 automatically.
+ */
+function normalizeOllamaEndpoint(endpoint: string): string {
+  const cleaned = endpoint.replace(/\/$/, '');
+  // If already contains /v1 (or any deeper path), leave it as-is
+  if (/\/v\d+/.test(cleaned)) return cleaned;
+  return `${cleaned}/v1`;
+}
+
+/**
  * OpenAI API adapter for chat.completions endpoint
- * Supports OpenAI-compatible APIs including custom endpoints
+ * Supports OpenAI-compatible APIs including custom endpoints and Ollama
  */
 export class OpenAIAdapter implements LLMAdapter {
   buildRequest(
@@ -13,17 +25,37 @@ export class OpenAIAdapter implements LLMAdapter {
     headers: Record<string, string>;
     body: unknown;
   } {
-    // SECURITY: Use provider-specific API key - OpenAI keys must not be sent to other providers
-    const apiKey = config.llm_openai_api_key;
-
-    if (!apiKey) {
-      throw new Error('OpenAI API key is required but not configured');
+    // SECURITY: Provider-aware API key selection.
+    // Ollama (local) needs no key; custom endpoints may or may not need one.
+    let apiKey: string | undefined;
+    switch (config.llm_provider) {
+      case 'openai':
+        apiKey = config.llm_openai_api_key;
+        if (!apiKey) throw new Error('OpenAI API key is required but not configured');
+        break;
+      case 'ollama':
+        // Ollama running locally — no auth needed
+        apiKey = undefined;
+        break;
+      case 'custom':
+        // Custom OpenAI-compat servers may or may not require a key
+        apiKey = config.llm_custom_api_key || undefined;
+        break;
+      default:
+        // Fallback: use OpenAI key (backwards compat for openrouter routing through this adapter)
+        apiKey = config.llm_openai_api_key;
+        if (!apiKey) throw new Error('API key is required but not configured');
     }
 
     // Build content array with images and text
     const content: Array<{ type: string; image_url?: { url: string }; text?: string }> = [];
 
-    for (const image of request.images) {
+    // Include labeled inputs if provided (e.g., for verification passes)
+    const allImages = request.labeledInputs
+      ? [...request.images, ...request.labeledInputs.map((li) => ({ mimeType: li.mimeType, base64Data: li.base64Data }))]
+      : request.images;
+
+    for (const image of allImages) {
       content.push({
         type: 'image_url',
         image_url: {
@@ -37,25 +69,41 @@ export class OpenAIAdapter implements LLMAdapter {
       text: request.prompt,
     });
 
-    const baseUrl = config.llm_endpoint_url || 'https://api.openai.com/v1';
+    // Resolve base URL, normalising Ollama bare hosts to include /v1
+    let rawBase = config.llm_endpoint_url || 'https://api.openai.com/v1';
+    if (config.llm_provider === 'ollama') {
+      rawBase = normalizeOllamaEndpoint(rawBase);
+    } else {
+      rawBase = rawBase.replace(/\/$/, '');
+    }
+
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
+
+    const messages: Array<Record<string, unknown>> = [];
+
+    // System message — native support in /v1/chat/completions
+    if (request.system) {
+      messages.push({ role: 'system', content: request.system });
+    }
+    messages.push({ role: 'user', content });
+
+    const body: Record<string, unknown> = {
+      model: config.llm_vision_model || 'gpt-4o',
+      messages,
+      max_tokens: request.maxTokens ?? 4096,
+      temperature: request.temperature ?? 0.1,
+    };
+
+    // JSON mode — only for providers that support it (OpenAI, OpenRouter, OpenAI-compat)
+    if (request.responseFormat?.type === 'json') {
+      body['response_format'] = { type: 'json_object' };
+    }
 
     return {
-      url: `${baseUrl.replace(/\/$/, '')}/chat/completions`,
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: {
-        model: config.llm_vision_model || 'gpt-4o',
-        messages: [
-          {
-            role: 'user',
-            content,
-          },
-        ],
-        max_tokens: request.maxTokens ?? 4096,
-        temperature: request.temperature ?? 0.1,
-      },
+      url: `${rawBase}/chat/completions`,
+      headers,
+      body,
     };
   }
 

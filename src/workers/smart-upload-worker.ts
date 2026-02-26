@@ -10,10 +10,11 @@ import { prisma } from '@/lib/db';
 import { downloadFile, uploadFile } from '@/lib/services/storage';
 import { renderPdfPageBatch } from '@/lib/services/pdf-renderer';
 import { callVisionModel } from '@/lib/llm';
-import { loadLLMConfig, runtimeToAdapterConfig } from '@/lib/llm/config-loader';
+import { loadSmartUploadRuntimeConfig, runtimeToAdapterConfig } from '@/lib/llm/config-loader';
 import type { LLMRuntimeConfig } from '@/lib/llm/config-loader';
 import { splitPdfByCuttingInstructions } from '@/lib/services/pdf-splitter';
 import { createWorker } from '@/lib/jobs/queue';
+import { queueSmartUploadAutoCommit } from '@/lib/jobs/smart-upload';
 import { logger } from '@/lib/logger';
 import { buildVerificationPrompt } from '@/lib/smart-upload/prompts';
 import type {
@@ -96,14 +97,17 @@ const llmRateLimiter = new TokenBucketRateLimiter(15);
 /**
  * Call the verification LLM using the shared adapter pattern.
  * Uses verificationModel instead of visionModel for the second pass.
+ * Accepts optional labeled inputs (sampled parts) for cross-reference.
  */
 async function callVerificationLLM(
   pageImages: string[],
   cfg: LLMRuntimeConfig,
   prompt: string,
+  labeledImages?: Array<{ label: string; base64Data: string }>,
 ): Promise<ExtractedMetadata> {
-  await llmRateLimiter.consume();
+  // setLimit BEFORE consume (rate limiter fix)
   llmRateLimiter.setLimit(cfg.rateLimit);
+  await llmRateLimiter.consume();
 
   // Use verification model for second pass — override llm_vision_model field
   const adapterConfig = {
@@ -119,6 +123,15 @@ async function callVerificationLLM(
   const response = await callVisionModel(adapterConfig, images, prompt, {
     maxTokens: 4096,
     temperature: 0.1,
+    ...(labeledImages && labeledImages.length > 0
+      ? {
+          labeledInputs: labeledImages.map(({ label, base64Data }) => ({
+            label,
+            mimeType: 'image/png' as const,
+            base64Data,
+          })),
+        }
+      : {}),
   });
 
   return parseVerificationResponse(response.content);
@@ -152,13 +165,124 @@ function shuffleArray<T>(array: T[]): T[] {
 }
 
 // =============================================================================
+// Second-Pass Result Handler (shared between parts-present and fallback paths)
+// =============================================================================
+
+async function handleSecondPassResult(
+  sessionId: string,
+  smartSession: { parseStatus: string | null; routingDecision: string | null; fileName: string; uploadSessionId: string },
+  updateData: Record<string, unknown>,
+  secondPassResult: ExtractedMetadata,
+  verificationConfidence: number,
+  secondPassRaw: string,
+  correctedCuttingInstructions: CuttingInstruction[] | undefined,
+  originalPdfBuffer: Buffer,
+  parsedParts: ParsedPartRecord[] | null,
+  llmConfig: LLMRuntimeConfig,
+): Promise<void> {
+  Object.assign(updateData, {
+    secondPassResult,
+    secondPassRaw,
+    secondPassStatus: 'COMPLETE',
+    llmProvider: llmConfig.provider,
+    llmVisionModel: llmConfig.verificationModel,
+    llmVerifyModel: llmConfig.verificationModel,
+    llmModelParams: { temperature: 0.1, max_tokens: 4096 },
+    llmPromptVersion: llmConfig.promptVersion || '2.0.0',
+  });
+
+  if (correctedCuttingInstructions && correctedCuttingInstructions.length > 0) {
+    const existingMetadata = updateData.extractedMetadata as Record<string, unknown> | undefined;
+    updateData.extractedMetadata = { ...(existingMetadata ?? {}), cuttingInstructions: correctedCuttingInstructions };
+    updateData.cuttingInstructions = correctedCuttingInstructions;
+
+    if (smartSession.parseStatus !== 'PARSED') {
+      const splitResults = await splitPdfByCuttingInstructions(
+        originalPdfBuffer,
+        smartSession.fileName.replace(/\.pdf$/i, ''),
+        correctedCuttingInstructions
+      );
+      const newParsedParts: ParsedPartRecord[] = [];
+      const tempFiles: string[] = [];
+      for (const part of splitResults) {
+        const safePartName = part.instruction.partName.replace(/[^a-zA-Z0-9\-_ ]/g, '_');
+        const partStorageKey = `smart-upload/${sessionId}/parts/${safePartName}.pdf`;
+        await uploadFile(partStorageKey, part.buffer, {
+          contentType: 'application/pdf',
+          metadata: { sessionId, instrument: part.instruction.instrument, partName: part.instruction.partName, section: part.instruction.section, originalUploadId: sessionId },
+        });
+        tempFiles.push(partStorageKey);
+        newParsedParts.push({
+          partName: part.instruction.partName, instrument: part.instruction.instrument,
+          section: part.instruction.section, transposition: part.instruction.transposition,
+          partNumber: part.instruction.partNumber, storageKey: partStorageKey,
+          fileName: part.fileName, fileSize: part.buffer.length,
+          pageCount: part.pageCount, pageRange: part.instruction.pageRange,
+        });
+      }
+      updateData.parsedParts = newParsedParts;
+      updateData.tempFiles = tempFiles;
+      updateData.parseStatus = 'PARSED';
+      logger.info('PDF split completed in second pass', { sessionId, partsCount: newParsedParts.length });
+    } else if (parsedParts && parsedParts.length > 0) {
+      const splitResults = await splitPdfByCuttingInstructions(
+        originalPdfBuffer,
+        smartSession.fileName.replace(/\.pdf$/i, ''),
+        correctedCuttingInstructions
+      );
+      const newParsedParts: ParsedPartRecord[] = [];
+      for (const part of splitResults) {
+        const safePartName = part.instruction.partName.replace(/[^a-zA-Z0-9\-_ ]/g, '_');
+        const partStorageKey = `smart-upload/${sessionId}/parts/${safePartName}.pdf`;
+        await uploadFile(partStorageKey, part.buffer, {
+          contentType: 'application/pdf',
+          metadata: { sessionId, instrument: part.instruction.instrument, partName: part.instruction.partName, section: part.instruction.section, originalUploadId: sessionId },
+        });
+        newParsedParts.push({
+          partName: part.instruction.partName, instrument: part.instruction.instrument,
+          section: part.instruction.section, transposition: part.instruction.transposition,
+          partNumber: part.instruction.partNumber, storageKey: partStorageKey,
+          fileName: part.fileName, fileSize: part.buffer.length,
+          pageCount: part.pageCount, pageRange: part.instruction.pageRange,
+        });
+      }
+      updateData.parsedParts = newParsedParts;
+      logger.info('Re-split PDF in second pass', { sessionId, newPartsCount: newParsedParts.length });
+    }
+  }
+
+  // Auto-approve if legacy mode
+  const routingDecision = smartSession.routingDecision as string;
+  if (verificationConfidence >= llmConfig.autoApproveThreshold && routingDecision === 'auto_parse_second_pass' && updateData.parseStatus === 'PARSED') {
+    updateData.autoApproved = true;
+    logger.info('Session auto-approved after second pass (legacy threshold)', { sessionId, verificationConfidence });
+  }
+
+  await prisma.smartUploadSession.update({ where: { uploadSessionId: sessionId }, data: updateData });
+
+  // Trigger fully-autonomous auto-commit if configured
+  if (
+    llmConfig.enableFullyAutonomousMode &&
+    verificationConfidence >= llmConfig.autonomousApprovalThreshold &&
+    updateData.parseStatus === 'PARSED'
+  ) {
+    logger.info('Autonomous mode: queueing auto-commit after second pass', { sessionId, verificationConfidence });
+    await queueSmartUploadAutoCommit(sessionId);
+  }
+}
+
+// =============================================================================
 // Main Job Processor
 // =============================================================================
 
 async function processSecondPass(job: Job<SmartUploadSecondPassJobData>): Promise<void> {
   const { sessionId } = job.data;
 
-  await job.updateProgress(5);
+  /** Convenience wrapper that always includes sessionId in progress payloads */
+  const progress = (step: string, percent: number, message: string) =>
+    job.updateProgress({ step, percent, message, sessionId });
+
+  await progress('starting', 5, 'Initializing second-pass verification');
 
   logger.info('Starting second pass verification', { sessionId, jobId: job.id });
 
@@ -177,7 +301,7 @@ async function processSecondPass(job: Job<SmartUploadSecondPassJobData>): Promis
     throw new Error(`Session is not eligible for second pass. Current status: ${currentSecondPassStatus}`);
   }
 
-  await job.updateProgress(10);
+  await progress('starting', 10, 'Session validated');
 
   // Set secondPassStatus to IN_PROGRESS immediately
   await prisma.smartUploadSession.update({
@@ -185,11 +309,11 @@ async function processSecondPass(job: Job<SmartUploadSecondPassJobData>): Promis
     data: { secondPassStatus: 'IN_PROGRESS' },
   });
 
-  await job.updateProgress(15);
+  await progress('starting', 15, 'Status set to in-progress');
 
   try {
-    // Load LLM config
-    const llmConfig = await loadLLMConfig();
+    // Load LLM config (uses smart_upload_* settings from DB)
+    const llmConfig = await loadSmartUploadRuntimeConfig();
 
     // Download the original PDF
     const storageKey = smartSession.storageKey;
@@ -200,7 +324,7 @@ async function processSecondPass(job: Job<SmartUploadSecondPassJobData>): Promis
     }
 
     const originalPdfBuffer = await streamToBuffer(downloadResult.stream);
-    await job.updateProgress(25);
+    await progress('downloading', 25, 'PDF downloaded');
 
     // Convert all pages to images
     const allPageIndices = Array.from({ length: Math.min( 
@@ -213,7 +337,7 @@ async function processSecondPass(job: Job<SmartUploadSecondPassJobData>): Promis
       quality: 85,
       format: 'png',
     });
-    await job.updateProgress(35);
+    await progress('rendering', 35, 'PDF rendered to images');
 
     // FIX: Treat fields as JSON directly, NOT strings (Bug #2 fix)
     const metadata = smartSession.extractedMetadata as ExtractedMetadata | null;
@@ -224,9 +348,12 @@ async function processSecondPass(job: Job<SmartUploadSecondPassJobData>): Promis
     const parsedParts = smartSession.parsedParts as ParsedPartRecord[] | null;
     const cuttingInstructions = smartSession.cuttingInstructions as CuttingInstruction[] | null;
 
-    let verificationPrompt: string;
+    let verificationPrompt: string = '';
 
-    await job.updateProgress(40);
+    // Shared update data - will be built in handleSecondPassResult
+    const updateData: Record<string, unknown> = {};
+
+    await progress('analyzing', 40, 'Analyzing metadata and parts');
 
     // Check if we have parsed parts for spot-checking
     if (smartSession.parseStatus === 'PARSED' && parsedParts && parsedParts.length > 0) {
@@ -240,11 +367,11 @@ async function processSecondPass(job: Job<SmartUploadSecondPassJobData>): Promis
         sampledCount: sampledParts.length,
       });
 
-      // Build verification prompt with original pages and sampled parts
+      // Collect labeled images from each sampled part (the actual fix)
+      const labeledImages: Array<{ label: string; base64Data: string }> = [];
       let promptContent = `## ORIGINAL SCORE (ALL PAGES)\n`;
       promptContent += `Analyze all ${originalPageImages.length} pages of the original score above.\n\n`;
 
-      // Download and convert each sampled part to images
       for (const part of sampledParts) {
         promptContent += `=== PART: ${part.partName} ===\n`;
         promptContent += `Instrument: ${part.instrument}\n`;
@@ -257,9 +384,12 @@ async function processSecondPass(job: Job<SmartUploadSecondPassJobData>): Promis
             const partPdfBuffer = await streamToBuffer(partDownloadResult.stream);
             const partPageImages = await convertAllPdfPagesToImages(partPdfBuffer);
 
-            // Add part page images to content
+            // Build labeled images with clear part identification
             for (let i = 0; i < partPageImages.length; i++) {
-              promptContent += `[Part "${part.partName}" - Page ${i}]\n`;
+              labeledImages.push({
+                label: `Part "${part.partName}" Page ${i + 1}`,
+                base64Data: partPageImages[i],
+              });
             }
           }
         } catch (partError) {
@@ -273,14 +403,12 @@ async function processSecondPass(job: Job<SmartUploadSecondPassJobData>): Promis
 
       promptContent += `\n## PROPOSED CUTTING INSTRUCTIONS\n`;
       promptContent += JSON.stringify(cuttingInstructions, null, 2);
-
-      promptContent += `\n\nReview the original score and sampled parts above. Verify that:
-1. The cuttingInstructions accurately reflect the page ranges for each part
-2. Each part's instrument, section, and transposition are correct
-3. No parts are missing from the cuttingInstructions
-
-Return the corrected JSON with an improved confidenceScore in a "verificationConfidence" field (0-100).
-Include a "corrections" field explaining any changes made, or null if no corrections were needed.`;
+      promptContent += `\n\nReview the original score and sampled parts above. Verify that:\n`;
+      promptContent += `1. The cuttingInstructions accurately reflect the page ranges for each part\n`;
+      promptContent += `2. Each part's instrument, section, and transposition are correct\n`;
+      promptContent += `3. No parts are missing from the cuttingInstructions\n\n`;
+      promptContent += `Return the corrected JSON with an improved confidenceScore in a "verificationConfidence" field (0-100).\n`;
+      promptContent += `Include a "corrections" field explaining any changes made, or null if no corrections were needed.`;
 
       verificationPrompt = buildVerificationPrompt(
         llmConfig.verificationSystemPrompt || '',
@@ -289,6 +417,25 @@ Include a "corrections" field explaining any changes made, or null if no correct
           pageCount: originalPageImages.length,
         }
       ) + '\n\n' + promptContent;
+
+      // Call the verification LLM with labeled part images
+      const secondPassResult = await callVerificationLLM(
+        originalPageImages,
+        llmConfig,
+        verificationPrompt,
+        labeledImages,
+      );
+
+      const verificationConfidence = (secondPassResult as unknown as Record<string, unknown>).verificationConfidence as number
+        ?? secondPassResult.confidenceScore;
+      const secondPassRaw = JSON.stringify(secondPassResult);
+      const correctedCuttingInstructions = secondPassResult.cuttingInstructions;
+
+      await progress('verification', 70, 'Verification complete with parts');
+      await handleSecondPassResult(
+        sessionId, smartSession, updateData, secondPassResult, verificationConfidence,
+        secondPassRaw, correctedCuttingInstructions, originalPdfBuffer, parsedParts, llmConfig
+      );
     } else {
       // No parts parsed yet - re-run full vision extraction as second opinion
       const fallbackContext = `Extract metadata from ALL ${originalPageImages.length} pages of this music score.
@@ -298,186 +445,33 @@ Return JSON with title, composer, confidenceScore, fileType, isMultiPart, ensemb
 Include a "verificationConfidence" field (0-100) indicating your confidence in this extraction.
 Include a "corrections" field explaining any corrections made from the first pass, or null if no corrections were needed.`;
 
-      verificationPrompt = buildVerificationPrompt(
+      const fallbackPrompt = buildVerificationPrompt(
         llmConfig.verificationSystemPrompt || '',
         {
           originalMetadata: metadata as unknown as Record<string, unknown>,
           pageCount: originalPageImages.length,
         }
       ) + '\n\n' + fallbackContext;
+
+      await progress('analyzing', 50, 'Running full vision re-extraction');
+
+      const secondPassResult = await callVerificationLLM(originalPageImages, llmConfig, fallbackPrompt);
+      const verificationConfidence = (secondPassResult as unknown as Record<string, unknown>).verificationConfidence as number
+        ?? secondPassResult.confidenceScore;
+      const secondPassRaw = JSON.stringify(secondPassResult);
+      const correctedCuttingInstructions = secondPassResult.cuttingInstructions;
+
+      await progress('verification', 70, 'Fallback verification complete');
+      await handleSecondPassResult(
+        sessionId, smartSession, updateData, secondPassResult, verificationConfidence,
+        secondPassRaw, correctedCuttingInstructions, originalPdfBuffer, parsedParts, llmConfig
+      );
     }
 
-    await job.updateProgress(50);
-
-    // Call the verification LLM
-    const secondPassResult = await callVerificationLLM(originalPageImages, llmConfig, verificationPrompt);
-    const verificationConfidence = secondPassResult.verificationConfidence ?? secondPassResult.confidenceScore;
-
-    await job.updateProgress(70);
-
-    // Parse the second pass response
-    const secondPassRaw = JSON.stringify(secondPassResult);
-
-    // Check if cutting instructions were corrected
-    const correctedCuttingInstructions = secondPassResult.cuttingInstructions;
-
-    // Update session with second pass results
-    const updateData: Record<string, unknown> = {
-      secondPassResult: secondPassResult,
-      secondPassRaw: secondPassRaw,
-      secondPassStatus: 'COMPLETE',
-      llmProvider: llmConfig.provider,
-      llmVisionModel: llmConfig.verificationModel,
-      llmVerifyModel: llmConfig.verificationModel,
-      llmModelParams: { temperature: 0.1, max_tokens: 4096 },
-      llmPromptVersion: llmConfig.promptVersion || '1.0.0',
-    };
-
-    // If corrections were made to cutting instructions, update them
-    if (correctedCuttingInstructions && correctedCuttingInstructions.length > 0) {
-      updateData.extractedMetadata = {
-        ...metadata,
-        cuttingInstructions: correctedCuttingInstructions,
-      };
-      updateData.cuttingInstructions = correctedCuttingInstructions;
-
-      // FIX: If not yet parsed (parseStatus !== 'PARSED'), do initial split (Bug #3 fix)
-      if (smartSession.parseStatus !== 'PARSED') {
-        logger.info('Initial PDF split with corrected instructions', {
-          sessionId,
-          partsCount: correctedCuttingInstructions.length,
-        });
-
-        const baseName = smartSession.fileName.replace(/\.pdf$/i, '');
-        const splitResults = await splitPdfByCuttingInstructions(
-          originalPdfBuffer,
-          baseName,
-          correctedCuttingInstructions
-        );
-
-        const newParsedParts: ParsedPartRecord[] = [];
-        const tempFiles: string[] = [];
-
-        for (const part of splitResults) {
-          const safePartName = part.instruction.partName.replace(/[^a-zA-Z0-9\-_ ]/g, '_');
-          const partStorageKey = `smart-upload/${sessionId}/parts/${safePartName}.pdf`;
-
-          await uploadFile(partStorageKey, part.buffer, {
-            contentType: 'application/pdf',
-            metadata: {
-              sessionId,
-              instrument: part.instruction.instrument,
-              partName: part.instruction.partName,
-              section: part.instruction.section,
-              originalUploadId: sessionId,
-            },
-          });
-
-          tempFiles.push(partStorageKey);
-
-          newParsedParts.push({
-            partName: part.instruction.partName,
-            instrument: part.instruction.instrument,
-            section: part.instruction.section,
-            transposition: part.instruction.transposition,
-            partNumber: part.instruction.partNumber,
-            storageKey: partStorageKey,
-            fileName: part.fileName,
-            fileSize: part.buffer.length,
-            pageCount: part.pageCount,
-            pageRange: part.instruction.pageRange,
-          });
-        }
-
-        updateData.parsedParts = newParsedParts;
-        updateData.tempFiles = tempFiles;
-        updateData.parseStatus = 'PARSED';
-
-        logger.info('PDF split completed', {
-          sessionId,
-          partsCount: newParsedParts.length,
-        });
-      } else if (parsedParts && parsedParts.length > 0) {
-        // Already parsed, re-run PDF splitting with corrected instructions
-        logger.info('Re-running PDF split with corrected instructions', {
-          sessionId,
-          originalPartsCount: parsedParts.length,
-          newPartsCount: correctedCuttingInstructions.length,
-        });
-
-        const baseName = smartSession.fileName.replace(/\.pdf$/i, '');
-        const splitResults = await splitPdfByCuttingInstructions(
-          originalPdfBuffer,
-          baseName,
-          correctedCuttingInstructions
-        );
-
-        const newParsedParts: ParsedPartRecord[] = [];
-
-        for (const part of splitResults) {
-          const safePartName = part.instruction.partName.replace(/[^a-zA-Z0-9\-_ ]/g, '_');
-          const partStorageKey = `smart-upload/${sessionId}/parts/${safePartName}.pdf`;
-
-          await uploadFile(partStorageKey, part.buffer, {
-            contentType: 'application/pdf',
-            metadata: {
-              sessionId,
-              instrument: part.instruction.instrument,
-              partName: part.instruction.partName,
-              section: part.instruction.section,
-              originalUploadId: sessionId,
-            },
-          });
-
-          newParsedParts.push({
-            partName: part.instruction.partName,
-            instrument: part.instruction.instrument,
-            section: part.instruction.section,
-            transposition: part.instruction.transposition,
-            partNumber: part.instruction.partNumber,
-            storageKey: partStorageKey,
-            fileName: part.fileName,
-            fileSize: part.buffer.length,
-            pageCount: part.pageCount,
-            pageRange: part.instruction.pageRange,
-          });
-        }
-
-        updateData.parsedParts = newParsedParts;
-        logger.info('Re-split PDF with corrected instructions', {
-          sessionId,
-          newPartsCount: newParsedParts.length,
-        });
-      }
-    }
-
-    await job.updateProgress(85);
-
-    // Check if we can auto-approve
-    const routingDecision = smartSession.routingDecision as string;
-    if (
-      verificationConfidence >= llmConfig.autoApproveThreshold &&
-      routingDecision === 'auto_parse_second_pass' &&
-      updateData.parseStatus === 'PARSED'
-    ) {
-      updateData.autoApproved = true;
-      logger.info('Session auto-approved after second pass', {
-        sessionId,
-        verificationConfidence,
-      });
-    }
-
-    // Update the session
-    await prisma.smartUploadSession.update({
-      where: { uploadSessionId: sessionId },
-      data: updateData,
-    });
-
-    await job.updateProgress(100);
+    await progress('verification', 90, 'Second pass finalized');
 
     logger.info('Second pass completed', {
       sessionId,
-      verificationConfidence,
       secondPassStatus: 'COMPLETE',
     });
   } catch (error) {

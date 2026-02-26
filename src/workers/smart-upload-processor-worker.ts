@@ -7,6 +7,8 @@
 import { Job } from 'bullmq';
 import { createWorker } from '@/lib/jobs/queue';
 import { processSmartUpload } from './smart-upload-processor';
+import { commitSmartUploadSessionToLibrary } from '@/lib/smart-upload/commit';
+import { SMART_UPLOAD_JOB_NAMES } from '@/lib/jobs/smart-upload';
 import { logger } from '@/lib/logger';
 
 // =============================================================================
@@ -36,8 +38,13 @@ export function startSmartUploadProcessorWorker(): void {
     queueName: 'SMART_UPLOAD',
     concurrency: config.concurrency,
     processor: async (job: Job) => {
-      if (job.name === 'smartupload.process') {
+      if (job.name === SMART_UPLOAD_JOB_NAMES.PROCESS) {
         await processSmartUpload(job);
+      } else if (job.name === SMART_UPLOAD_JOB_NAMES.AUTO_COMMIT) {
+        const { sessionId } = job.data as { sessionId: string };
+        logger.info('Running auto-commit for session', { sessionId, jobId: job.id });
+        await commitSmartUploadSessionToLibrary(sessionId, {}, 'system:auto-commit');
+        logger.info('Auto-commit complete', { sessionId });
       } else {
         throw new Error(`Unknown job type: ${job.name}`);
       }

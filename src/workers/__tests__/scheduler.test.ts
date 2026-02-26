@@ -28,7 +28,7 @@ vi.mock('@/lib/jobs/queue', () => ({
   addJob: vi.fn().mockResolvedValue({ id: 'job-123' }),
   createWorker: vi.fn(),
   QUEUE_NAMES: {
-    SCHEDULED: 'eccb:scheduled',
+    SCHEDULED: 'eccb-scheduled',
   },
 }));
 

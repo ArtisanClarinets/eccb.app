@@ -7,8 +7,8 @@ import { applyRateLimit } from '@/lib/rate-limit';
 import { validateCSRF } from '@/lib/csrf';
 import { logger } from '@/lib/logger';
 import { MUSIC_UPLOAD } from '@/lib/auth/permission-constants';
-import { env } from '@/lib/env';
 import { queueSmartUploadProcess } from '@/lib/jobs/smart-upload';
+import { loadSmartUploadRuntimeConfig } from '@/lib/llm/config-loader';
 import type {
   RoutingDecision,
   ParseStatus,
@@ -16,11 +16,11 @@ import type {
 } from '@/types/smart-upload';
 
 // =============================================================================
-// Constants
+// Constants (defaults — overridden by DB config at runtime)
 // =============================================================================
 
-const ALLOWED_MIME_TYPE = 'application/pdf';
-const MAX_FILE_SIZE = env.MAX_FILE_SIZE;
+const DEFAULT_ALLOWED_MIME_TYPES = ['application/pdf'];
+const DEFAULT_MAX_FILE_SIZE_MB = 50;
 
 // =============================================================================
 // Helper Functions
@@ -83,6 +83,18 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    // Load DB-configured limits (fall back to defaults if DB unavailable)
+    let maxFileSizeMb = DEFAULT_MAX_FILE_SIZE_MB;
+    const allowedMimeTypes = DEFAULT_ALLOWED_MIME_TYPES;
+    try {
+      const cfg = await loadSmartUploadRuntimeConfig();
+      maxFileSizeMb = cfg.maxFileSizeMb ?? DEFAULT_MAX_FILE_SIZE_MB;
+      // allowedMimeTypes is not yet on LLMRuntimeConfig; use default
+    } catch {
+      logger.warn('Could not load smart upload config from DB; using defaults for upload limits');
+    }
+    const maxFileSizeBytes = maxFileSizeMb * 1024 * 1024;
+
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
 
@@ -90,16 +102,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
     }
 
-    if (file.size > MAX_FILE_SIZE) {
+    if (file.size > maxFileSizeBytes) {
       return NextResponse.json(
-        { error: `File too large. Maximum size is ${MAX_FILE_SIZE / (1024 * 1024)}MB` },
+        { error: `File too large. Maximum size is ${maxFileSizeMb}MB` },
         { status: 400 }
       );
     }
 
-    if (file.type !== ALLOWED_MIME_TYPE) {
+    if (!allowedMimeTypes.includes(file.type)) {
       return NextResponse.json(
-        { error: 'Invalid file type. Only PDF files are allowed' },
+        { error: `Invalid file type. Allowed types: ${allowedMimeTypes.join(', ')}` },
         { status: 400 }
       );
     }

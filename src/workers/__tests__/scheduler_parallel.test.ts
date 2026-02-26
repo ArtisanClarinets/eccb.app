@@ -16,7 +16,7 @@ vi.mock('@/lib/jobs/queue', () => ({
   addJob: vi.fn(),
   createWorker: vi.fn(),
   QUEUE_NAMES: {
-    SCHEDULED: 'eccb:scheduled',
+    SCHEDULED: 'eccb-scheduled',
   },
 }));
 

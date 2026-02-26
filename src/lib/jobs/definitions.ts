@@ -275,12 +275,12 @@ export const JOB_CONFIGS: Record<JobType, JobConfig> = {
 // ============================================================================
 
 export const QUEUE_NAMES = {
-  EMAIL: 'eccb:email',
-  NOTIFICATION: 'eccb:notification',
-  SCHEDULED: 'eccb:scheduled',
-  CLEANUP: 'eccb:cleanup',
-  DEAD_LETTER: 'eccb:dead-letter',
-  SMART_UPLOAD: 'eccb:smart-upload',
+  EMAIL: 'eccb-email',
+  NOTIFICATION: 'eccb-notification',
+  SCHEDULED: 'eccb-scheduled',
+  CLEANUP: 'eccb-cleanup',
+  DEAD_LETTER: 'eccb-dead-letter',
+  SMART_UPLOAD: 'eccb-smart-upload',
 } as const;
 
 export type QueueName = typeof QUEUE_NAMES[keyof typeof QUEUE_NAMES];

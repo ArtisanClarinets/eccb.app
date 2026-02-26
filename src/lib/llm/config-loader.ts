@@ -16,6 +16,8 @@ export interface LLMRuntimeConfig {
   endpointUrl: string;
   visionModel: string;
   verificationModel: string;
+  /** Adjudicator (3rd pass) model — defaults to verificationModel */
+  adjudicatorModel: string;
   openaiApiKey: string;
   anthropicApiKey: string;
   openrouterApiKey: string;
@@ -25,9 +27,18 @@ export interface LLMRuntimeConfig {
   twoPassEnabled: boolean;
   visionSystemPrompt?: string;
   verificationSystemPrompt?: string;
+  /** Prompt for the header-labelling cheap-model pass */
+  headerLabelPrompt?: string;
+  /** Prompt for the adjudicator 3rd pass */
+  adjudicatorPrompt?: string;
   rateLimit: number;
   autoApproveThreshold: number;
   skipParseThreshold: number;
+  maxPages: number;
+  maxFileSizeMb: number;
+  maxConcurrent: number;
+  enableFullyAutonomousMode: boolean;
+  autonomousApprovalThreshold: number;
   visionModelParams: Record<string, unknown>;
   verificationModelParams: Record<string, unknown>;
   promptVersion?: string;
@@ -48,11 +59,23 @@ const DB_KEYS = [
   // Models
   'llm_vision_model',
   'llm_verification_model',
-  // Behaviour
-  'llm_confidence_threshold',
+  // Behaviour — smart_upload_* are the canonical keys; legacy llm_* honoured as fallback
+  'smart_upload_confidence_threshold',
+  'smart_upload_auto_approve_threshold',
+  'smart_upload_rate_limit_rpm',
+  'smart_upload_max_concurrent',
+  'smart_upload_max_pages',
+  'smart_upload_max_file_size_mb',
+  'smart_upload_enable_autonomous_mode',
+  'smart_upload_autonomous_approval_threshold',
+  'llm_adjudicator_model',
   'llm_two_pass_enabled',
   'llm_vision_system_prompt',
   'llm_verification_system_prompt',
+  'llm_header_label_prompt',
+  'llm_adjudicator_prompt',
+  // Legacy behaviour keys
+  'llm_confidence_threshold',
   'llm_rate_limit_rpm',
   'llm_auto_approve_threshold',
   'llm_skip_parse_threshold',
@@ -154,22 +177,55 @@ export async function loadLLMConfig(): Promise<LLMRuntimeConfig> {
     endpointUrl,
     visionModel,
     verificationModel,
+    adjudicatorModel:
+      db['llm_adjudicator_model'] ||
+      (provider === 'openai' ? 'gpt-4o' :
+       provider === 'anthropic' ? 'claude-3-5-sonnet-20241022' :
+       verificationModel),
     openaiApiKey: db['llm_openai_api_key'] || process.env.LLM_OPENAI_API_KEY || '',
     anthropicApiKey: db['llm_anthropic_api_key'] || process.env.LLM_ANTHROPIC_API_KEY || '',
     openrouterApiKey: db['llm_openrouter_api_key'] || process.env.LLM_OPENROUTER_API_KEY || '',
     geminiApiKey: db['llm_gemini_api_key'] || process.env.LLM_GEMINI_API_KEY || '',
     customApiKey: db['llm_custom_api_key'] || process.env.LLM_CUSTOM_API_KEY || '',
-    confidenceThreshold: Number(db['llm_confidence_threshold'] ?? 70),
+    // Prefer smart_upload_* canonical keys, fall back to legacy llm_* keys
+    confidenceThreshold: Number(
+      db['smart_upload_confidence_threshold'] ||
+      db['llm_confidence_threshold'] ||
+      70
+    ),
     twoPassEnabled: (db['llm_two_pass_enabled'] ?? 'true') === 'true',
     visionSystemPrompt: db['llm_vision_system_prompt'] || undefined,
     verificationSystemPrompt: db['llm_verification_system_prompt'] || undefined,
-    rateLimit: Number(db['llm_rate_limit_rpm'] ?? 15),
-    autoApproveThreshold: Number(db['llm_auto_approve_threshold'] ?? 90),
+    headerLabelPrompt: db['llm_header_label_prompt'] || undefined,
+    adjudicatorPrompt: db['llm_adjudicator_prompt'] || undefined,
+    rateLimit: Number(
+      db['smart_upload_rate_limit_rpm'] ||
+      db['llm_rate_limit_rpm'] ||
+      15
+    ),
+    autoApproveThreshold: Number(
+      db['smart_upload_auto_approve_threshold'] ||
+      db['llm_auto_approve_threshold'] ||
+      90
+    ),
     skipParseThreshold: Number(db['llm_skip_parse_threshold'] ?? 60),
+    maxPages: Number(db['smart_upload_max_pages'] ?? 20),
+    maxFileSizeMb: Number(db['smart_upload_max_file_size_mb'] ?? 50),
+    maxConcurrent: Number(db['smart_upload_max_concurrent'] ?? 3),
+    enableFullyAutonomousMode: (db['smart_upload_enable_autonomous_mode'] ?? 'false') === 'true',
+    autonomousApprovalThreshold: Number(db['smart_upload_autonomous_approval_threshold'] ?? 95),
     visionModelParams,
     verificationModelParams,
     promptVersion: db['llm_prompt_version'] || '1.0.0',
   };
+}
+
+/**
+ * Alias for loadLLMConfig — reads canonical smart_upload_* settings.
+ * Workers should call this instead of loadLLMConfig.
+ */
+export async function loadSmartUploadRuntimeConfig(): Promise<LLMRuntimeConfig> {
+  return loadLLMConfig();
 }
 
 /**

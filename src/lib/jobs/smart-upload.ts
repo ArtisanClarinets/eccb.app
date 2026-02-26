@@ -23,6 +23,10 @@ interface SmartUploadSecondPassData {
   sessionId: string;
 }
 
+interface SmartUploadAutoCommitData {
+  sessionId: string;
+}
+
 // =============================================================================
 // Queue Names and Job Names
 // =============================================================================
@@ -30,6 +34,7 @@ interface SmartUploadSecondPassData {
 export const SMART_UPLOAD_JOB_NAMES = {
   PROCESS: 'smartupload.process',
   SECOND_PASS: 'smartupload.secondPass',
+  AUTO_COMMIT: 'smartupload.autoCommit',
 } as const;
 
 // =============================================================================
@@ -111,6 +116,36 @@ export async function queueSmartUploadSecondPass(
   return job;
 }
 
+/**
+ * Queue a smart upload for autonomous auto-commit.
+ * Only triggered when confidence >= autonomousApprovalThreshold.
+ *
+ * @param sessionId - The smart upload session ID
+ * @returns The created job
+ */
+export async function queueSmartUploadAutoCommit(sessionId: string): Promise<Job> {
+  const queue = getQueue('SMART_UPLOAD');
+
+  if (!queue) {
+    throw new Error('Smart upload queue not initialized');
+  }
+
+  const job = await queue.add(
+    SMART_UPLOAD_JOB_NAMES.AUTO_COMMIT,
+    { sessionId } as SmartUploadAutoCommitData,
+    {
+      priority: 3, // Higher priority than second pass
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 5000 },
+      removeOnComplete: 100,
+      removeOnFail: 50,
+    }
+  );
+
+  logger.info('Smart upload auto-commit job queued', { jobId: job.id, sessionId });
+  return job;
+}
+
 // =============================================================================
 // Job Status Types
 // =============================================================================
@@ -119,6 +154,7 @@ export interface SmartUploadJobProgress {
   step: SmartUploadStep;
   percent: number;
   message?: string;
+  sessionId?: string;
 }
 
 export type SmartUploadStep =
@@ -131,7 +167,8 @@ export type SmartUploadStep =
   | 'saving'
   | 'complete'
   | 'failed'
-  | 'queued_for_second_pass';
+  | 'queued_for_second_pass'
+  | 'auto_committing';
 
 // Re-export types for convenience
-export type { SmartUploadProcessData, SmartUploadSecondPassData };
+export type { SmartUploadProcessData, SmartUploadSecondPassData, SmartUploadAutoCommitData };
