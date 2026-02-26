@@ -389,6 +389,7 @@ async function fetchOllamaModels(endpoint: string): Promise<ModelInfo[]> {
   const response = await fetch(`${endpoint}/api/tags`, {
     method: 'GET',
     headers: { 'Content-Type': 'application/json' },
+    signal: AbortSignal.timeout(5_000),
   });
 
   if (!response.ok) {

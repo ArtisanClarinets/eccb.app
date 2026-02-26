@@ -2,12 +2,22 @@ import { prisma } from '@/lib/db';
 import { auth } from '@/lib/auth/config';
 import { headers } from 'next/headers';
 
+/**
+ * Serialize a value for storage in Prisma's String column.
+ * Strings pass through unchanged; objects are JSON-stringified.
+ */
+function serializeValue(v: unknown): string | null {
+  if (v === null || v === undefined) return null;
+  if (typeof v === 'string') return v;
+  return JSON.stringify(v);
+}
+
 export async function auditLog(data: {
   action: string;
   entityType: string;
   entityId?: string;
-  oldValues?: any;
-  newValues?: any;
+  oldValues?: unknown;
+  newValues?: unknown;
 }): Promise<void> {
   try {
     const headersList = await headers();
@@ -22,8 +32,8 @@ export async function auditLog(data: {
         action: data.action,
         entityType: data.entityType,
         entityId: data.entityId,
-        oldValues: data.oldValues ?? null,
-        newValues: data.newValues ?? null,
+        oldValues: serializeValue(data.oldValues),
+        newValues: serializeValue(data.newValues),
       },
     });
   } catch (error) {

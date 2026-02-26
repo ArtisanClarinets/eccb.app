@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getSession } from '@/lib/auth/guards';
-import { requirePermission } from '@/lib/auth/permissions';
+import { checkUserPermission } from '@/lib/auth/permissions';
 import { logger } from '@/lib/logger';
 import type { ParsedPartRecord, CuttingInstruction, ParseStatus, SecondPassStatus } from '@/types/smart-upload';
 
@@ -37,7 +37,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Check permission - require music:read or music:edit permission
-    await requirePermission('music:read');
+    const hasPermission = await checkUserPermission(session.user.id, 'music:read');
+    if (!hasPermission) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     // Get search params
     const searchParams = request.nextUrl.searchParams;

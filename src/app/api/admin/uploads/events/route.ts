@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { getQueueEvents } from '@/lib/jobs/queue';
+import { initializeQueues, getQueueEvents } from '@/lib/jobs/queue';
 import { logger } from '@/lib/logger';
 import { getSession } from '@/lib/auth/guards';
 import { checkUserPermission } from '@/lib/auth/permissions';
@@ -33,6 +33,7 @@ export async function GET(request: NextRequest) {
 
   const sessionId = request.nextUrl.searchParams.get('sessionId');
 
+  initializeQueues();
   const queueEvents = getQueueEvents('SMART_UPLOAD');
 
   if (!queueEvents) {

@@ -7,7 +7,7 @@
  */
 
 import { Job } from 'bullmq';
-import { getQueue } from './queue';
+import { getQueue, initializeQueues } from './queue';
 import { logger } from '@/lib/logger';
 
 // =============================================================================
@@ -53,6 +53,7 @@ export async function queueSmartUploadProcess(
   sessionId: string,
   fileId: string
 ): Promise<Job> {
+  initializeQueues();
   const queue = getQueue('SMART_UPLOAD');
 
   if (!queue) {
@@ -90,6 +91,7 @@ export async function queueSmartUploadProcess(
 export async function queueSmartUploadSecondPass(
   sessionId: string
 ): Promise<Job> {
+  initializeQueues();
   const queue = getQueue('SMART_UPLOAD');
 
   if (!queue) {
@@ -124,6 +126,7 @@ export async function queueSmartUploadSecondPass(
  * @returns The created job
  */
 export async function queueSmartUploadAutoCommit(sessionId: string): Promise<Job> {
+  initializeQueues();
   const queue = getQueue('SMART_UPLOAD');
 
   if (!queue) {

@@ -110,10 +110,14 @@ export async function POST(request: NextRequest) {
       }
 
       case 'gemini': {
-        const base = (endpoint?.trim() || getDefaultEndpointForProvider('gemini')).replace(/\/$/, '');
+        const rawBase = (endpoint?.trim() || getDefaultEndpointForProvider('gemini')).replace(/\/$/, '');
+        // Ensure /v1beta is present regardless of what the user saved
+        const base = rawBase.endsWith('/v1beta')
+          ? rawBase
+          : rawBase.replace(/\/v\d+[a-z]*$/, '') + '/v1beta';
         const key = apiKey ? `?key=${encodeURIComponent(apiKey)}` : '';
-        // Gemini's model API tests for a specific model, not a general list
-        testUrl = `${base}/models/${model}${key}`;
+        // Use model list endpoint instead of specific model — more reliable
+        testUrl = `${base}/models${key}`;
         break;
       }
 

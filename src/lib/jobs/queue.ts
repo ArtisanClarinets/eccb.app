@@ -69,9 +69,15 @@ const queues: QueueInstances = {
 const queueEvents: Map<string, QueueEvents> = new Map();
 
 /**
- * Initialize all queues
+ * Initialize all queues.
+ * Safe to call multiple times — subsequent calls are no-ops.
  */
+let _queuesInitialized = false;
+
 export function initializeQueues(): void {
+  if (_queuesInitialized) return;
+  _queuesInitialized = true;
+
   const connection = getRedisConnection();
 
   // Email queue
