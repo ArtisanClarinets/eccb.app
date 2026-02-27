@@ -146,3 +146,5 @@ export class AnthropicAdapter implements LLMAdapter {
     };
   }
 }
+
+export const adapter = new AnthropicAdapter();

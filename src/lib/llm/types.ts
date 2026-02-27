@@ -1,4 +1,13 @@
-export type LLMProvider = 'openai' | 'anthropic' | 'openrouter' | 'gemini' | 'ollama' | 'custom';
+export type LLMProvider =
+  | 'openai'
+  | 'anthropic'
+  | 'openrouter'
+  | 'gemini'
+  | 'ollama'
+  | 'ollama-cloud'
+  | 'mistral'
+  | 'groq'
+  | 'custom';
 
 export interface LLMConfig {
   llm_provider: LLMProvider;
@@ -7,6 +16,9 @@ export interface LLMConfig {
   llm_anthropic_api_key?: string;
   llm_openrouter_api_key?: string;
   llm_gemini_api_key?: string;
+  llm_ollama_cloud_api_key?: string;
+  llm_mistral_api_key?: string;
+  llm_groq_api_key?: string;
   llm_custom_api_key?: string;
   llm_vision_model?: string;
   llm_verification_model?: string;

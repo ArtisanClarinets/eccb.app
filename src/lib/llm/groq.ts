@@ -1,6 +1,6 @@
-// src/lib/llm/ollama-cloud.ts
+// src/lib/llm/groq.ts
 // ============================================================
-// Adapter for the Ollama Cloud API.
+// Adapter for the Groq API.
 // Assumes an OpenAI-compatible endpoint structure.
 // ============================================================
 
@@ -12,17 +12,17 @@ import {
 } from './types';
 
 /**
- * Implements the LLMAdapter for the official Ollama Cloud service.
+ * Implements the LLMAdapter for the Groq API.
  *
- * This adapter is built on the assumption that the Ollama Cloud API
- * follows the OpenAI completions API format, which is a common standard for
- * serving LLM models.
+ * This adapter is built for the Groq API, which provides extremely
+ * fast inference on its LPU hardware and uses an OpenAI-compatible
+ * API format.
  *
- * @see https://ollama.com/cloud
+ * @see https://console.groq.com/docs/
  */
-export class OllamaCloudAdapter implements LLMAdapter {
+export class GroqAdapter implements LLMAdapter {
   /**
-   * Constructs the API request for the Ollama Cloud service.
+   * Constructs the API request for the Groq service.
    *
    * @param config - The LLM configuration containing the API key, endpoint, and model.
    * @param request - The vision request with prompt and images.
@@ -32,8 +32,7 @@ export class OllamaCloudAdapter implements LLMAdapter {
     config: LLMConfig,
     request: VisionRequest,
   ): { url: string; headers: Record<string, string>; body: unknown } {
-    const { llm_endpoint_url, llm_vision_model, llm_ollama_cloud_api_key } =
-      config;
+    const { llm_endpoint_url, llm_vision_model, llm_groq_api_key } = config;
     const {
       images,
       prompt,
@@ -45,18 +44,18 @@ export class OllamaCloudAdapter implements LLMAdapter {
     } = request;
 
     if (!llm_endpoint_url) {
-      throw new Error('Ollama Cloud endpoint URL is not configured.');
+      throw new Error('Groq endpoint URL is not configured.');
     }
 
-    if (!llm_ollama_cloud_api_key) {
-      throw new Error('Ollama Cloud API key is not configured.');
+    if (!llm_groq_api_key) {
+      throw new Error('Groq API key is not configured.');
     }
 
     const url = `${llm_endpoint_url.replace(/\/$/, '')}/chat/completions`;
 
     const headers = {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${llm_ollama_cloud_api_key}`,
+      Authorization: `Bearer ${llm_groq_api_key}`,
     };
 
     const messages = [];
@@ -65,6 +64,10 @@ export class OllamaCloudAdapter implements LLMAdapter {
       messages.push({ role: 'system', content: system });
     }
 
+    // IMPORTANT: As of early 2024, Groq does not support vision/image inputs.
+    // The image content is constructed here to maintain a consistent interface,
+    // but the Groq API will likely reject requests containing image data.
+    // The calling service should ideally avoid sending image requests to Groq.
     const imageContent = images.map((img) => ({
       type: 'image_url',
       image_url: {
@@ -92,7 +95,7 @@ export class OllamaCloudAdapter implements LLMAdapter {
   }
 
   /**
-   * Parses the JSON response from the Ollama Cloud API.
+   * Parses the JSON response from the Groq API.
    *
    * @param response - The raw JSON response from the API.
    * @returns A structured VisionResponse object.
@@ -116,4 +119,4 @@ export class OllamaCloudAdapter implements LLMAdapter {
   }
 }
 
-export const adapter = new OllamaCloudAdapter();
+export const adapter = new GroqAdapter();

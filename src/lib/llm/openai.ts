@@ -161,3 +161,5 @@ export class OpenAIAdapter implements LLMAdapter {
     };
   }
 }
+
+export const adapter = new OpenAIAdapter();

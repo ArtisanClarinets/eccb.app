@@ -23,6 +23,9 @@ export interface LLMRuntimeConfig {
   anthropicApiKey: string;
   openrouterApiKey: string;
   geminiApiKey: string;
+  ollamaCloudApiKey: string;
+  mistralApiKey: string;
+  groqApiKey: string;
   customApiKey: string;
   confidenceThreshold: number;
   twoPassEnabled: boolean;
@@ -57,6 +60,9 @@ const DB_KEYS = [
   'llm_anthropic_api_key',
   'llm_openrouter_api_key',
   'llm_gemini_api_key',
+  'llm_ollama_cloud_api_key',
+  'llm_mistral_api_key',
+  'llm_groq_api_key',
   'llm_custom_api_key',
   // Models
   'llm_vision_model',
@@ -155,6 +161,11 @@ export async function loadLLMConfig(): Promise<LLMRuntimeConfig> {
           db['llm_ollama_endpoint'] ||
           getDefaultEndpointForProvider('ollama');
         break;
+      case 'ollama-cloud':
+        endpointUrl =
+          process.env.LLM_OLLAMA_CLOUD_ENDPOINT ||
+          getDefaultEndpointForProvider('ollama-cloud');
+        break;
       case 'custom':
         endpointUrl =
           process.env.LLM_CUSTOM_BASE_URL ||
@@ -204,6 +215,9 @@ export async function loadLLMConfig(): Promise<LLMRuntimeConfig> {
     anthropicApiKey: db['llm_anthropic_api_key'] || process.env.LLM_ANTHROPIC_API_KEY || '',
     openrouterApiKey: db['llm_openrouter_api_key'] || process.env.LLM_OPENROUTER_API_KEY || '',
     geminiApiKey: db['llm_gemini_api_key'] || process.env.LLM_GEMINI_API_KEY || '',
+    ollamaCloudApiKey: db['llm_ollama_cloud_api_key'] || process.env.LLM_OLLAMA_CLOUD_API_KEY || '',
+    mistralApiKey: db['llm_mistral_api_key'] || process.env.LLM_MISTRAL_API_KEY || '',
+    groqApiKey: db['llm_groq_api_key'] || process.env.LLM_GROQ_API_KEY || '',
     customApiKey: db['llm_custom_api_key'] || process.env.LLM_CUSTOM_API_KEY || '',
     // Prefer smart_upload_* canonical keys, fall back to legacy llm_* keys
     confidenceThreshold: Number(
@@ -265,6 +279,9 @@ export function runtimeToAdapterConfig(cfg: LLMRuntimeConfig) {
     llm_anthropic_api_key: cfg.anthropicApiKey,
     llm_openrouter_api_key: cfg.openrouterApiKey,
     llm_gemini_api_key: cfg.geminiApiKey,
+    llm_ollama_cloud_api_key: cfg.ollamaCloudApiKey,
+    llm_mistral_api_key: cfg.mistralApiKey,
+    llm_groq_api_key: cfg.groqApiKey,
     llm_custom_api_key: cfg.customApiKey,
   } as const;
 }

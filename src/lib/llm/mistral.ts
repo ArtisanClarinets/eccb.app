@@ -1,6 +1,6 @@
-// src/lib/llm/ollama-cloud.ts
+// src/lib/llm/mistral.ts
 // ============================================================
-// Adapter for the Ollama Cloud API.
+// Adapter for the Mistral AI API.
 // Assumes an OpenAI-compatible endpoint structure.
 // ============================================================
 
@@ -12,17 +12,16 @@ import {
 } from './types';
 
 /**
- * Implements the LLMAdapter for the official Ollama Cloud service.
+ * Implements the LLMAdapter for the Mistral AI API.
  *
- * This adapter is built on the assumption that the Ollama Cloud API
- * follows the OpenAI completions API format, which is a common standard for
- * serving LLM models.
+ * This adapter is built for the Mistral API, which follows the
+ * standard OpenAI completions API format.
  *
- * @see https://ollama.com/cloud
+ * @see https://docs.mistral.ai/
  */
-export class OllamaCloudAdapter implements LLMAdapter {
+export class MistralAdapter implements LLMAdapter {
   /**
-   * Constructs the API request for the Ollama Cloud service.
+   * Constructs the API request for the Mistral AI service.
    *
    * @param config - The LLM configuration containing the API key, endpoint, and model.
    * @param request - The vision request with prompt and images.
@@ -32,8 +31,7 @@ export class OllamaCloudAdapter implements LLMAdapter {
     config: LLMConfig,
     request: VisionRequest,
   ): { url: string; headers: Record<string, string>; body: unknown } {
-    const { llm_endpoint_url, llm_vision_model, llm_ollama_cloud_api_key } =
-      config;
+    const { llm_endpoint_url, llm_vision_model, llm_mistral_api_key } = config;
     const {
       images,
       prompt,
@@ -45,18 +43,18 @@ export class OllamaCloudAdapter implements LLMAdapter {
     } = request;
 
     if (!llm_endpoint_url) {
-      throw new Error('Ollama Cloud endpoint URL is not configured.');
+      throw new Error('Mistral endpoint URL is not configured.');
     }
 
-    if (!llm_ollama_cloud_api_key) {
-      throw new Error('Ollama Cloud API key is not configured.');
+    if (!llm_mistral_api_key) {
+      throw new Error('Mistral API key is not configured.');
     }
 
     const url = `${llm_endpoint_url.replace(/\/$/, '')}/chat/completions`;
 
     const headers = {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${llm_ollama_cloud_api_key}`,
+      Authorization: `Bearer ${llm_mistral_api_key}`,
     };
 
     const messages = [];
@@ -65,6 +63,10 @@ export class OllamaCloudAdapter implements LLMAdapter {
       messages.push({ role: 'system', content: system });
     }
 
+    // Note: As of early 2024, Mistral's official API does not support inline images
+    // in the same way as OpenAI's vision models. This implementation assumes a
+    // future-compatible or OpenAI-proxy-compatible format. If targeting native
+    // Mistral, this would need adjustment. For now, we follow the common standard.
     const imageContent = images.map((img) => ({
       type: 'image_url',
       image_url: {
@@ -92,7 +94,7 @@ export class OllamaCloudAdapter implements LLMAdapter {
   }
 
   /**
-   * Parses the JSON response from the Ollama Cloud API.
+   * Parses the JSON response from the Mistral API.
    *
    * @param response - The raw JSON response from the API.
    * @returns A structured VisionResponse object.
@@ -116,4 +118,4 @@ export class OllamaCloudAdapter implements LLMAdapter {
   }
 }
 
-export const adapter = new OllamaCloudAdapter();
+export const adapter = new MistralAdapter();

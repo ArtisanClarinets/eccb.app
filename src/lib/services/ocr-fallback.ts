@@ -79,7 +79,8 @@ function asError(err: unknown): Error {
   return err instanceof Error ? err : new Error(String(err));
 }
 
-function safeErrorDetails(err: unknown) {
+// helper for debugging; currently unused
+function _safeErrorDetails(err: unknown) {
   const e = asError(err);
   return { errorMessage: e.message, errorName: e.name, errorStack: e.stack };
 }
@@ -103,7 +104,7 @@ function normalizeWhitespace(input: string): string {
   return input.replace(/\s+/g, ' ').trim();
 }
 
-function stripPdfExtension(input: string): string {
+function _stripPdfExtension(input: string): string {
   return input.replace(/\.pdf$/i, '').trim();
 }
 

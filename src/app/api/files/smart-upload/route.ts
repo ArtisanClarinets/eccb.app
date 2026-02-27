@@ -36,23 +36,6 @@ function getExtension(filename: string): string {
   return filename.slice(lastDot).toLowerCase();
 }
 
-function getUploadMessage(
-  routingDecision: RoutingDecision,
-  _parseStatus: ParseStatus,
-  _partsCount: number
-): string {
-  switch (routingDecision) {
-    case 'auto_parse_auto_approve':
-      return 'Upload successful. High confidence - processing in background.';
-    case 'auto_parse_second_pass':
-      return 'Upload successful. Processing in background - second pass verification queued.';
-    case 'no_parse_second_pass':
-      return 'Upload successful. Low confidence - sent to second pass analysis before splitting.';
-    default:
-      return 'Upload successful. Processing in background - please review the extracted metadata before committing to the music library.';
-  }
-}
-
 // =============================================================================
 // Route Handler
 // =============================================================================

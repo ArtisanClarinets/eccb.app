@@ -1,7 +1,7 @@
-// src/lib/llm/ollama-cloud.ts
+// src/lib/llm/ollama.ts
 // ============================================================
-// Adapter for the Ollama Cloud API.
-// Assumes an OpenAI-compatible endpoint structure.
+// Adapter for a local or self-hosted Ollama instance.
+// Assumes an OpenAI-compatible API format.
 // ============================================================
 
 import {
@@ -12,19 +12,19 @@ import {
 } from './types';
 
 /**
- * Implements the LLMAdapter for the official Ollama Cloud service.
+ * Implements the LLMAdapter for a local Ollama instance.
  *
- * This adapter is built on the assumption that the Ollama Cloud API
- * follows the OpenAI completions API format, which is a common standard for
- * serving LLM models.
+ * This adapter is designed for local or self-hosted Ollama installations,
+ * which typically do not require an API key. It assumes the standard
+ * OpenAI-compatible `/chat/completions` endpoint.
  *
- * @see https://ollama.com/cloud
+ * @see https://ollama.com
  */
-export class OllamaCloudAdapter implements LLMAdapter {
+export class OllamaAdapter implements LLMAdapter {
   /**
-   * Constructs the API request for the Ollama Cloud service.
+   * Constructs the API request for the local Ollama service.
    *
-   * @param config - The LLM configuration containing the API key, endpoint, and model.
+   * @param config - The LLM configuration containing the endpoint and model.
    * @param request - The vision request with prompt and images.
    * @returns An object containing the URL, headers, and body for the fetch request.
    */
@@ -32,8 +32,7 @@ export class OllamaCloudAdapter implements LLMAdapter {
     config: LLMConfig,
     request: VisionRequest,
   ): { url: string; headers: Record<string, string>; body: unknown } {
-    const { llm_endpoint_url, llm_vision_model, llm_ollama_cloud_api_key } =
-      config;
+    const { llm_endpoint_url, llm_vision_model } = config;
     const {
       images,
       prompt,
@@ -45,18 +44,13 @@ export class OllamaCloudAdapter implements LLMAdapter {
     } = request;
 
     if (!llm_endpoint_url) {
-      throw new Error('Ollama Cloud endpoint URL is not configured.');
-    }
-
-    if (!llm_ollama_cloud_api_key) {
-      throw new Error('Ollama Cloud API key is not configured.');
+      throw new Error('Ollama endpoint URL is not configured.');
     }
 
     const url = `${llm_endpoint_url.replace(/\/$/, '')}/chat/completions`;
 
     const headers = {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${llm_ollama_cloud_api_key}`,
     };
 
     const messages = [];
@@ -92,7 +86,7 @@ export class OllamaCloudAdapter implements LLMAdapter {
   }
 
   /**
-   * Parses the JSON response from the Ollama Cloud API.
+   * Parses the JSON response from the Ollama API.
    *
    * @param response - The raw JSON response from the API.
    * @returns A structured VisionResponse object.
@@ -116,4 +110,4 @@ export class OllamaCloudAdapter implements LLMAdapter {
   }
 }
 
-export const adapter = new OllamaCloudAdapter();
+export const adapter = new OllamaAdapter();

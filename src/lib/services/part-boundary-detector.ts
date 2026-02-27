@@ -84,7 +84,7 @@ function safeString(s: unknown): string {
   return typeof s === 'string' ? s : '';
 }
 
-function safeErrorDetails(err: unknown) {
+function _safeErrorDetails(err: unknown) {
   const e = err instanceof Error ? err : new Error(String(err));
   return { errorMessage: e.message, errorName: e.name, errorStack: e.stack };
 }
