@@ -1,0 +1,667 @@
+npm run dev:full
+
+> eccb-platform@0.1.0 dev:full
+> concurrently -n "next,workers" -c "cyan,magenta" "next dev --port 3025" "tsx src/workers/index.ts"
+
+[next] ▲ Next.js 16.1.6 (Turbopack)
+[next] - Local:         http://localhost:3025
+[next] - Network:       http://192.168.1.152:3025
+[next] - Environments: .env
+[next] - Experiments (use with caution):
+[next]   · cpus: 4
+[next]   · optimizePackageImports
+[next] 
+[next] ✓ Starting...
+[next] ✓ Ready in 574ms
+[workers] 2026-02-27T08:40:18.111Z INFO  Starting ECCB workers...
+[workers] 2026-02-27T08:40:18.114Z INFO  All job queues initialized
+[workers] 2026-02-27T08:40:18.115Z INFO  Email workers started [singleConcurrency=3 bulkConcurrency=1]
+[workers] 2026-02-27T08:40:18.115Z INFO  Scheduler workers started
+[workers] 2026-02-27T08:40:18.115Z INFO  Smart upload worker started [concurrency=2]
+[workers] 2026-02-27T08:40:18.116Z DEBUG Running scheduler tick
+[workers] 2026-02-27T08:40:18.116Z INFO  Scheduler intervals started [schedulerIntervalMs=60000 cleanupIntervalMs=86400000]
+[workers] 2026-02-27T08:40:18.117Z INFO  ECCB workers started successfully
+[workers] 2026-02-27T08:40:18.122Z INFO  Health check server listening on port 3001
+[workers] 2026-02-27T08:40:18.191Z INFO  Smart upload processor worker started [concurrency=3]
+[next] 2026-02-27T08:40:25.289Z INFO  Request started: GET / [requestId="req_e67f45aa-de86-40af-a0b9-9db4cc08fa26" method="GET" path="/" userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" ip="::ffff:127.0.0.1"]
+[next] 2026-02-27T08:40:25.291Z DEBUG Request completed: GET / 200 [requestId="req_e67f45aa-de86-40af-a0b9-9db4cc08fa26" method="GET" path="/" status=200 duration=2 durationMs=2]
+[next]  GET / 200 in 919ms (compile: 486ms, proxy.ts: 54ms, render: 379ms)
+[next] 2026-02-27T08:40:29.692Z INFO  Request started: GET /admin [requestId="req_8452de58-8903-447e-aaf3-12d2d6fc77be" method="GET" path="/admin" userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" ip="::ffff:127.0.0.1"]
+[next] 2026-02-27T08:40:29.692Z DEBUG Request completed: GET /admin 200 [requestId="req_8452de58-8903-447e-aaf3-12d2d6fc77be" method="GET" path="/admin" status=200 duration=0 durationMs=0]
+[next]  GET /admin 200 in 287ms (compile: 30ms, proxy.ts: 5ms, render: 252ms)
+[next] 2026-02-27T08:40:35.124Z INFO  Request started: GET /admin/uploads/settings [requestId="req_125a7952-6bc9-45ef-a3f6-446765a8caaa" method="GET" path="/admin/uploads/settings" userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" ip="::ffff:127.0.0.1"]
+[next] 2026-02-27T08:40:35.124Z DEBUG Request completed: GET /admin/uploads/settings 200 [requestId="req_125a7952-6bc9-45ef-a3f6-446765a8caaa" method="GET" path="/admin/uploads/settings" status=200 duration=0 durationMs=0]
+[next]  GET /admin/uploads/settings 200 in 34ms (compile: 17ms, proxy.ts: 6ms, render: 11ms)
+[next] 2026-02-27T08:40:35.232Z INFO  Request started: GET /api/admin/uploads/settings [requestId="req_99e9fa80-b4eb-4497-a541-a37bdb9f0b0f" method="GET" path="/api/admin/uploads/settings" userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" ip="::ffff:127.0.0.1"]
+[next] 2026-02-27T08:40:35.232Z DEBUG Request completed: GET /api/admin/uploads/settings 200 [requestId="req_99e9fa80-b4eb-4497-a541-a37bdb9f0b0f" method="GET" path="/api/admin/uploads/settings" status=200 duration=0 durationMs=0]
+[next]  GET /api/admin/uploads/settings 200 in 270ms (compile: 249ms, proxy.ts: 2ms, render: 19ms)
+[next] 2026-02-27T08:40:35.537Z INFO  Request started: GET /api/admin/uploads/settings [requestId="req_aaf29343-c984-4d7d-ba29-2b260a4585dd" method="GET" path="/api/admin/uploads/settings" userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" ip="::ffff:127.0.0.1"]
+[next] 2026-02-27T08:40:35.537Z DEBUG Request completed: GET /api/admin/uploads/settings 200 [requestId="req_aaf29343-c984-4d7d-ba29-2b260a4585dd" method="GET" path="/api/admin/uploads/settings" status=200 duration=0 durationMs=0]
+[next]  GET /api/admin/uploads/settings 200 in 21ms (compile: 3ms, proxy.ts: 4ms, render: 15ms)
+[next] 2026-02-27T08:40:35.598Z INFO  Request started: GET /api/admin/uploads/models [requestId="req_a333cb95-5300-4ce6-a6d6-2f7b0935677a" method="GET" path="/api/admin/uploads/models" query="?provider=gemini&endpoint=https%3A%2F%2Fgenerativelanguage.googleapis.com%2Fv1beta" userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" ip="::ffff:127.0.0.1"]
+[next] 2026-02-27T08:40:35.598Z DEBUG Request completed: GET /api/admin/uploads/models 200 [requestId="req_a333cb95-5300-4ce6-a6d6-2f7b0935677a" method="GET" path="/api/admin/uploads/models" status=200 duration=0 durationMs=0]
+[next] 2026-02-27T08:40:35.814Z INFO  Fetched models from provider [provider="gemini" modelCount=31 filteredForVision=true recommendedModel="models/gemini-2.5-flash" userId="kb8ormO1GjhsWJ3mTYBhsYGIysuXvIyJ"]
+[next]  GET /api/admin/uploads/models?provider=gemini&endpoint=https%3A%2F%2Fgenerativelanguage.googleapis.com%2Fv1beta 200 in 222ms (compile: 31ms, proxy.ts: 4ms, render: 186ms)
+[next] 2026-02-27T08:40:35.821Z INFO  Request started: GET /api/admin/uploads/models [requestId="req_ddddb1e7-ec99-49e4-b951-7a925f366568" method="GET" path="/api/admin/uploads/models" query="?provider=gemini&endpoint=https%3A%2F%2Fgenerativelanguage.googleapis.com%2Fv1beta" userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" ip="::ffff:127.0.0.1"]
+[next] 2026-02-27T08:40:35.821Z DEBUG Request completed: GET /api/admin/uploads/models 200 [requestId="req_ddddb1e7-ec99-49e4-b951-7a925f366568" method="GET" path="/api/admin/uploads/models" status=200 duration=0 durationMs=0]
+[next] 2026-02-27T08:40:35.890Z INFO  Fetched models from provider [provider="gemini" modelCount=31 filteredForVision=true recommendedModel="models/gemini-2.5-flash" userId="kb8ormO1GjhsWJ3mTYBhsYGIysuXvIyJ"]
+[next]  GET /api/admin/uploads/models?provider=gemini&endpoint=https%3A%2F%2Fgenerativelanguage.googleapis.com%2Fv1beta 200 in 73ms (compile: 1976µs, proxy.ts: 3ms, render: 68ms)
+[next] 2026-02-27T08:41:04.271Z INFO  Request started: POST /api/admin/uploads/settings/test [requestId="req_6cf5e087-8e91-4478-abd1-825814f51576" method="POST" path="/api/admin/uploads/settings/test" userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" ip="::ffff:127.0.0.1"]
+[next] 2026-02-27T08:41:04.272Z DEBUG Request completed: POST /api/admin/uploads/settings/test 200 [requestId="req_6cf5e087-8e91-4478-abd1-825814f51576" method="POST" path="/api/admin/uploads/settings/test" status=200 duration=1 durationMs=1]
+[next] 2026-02-27T08:41:04.308Z INFO  Testing LLM connection [userId="kb8ormO1GjhsWJ3mTYBhsYGIysuXvIyJ" provider="gemini" model="models/gemini-2.5-flash" endpoint="https://generativelanguage.googleapis.com"]
+[next]  POST /api/admin/uploads/settings/test 200 in 173ms (compile: 27ms, proxy.ts: 5ms, render: 141ms)
+[next] 2026-02-27T08:41:06.129Z INFO  Request started: POST /api/admin/uploads/providers/discover [requestId="req_75d7d729-139b-4703-98f1-4f03c218732b" method="POST" path="/api/admin/uploads/providers/discover" userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" ip="::ffff:127.0.0.1"]
+[next] 2026-02-27T08:41:06.129Z DEBUG Request completed: POST /api/admin/uploads/providers/discover 200 [requestId="req_75d7d729-139b-4703-98f1-4f03c218732b" method="POST" path="/api/admin/uploads/providers/discover" status=200 duration=0 durationMs=0]
+[next] 2026-02-27T08:41:06.332Z INFO  Provider discovery results [userId="kb8ormO1GjhsWJ3mTYBhsYGIysuXvIyJ" available=["gemini","openrouter"]]
+[next]  POST /api/admin/uploads/providers/discover 200 in 209ms (compile: 24ms, proxy.ts: 4ms, render: 181ms)
+[workers] 2026-02-27T08:41:18.116Z DEBUG Running scheduler tick
+[next] 2026-02-27T08:41:18.155Z INFO  Request started: GET /api/admin/uploads/models [requestId="req_900ba1bc-0413-4802-b1a9-95d0f738d422" method="GET" path="/api/admin/uploads/models" query="?provider=openrouter&endpoint=https%3A%2F%2Fopenrouter.ai%2Fapi%2Fv1" userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" ip="::ffff:127.0.0.1"]
+[next] 2026-02-27T08:41:18.155Z DEBUG Request completed: GET /api/admin/uploads/models 200 [requestId="req_900ba1bc-0413-4802-b1a9-95d0f738d422" method="GET" path="/api/admin/uploads/models" status=200 duration=0 durationMs=0]
+[next] 2026-02-27T08:41:18.282Z INFO  Fetched models from provider [provider="openrouter" modelCount=93 filteredForVision=true recommendedModel="google/gemini-3.1-flash-image-preview" userId="kb8ormO1GjhsWJ3mTYBhsYGIysuXvIyJ"]
+[next]  GET /api/admin/uploads/models?provider=openrouter&endpoint=https%3A%2F%2Fopenrouter.ai%2Fapi%2Fv1 200 in 131ms (compile: 1681µs, proxy.ts: 1905µs, render: 128ms)
+[next] 2026-02-27T08:41:19.906Z INFO  Request started: GET /api/admin/uploads/models [requestId="req_b841cf54-fcd6-4a76-92d8-dca5363d8bf9" method="GET" path="/api/admin/uploads/models" query="?provider=openrouter&endpoint=https%3A%2F%2Fopenrouter.ai%2Fapi%2Fv1" userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" ip="::ffff:127.0.0.1"]
+[next] 2026-02-27T08:41:19.906Z DEBUG Request completed: GET /api/admin/uploads/models 200 [requestId="req_b841cf54-fcd6-4a76-92d8-dca5363d8bf9" method="GET" path="/api/admin/uploads/models" status=200 duration=0 durationMs=0]
+[next] 2026-02-27T08:41:19.985Z INFO  Fetched models from provider [provider="openrouter" modelCount=93 filteredForVision=true recommendedModel="google/gemini-3.1-flash-image-preview" userId="kb8ormO1GjhsWJ3mTYBhsYGIysuXvIyJ"]
+[next]  GET /api/admin/uploads/models?provider=openrouter&endpoint=https%3A%2F%2Fopenrouter.ai%2Fapi%2Fv1 200 in 84ms (compile: 1847µs, proxy.ts: 4ms, render: 78ms)
+[next] 2026-02-27T08:41:57.411Z INFO  Request started: POST /api/admin/uploads/settings/test [requestId="req_de980d09-fa01-42f4-93c9-e7f3c69c490c" method="POST" path="/api/admin/uploads/settings/test" userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" ip="::ffff:127.0.0.1"]
+[next] 2026-02-27T08:41:57.411Z DEBUG Request completed: POST /api/admin/uploads/settings/test 200 [requestId="req_de980d09-fa01-42f4-93c9-e7f3c69c490c" method="POST" path="/api/admin/uploads/settings/test" status=200 duration=0 durationMs=0]
+[next] 2026-02-27T08:41:57.418Z INFO  Testing LLM connection [userId="kb8ormO1GjhsWJ3mTYBhsYGIysuXvIyJ" provider="openrouter" model="nvidia/nemotron-nano-12b-v2-vl:free" endpoint="https://openrouter.ai"]
+[next]  POST /api/admin/uploads/settings/test 200 in 118ms (compile: 1366µs, proxy.ts: 1947µs, render: 115ms)
+[next] 2026-02-27T08:41:59.314Z INFO  Request started: PUT /api/admin/uploads/settings [requestId="req_99f81cf5-42dd-4369-8aa0-972471e55f83" method="PUT" path="/api/admin/uploads/settings" userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" ip="::ffff:127.0.0.1"]
+[next] 2026-02-27T08:41:59.314Z DEBUG Request completed: PUT /api/admin/uploads/settings 200 [requestId="req_99f81cf5-42dd-4369-8aa0-972471e55f83" method="PUT" path="/api/admin/uploads/settings" status=200 duration=0 durationMs=0]
+[next] 2026-02-27T08:41:59.344Z INFO  Smart upload settings updated [userId="kb8ormO1GjhsWJ3mTYBhsYGIysuXvIyJ" keys=["llm_provider","llm_vision_model","llm_verification_model","llm_endpoint_url"] skipped=[]]
+[next]  PUT /api/admin/uploads/settings 200 in 34ms (compile: 1256µs, proxy.ts: 3ms, render: 30ms)
+[next] 2026-02-27T08:42:01.216Z INFO  Request started: GET /admin/uploads [requestId="req_c43470e9-f671-4ece-9ea9-0cd01fbfe54e" method="GET" path="/admin/uploads" userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" ip="::ffff:127.0.0.1"]
+[next] 2026-02-27T08:42:01.216Z DEBUG Request completed: GET /admin/uploads 200 [requestId="req_c43470e9-f671-4ece-9ea9-0cd01fbfe54e" method="GET" path="/admin/uploads" status=200 duration=0 durationMs=0]
+[next]  GET /admin/uploads 200 in 41ms (compile: 17ms, proxy.ts: 4ms, render: 20ms)
+[next] 2026-02-27T08:42:08.169Z INFO  Request started: POST /api/files/smart-upload [requestId="req_9bc7565e-9f64-4be0-be58-55a700b5534c" method="POST" path="/api/files/smart-upload" userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" ip="::ffff:127.0.0.1"]
+[next] 2026-02-27T08:42:08.169Z DEBUG Request completed: POST /api/files/smart-upload 200 [requestId="req_9bc7565e-9f64-4be0-be58-55a700b5534c" method="POST" path="/api/files/smart-upload" status=200 duration=0 durationMs=0]
+[next] 2026-02-27T08:42:08.473Z INFO  Processing smart upload [userId="kb8ormO1GjhsWJ3mTYBhsYGIysuXvIyJ" filename="AmericanPatrol.pdf" size=4036101]
+[next] 2026-02-27T08:42:08.474Z INFO  Storage directory initialized: /home/dylan/eccb.app/storage
+[next] 2026-02-27T08:42:08.477Z INFO  File uploaded to local storage [key="smart-upload/25ca0875-9464-48ca-b733-4fbab3d09b27/original.pdf" path="/home/dylan/eccb.app/storage/smart-upload/25ca0875-9464-48ca-b733-4fbab3d09b27/original.pdf"]
+[next] 2026-02-27T08:42:08.481Z INFO  Smart upload session created, queueing for processing [sessionId="25ca0875-9464-48ca-b733-4fbab3d09b27" userId="kb8ormO1GjhsWJ3mTYBhsYGIysuXvIyJ"]
+[next] 2026-02-27T08:42:08.483Z INFO  All job queues initialized
+[next]  POST /api/files/smart-upload 200 in 319ms (compile: 137ms, proxy.ts: 154ms, render: 29ms)
+[workers] 2026-02-27T08:42:08.499Z INFO  Starting smart upload processing [sessionId="25ca0875-9464-48ca-b733-4fbab3d09b27" fileId="cmm4n8t7j0001hziwy0zofc8i" jobId="1"]
+[next] 2026-02-27T08:42:08.501Z INFO  Smart upload process job queued [jobId="1" sessionId="25ca0875-9464-48ca-b733-4fbab3d09b27" fileId="cmm4n8t7j0001hziwy0zofc8i"]
+[workers] 2026-02-27T08:42:08.506Z INFO  Storage directory initialized: /home/dylan/eccb.app/storage
+[next] 2026-02-27T08:42:08.511Z INFO  Request started: GET /api/admin/uploads/events [requestId="req_dadd485b-ce3c-4adf-a4ee-ae7611520c80" method="GET" path="/api/admin/uploads/events" query="?sessionId=25ca0875-9464-48ca-b733-4fbab3d09b27" userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" ip="::ffff:127.0.0.1"]
+[next] 2026-02-27T08:42:08.511Z DEBUG Request completed: GET /api/admin/uploads/events 200 [requestId="req_dadd485b-ce3c-4adf-a4ee-ae7611520c80" method="GET" path="/api/admin/uploads/events" status=200 duration=0 durationMs=0]
+[next] 2026-02-27T08:42:08.591Z DEBUG SSE connection established [sessionId="25ca0875-9464-48ca-b733-4fbab3d09b27"]
+[workers] 2026-02-27T08:42:08.996Z WARN  renderPdfPageBatch: failed to render page [idx=1 err={}]
+[workers] 2026-02-27T08:42:09.060Z WARN  renderPdfPageBatch: failed to render page [idx=11 err={}]
+[workers] 2026-02-27T08:42:09.108Z WARN  renderPdfPageBatch: failed to render page [idx=21 err={}]
+[workers] 2026-02-27T08:42:09.137Z WARN  renderPdfPageBatch: failed to render page [idx=31 err={}]
+[workers] 2026-02-27T08:42:09.156Z WARN  renderPdfPageBatch: failed to render page [idx=41 err={}]
+[workers] 2026-02-27T08:42:09.359Z WARN  renderPdfPageBatch: failed to render page [idx=66 err={}]
+[workers] 2026-02-27T08:42:09.359Z INFO  PDF pages sampled for LLM [totalPages=67 sampledCount=8 indices=[0,1,11,21,31,41,51,66]]
+[workers] 2026-02-27T08:42:09.479Z INFO  PDF text extraction complete [totalPages=67 pagesToProcess=67 pagesWithText=10 textLayerCoverage="15%" hasTextLayer=false]
+[workers] 2026-02-27T08:42:09.576Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=1 err={}]
+[workers] 2026-02-27T08:42:09.592Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=2 err={}]
+[workers] 2026-02-27T08:42:09.608Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=3 err={}]
+[workers] 2026-02-27T08:42:09.624Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=4 err={}]
+[workers] 2026-02-27T08:42:09.639Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=5 err={}]
+[workers] 2026-02-27T08:42:09.697Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=6 err={}]
+[workers] 2026-02-27T08:42:09.753Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=7 err={}]
+[workers] 2026-02-27T08:42:09.768Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=8 err={}]
+[workers] 2026-02-27T08:42:09.782Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=9 err={}]
+[workers] 2026-02-27T08:42:09.836Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=10 err={}]
+[workers] 2026-02-27T08:42:09.897Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=11 err={}]
+[workers] 2026-02-27T08:42:09.916Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=12 err={}]
+[workers] 2026-02-27T08:42:09.931Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=13 err={}]
+[workers] 2026-02-27T08:42:09.946Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=14 err={}]
+[workers] 2026-02-27T08:42:09.963Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=15 err={}]
+[workers] 2026-02-27T08:42:09.981Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=16 err={}]
+[workers] 2026-02-27T08:42:09.996Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=17 err={}]
+[workers] 2026-02-27T08:42:10.011Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=18 err={}]
+[workers] 2026-02-27T08:42:10.026Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=19 err={}]
+[workers] 2026-02-27T08:42:10.043Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=20 err={}]
+[workers] 2026-02-27T08:42:10.057Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=21 err={}]
+[workers] 2026-02-27T08:42:10.072Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=22 err={}]
+[workers] 2026-02-27T08:42:10.088Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=23 err={}]
+[workers] 2026-02-27T08:42:10.104Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=24 err={}]
+[workers] 2026-02-27T08:42:10.118Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=25 err={}]
+[workers] 2026-02-27T08:42:10.134Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=26 err={}]
+[workers] 2026-02-27T08:42:10.150Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=27 err={}]
+[workers] 2026-02-27T08:42:10.165Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=28 err={}]
+[workers] 2026-02-27T08:42:10.179Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=29 err={}]
+[workers] 2026-02-27T08:42:10.193Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=30 err={}]
+[workers] 2026-02-27T08:42:10.208Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=31 err={}]
+[workers] 2026-02-27T08:42:10.225Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=32 err={}]
+[workers] 2026-02-27T08:42:10.243Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=33 err={}]
+[workers] 2026-02-27T08:42:10.263Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=34 err={}]
+[workers] 2026-02-27T08:42:10.280Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=35 err={}]
+[workers] 2026-02-27T08:42:10.293Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=36 err={}]
+[workers] 2026-02-27T08:42:10.317Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=37 err={}]
+[workers] 2026-02-27T08:42:10.334Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=38 err={}]
+[workers] 2026-02-27T08:42:10.350Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=39 err={}]
+[workers] 2026-02-27T08:42:10.368Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=40 err={}]
+[workers] 2026-02-27T08:42:10.383Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=41 err={}]
+[workers] 2026-02-27T08:42:10.397Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=42 err={}]
+[workers] 2026-02-27T08:42:10.413Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=43 err={}]
+[workers] 2026-02-27T08:42:10.971Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=52 err={}]
+[workers] 2026-02-27T08:42:10.985Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=53 err={}]
+[workers] 2026-02-27T08:42:11.000Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=54 err={}]
+[workers] 2026-02-27T08:42:11.017Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=55 err={}]
+[workers] 2026-02-27T08:42:11.030Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=56 err={}]
+[workers] 2026-02-27T08:42:11.044Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=57 err={}]
+[workers] 2026-02-27T08:42:11.061Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=58 err={}]
+[workers] 2026-02-27T08:42:11.079Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=59 err={}]
+[workers] 2026-02-27T08:42:11.094Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=60 err={}]
+[workers] 2026-02-27T08:42:11.109Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=61 err={}]
+[workers] 2026-02-27T08:42:11.125Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=62 err={}]
+[workers] 2026-02-27T08:42:11.142Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=63 err={}]
+[workers] 2026-02-27T08:42:11.156Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=64 err={}]
+[workers] 2026-02-27T08:42:11.171Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=65 err={}]
+[workers] 2026-02-27T08:42:11.221Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=66 err={}]
+[workers] 2026-02-27T08:42:11.222Z DEBUG Calling vision LLM [provider="openrouter" model="nvidia/nemotron-nano-12b-v2-vl:free" imageCount=67 labeledInputCount=0 responseFormat="json" attempt=1]
+[workers] 2026-02-27T08:42:11.323Z WARN  LLM call failed, retrying [error="LLM call failed: 401 Unauthorized — {\"error\":{\"message\":\"Missing Authentication header\",\"code\":401}}" waitMs=1000 attempt=1]
+[workers] 2026-02-27T08:42:12.324Z DEBUG Calling vision LLM [provider="openrouter" model="nvidia/nemotron-nano-12b-v2-vl:free" imageCount=67 labeledInputCount=0 responseFormat="json" attempt=2]
+[workers] 2026-02-27T08:42:12.353Z WARN  LLM call failed, retrying [error="LLM call failed: 401 Unauthorized — {\"error\":{\"message\":\"Missing Authentication header\",\"code\":401}}" waitMs=2000 attempt=2]
+[next]  GET /.well-known/appspecific/com.chrome.devtools.json 404 in 882ms (compile: 618ms, proxy.ts: 1520µs, render: 263ms)
+[workers] 2026-02-27T08:42:14.353Z DEBUG Calling vision LLM [provider="openrouter" model="nvidia/nemotron-nano-12b-v2-vl:free" imageCount=67 labeledInputCount=0 responseFormat="json" attempt=3]
+[workers] 2026-02-27T08:42:14.384Z WARN  Header-label segmentation failed; continuing with first-pass vision [sessionId="25ca0875-9464-48ca-b733-4fbab3d09b27" error="LLM call failed: 401 Unauthorized — {\"error\":{\"message\":\"Missing Authentication header\",\"code\":401}}"]
+[workers] 2026-02-27T08:42:14.385Z DEBUG Calling vision LLM [provider="openrouter" model="nvidia/nemotron-nano-12b-v2-vl:free" imageCount=8 labeledInputCount=0 responseFormat="json" attempt=1]
+[workers] 2026-02-27T08:42:14.403Z WARN  LLM call failed, retrying [error="LLM call failed: 401 Unauthorized — {\"error\":{\"message\":\"Missing Authentication header\",\"code\":401}}" waitMs=1000 attempt=1]
+[workers] 2026-02-27T08:42:15.403Z DEBUG Calling vision LLM [provider="openrouter" model="nvidia/nemotron-nano-12b-v2-vl:free" imageCount=8 labeledInputCount=0 responseFormat="json" attempt=2]
+[workers] 2026-02-27T08:42:15.421Z WARN  LLM call failed, retrying [error="LLM call failed: 401 Unauthorized — {\"error\":{\"message\":\"Missing Authentication header\",\"code\":401}}" waitMs=2000 attempt=2]
+[workers] 2026-02-27T08:42:17.421Z DEBUG Calling vision LLM [provider="openrouter" model="nvidia/nemotron-nano-12b-v2-vl:free" imageCount=8 labeledInputCount=0 responseFormat="json" attempt=3]
+[workers] 2026-02-27T08:42:17.445Z ERROR Job failed [jobId="1" name="smartupload.process" attemptsMade=1]
+[workers]   Error: LLM call failed: 401 Unauthorized — {"error":{"message":"Missing Authentication header","code":401}}
+[workers]       at Object.error (/home/dylan/eccb.app/src/lib/logger.ts:209:34)
+[workers]       at Worker.<anonymous> (/home/dylan/eccb.app/src/lib/jobs/queue.ts:393:14)
+[workers]       at Worker.emit (node:events:524:28)
+[workers]       at Worker.emit (/home/dylan/eccb.app/node_modules/bullmq/src/classes/queue-base.ts:131:20)
+[workers] 2026-02-27T08:42:18.117Z DEBUG Running scheduler tick
+[workers] 2026-02-27T08:42:22.537Z ERROR Job failed [jobId="1" name="smartupload.process" attemptsMade=2]
+[workers]   Error: Unknown job type: smartupload.process
+[workers]       at Object.error (/home/dylan/eccb.app/src/lib/logger.ts:209:34)
+[workers]       at Worker.<anonymous> (/home/dylan/eccb.app/src/lib/jobs/queue.ts:393:14)
+[workers]       at Worker.emit (node:events:524:28)
+[workers]       at Worker.emit (/home/dylan/eccb.app/node_modules/bullmq/src/classes/queue-base.ts:131:20)
+[workers] 2026-02-27T08:42:32.560Z INFO  Starting smart upload processing [sessionId="25ca0875-9464-48ca-b733-4fbab3d09b27" fileId="cmm4n8t7j0001hziwy0zofc8i" jobId="1"]
+[workers] 2026-02-27T08:42:32.764Z WARN  renderPdfPageBatch: failed to render page [idx=1 err={}]
+[workers] 2026-02-27T08:42:32.824Z WARN  renderPdfPageBatch: failed to render page [idx=11 err={}]
+[workers] 2026-02-27T08:42:32.853Z WARN  renderPdfPageBatch: failed to render page [idx=21 err={}]
+[workers] 2026-02-27T08:42:32.870Z WARN  renderPdfPageBatch: failed to render page [idx=31 err={}]
+[workers] 2026-02-27T08:42:32.887Z WARN  renderPdfPageBatch: failed to render page [idx=41 err={}]
+[workers] 2026-02-27T08:42:33.088Z WARN  renderPdfPageBatch: failed to render page [idx=66 err={}]
+[workers] 2026-02-27T08:42:33.088Z INFO  PDF pages sampled for LLM [totalPages=67 sampledCount=8 indices=[0,1,11,21,31,41,51,66]]
+[workers] 2026-02-27T08:42:33.201Z INFO  PDF text extraction complete [totalPages=67 pagesToProcess=67 pagesWithText=10 textLayerCoverage="15%" hasTextLayer=false]
+[workers] 2026-02-27T08:42:33.278Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=1 err={}]
+[workers] 2026-02-27T08:42:33.305Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=2 err={}]
+[workers] 2026-02-27T08:42:33.322Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=3 err={}]
+[workers] 2026-02-27T08:42:33.335Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=4 err={}]
+[workers] 2026-02-27T08:42:33.350Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=5 err={}]
+[workers] 2026-02-27T08:42:33.394Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=6 err={}]
+[workers] 2026-02-27T08:42:33.443Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=7 err={}]
+[workers] 2026-02-27T08:42:33.458Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=8 err={}]
+[workers] 2026-02-27T08:42:33.473Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=9 err={}]
+[workers] 2026-02-27T08:42:33.526Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=10 err={}]
+[workers] 2026-02-27T08:42:33.568Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=11 err={}]
+[workers] 2026-02-27T08:42:33.590Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=12 err={}]
+[workers] 2026-02-27T08:42:33.609Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=13 err={}]
+[workers] 2026-02-27T08:42:33.624Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=14 err={}]
+[workers] 2026-02-27T08:42:33.639Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=15 err={}]
+[workers] 2026-02-27T08:42:33.654Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=16 err={}]
+[workers] 2026-02-27T08:42:33.670Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=17 err={}]
+[workers] 2026-02-27T08:42:33.687Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=18 err={}]
+[workers] 2026-02-27T08:42:33.701Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=19 err={}]
+[workers] 2026-02-27T08:42:33.715Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=20 err={}]
+[workers] 2026-02-27T08:42:33.729Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=21 err={}]
+[workers] 2026-02-27T08:42:33.744Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=22 err={}]
+[workers] 2026-02-27T08:42:33.762Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=23 err={}]
+[workers] 2026-02-27T08:42:33.778Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=24 err={}]
+[workers] 2026-02-27T08:42:33.792Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=25 err={}]
+[workers] 2026-02-27T08:42:33.806Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=26 err={}]
+[workers] 2026-02-27T08:42:33.819Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=27 err={}]
+[workers] 2026-02-27T08:42:33.833Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=28 err={}]
+[workers] 2026-02-27T08:42:33.850Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=29 err={}]
+[workers] 2026-02-27T08:42:33.867Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=30 err={}]
+[workers] 2026-02-27T08:42:33.882Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=31 err={}]
+[workers] 2026-02-27T08:42:33.897Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=32 err={}]
+[workers] 2026-02-27T08:42:33.913Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=33 err={}]
+[workers] 2026-02-27T08:42:33.929Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=34 err={}]
+[workers] 2026-02-27T08:42:33.945Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=35 err={}]
+[workers] 2026-02-27T08:42:33.959Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=36 err={}]
+[workers] 2026-02-27T08:42:33.972Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=37 err={}]
+[workers] 2026-02-27T08:42:33.987Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=38 err={}]
+[workers] 2026-02-27T08:42:34.001Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=39 err={}]
+[workers] 2026-02-27T08:42:34.018Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=40 err={}]
+[workers] 2026-02-27T08:42:34.033Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=41 err={}]
+[workers] 2026-02-27T08:42:34.047Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=42 err={}]
+[workers] 2026-02-27T08:42:34.061Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=43 err={}]
+[workers] 2026-02-27T08:42:34.623Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=52 err={}]
+[workers] 2026-02-27T08:42:34.636Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=53 err={}]
+[workers] 2026-02-27T08:42:34.650Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=54 err={}]
+[workers] 2026-02-27T08:42:34.666Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=55 err={}]
+[workers] 2026-02-27T08:42:34.680Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=56 err={}]
+[workers] 2026-02-27T08:42:34.697Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=57 err={}]
+[workers] 2026-02-27T08:42:34.713Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=58 err={}]
+[workers] 2026-02-27T08:42:34.728Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=59 err={}]
+[workers] 2026-02-27T08:42:34.743Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=60 err={}]
+[workers] 2026-02-27T08:42:34.759Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=61 err={}]
+[workers] 2026-02-27T08:42:34.775Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=62 err={}]
+[workers] 2026-02-27T08:42:34.791Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=63 err={}]
+[workers] 2026-02-27T08:42:34.811Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=64 err={}]
+[workers] 2026-02-27T08:42:34.828Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=65 err={}]
+[workers] 2026-02-27T08:42:34.875Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=66 err={}]
+[workers] 2026-02-27T08:42:34.875Z DEBUG Calling vision LLM [provider="openrouter" model="nvidia/nemotron-nano-12b-v2-vl:free" imageCount=67 labeledInputCount=0 responseFormat="json" attempt=1]
+[workers] 2026-02-27T08:42:34.952Z WARN  LLM call failed, retrying [error="LLM call failed: 401 Unauthorized — {\"error\":{\"message\":\"Missing Authentication header\",\"code\":401}}" waitMs=1000 attempt=1]
+[workers] 2026-02-27T08:42:35.953Z DEBUG Calling vision LLM [provider="openrouter" model="nvidia/nemotron-nano-12b-v2-vl:free" imageCount=67 labeledInputCount=0 responseFormat="json" attempt=2]
+[workers] 2026-02-27T08:42:35.983Z WARN  LLM call failed, retrying [error="LLM call failed: 401 Unauthorized — {\"error\":{\"message\":\"Missing Authentication header\",\"code\":401}}" waitMs=2000 attempt=2]
+[workers] 2026-02-27T08:42:37.983Z DEBUG Calling vision LLM [provider="openrouter" model="nvidia/nemotron-nano-12b-v2-vl:free" imageCount=67 labeledInputCount=0 responseFormat="json" attempt=3]
+[workers] 2026-02-27T08:42:38.013Z WARN  Header-label segmentation failed; continuing with first-pass vision [sessionId="25ca0875-9464-48ca-b733-4fbab3d09b27" error="LLM call failed: 401 Unauthorized — {\"error\":{\"message\":\"Missing Authentication header\",\"code\":401}}"]
+[workers] 2026-02-27T08:42:38.013Z DEBUG Calling vision LLM [provider="openrouter" model="nvidia/nemotron-nano-12b-v2-vl:free" imageCount=8 labeledInputCount=0 responseFormat="json" attempt=1]
+[workers] 2026-02-27T08:42:38.028Z WARN  LLM call failed, retrying [error="LLM call failed: 401 Unauthorized — {\"error\":{\"message\":\"Missing Authentication header\",\"code\":401}}" waitMs=1000 attempt=1]
+[workers] 2026-02-27T08:42:39.028Z DEBUG Calling vision LLM [provider="openrouter" model="nvidia/nemotron-nano-12b-v2-vl:free" imageCount=8 labeledInputCount=0 responseFormat="json" attempt=2]
+[workers] 2026-02-27T08:42:39.043Z WARN  LLM call failed, retrying [error="LLM call failed: 401 Unauthorized — {\"error\":{\"message\":\"Missing Authentication header\",\"code\":401}}" waitMs=2000 attempt=2]
+[workers] 2026-02-27T08:42:41.043Z DEBUG Calling vision LLM [provider="openrouter" model="nvidia/nemotron-nano-12b-v2-vl:free" imageCount=8 labeledInputCount=0 responseFormat="json" attempt=3]
+[workers] 2026-02-27T08:42:41.062Z ERROR Job failed [jobId="1" name="smartupload.process" attemptsMade=3]
+[workers]   Error: LLM call failed: 401 Unauthorized — {"error":{"message":"Missing Authentication header","code":401}}
+[workers]       at Object.error (/home/dylan/eccb.app/src/lib/logger.ts:209:34)
+[workers]       at Worker.<anonymous> (/home/dylan/eccb.app/src/lib/jobs/queue.ts:393:14)
+[workers]       at Worker.emit (node:events:524:28)
+[workers]       at Worker.emit (/home/dylan/eccb.app/node_modules/bullmq/src/classes/queue-base.ts:131:20)
+[workers] 2026-02-27T08:42:41.063Z WARN  Job moved to dead letter queue [jobId="1" originalQueue="eccb-smart-upload" reason="LLM call failed: 401 Unauthorized — {\"error\":{\"message\":\"Missing Authentication header\",\"code\":401}}"]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[next] 2026-02-27T08:43:30.699Z INFO  Request started: GET /admin/uploads/settings [requestId="req_8042ceae-f809-48fe-bb45-702eedde991b" method="GET" path="/admin/uploads/settings" userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" ip="::ffff:127.0.0.1"]
+[next] 2026-02-27T08:43:30.699Z DEBUG Request completed: GET /admin/uploads/settings 200 [requestId="req_8042ceae-f809-48fe-bb45-702eedde991b" method="GET" path="/admin/uploads/settings" status=200 duration=0 durationMs=0]
+[next]  GET /admin/uploads/settings 200 in 16ms (compile: 2ms, proxy.ts: 4ms, render: 10ms)
+[next] 2026-02-27T08:43:30.770Z INFO  Request started: GET /api/admin/uploads/settings [requestId="req_cfb55036-8602-4a76-9d89-3591564835be" method="GET" path="/api/admin/uploads/settings" userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" ip="::ffff:127.0.0.1"]
+[next] 2026-02-27T08:43:30.770Z DEBUG Request completed: GET /api/admin/uploads/settings 200 [requestId="req_cfb55036-8602-4a76-9d89-3591564835be" method="GET" path="/api/admin/uploads/settings" status=200 duration=0 durationMs=0]
+[next]  GET /api/admin/uploads/settings 200 in 15ms (compile: 1992µs, proxy.ts: 4ms, render: 9ms)
+[next] 2026-02-27T08:43:30.792Z INFO  Request started: GET /api/admin/uploads/settings [requestId="req_aaeae38a-d8b5-48a4-9bbd-314e71c3b098" method="GET" path="/api/admin/uploads/settings" userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" ip="::ffff:127.0.0.1"]
+[next] 2026-02-27T08:43:30.792Z DEBUG Request completed: GET /api/admin/uploads/settings 200 [requestId="req_aaeae38a-d8b5-48a4-9bbd-314e71c3b098" method="GET" path="/api/admin/uploads/settings" status=200 duration=0 durationMs=0]
+[next]  GET /api/admin/uploads/settings 200 in 15ms (compile: 2ms, proxy.ts: 3ms, render: 10ms)
+[next] 2026-02-27T08:43:30.835Z INFO  Request started: GET /api/admin/uploads/models [requestId="req_85c486ba-a8ca-40f5-ba58-e1dce92dcc13" method="GET" path="/api/admin/uploads/models" query="?provider=openrouter&endpoint=https%3A%2F%2Fopenrouter.ai%2Fapi%2Fv1" userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" ip="::ffff:127.0.0.1"]
+[next] 2026-02-27T08:43:30.835Z DEBUG Request completed: GET /api/admin/uploads/models 200 [requestId="req_85c486ba-a8ca-40f5-ba58-e1dce92dcc13" method="GET" path="/api/admin/uploads/models" status=200 duration=0 durationMs=0]
+[next] 2026-02-27T08:43:31.002Z INFO  Fetched models from provider [provider="openrouter" modelCount=93 filteredForVision=true recommendedModel="google/gemini-3.1-flash-image-preview" userId="kb8ormO1GjhsWJ3mTYBhsYGIysuXvIyJ"]
+[next]  GET /api/admin/uploads/models?provider=openrouter&endpoint=https%3A%2F%2Fopenrouter.ai%2Fapi%2Fv1 200 in 171ms (compile: 1161µs, proxy.ts: 3ms, render: 167ms)
+[next] 2026-02-27T08:43:31.009Z INFO  Request started: GET /api/admin/uploads/models [requestId="req_4e6fff6d-a0b7-4076-8249-8117665038d0" method="GET" path="/api/admin/uploads/models" query="?provider=openrouter&endpoint=https%3A%2F%2Fopenrouter.ai%2Fapi%2Fv1" userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" ip="::ffff:127.0.0.1"]
+[next] 2026-02-27T08:43:31.009Z DEBUG Request completed: GET /api/admin/uploads/models 200 [requestId="req_4e6fff6d-a0b7-4076-8249-8117665038d0" method="GET" path="/api/admin/uploads/models" status=200 duration=0 durationMs=0]
+[next] 2026-02-27T08:43:31.104Z INFO  Fetched models from provider [provider="openrouter" modelCount=93 filteredForVision=true recommendedModel="google/gemini-3.1-flash-image-preview" userId="kb8ormO1GjhsWJ3mTYBhsYGIysuXvIyJ"]
+[next]  GET /api/admin/uploads/models?provider=openrouter&endpoint=https%3A%2F%2Fopenrouter.ai%2Fapi%2Fv1 200 in 100ms (compile: 1388µs, proxy.ts: 3ms, render: 95ms)
+[next] 2026-02-27T08:43:32.668Z INFO  Request started: GET /api/admin/uploads/models [requestId="req_c0dec4a4-7868-48d2-9ca8-2f8ad5d2b389" method="GET" path="/api/admin/uploads/models" query="?provider=gemini&endpoint=https%3A%2F%2Fgenerativelanguage.googleapis.com%2Fv1beta" userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" ip="::ffff:127.0.0.1"]
+[next] 2026-02-27T08:43:32.668Z DEBUG Request completed: GET /api/admin/uploads/models 200 [requestId="req_c0dec4a4-7868-48d2-9ca8-2f8ad5d2b389" method="GET" path="/api/admin/uploads/models" status=200 duration=0 durationMs=0]
+[next] 2026-02-27T08:43:32.821Z INFO  Fetched models from provider [provider="gemini" modelCount=31 filteredForVision=true recommendedModel="models/gemini-2.5-flash" userId="kb8ormO1GjhsWJ3mTYBhsYGIysuXvIyJ"]
+[next]  GET /api/admin/uploads/models?provider=gemini&endpoint=https%3A%2F%2Fgenerativelanguage.googleapis.com%2Fv1beta 200 in 156ms (compile: 1140µs, proxy.ts: 2ms, render: 153ms)
+[next] 2026-02-27T08:43:34.524Z INFO  Request started: GET /api/admin/uploads/models [requestId="req_e3a6dfd4-7c80-4e8f-9e70-d98d0b442076" method="GET" path="/api/admin/uploads/models" query="?provider=gemini&endpoint=https%3A%2F%2Fgenerativelanguage.googleapis.com%2Fv1beta" userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" ip="::ffff:127.0.0.1"]
+[next] 2026-02-27T08:43:34.524Z DEBUG Request completed: GET /api/admin/uploads/models 200 [requestId="req_e3a6dfd4-7c80-4e8f-9e70-d98d0b442076" method="GET" path="/api/admin/uploads/models" status=200 duration=0 durationMs=0]
+[next] 2026-02-27T08:43:34.868Z INFO  Fetched models from provider [provider="gemini" modelCount=31 filteredForVision=true recommendedModel="models/gemini-2.5-flash" userId="kb8ormO1GjhsWJ3mTYBhsYGIysuXvIyJ"]
+[next]  GET /api/admin/uploads/models?provider=gemini&endpoint=https%3A%2F%2Fgenerativelanguage.googleapis.com%2Fv1beta 200 in 348ms (compile: 2ms, proxy.ts: 3ms, render: 344ms)
+[next] 2026-02-27T08:43:46.462Z INFO  Request started: PUT /api/admin/uploads/settings [requestId="req_345b38aa-c228-4bd7-96ae-e7263eccf068" method="PUT" path="/api/admin/uploads/settings" userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" ip="::ffff:127.0.0.1"]
+[next] 2026-02-27T08:43:46.462Z DEBUG Request completed: PUT /api/admin/uploads/settings 200 [requestId="req_345b38aa-c228-4bd7-96ae-e7263eccf068" method="PUT" path="/api/admin/uploads/settings" status=200 duration=0 durationMs=0]
+[next] 2026-02-27T08:43:46.492Z INFO  Smart upload settings updated [userId="kb8ormO1GjhsWJ3mTYBhsYGIysuXvIyJ" keys=["llm_provider","llm_vision_model","llm_verification_model","llm_endpoint_url"] skipped=[]]
+[next]  PUT /api/admin/uploads/settings 200 in 34ms (compile: 3ms, proxy.ts: 3ms, render: 28ms)
+[next] 2026-02-27T08:43:48.632Z INFO  Request started: GET /admin/uploads/review [requestId="req_4f8f5130-72d0-46a0-b0c2-6c752af7ccdf" method="GET" path="/admin/uploads/review" userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" ip="::ffff:127.0.0.1"]
+[next] 2026-02-27T08:43:48.633Z DEBUG Request completed: GET /admin/uploads/review 200 [requestId="req_4f8f5130-72d0-46a0-b0c2-6c752af7ccdf" method="GET" path="/admin/uploads/review" status=200 duration=1 durationMs=1]
+[next]  GET /admin/uploads/review 200 in 28ms (compile: 15ms, proxy.ts: 4ms, render: 9ms)
+[next] 2026-02-27T08:43:48.816Z INFO  Request started: GET /api/admin/uploads/review [requestId="req_95e8ce17-9f2e-484f-955c-6ac9cb23c5f8" method="GET" path="/api/admin/uploads/review" query="?status=PENDING_REVIEW" userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" ip="::ffff:127.0.0.1"]
+[next] 2026-02-27T08:43:48.816Z DEBUG Request completed: GET /api/admin/uploads/review 200 [requestId="req_95e8ce17-9f2e-484f-955c-6ac9cb23c5f8" method="GET" path="/api/admin/uploads/review" status=200 duration=1 durationMs=1]
+[next]  GET /api/admin/uploads/review?status=PENDING_REVIEW 200 in 41ms (compile: 29ms, proxy.ts: 1748µs, render: 10ms)
+[next] 2026-02-27T08:43:48.862Z INFO  Request started: GET /api/admin/uploads/review [requestId="req_d10cc67e-978c-40a9-9666-1bd8c7df41d7" method="GET" path="/api/admin/uploads/review" query="?status=PENDING_REVIEW" userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" ip="::ffff:127.0.0.1"]
+[next] 2026-02-27T08:43:48.862Z DEBUG Request completed: GET /api/admin/uploads/review 200 [requestId="req_d10cc67e-978c-40a9-9666-1bd8c7df41d7" method="GET" path="/api/admin/uploads/review" status=200 duration=0 durationMs=0]
+[next]  GET /api/admin/uploads/review?status=PENDING_REVIEW 200 in 14ms (compile: 2ms, proxy.ts: 3ms, render: 9ms)
+[next] 2026-02-27T08:43:56.659Z INFO  Request started: POST /api/admin/uploads/review/418bdcc0-4254-4028-952f-21a924d2e67b/reject [requestId="req_88ecd077-4f1e-4fd6-ba9a-be85729a3968" method="POST" path="/api/admin/uploads/review/418bdcc0-4254-4028-952f-21a924d2e67b/reject" userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" ip="::ffff:127.0.0.1"]
+[next] 2026-02-27T08:43:56.659Z DEBUG Request completed: POST /api/admin/uploads/review/418bdcc0-4254-4028-952f-21a924d2e67b/reject 200 [requestId="req_88ecd077-4f1e-4fd6-ba9a-be85729a3968" method="POST" path="/api/admin/uploads/review/418bdcc0-4254-4028-952f-21a924d2e67b/reject" status=200 duration=0 durationMs=0]
+[next] 2026-02-27T08:43:57.303Z INFO  No temp files to clean up [sessionId="418bdcc0-4254-4028-952f-21a924d2e67b"]
+[next] 2026-02-27T08:43:57.304Z INFO  Smart upload rejected [sessionId="418bdcc0-4254-4028-952f-21a924d2e67b" userId="kb8ormO1GjhsWJ3mTYBhsYGIysuXvIyJ" reason=""]
+[next]  POST /api/admin/uploads/review/418bdcc0-4254-4028-952f-21a924d2e67b/reject 200 in 648ms (compile: 630ms, proxy.ts: 2ms, render: 16ms)
+[next] 2026-02-27T08:43:57.312Z INFO  Request started: GET /api/admin/uploads/review [requestId="req_d26d8b0c-827d-4a3f-ba62-5ec1310b60db" method="GET" path="/api/admin/uploads/review" query="?status=PENDING_REVIEW" userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" ip="::ffff:127.0.0.1"]
+[next] 2026-02-27T08:43:57.312Z DEBUG Request completed: GET /api/admin/uploads/review 200 [requestId="req_d26d8b0c-827d-4a3f-ba62-5ec1310b60db" method="GET" path="/api/admin/uploads/review" status=200 duration=0 durationMs=0]
+[next]  GET /api/admin/uploads/review?status=PENDING_REVIEW 200 in 12ms (compile: 2ms, proxy.ts: 3ms, render: 7ms)
+[next] 2026-02-27T08:43:59.982Z INFO  Request started: POST /api/admin/uploads/review/ac02e16d-c048-4ee2-8af3-1a4d769a9a7a/reject [requestId="req_3f615360-5817-4756-9721-d57f669b645a" method="POST" path="/api/admin/uploads/review/ac02e16d-c048-4ee2-8af3-1a4d769a9a7a/reject" userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" ip="::ffff:127.0.0.1"]
+[next] 2026-02-27T08:43:59.983Z DEBUG Request completed: POST /api/admin/uploads/review/ac02e16d-c048-4ee2-8af3-1a4d769a9a7a/reject 200 [requestId="req_3f615360-5817-4756-9721-d57f669b645a" method="POST" path="/api/admin/uploads/review/ac02e16d-c048-4ee2-8af3-1a4d769a9a7a/reject" status=200 duration=1 durationMs=1]
+[next] 2026-02-27T08:44:00.021Z INFO  No temp files to clean up [sessionId="ac02e16d-c048-4ee2-8af3-1a4d769a9a7a"]
+[next] 2026-02-27T08:44:00.021Z INFO  Smart upload rejected [sessionId="ac02e16d-c048-4ee2-8af3-1a4d769a9a7a" userId="kb8ormO1GjhsWJ3mTYBhsYGIysuXvIyJ" reason=""]
+[next]  POST /api/admin/uploads/review/ac02e16d-c048-4ee2-8af3-1a4d769a9a7a/reject 200 in 41ms (compile: 24ms, proxy.ts: 2ms, render: 15ms)
+[next] 2026-02-27T08:44:00.031Z INFO  Request started: GET /api/admin/uploads/review [requestId="req_34414779-58e0-4011-8452-4b20ddbeaf6e" method="GET" path="/api/admin/uploads/review" query="?status=PENDING_REVIEW" userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" ip="::ffff:127.0.0.1"]
+[next] 2026-02-27T08:44:00.031Z DEBUG Request completed: GET /api/admin/uploads/review 200 [requestId="req_34414779-58e0-4011-8452-4b20ddbeaf6e" method="GET" path="/api/admin/uploads/review" status=200 duration=0 durationMs=0]
+[next]  GET /api/admin/uploads/review?status=PENDING_REVIEW 200 in 9ms (compile: 1083µs, proxy.ts: 1648µs, render: 7ms)
+[next] 2026-02-27T08:44:03.200Z INFO  Request started: GET /admin/music [requestId="req_f4059b13-9ea9-42ca-9a84-20e549a3475c" method="GET" path="/admin/music" userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" ip="::ffff:127.0.0.1"]
+[next] 2026-02-27T08:44:03.200Z DEBUG Request completed: GET /admin/music 200 [requestId="req_f4059b13-9ea9-42ca-9a84-20e549a3475c" method="GET" path="/admin/music" status=200 duration=0 durationMs=0]
+[next]  GET /admin/music 200 in 61ms (compile: 11ms, proxy.ts: 2ms, render: 48ms)
+[next] 2026-02-27T08:44:04.096Z INFO  Request started: GET /admin/music/new [requestId="req_b7330d68-a51f-4573-82fd-1ed34bb2aff4" method="GET" path="/admin/music/new" userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" ip="::ffff:127.0.0.1"]
+[next] 2026-02-27T08:44:04.097Z DEBUG Request completed: GET /admin/music/new 200 [requestId="req_b7330d68-a51f-4573-82fd-1ed34bb2aff4" method="GET" path="/admin/music/new" status=200 duration=1 durationMs=1]
+[next]  GET /admin/music/new 200 in 45ms (compile: 29ms, proxy.ts: 1833µs, render: 14ms)
+[next] 2026-02-27T08:44:04.554Z INFO  Request started: GET /admin/uploads [requestId="req_853b3ba4-4f99-42de-9afb-788f2b9927b6" method="GET" path="/admin/uploads" userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" ip="::ffff:127.0.0.1"]
+[next] 2026-02-27T08:44:04.555Z DEBUG Request completed: GET /admin/uploads 200 [requestId="req_853b3ba4-4f99-42de-9afb-788f2b9927b6" method="GET" path="/admin/uploads" status=200 duration=1 durationMs=1]
+[next]  GET /admin/uploads 200 in 13ms (compile: 1605µs, proxy.ts: 2ms, render: 9ms)
+[next] 2026-02-27T08:44:09.303Z INFO  Request started: POST /api/files/smart-upload [requestId="req_eb712f17-cb42-48b6-80bb-5a2007fff62c" method="POST" path="/api/files/smart-upload" userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" ip="::ffff:127.0.0.1"]
+[next] 2026-02-27T08:44:09.303Z DEBUG Request completed: POST /api/files/smart-upload 200 [requestId="req_eb712f17-cb42-48b6-80bb-5a2007fff62c" method="POST" path="/api/files/smart-upload" status=200 duration=0 durationMs=0]
+[next] 2026-02-27T08:44:09.523Z INFO  Processing smart upload [userId="kb8ormO1GjhsWJ3mTYBhsYGIysuXvIyJ" filename="AmericanPatrol.pdf" size=4036101]
+[next] 2026-02-27T08:44:09.526Z INFO  File uploaded to local storage [key="smart-upload/627d5203-bb9b-48b0-8c8e-e4f0feb732af/original.pdf" path="/home/dylan/eccb.app/storage/smart-upload/627d5203-bb9b-48b0-8c8e-e4f0feb732af/original.pdf"]
+[next] 2026-02-27T08:44:09.528Z INFO  Smart upload session created, queueing for processing [sessionId="627d5203-bb9b-48b0-8c8e-e4f0feb732af" userId="kb8ormO1GjhsWJ3mTYBhsYGIysuXvIyJ"]
+[next]  POST /api/files/smart-upload 200 in 228ms (compile: 2ms, proxy.ts: 207ms, render: 19ms)
+[workers] 2026-02-27T08:44:09.530Z INFO  Starting smart upload processing [sessionId="627d5203-bb9b-48b0-8c8e-e4f0feb732af" fileId="cmm4nbelz0003hziwalu1pxks" jobId="2"]
+[next] 2026-02-27T08:44:09.530Z INFO  Smart upload process job queued [jobId="2" sessionId="627d5203-bb9b-48b0-8c8e-e4f0feb732af" fileId="cmm4nbelz0003hziwalu1pxks"]
+[next] 2026-02-27T08:44:09.536Z INFO  Request started: GET /api/admin/uploads/events [requestId="req_053d6838-aa38-4d23-9188-89d90ec48155" method="GET" path="/api/admin/uploads/events" query="?sessionId=627d5203-bb9b-48b0-8c8e-e4f0feb732af" userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" ip="::ffff:127.0.0.1"]
+[next] 2026-02-27T08:44:09.537Z DEBUG Request completed: GET /api/admin/uploads/events 200 [requestId="req_053d6838-aa38-4d23-9188-89d90ec48155" method="GET" path="/api/admin/uploads/events" status=200 duration=1 durationMs=1]
+[next] 2026-02-27T08:44:09.544Z DEBUG SSE connection established [sessionId="627d5203-bb9b-48b0-8c8e-e4f0feb732af"]
+[workers] 2026-02-27T08:44:09.717Z WARN  renderPdfPageBatch: failed to render page [idx=1 err={}]
+[workers] 2026-02-27T08:44:09.758Z WARN  renderPdfPageBatch: failed to render page [idx=11 err={}]
+[workers] 2026-02-27T08:44:09.775Z WARN  renderPdfPageBatch: failed to render page [idx=21 err={}]
+[workers] 2026-02-27T08:44:09.791Z WARN  renderPdfPageBatch: failed to render page [idx=31 err={}]
+[workers] 2026-02-27T08:44:09.806Z WARN  renderPdfPageBatch: failed to render page [idx=41 err={}]
+[workers] 2026-02-27T08:44:09.998Z WARN  renderPdfPageBatch: failed to render page [idx=66 err={}]
+[workers] 2026-02-27T08:44:09.998Z INFO  PDF pages sampled for LLM [totalPages=67 sampledCount=8 indices=[0,1,11,21,31,41,51,66]]
+[workers] 2026-02-27T08:44:10.087Z INFO  PDF text extraction complete [totalPages=67 pagesToProcess=67 pagesWithText=10 textLayerCoverage="15%" hasTextLayer=false]
+[workers] 2026-02-27T08:44:10.154Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=1 err={}]
+[workers] 2026-02-27T08:44:10.167Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=2 err={}]
+[workers] 2026-02-27T08:44:10.181Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=3 err={}]
+[workers] 2026-02-27T08:44:10.196Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=4 err={}]
+[workers] 2026-02-27T08:44:10.214Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=5 err={}]
+[workers] 2026-02-27T08:44:10.260Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=6 err={}]
+[workers] 2026-02-27T08:44:10.308Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=7 err={}]
+[workers] 2026-02-27T08:44:10.322Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=8 err={}]
+[workers] 2026-02-27T08:44:10.337Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=9 err={}]
+[workers] 2026-02-27T08:44:10.374Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=10 err={}]
+[workers] 2026-02-27T08:44:10.413Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=11 err={}]
+[workers] 2026-02-27T08:44:10.432Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=12 err={}]
+[workers] 2026-02-27T08:44:10.447Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=13 err={}]
+[workers] 2026-02-27T08:44:10.462Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=14 err={}]
+[workers] 2026-02-27T08:44:10.476Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=15 err={}]
+[workers] 2026-02-27T08:44:10.491Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=16 err={}]
+[workers] 2026-02-27T08:44:10.505Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=17 err={}]
+[workers] 2026-02-27T08:44:10.520Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=18 err={}]
+[workers] 2026-02-27T08:44:10.540Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=19 err={}]
+[workers] 2026-02-27T08:44:10.558Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=20 err={}]
+[workers] 2026-02-27T08:44:10.572Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=21 err={}]
+[workers] 2026-02-27T08:44:10.586Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=22 err={}]
+[workers] 2026-02-27T08:44:10.601Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=23 err={}]
+[workers] 2026-02-27T08:44:10.614Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=24 err={}]
+[workers] 2026-02-27T08:44:10.629Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=25 err={}]
+[workers] 2026-02-27T08:44:10.644Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=26 err={}]
+[workers] 2026-02-27T08:44:10.661Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=27 err={}]
+[workers] 2026-02-27T08:44:10.675Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=28 err={}]
+[workers] 2026-02-27T08:44:10.689Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=29 err={}]
+[workers] 2026-02-27T08:44:10.703Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=30 err={}]
+[workers] 2026-02-27T08:44:10.717Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=31 err={}]
+[workers] 2026-02-27T08:44:10.734Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=32 err={}]
+[workers] 2026-02-27T08:44:10.753Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=33 err={}]
+[workers] 2026-02-27T08:44:10.767Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=34 err={}]
+[workers] 2026-02-27T08:44:10.781Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=35 err={}]
+[workers] 2026-02-27T08:44:10.794Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=36 err={}]
+[workers] 2026-02-27T08:44:10.808Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=37 err={}]
+[workers] 2026-02-27T08:44:10.821Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=38 err={}]
+[workers] 2026-02-27T08:44:10.835Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=39 err={}]
+[workers] 2026-02-27T08:44:10.852Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=40 err={}]
+[workers] 2026-02-27T08:44:10.871Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=41 err={}]
+[workers] 2026-02-27T08:44:10.885Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=42 err={}]
+[workers] 2026-02-27T08:44:10.899Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=43 err={}]
+[workers] 2026-02-27T08:44:11.449Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=52 err={}]
+[workers] 2026-02-27T08:44:11.463Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=53 err={}]
+[workers] 2026-02-27T08:44:11.478Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=54 err={}]
+[workers] 2026-02-27T08:44:11.492Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=55 err={}]
+[workers] 2026-02-27T08:44:11.508Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=56 err={}]
+[workers] 2026-02-27T08:44:11.522Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=57 err={}]
+[workers] 2026-02-27T08:44:11.537Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=58 err={}]
+[workers] 2026-02-27T08:44:11.553Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=59 err={}]
+[workers] 2026-02-27T08:44:11.567Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=60 err={}]
+[workers] 2026-02-27T08:44:11.583Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=61 err={}]
+[workers] 2026-02-27T08:44:11.599Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=62 err={}]
+[workers] 2026-02-27T08:44:11.616Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=63 err={}]
+[workers] 2026-02-27T08:44:11.629Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=64 err={}]
+[workers] 2026-02-27T08:44:11.643Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=65 err={}]
+[workers] 2026-02-27T08:44:11.691Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=66 err={}]
+[workers] 2026-02-27T08:44:11.692Z DEBUG Calling vision LLM [provider="gemini" model="models/gemini-2.0-flash-001" imageCount=67 labeledInputCount=0 responseFormat="json" attempt=1]
+[workers] 2026-02-27T08:44:11.831Z WARN  LLM call failed, retrying [error="LLM call failed: 404 Not Found — " waitMs=1000 attempt=1]
+[workers] 2026-02-27T08:44:12.832Z DEBUG Calling vision LLM [provider="gemini" model="models/gemini-2.0-flash-001" imageCount=67 labeledInputCount=0 responseFormat="json" attempt=2]
+[workers] 2026-02-27T08:44:12.895Z WARN  LLM call failed, retrying [error="LLM call failed: 404 Not Found — " waitMs=2000 attempt=2]
+[workers] 2026-02-27T08:44:14.895Z DEBUG Calling vision LLM [provider="gemini" model="models/gemini-2.0-flash-001" imageCount=67 labeledInputCount=0 responseFormat="json" attempt=3]
+[workers] 2026-02-27T08:44:14.959Z WARN  Header-label segmentation failed; continuing with first-pass vision [sessionId="627d5203-bb9b-48b0-8c8e-e4f0feb732af" error="LLM call failed: 404 Not Found — "]
+[workers] 2026-02-27T08:44:14.959Z DEBUG Calling vision LLM [provider="gemini" model="models/gemini-2.5-flash" imageCount=8 labeledInputCount=0 responseFormat="json" attempt=1]
+[workers] 2026-02-27T08:44:14.991Z WARN  LLM call failed, retrying [error="LLM call failed: 404 Not Found — " waitMs=1000 attempt=1]
+[workers] 2026-02-27T08:44:15.992Z DEBUG Calling vision LLM [provider="gemini" model="models/gemini-2.5-flash" imageCount=8 labeledInputCount=0 responseFormat="json" attempt=2]
+[workers] 2026-02-27T08:44:16.024Z WARN  LLM call failed, retrying [error="LLM call failed: 404 Not Found — " waitMs=2000 attempt=2]
+[workers] 2026-02-27T08:44:18.024Z DEBUG Calling vision LLM [provider="gemini" model="models/gemini-2.5-flash" imageCount=8 labeledInputCount=0 responseFormat="json" attempt=3]
+[workers] 2026-02-27T08:44:18.059Z ERROR Job failed [jobId="2" name="smartupload.process" attemptsMade=1]
+[workers]   Error: LLM call failed: 404 Not Found — 
+[workers]       at Object.error (/home/dylan/eccb.app/src/lib/logger.ts:209:34)
+[workers]       at Worker.<anonymous> (/home/dylan/eccb.app/src/lib/jobs/queue.ts:393:14)
+[workers]       at Worker.emit (node:events:524:28)
+[workers]       at Worker.emit (/home/dylan/eccb.app/node_modules/bullmq/src/classes/queue-base.ts:131:20)
+[workers] 2026-02-27T08:44:18.117Z DEBUG Running scheduler tick
+[workers] 2026-02-27T08:44:23.130Z INFO  Starting smart upload processing [sessionId="627d5203-bb9b-48b0-8c8e-e4f0feb732af" fileId="cmm4nbelz0003hziwalu1pxks" jobId="2"]
+[workers] 2026-02-27T08:44:23.304Z WARN  renderPdfPageBatch: failed to render page [idx=1 err={}]
+[workers] 2026-02-27T08:44:23.340Z WARN  renderPdfPageBatch: failed to render page [idx=11 err={}]
+[workers] 2026-02-27T08:44:23.355Z WARN  renderPdfPageBatch: failed to render page [idx=21 err={}]
+[workers] 2026-02-27T08:44:23.371Z WARN  renderPdfPageBatch: failed to render page [idx=31 err={}]
+[workers] 2026-02-27T08:44:23.389Z WARN  renderPdfPageBatch: failed to render page [idx=41 err={}]
+[workers] 2026-02-27T08:44:23.572Z WARN  renderPdfPageBatch: failed to render page [idx=66 err={}]
+[workers] 2026-02-27T08:44:23.572Z INFO  PDF pages sampled for LLM [totalPages=67 sampledCount=8 indices=[0,1,11,21,31,41,51,66]]
+[workers] 2026-02-27T08:44:23.670Z INFO  PDF text extraction complete [totalPages=67 pagesToProcess=67 pagesWithText=10 textLayerCoverage="15%" hasTextLayer=false]
+[workers] 2026-02-27T08:44:23.737Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=1 err={}]
+[workers] 2026-02-27T08:44:23.751Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=2 err={}]
+[workers] 2026-02-27T08:44:23.765Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=3 err={}]
+[workers] 2026-02-27T08:44:23.779Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=4 err={}]
+[workers] 2026-02-27T08:44:23.793Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=5 err={}]
+[workers] 2026-02-27T08:44:23.840Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=6 err={}]
+[workers] 2026-02-27T08:44:23.891Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=7 err={}]
+[workers] 2026-02-27T08:44:23.905Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=8 err={}]
+[workers] 2026-02-27T08:44:23.919Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=9 err={}]
+[workers] 2026-02-27T08:44:23.965Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=10 err={}]
+[workers] 2026-02-27T08:44:24.005Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=11 err={}]
+[workers] 2026-02-27T08:44:24.020Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=12 err={}]
+[workers] 2026-02-27T08:44:24.037Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=13 err={}]
+[workers] 2026-02-27T08:44:24.052Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=14 err={}]
+[workers] 2026-02-27T08:44:24.070Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=15 err={}]
+[workers] 2026-02-27T08:44:24.084Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=16 err={}]
+[workers] 2026-02-27T08:44:24.099Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=17 err={}]
+[workers] 2026-02-27T08:44:24.114Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=18 err={}]
+[workers] 2026-02-27T08:44:24.129Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=19 err={}]
+[workers] 2026-02-27T08:44:24.147Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=20 err={}]
+[workers] 2026-02-27T08:44:24.161Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=21 err={}]
+[workers] 2026-02-27T08:44:24.175Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=22 err={}]
+[workers] 2026-02-27T08:44:24.190Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=23 err={}]
+[workers] 2026-02-27T08:44:24.205Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=24 err={}]
+[workers] 2026-02-27T08:44:24.221Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=25 err={}]
+[workers] 2026-02-27T08:44:24.239Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=26 err={}]
+[workers] 2026-02-27T08:44:24.252Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=27 err={}]
+[workers] 2026-02-27T08:44:24.266Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=28 err={}]
+[workers] 2026-02-27T08:44:24.280Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=29 err={}]
+[workers] 2026-02-27T08:44:24.294Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=30 err={}]
+[workers] 2026-02-27T08:44:24.309Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=31 err={}]
+[workers] 2026-02-27T08:44:24.326Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=32 err={}]
+[workers] 2026-02-27T08:44:24.347Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=33 err={}]
+[workers] 2026-02-27T08:44:24.365Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=34 err={}]
+[workers] 2026-02-27T08:44:24.378Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=35 err={}]
+[workers] 2026-02-27T08:44:24.391Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=36 err={}]
+[workers] 2026-02-27T08:44:24.404Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=37 err={}]
+[workers] 2026-02-27T08:44:24.418Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=38 err={}]
+[workers] 2026-02-27T08:44:24.431Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=39 err={}]
+[workers] 2026-02-27T08:44:24.447Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=40 err={}]
+[workers] 2026-02-27T08:44:24.469Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=41 err={}]
+[workers] 2026-02-27T08:44:24.487Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=42 err={}]
+[workers] 2026-02-27T08:44:24.501Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=43 err={}]
+[workers] 2026-02-27T08:44:25.046Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=52 err={}]
+[workers] 2026-02-27T08:44:25.061Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=53 err={}]
+[workers] 2026-02-27T08:44:25.078Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=54 err={}]
+[workers] 2026-02-27T08:44:25.092Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=55 err={}]
+[workers] 2026-02-27T08:44:25.105Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=56 err={}]
+[workers] 2026-02-27T08:44:25.119Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=57 err={}]
+[workers] 2026-02-27T08:44:25.134Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=58 err={}]
+[workers] 2026-02-27T08:44:25.151Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=59 err={}]
+[workers] 2026-02-27T08:44:25.167Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=60 err={}]
+[workers] 2026-02-27T08:44:25.184Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=61 err={}]
+[workers] 2026-02-27T08:44:25.199Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=62 err={}]
+[workers] 2026-02-27T08:44:25.213Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=63 err={}]
+[workers] 2026-02-27T08:44:25.227Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=64 err={}]
+[workers] 2026-02-27T08:44:25.240Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=65 err={}]
+[workers] 2026-02-27T08:44:25.289Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=66 err={}]
+[workers] 2026-02-27T08:44:25.290Z DEBUG Calling vision LLM [provider="gemini" model="models/gemini-2.0-flash-001" imageCount=67 labeledInputCount=0 responseFormat="json" attempt=1]
+[workers] 2026-02-27T08:44:25.429Z WARN  LLM call failed, retrying [error="LLM call failed: 404 Not Found — " waitMs=1000 attempt=1]
+[workers] 2026-02-27T08:44:26.429Z DEBUG Calling vision LLM [provider="gemini" model="models/gemini-2.0-flash-001" imageCount=67 labeledInputCount=0 responseFormat="json" attempt=2]
+[workers] 2026-02-27T08:44:26.490Z WARN  LLM call failed, retrying [error="LLM call failed: 404 Not Found — " waitMs=2000 attempt=2]
+[workers] 2026-02-27T08:44:28.491Z DEBUG Calling vision LLM [provider="gemini" model="models/gemini-2.0-flash-001" imageCount=67 labeledInputCount=0 responseFormat="json" attempt=3]
+[workers] 2026-02-27T08:44:28.559Z WARN  Header-label segmentation failed; continuing with first-pass vision [sessionId="627d5203-bb9b-48b0-8c8e-e4f0feb732af" error="LLM call failed: 404 Not Found — "]
+[workers] 2026-02-27T08:44:28.560Z DEBUG Calling vision LLM [provider="gemini" model="models/gemini-2.5-flash" imageCount=8 labeledInputCount=0 responseFormat="json" attempt=1]
+[workers] 2026-02-27T08:44:28.592Z WARN  LLM call failed, retrying [error="LLM call failed: 404 Not Found — " waitMs=1000 attempt=1]
+[workers] 2026-02-27T08:44:29.592Z DEBUG Calling vision LLM [provider="gemini" model="models/gemini-2.5-flash" imageCount=8 labeledInputCount=0 responseFormat="json" attempt=2]
+[workers] 2026-02-27T08:44:29.625Z WARN  LLM call failed, retrying [error="LLM call failed: 404 Not Found — " waitMs=2000 attempt=2]
+[workers] 2026-02-27T08:44:31.625Z DEBUG Calling vision LLM [provider="gemini" model="models/gemini-2.5-flash" imageCount=8 labeledInputCount=0 responseFormat="json" attempt=3]
+[workers] 2026-02-27T08:44:31.660Z ERROR Job failed [jobId="2" name="smartupload.process" attemptsMade=2]
+[workers]   Error: LLM call failed: 404 Not Found — 
+[workers]       at Object.error (/home/dylan/eccb.app/src/lib/logger.ts:209:34)
+[workers]       at Worker.<anonymous> (/home/dylan/eccb.app/src/lib/jobs/queue.ts:393:14)
+[workers]       at Worker.emit (node:events:524:28)
+[workers]       at Worker.emit (/home/dylan/eccb.app/node_modules/bullmq/src/classes/queue-base.ts:131:20)
+[workers] 2026-02-27T08:44:41.677Z INFO  Starting smart upload processing [sessionId="627d5203-bb9b-48b0-8c8e-e4f0feb732af" fileId="cmm4nbelz0003hziwalu1pxks" jobId="2"]
+[workers] 2026-02-27T08:44:41.872Z WARN  renderPdfPageBatch: failed to render page [idx=1 err={}]
+[workers] 2026-02-27T08:44:41.932Z WARN  renderPdfPageBatch: failed to render page [idx=11 err={}]
+[workers] 2026-02-27T08:44:41.960Z WARN  renderPdfPageBatch: failed to render page [idx=21 err={}]
+[workers] 2026-02-27T08:44:41.978Z WARN  renderPdfPageBatch: failed to render page [idx=31 err={}]
+[workers] 2026-02-27T08:44:41.993Z WARN  renderPdfPageBatch: failed to render page [idx=41 err={}]
+[workers] 2026-02-27T08:44:42.180Z WARN  renderPdfPageBatch: failed to render page [idx=66 err={}]
+[workers] 2026-02-27T08:44:42.181Z INFO  PDF pages sampled for LLM [totalPages=67 sampledCount=8 indices=[0,1,11,21,31,41,51,66]]
+[workers] 2026-02-27T08:44:42.295Z INFO  PDF text extraction complete [totalPages=67 pagesToProcess=67 pagesWithText=10 textLayerCoverage="15%" hasTextLayer=false]
+[workers] 2026-02-27T08:44:42.367Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=1 err={}]
+[workers] 2026-02-27T08:44:42.381Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=2 err={}]
+[workers] 2026-02-27T08:44:42.396Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=3 err={}]
+[workers] 2026-02-27T08:44:42.410Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=4 err={}]
+[workers] 2026-02-27T08:44:42.426Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=5 err={}]
+[workers] 2026-02-27T08:44:42.469Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=6 err={}]
+[workers] 2026-02-27T08:44:42.522Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=7 err={}]
+[workers] 2026-02-27T08:44:42.537Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=8 err={}]
+[workers] 2026-02-27T08:44:42.552Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=9 err={}]
+[workers] 2026-02-27T08:44:42.609Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=10 err={}]
+[workers] 2026-02-27T08:44:42.648Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=11 err={}]
+[workers] 2026-02-27T08:44:42.673Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=12 err={}]
+[workers] 2026-02-27T08:44:42.692Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=13 err={}]
+[workers] 2026-02-27T08:44:42.706Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=14 err={}]
+[workers] 2026-02-27T08:44:42.721Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=15 err={}]
+[workers] 2026-02-27T08:44:42.736Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=16 err={}]
+[workers] 2026-02-27T08:44:42.751Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=17 err={}]
+[workers] 2026-02-27T08:44:42.765Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=18 err={}]
+[workers] 2026-02-27T08:44:42.779Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=19 err={}]
+[workers] 2026-02-27T08:44:42.802Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=20 err={}]
+[workers] 2026-02-27T08:44:42.820Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=21 err={}]
+[workers] 2026-02-27T08:44:42.834Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=22 err={}]
+[workers] 2026-02-27T08:44:42.849Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=23 err={}]
+[workers] 2026-02-27T08:44:42.862Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=24 err={}]
+[workers] 2026-02-27T08:44:42.876Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=25 err={}]
+[workers] 2026-02-27T08:44:42.891Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=26 err={}]
+[workers] 2026-02-27T08:44:42.907Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=27 err={}]
+[workers] 2026-02-27T08:44:42.924Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=28 err={}]
+[workers] 2026-02-27T08:44:42.942Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=29 err={}]
+[workers] 2026-02-27T08:44:42.956Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=30 err={}]
+[workers] 2026-02-27T08:44:42.970Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=31 err={}]
+[workers] 2026-02-27T08:44:42.985Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=32 err={}]
+[workers] 2026-02-27T08:44:43.001Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=33 err={}]
+[workers] 2026-02-27T08:44:43.016Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=34 err={}]
+[workers] 2026-02-27T08:44:43.032Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=35 err={}]
+[workers] 2026-02-27T08:44:43.048Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=36 err={}]
+[workers] 2026-02-27T08:44:43.061Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=37 err={}]
+[workers] 2026-02-27T08:44:43.074Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=38 err={}]
+[workers] 2026-02-27T08:44:43.088Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=39 err={}]
+[workers] 2026-02-27T08:44:43.102Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=40 err={}]
+[workers] 2026-02-27T08:44:43.117Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=41 err={}]
+[workers] 2026-02-27T08:44:43.130Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=42 err={}]
+[workers] 2026-02-27T08:44:43.153Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=43 err={}]
+[workers] 2026-02-27T08:44:43.674Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=52 err={}]
+[workers] 2026-02-27T08:44:43.692Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=53 err={}]
+[workers] 2026-02-27T08:44:43.711Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=54 err={}]
+[workers] 2026-02-27T08:44:43.729Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=55 err={}]
+[workers] 2026-02-27T08:44:43.743Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=56 err={}]
+[workers] 2026-02-27T08:44:43.756Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=57 err={}]
+[workers] 2026-02-27T08:44:43.771Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=58 err={}]
+[workers] 2026-02-27T08:44:43.787Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=59 err={}]
+[workers] 2026-02-27T08:44:43.801Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=60 err={}]
+[workers] 2026-02-27T08:44:43.816Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=61 err={}]
+[workers] 2026-02-27T08:44:43.838Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=62 err={}]
+[workers] 2026-02-27T08:44:43.855Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=63 err={}]
+[workers] 2026-02-27T08:44:43.868Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=64 err={}]
+[workers] 2026-02-27T08:44:43.882Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=65 err={}]
+[workers] 2026-02-27T08:44:43.930Z WARN  renderPdfHeaderCropBatch: failed to render header crop [idx=66 err={}]
+[workers] 2026-02-27T08:44:43.930Z DEBUG Calling vision LLM [provider="gemini" model="models/gemini-2.0-flash-001" imageCount=67 labeledInputCount=0 responseFormat="json" attempt=1]
+[workers] 2026-02-27T08:44:44.067Z WARN  LLM call failed, retrying [error="LLM call failed: 404 Not Found — " waitMs=1000 attempt=1]
+[workers] 2026-02-27T08:44:45.067Z DEBUG Calling vision LLM [provider="gemini" model="models/gemini-2.0-flash-001" imageCount=67 labeledInputCount=0 responseFormat="json" attempt=2]
+[workers] 2026-02-27T08:44:45.131Z WARN  LLM call failed, retrying [error="LLM call failed: 404 Not Found — " waitMs=2000 attempt=2]
+[workers] 2026-02-27T08:44:47.131Z DEBUG Calling vision LLM [provider="gemini" model="models/gemini-2.0-flash-001" imageCount=67 labeledInputCount=0 responseFormat="json" attempt=3]
+[workers] 2026-02-27T08:44:47.189Z WARN  Header-label segmentation failed; continuing with first-pass vision [sessionId="627d5203-bb9b-48b0-8c8e-e4f0feb732af" error="LLM call failed: 404 Not Found — "]
+[workers] 2026-02-27T08:44:47.190Z DEBUG Calling vision LLM [provider="gemini" model="models/gemini-2.5-flash" imageCount=8 labeledInputCount=0 responseFormat="json" attempt=1]
+[workers] 2026-02-27T08:44:47.220Z WARN  LLM call failed, retrying [error="LLM call failed: 404 Not Found — " waitMs=1000 attempt=1]
+[workers] 2026-02-27T08:44:48.220Z DEBUG Calling vision LLM [provider="gemini" model="models/gemini-2.5-flash" imageCount=8 labeledInputCount=0 responseFormat="json" attempt=2]
+[workers] 2026-02-27T08:44:48.252Z WARN  LLM call failed, retrying [error="LLM call failed: 404 Not Found — " waitMs=2000 attempt=2]
+[workers] 2026-02-27T08:44:50.252Z DEBUG Calling vision LLM [provider="gemini" model="models/gemini-2.5-flash" imageCount=8 labeledInputCount=0 responseFormat="json" attempt=3]
+[workers] 2026-02-27T08:44:50.285Z ERROR Job failed [jobId="2" name="smartupload.process" attemptsMade=3]
+[workers]   Error: LLM call failed: 404 Not Found — 
+[workers]       at Object.error (/home/dylan/eccb.app/src/lib/logger.ts:209:34)
+[workers]       at Worker.<anonymous> (/home/dylan/eccb.app/src/lib/jobs/queue.ts:393:14)
+[workers]       at Worker.emit (node:events:524:28)
+[workers]       at Worker.emit (/home/dylan/eccb.app/node_modules/bullmq/src/classes/queue-base.ts:131:20)
+[workers] 2026-02-27T08:44:50.285Z WARN  Job moved to dead letter queue [jobId="2" originalQueue="eccb-smart-upload" reason="LLM call failed: 404 Not Found — "]
