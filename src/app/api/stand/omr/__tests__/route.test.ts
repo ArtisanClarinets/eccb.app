@@ -202,17 +202,19 @@ describe('OMR API Route', () => {
       mockPrisma.musicPiece.update.mockResolvedValue({});
 
       // Mock fetch for both file retrieval and OpenAI API.
+      // Return a simple PNG image (to avoid pdfjs-dist conversion)
       vi.mocked(global.fetch).mockImplementation(async (url: RequestInfo, opts?: RequestInit) => {
         const u = typeof url === 'string' ? url : url.toString();
         if (u.includes('/api/files/')) {
-          // return a fake PDF buffer with %PDF magic bytes
+          // Return a simple PNG image buffer instead of PDF to skip conversion
+          const pngBuffer = Buffer.from([137, 80, 78, 71]); // PNG magic: ‰PNG
           return {
             ok: true,
-            headers: { get: () => 'application/pdf' },
-            arrayBuffer: async () => new Uint8Array([0x25, 0x50, 0x44, 0x46]).buffer,
+            headers: { get: () => 'image/png' },
+            arrayBuffer: async () => pngBuffer.buffer,
           } as unknown as Response;
         }
-        // otherwise assume OpenAI analysis request
+        // Otherwise assume OpenAI analysis request
         return {
           ok: true,
           json: async () => ({

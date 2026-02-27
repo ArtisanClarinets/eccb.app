@@ -79,14 +79,17 @@ function asError(err: unknown): Error {
   return err instanceof Error ? err : new Error(String(err));
 }
 
-// helper for debugging; currently unused
-function _safeErrorDetails(err: unknown) {
+/**
+ * Error details helper used for safe structured logging.
+ * (Fixes the build error: safeErrorDetails must exist and be referenced consistently.)
+ */
+function safeErrorDetails(err: unknown) {
   const e = asError(err);
   return { errorMessage: e.message, errorName: e.name, errorStack: e.stack };
 }
 
 function nowMs(): number {
-   
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const perf = (globalThis as any)?.performance;
   if (perf?.now) return perf.now();
   return Date.now();
@@ -104,7 +107,7 @@ function normalizeWhitespace(input: string): string {
   return input.replace(/\s+/g, ' ').trim();
 }
 
-function _stripPdfExtension(input: string): string {
+function stripPdfExtension(input: string): string {
   return input.replace(/\.pdf$/i, '').trim();
 }
 
@@ -128,17 +131,29 @@ function extractTitleComposerFromText(text: string): { title?: string; composer?
   // Examples:
   //   "AMERICAN PATROL" "Karl L. King"
   //   "Title" "By Composer"
-  const byMatch = cleaned.match(/\b(?:by|composer|composed\s+by|arr\.?\s*by)\b\s*([A-Z][A-Za-z.'’-]{1,}.*)$/i);
-  const arrangerMatch = cleaned.match(/\b(?:arranged\s+by|arr\.?\s*by)\b\s*([A-Z][A-Za-z.'’-]{1,}.*)$/i);
+  const byMatch = cleaned.match(
+    /\b(?:by|composer|composed\s+by|arr\.?\s*by)\b\s*([A-Z][A-Za-z.'’-]{1,}.*)$/i
+  );
+  const arrangerMatch = cleaned.match(
+    /\b(?:arranged\s+by|arr\.?\s*by)\b\s*([A-Z][A-Za-z.'’-]{1,}.*)$/i
+  );
 
   // Candidate lines: we don't have real lines here, so approximate by splitting on long gaps.
-  const tokens = cleaned.split(/\s{2,}|\s-\s|\s•\s|\s\|\s/).map((t) => normalizeWhitespace(t)).filter(Boolean);
+  const tokens = cleaned
+    .split(/\s{2,}|\s-\s|\s•\s|\s\|\s/)
+    .map((t) => normalizeWhitespace(t))
+    .filter(Boolean);
 
   // Title candidate: prefer something reasonably long and not "by/arranged" line.
   let titleCandidate: string | undefined;
   for (const t of tokens.slice(0, 6)) {
     const lowered = t.toLowerCase();
-    if (lowered.startsWith('by ') || lowered.startsWith('arr') || lowered.includes('arranged by') || lowered.includes('composer')) {
+    if (
+      lowered.startsWith('by ') ||
+      lowered.startsWith('arr') ||
+      lowered.includes('arranged by') ||
+      lowered.includes('composer')
+    ) {
       continue;
     }
     // Avoid tiny fragments
@@ -157,6 +172,7 @@ function extractTitleComposerFromText(text: string): { title?: string; composer?
     for (const t of tokens.slice(0, 8)) {
       const lowered = t.toLowerCase();
       if (lowered.includes('by ') || lowered.includes('arr') || lowered.includes('composer')) continue;
+
       // Heuristic: looks name-like
       if (/^[A-Z][A-Za-z.'’-]+(?:\s+[A-Z][A-Za-z.'’-]+){0,3}$/.test(t) && t.length <= 40) {
         // Don’t choose titleCandidate again
@@ -184,7 +200,7 @@ async function tryOcrBase64ImageToText(base64PngOrJpeg: string): Promise<string>
 
   try {
     // Optional dependency – only works if installed.
-     
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const mod: any = await import('tesseract.js').catch(() => null);
     if (!mod?.recognize) {
       logger.warn('OCR engine unavailable (tesseract.js not installed); skipping OCR');
@@ -192,9 +208,10 @@ async function tryOcrBase64ImageToText(base64PngOrJpeg: string): Promise<string>
     }
 
     // tesseract.js expects a data URL or buffer; we supply data URL.
+    // NOTE: we default to image/png; OCR will still run even if the content was jpeg base64.
     const dataUrl = `data:image/png;base64,${base64PngOrJpeg}`;
 
-     
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const result: any = await mod.recognize(dataUrl, 'eng', {
       // Keep logs quiet; do not emit OCR text or internal debug.
       logger: () => undefined,
@@ -209,7 +226,10 @@ async function tryOcrBase64ImageToText(base64PngOrJpeg: string): Promise<string>
     return text;
   } catch (err) {
     const details = safeErrorDetails(err);
-    logger.warn('OCR failed; skipping OCR path', { ...details, durationMs: Math.round(nowMs() - start) });
+    logger.warn('OCR failed; skipping OCR path', {
+      ...details,
+      durationMs: Math.round(nowMs() - start),
+    });
     return '';
   }
 }
@@ -227,11 +247,7 @@ export async function extractOcrFallbackMetadata(params: {
 }): Promise<OCRMetadata> {
   const start = nowMs();
 
-  const {
-    pdfBuffer,
-    filename,
-    options = {},
-  } = params;
+  const { pdfBuffer, filename, options = {} } = params;
 
   const fileSafe = safeBaseName(filename);
 
@@ -296,12 +312,15 @@ export async function extractOcrFallbackMetadata(params: {
     // If we have a strong text layer but couldn't parse title, still return filename fallback,
     // but mark scanning state correctly.
     if (!isImageScanned) {
-      logger.info('OCR fallback: PDF has text layer but title parse was inconclusive; using filename fallback', {
-        filename: fileSafe,
-        hasTextLayer: extraction.hasTextLayer,
-        textLayerCoverage: extraction.textLayerCoverage,
-        durationMs: Math.round(nowMs() - start),
-      });
+      logger.info(
+        'OCR fallback: PDF has text layer but title parse was inconclusive; using filename fallback',
+        {
+          filename: fileSafe,
+          hasTextLayer: extraction.hasTextLayer,
+          textLayerCoverage: extraction.textLayerCoverage,
+          durationMs: Math.round(nowMs() - start),
+        }
+      );
 
       return {
         ...filenameFallback,
@@ -330,23 +349,23 @@ export async function extractOcrFallbackMetadata(params: {
       let ocrText = '';
 
       if (ocrMode === 'header' || ocrMode === 'both') {
-        const crops = await renderPdfHeaderCropBatch(
-          pdfBuffer,
-          [0],
-          {
-            scale: renderScale,
-            maxWidth: renderMaxWidth,
-            quality: renderQuality,
-            format: renderFormat,
-            cropHeightFraction: 0.25,
-          }
-        );
+        const crops = await renderPdfHeaderCropBatch(pdfBuffer, [0], {
+          scale: renderScale,
+          maxWidth: renderMaxWidth,
+          quality: renderQuality,
+          format: renderFormat,
+          cropHeightFraction: 0.25,
+        });
+
         if (crops?.[0]) {
           ocrText = await tryOcrBase64ImageToText(crops[0]);
         }
       }
 
-      if ((!ocrText || ocrText.trim().length < 8) && (ocrMode === 'full' || ocrMode === 'both')) {
+      if (
+        (!ocrText || ocrText.trim().length < 8) &&
+        (ocrMode === 'full' || ocrMode === 'both')
+      ) {
         const page0 = await renderPdfToImage(pdfBuffer, {
           pageIndex: 0,
           scale: renderScale,
@@ -354,6 +373,7 @@ export async function extractOcrFallbackMetadata(params: {
           quality: renderQuality,
           format: renderFormat,
         });
+
         if (page0) {
           const fullText = await tryOcrBase64ImageToText(page0);
           // Prefer longer of header vs full
@@ -458,7 +478,7 @@ export async function isImageBasedPdf(pdfBuffer: Buffer | string): Promise<boole
  */
 export function generateOCRFallback(filename: string): OCRMetadata {
   // Remove .pdf extension and clean up filename
-  let title = filename.replace(/\.pdf$/i, '').trim();
+  let title = stripPdfExtension(filename);
 
   // Try to extract common patterns from filenames
   // Pattern: "Composer - Title" or "Title - Composer"
@@ -474,14 +494,8 @@ export function generateOCRFallback(filename: string): OCRMetadata {
     if (/^\d+$/.test(firstPart)) {
       // First part is just a track/sequence number, use second part as title
       title = secondPart;
-      // Don't try to extract composer from the remaining title -
-      // the second dash is likely part of the title (e.g., "March - Stars and Stripes")
-    } else if (
-      // Check if first part looks like a composer name (not starting with digits, capitalized, not too long)
-      !/^\d/.test(firstPart) &&
-      firstPart.length < 30 &&
-      /^[A-Z]/.test(firstPart)
-    ) {
+      // Don't try to extract composer from the remaining title
+    } else if (!/^\d/.test(firstPart) && firstPart.length < 30 && /^[A-Z]/.test(firstPart)) {
       composer = firstPart;
       title = secondPart;
     } else if (!/^\d/.test(secondPart) && secondPart.length < 30 && /^[A-Z]/.test(secondPart)) {
@@ -526,7 +540,7 @@ export function generateOCRFallback(filename: string): OCRMetadata {
  * LOGIC UNCHANGED.
  */
 export function parseFilenameMetadata(filename: string): Partial<OCRMetadata> {
-  const cleanName = filename.replace(/\.pdf$/i, '').trim();
+  const cleanName = stripPdfExtension(filename);
   const result: Partial<OCRMetadata> = {};
 
   // Pattern: "Part 1 - Flute" or "Flute Part 1"

@@ -186,11 +186,12 @@ This document tracks the implementation progress of the Emerald Coast Community 
 ---
 
 ## 🔮 Future / Nice-to-Have (Feature 17)
-**Goal:** Post-MVP enhancements. SKIP FOR NOW!!!
+**Goal:** Post-MVP enhancements.
 
-- [ ] Music playback with synced score
-- [ ] Markup/annotation tools for PDF parts
-- [ ] Practice tracking logs for musicians
-- [ ] Donor management system
-- [ ] Ticketing platform integration
-- [ ] Music rental expiration alerts
+- [ ] Music playback with synced score (digital music stand integration - requires deep integration with music notation software, e.g., with MusicXML or similar, and potentially a custom player. We need to discuss this in more detail.)
+- [ ] Markup/annotation tools for PDF parts (partially implemented in the digital music stand)
+- [ ] Practice tracking logs for musicians (partially implemented in the digital music stand)
+- [ ] Donor management system (Integrate into Users/Members system. Need to ensure we have a clear understanding of the donor management requirements, DB schema, UI/UX design, stripe integration, reporting requirements, legality and compliance requirements, etc.)
+- [ ] Ticketing platform integration (legality and compliance requirements, DB schema, UI/UX design, stripe integration, reporting requirements, etc.)
+- [ ] Member dues management (Integrate into Users/Members system using stripe. Need to ensure we have a clear understanding of the member dues management requirements, DB schema, UI/UX design, stripe integration, reporting requirements, legality and compliance requirements, etc. Need to develop complete implementation plan using the stripe MCP to ensure proper implementation.)
+- [ ] Member Directory on the public site (Need to ensure we have a clear understanding of the member directory requirements, DB schema, UI/UX design, reporting requirements, legality and compliance requirements, etc.) (MOST IMPORTANT: WE MUST HAVE A CLEAR, DEFINITIVE OPT-IN FOR MEMBERS TO BE LISTED IN THE DIRECTORY. THIS IS A LEGAL AND PRIVACY ISSUE. THIS MUST BE VERY CLEAR AND EXPLICIT.)

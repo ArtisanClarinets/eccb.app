@@ -16,38 +16,38 @@ describe('LLM Adapters', () => {
   };
 
   describe('getAdapter', () => {
-    it('should return OpenAI adapter for openai provider', () => {
-      const adapter = getAdapter('openai');
+    it('should return OpenAI adapter for openai provider', async () => {
+      const adapter = await getAdapter('openai');
       expect(adapter).toBeInstanceOf(OpenAIAdapter);
     });
 
-    it('should return Anthropic adapter for anthropic provider', () => {
-      const adapter = getAdapter('anthropic');
+    it('should return Anthropic adapter for anthropic provider', async () => {
+      const adapter = await getAdapter('anthropic');
       expect(adapter).toBeInstanceOf(AnthropicAdapter);
     });
 
-    it('should return Gemini adapter for gemini provider', () => {
-      const adapter = getAdapter('gemini');
+    it('should return Gemini adapter for gemini provider', async () => {
+      const adapter = await getAdapter('gemini');
       expect(adapter).toBeInstanceOf(GeminiAdapter);
     });
 
-    it('should return OpenRouter adapter for openrouter provider', () => {
-      const adapter = getAdapter('openrouter');
+    it('should return OpenRouter adapter for openrouter provider', async () => {
+      const adapter = await getAdapter('openrouter');
       expect(adapter).toBeInstanceOf(OpenRouterAdapter);
     });
 
-    it('should return OpenAI adapter for custom provider', () => {
-      const adapter = getAdapter('custom');
+    it('should return OpenAI adapter for custom provider', async () => {
+      const adapter = await getAdapter('custom');
       expect(adapter).toBeInstanceOf(OpenAIAdapter);
     });
 
-    it('should return OpenAI adapter for ollama provider', () => {
-      const adapter = getAdapter('ollama');
+    it('should return OpenAI adapter for ollama provider', async () => {
+      const adapter = await getAdapter('ollama');
       expect(adapter).toBeInstanceOf(OpenAIAdapter);
     });
 
-    it('should default to OpenAI adapter for unknown provider', () => {
-      const adapter = getAdapter('unknown');
+    it('should default to OpenAI adapter for unknown provider', async () => {
+      const adapter = await getAdapter('unknown');
       expect(adapter).toBeInstanceOf(OpenAIAdapter);
     });
   });
