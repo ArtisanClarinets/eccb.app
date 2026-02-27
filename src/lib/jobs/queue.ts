@@ -36,17 +36,24 @@ const createRedisConnection = (): Redis => {
       logger.warn(`Redis reconnecting`, { attempt: times, delayMs: delay });
       return delay;
     },
-  });
+  }) as unknown as Redis;
 
-  connection.on('error', (err: Error) => {
+  // guard in case a test mock returns a bare object without event emitters
+  const safeOn = (event: string, handler: (...args: any[]) => void) => {
+    if (typeof (connection as any).on === 'function') {
+      (connection as any).on(event, handler);
+    }
+  };
+
+  safeOn('error', (err: Error) => {
     logger.error('Redis connection error', { error: err.message });
   });
 
-  connection.on('connect', () => {
+  safeOn('connect', () => {
     logger.info('Redis connected');
   });
 
-  connection.on('reconnecting', () => {
+  safeOn('reconnecting', () => {
     logger.warn('Redis reconnecting...');
   });
 

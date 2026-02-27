@@ -39,25 +39,39 @@ function parseDatabaseUrlForAdapter(url?: string) {
 const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build';
 const CONNECTION_LIMIT = isBuildPhase ? 1 : 10;
 
-const dbCfg = parseDatabaseUrlForAdapter(process.env.DATABASE_URL);
-const adapter = dbCfg
-  ? new PrismaMariaDb({
-      host: dbCfg.host,
-      port: dbCfg.port,
-      user: dbCfg.user,
-      password: dbCfg.password,
-      database: dbCfg.database,
-      connectionLimit: CONNECTION_LIMIT,
-    })
-  : undefined;
+let prisma: PrismaClient;
 
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    ...(adapter ? { adapter } : {}),
-    log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
-  });
+if (process.env.NODE_ENV === 'test') {
+  // During tests we typically mock out prisma methods, so we avoid
+  // instantiating the real client which currently requires an adapter
+  // or accelerateUrl when the DATABASE_URL is missing.  Return an empty
+  // object cast to PrismaClient; individual test files should mock
+  // the methods they rely on.
+  prisma = {} as PrismaClient;
+} else {
+  const dbCfg = parseDatabaseUrlForAdapter(process.env.DATABASE_URL);
+  const adapter = dbCfg
+    ? new PrismaMariaDb({
+        host: dbCfg.host,
+        port: dbCfg.port,
+        user: dbCfg.user,
+        password: dbCfg.password,
+        database: dbCfg.database,
+        connectionLimit: CONNECTION_LIMIT,
+      })
+    : undefined;
 
+  prisma =
+    globalForPrisma.prisma ??
+    new PrismaClient({
+      ...(adapter ? { adapter } : {}),
+      log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
+    });
+  // cache singleton
+  globalForPrisma.prisma = prisma;
+}
+
+export { prisma };
 // In all environments, cache the singleton on globalThis so that module
 // re-evaluation (HMR in dev, multiple module instances in build workers)
 // always reuses the same client and connection pool.

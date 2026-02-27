@@ -229,7 +229,9 @@ export function getApiKeyFieldForProvider(provider: ProviderValue): string {
  * Check if a provider requires an API key
  */
 export function providerRequiresApiKey(provider: ProviderValue): boolean {
-  return provider !== 'ollama' && provider !== 'custom';
+  // Ollama is the only local provider that does not require a key.
+  // All others, including custom endpoints, need an API key set.
+  return provider !== 'ollama';
 }
 
 /**

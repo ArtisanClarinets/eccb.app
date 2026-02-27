@@ -229,3 +229,4 @@ export { OllamaAdapter } from './ollama';
 export { OllamaCloudAdapter } from './ollama-cloud';
 export { OpenAIAdapter } from './openai';
 export { OpenRouterAdapter } from './openrouter';
+export { getAdapter };

@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth/guards';
 import { checkUserPermission } from '@/lib/auth/permissions';
 import { validateCSRF } from '@/lib/csrf';
 import { logger } from '@/lib/logger';
+import { auditLog } from '@/lib/services/audit';
 import { SYSTEM_CONFIG } from '@/lib/auth/permission-constants';
 import { z } from 'zod';
 import { getDefaultEndpointForProvider } from '@/lib/llm/providers';
@@ -52,6 +53,11 @@ export async function POST(request: NextRequest) {
 
     const { provider, endpoint, apiKey, model } = parsed.data;
 
+    // ensure required fields beyond schema
+    if ((provider === 'openai' || provider === 'anthropic' || provider === 'gemini' || provider === 'openrouter' || provider === 'custom') && !apiKey) {
+      return NextResponse.json({ ok: false, error: 'API key is required' }, { status: 400 });
+    }
+
     logger.info('Testing LLM connection', {
       userId: session.user.id,
       provider,
@@ -89,7 +95,14 @@ export async function POST(request: NextRequest) {
             lastError = `${url} → ${e instanceof Error ? e.message : String(e)}`;
           }
         }
-        return NextResponse.json({ ok: false, error: `Could not reach Ollama. Last error: ${lastError}` });
+        const failureMsg = `Connection failed: Could not reach Ollama. Last error: ${lastError}`;
+        await auditLog({
+          action: 'TEST_LLM_CONNECTION',
+          entityType: 'SETTING',
+          entityId: 'smart_upload',
+          newValues: { provider, model, success: false, error: failureMsg },
+        });
+        return NextResponse.json({ ok: false, error: failureMsg });
       }
 
       case 'openai': {
@@ -132,7 +145,7 @@ export async function POST(request: NextRequest) {
         const base = (endpoint || '').replace(/\/$/, '');
         if (!base) {
           return NextResponse.json(
-            { ok: false, error: 'Custom base URL is required.' },
+            { ok: false, error: 'Endpoint URL is required' },
             { status: 400 }
           );
         }
@@ -158,11 +171,20 @@ export async function POST(request: NextRequest) {
         signal: AbortSignal.timeout(10_000), // 10-second timeout
       });
     } catch (netErr) {
-      const msg =
-        netErr instanceof Error && netErr.name === 'TimeoutError'
-          ? `Connection timed out after 10 seconds. Make sure the endpoint is reachable.`
-          : `Network error: ${netErr instanceof Error ? netErr.message : String(netErr)}`;
-      return NextResponse.json({ ok: false, error: msg });
+      const isTimeout =
+        netErr instanceof Error &&
+        (netErr.name === 'TimeoutError' || netErr.name === 'AbortError');
+      const msg = isTimeout
+        ? `Connection timed out after 10 seconds. Make sure the endpoint is reachable.`
+        : `Network error: ${netErr instanceof Error ? netErr.message : String(netErr)}`;
+      const errText = `Connection failed: ${msg}`;
+      await auditLog({
+        action: 'TEST_LLM_CONNECTION',
+        entityType: 'SETTING',
+        entityId: 'smart_upload',
+        newValues: { provider, model, success: false, error: errText },
+      });
+      return NextResponse.json({ ok: false, error: errText });
     }
 
     if (!response.ok) {
@@ -172,16 +194,30 @@ export async function POST(request: NextRequest) {
         : response.status === 404
           ? ' — check the endpoint URL.'
           : '';
+      const errText = `Connection failed: server responded with ${response.status}${hint}`;
+      await auditLog({
+        action: 'TEST_LLM_CONNECTION',
+        entityType: 'SETTING',
+        entityId: 'smart_upload',
+        newValues: { provider, model, success: false, error: errText },
+      });
       return NextResponse.json({
         ok: false,
-        error: `Server responded with ${response.status}${hint}`,
+        error: errText,
         detail: errBody.substring(0, 200),
       });
     }
 
+    const successMessage = `Successfully connected to ${provider} (model: ${model}).`;
+    await auditLog({
+      action: 'TEST_LLM_CONNECTION',
+      entityType: 'SETTING',
+      entityId: 'smart_upload',
+      newValues: { provider, model, success: true, message: successMessage },
+    });
     return NextResponse.json({
       ok: true,
-      message: `Successfully connected to ${provider} (model: ${model}).`,
+      message: successMessage,
     });
   } catch (error) {
     logger.error('LLM connection test failed', { error });

@@ -48,6 +48,18 @@ export async function POST(
     const body = await request.json();
     const validatedData = approveSchema.parse(body);
 
+    // Early check: ensure session exists and is pending review
+    const existingSession = await prisma.smartUploadSession.findUnique({
+      where: { uploadSessionId: id },
+      select: { status: true },
+    });
+    if (!existingSession) {
+      return NextResponse.json({ error: 'Upload session not found' }, { status: 404 });
+    }
+    if (existingSession.status !== 'PENDING_REVIEW') {
+      return NextResponse.json({ error: 'Session is not pending review' }, { status: 400 });
+    }
+
     const overrides: CommitOverrides = {
       title: validatedData.title,
       composer: validatedData.composer,
@@ -105,11 +117,9 @@ export async function POST(
     const err = error instanceof Error ? error : new Error(String(error));
 
     // Surface domain errors as 400 to the client
-    if (
-      err.message.includes('not found') ||
-      err.message.includes('not commit-eligible') ||
-      err.message.includes('already committed')
-    ) {
+    // errors related to existence or eligibility are handled above,
+    // but keep a catch-all for other domain errors
+    if (err.message.includes('already committed')) {
       return NextResponse.json({ error: err.message }, { status: 400 });
     }
 

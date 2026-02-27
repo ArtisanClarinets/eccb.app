@@ -448,6 +448,12 @@ export function splitOverlappingRanges(instructions: NormalizedInstruction[]): N
     const current = sorted[i];
     const next = sorted[i + 1];
 
+    // Helper to strip internal metadata before pushing
+    const stripIndex = (obj: NormalizedInstruction & { originalIndex?: number }) => {
+      const { originalIndex, ...rest } = obj;
+      return rest;
+    };
+
     // Only check against the immediate next part in sorted order
     if (next && current.pageEnd >= next.pageStart) {
       // Overlap detected with next instruction
@@ -455,16 +461,14 @@ export function splitOverlappingRanges(instructions: NormalizedInstruction[]): N
       const adjustedEnd = next.pageStart - 1;
       if (adjustedEnd >= current.pageStart) {
         result.push({
-          ...current,
+          ...stripIndex(current),
           pageEnd: adjustedEnd,
         });
       }
       // If adjusted end < start, this part would have no pages, so skip it
     } else {
       // No overlap with immediate successor, keep as-is
-      result.push({
-        ...current,
-      });
+      result.push(stripIndex(current));
     }
   }
 

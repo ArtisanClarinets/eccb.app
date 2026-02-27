@@ -201,11 +201,21 @@ describe('OMR API Route', () => {
       mockPrisma.musicFile.update.mockResolvedValue({});
       mockPrisma.musicPiece.update.mockResolvedValue({});
 
-      // Mock fetch for OpenAI API
-      vi.mocked(global.fetch).mockResolvedValue({
-        ok: true,
-        json: () =>
-          Promise.resolve({
+      // Mock fetch for both file retrieval and OpenAI API.
+      vi.mocked(global.fetch).mockImplementation(async (url: RequestInfo, opts?: RequestInit) => {
+        const u = typeof url === 'string' ? url : url.toString();
+        if (u.includes('/api/files/')) {
+          // return a fake PDF buffer with %PDF magic bytes
+          return {
+            ok: true,
+            headers: { get: () => 'application/pdf' },
+            arrayBuffer: async () => new Uint8Array([0x25, 0x50, 0x44, 0x46]).buffer,
+          } as unknown as Response;
+        }
+        // otherwise assume OpenAI analysis request
+        return {
+          ok: true,
+          json: async () => ({
             choices: [
               {
                 message: {
@@ -218,7 +228,8 @@ describe('OMR API Route', () => {
               },
             ],
           }),
-      } as Response);
+        } as unknown as Response;
+      });
 
       const request = new NextRequest(
         new URL('http://localhost:3000/api/stand/omr'),
