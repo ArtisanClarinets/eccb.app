@@ -112,6 +112,17 @@ Return exactly this JSON shape:
 
 export const DEFAULT_ADJUDICATOR_USER_PROMPT_TEMPLATE = `Adjudicate first-pass and second-pass extraction outputs and produce a final result.
 
+Context:
+- Total pages: {{pageCount}}
+- First-pass metadata:
+{{firstPassMetadata}}
+
+- Second-pass metadata:
+{{secondPassMetadata}}
+
+- Identified Disagreements:
+{{disagreements}}
+
 Rules:
 1. Prefer values supported by explicit page evidence.
 2. Keep confirmed values unchanged.
@@ -181,6 +192,26 @@ export function buildHeaderLabelPrompt(
   const safeTemplate = template?.trim() || DEFAULT_HEADER_LABEL_USER_PROMPT_TEMPLATE;
   const labels = context.pageNumbers.map((pageNumber) => `Page ${pageNumber}`).join(', ');
   return safeTemplate.replace(/{{pageLabels}}/g, labels);
+}
+
+/**
+ * Build the third-pass adjudicator user prompt from template/context.
+ */
+export function buildAdjudicatorPrompt(
+  template: string,
+  context: {
+    firstPassMetadata: Record<string, unknown>;
+    secondPassMetadata: Record<string, unknown>;
+    disagreements: string[];
+    pageCount: number;
+  }
+): string {
+  const safeTemplate = template?.trim() || DEFAULT_ADJUDICATOR_USER_PROMPT_TEMPLATE;
+  return safeTemplate
+    .replace(/{{firstPassMetadata}}/g, JSON.stringify(context.firstPassMetadata, null, 2))
+    .replace(/{{secondPassMetadata}}/g, JSON.stringify(context.secondPassMetadata, null, 2))
+    .replace(/{{disagreements}}/g, context.disagreements.join('\n'))
+    .replace(/{{pageCount}}/g, String(context.pageCount));
 }
 
 // =============================================================================

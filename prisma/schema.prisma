@@ -399,6 +399,12 @@ model SmartUploadSession {
   tempFiles          Json?
   firstPassRaw       String?          @db.LongText
   secondPassRaw      String?          @db.LongText
+  adjudicatorStatus  String?
+  adjudicatorResult  Json?
+  adjudicatorRaw     String?          @db.LongText
+  finalConfidence    Int?
+  requiresHumanReview Boolean          @default(false)
+  llmAdjudicatorModel String?
 
   @@index([uploadSessionId])
   @@index([status])

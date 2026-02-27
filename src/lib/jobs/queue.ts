@@ -28,10 +28,29 @@ import { logger } from '@/lib/logger';
 // ============================================================================
 
 const createRedisConnection = (): Redis => {
-  return new Redis(env.REDIS_URL, {
+  const connection = new Redis(env.REDIS_URL, {
     maxRetriesPerRequest: null, // Required for BullMQ
     enableReadyCheck: false,
+    retryStrategy: (times: number) => {
+      const delay = Math.min(times * 1000, 30_000);
+      logger.warn(`Redis reconnecting`, { attempt: times, delayMs: delay });
+      return delay;
+    },
   });
+
+  connection.on('error', (err: Error) => {
+    logger.error('Redis connection error', { error: err.message });
+  });
+
+  connection.on('connect', () => {
+    logger.info('Redis connected');
+  });
+
+  connection.on('reconnecting', () => {
+    logger.warn('Redis reconnecting...');
+  });
+
+  return connection;
 };
 
 // Global Redis connection for queues
@@ -150,10 +169,13 @@ export async function addJob<T extends JobType>(
   options?: { delay?: number; jobId?: string }
 ): Promise<Job> {
   const queueName = getQueueNameForJob(jobType);
-  const queue = getQueue(queueName === QUEUE_NAMES.EMAIL ? 'EMAIL' :
+  const queue = getQueue(
+    queueName === QUEUE_NAMES.EMAIL ? 'EMAIL' :
     queueName === QUEUE_NAMES.NOTIFICATION ? 'NOTIFICATION' :
     queueName === QUEUE_NAMES.SCHEDULED ? 'SCHEDULED' :
-    queueName === QUEUE_NAMES.CLEANUP ? 'CLEANUP' : 'DEAD_LETTER');
+    queueName === QUEUE_NAMES.CLEANUP ? 'CLEANUP' :
+    queueName === QUEUE_NAMES.SMART_UPLOAD ? 'SMART_UPLOAD' : 'DEAD_LETTER'
+  );
 
   if (!queue) {
     throw new Error(`Queue not initialized: ${queueName}`);

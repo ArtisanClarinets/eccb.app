@@ -34,8 +34,8 @@
     "deps:update": "npm outdated && npm update --interactive"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.992.0",
-    "@aws-sdk/s3-request-presigner": "^3.992.0",
+    "@aws-sdk/client-s3": "^3.893.0",
+    "@aws-sdk/s3-request-presigner": "^3.893.0",
     "@hookform/resolvers": "^3.9.1",
     "@prisma/adapter-mariadb": "7.4.0",
     "@prisma/client": "7.4.0",
@@ -104,6 +104,7 @@
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.0",
     "tailwindcss-animate": "^1.0.7",
+    "tesseract.js": "^7.0.0",
     "tonal": "^6.0.0",
     "vaul": "^1.1.2",
     "webmidi": "^3.1.14",

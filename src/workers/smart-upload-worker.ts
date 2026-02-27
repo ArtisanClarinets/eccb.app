@@ -19,6 +19,8 @@ import { logger } from '@/lib/logger';
 import {
   buildVerificationPrompt,
   DEFAULT_VERIFICATION_SYSTEM_PROMPT,
+  DEFAULT_ADJUDICATOR_SYSTEM_PROMPT,
+  buildAdjudicatorPrompt,
 } from '@/lib/smart-upload/prompts';
 import type {
   CuttingInstruction,
@@ -144,6 +146,81 @@ async function callVerificationLLM(
   return { parsed: parseVerificationResponse(raw), raw };
 }
 
+/**
+ * Detect critical disagreements between first and second pass results.
+ */
+function detectDisagreements(
+  first: ExtractedMetadata,
+  second: ExtractedMetadata
+): string[] {
+  const disagreements: string[] = [];
+
+  if (first.title?.toLowerCase().trim() !== second.title?.toLowerCase().trim()) {
+    disagreements.push(`Title mismatch: "${first.title}" vs "${second.title}"`);
+  }
+
+  if (first.composer?.toLowerCase().trim() !== second.composer?.toLowerCase().trim()) {
+    disagreements.push(`Composer mismatch: "${first.composer}" vs "${second.composer}"`);
+  }
+
+  // Compare cutting instructions (instrument mapping)
+  const firstParts = first.cuttingInstructions?.map(p => p.instrument).sort().join(',') || '';
+  const secondParts = second.cuttingInstructions?.map(p => p.instrument).sort().join(',') || '';
+  
+  if (firstParts !== secondParts) {
+    disagreements.push('Instrument mapping mismatch in cutting instructions');
+  }
+
+  return disagreements;
+}
+
+/**
+ * Call the adjudicator LLM to resolve disagreements.
+ */
+async function callAdjudicatorLLM(
+  pageImages: string[],
+  cfg: LLMRuntimeConfig,
+  prompt: string
+): Promise<{ 
+  adjudicatedMetadata: ExtractedMetadata; 
+  adjudicationNotes: string | null;
+  finalConfidence: number;
+  requiresHumanReview: boolean;
+  raw: string;
+}> {
+  // Rate limiting
+  llmRateLimiter.setLimit(cfg.rateLimit);
+  await llmRateLimiter.consume();
+
+  const adapterConfig = {
+    ...runtimeToAdapterConfig(cfg),
+    llm_vision_model: cfg.adjudicatorModel || cfg.verificationModel,
+  };
+
+  const images = pageImages.slice(0, 10).map((base64Data) => ({
+    mimeType: 'image/png' as const,
+    base64Data,
+  }));
+
+  const response = await callVisionModel(adapterConfig, images, prompt, {
+    system: DEFAULT_ADJUDICATOR_SYSTEM_PROMPT,
+    responseFormat: { type: 'json' as const },
+    maxTokens: 4096,
+    temperature: 0.1,
+  });
+
+  const raw = response.content;
+  const parsed = parseVerificationResponse(raw) as any;
+
+  return {
+    adjudicatedMetadata: parsed.adjudicatedMetadata || parsed,
+    adjudicationNotes: parsed.adjudicationNotes || null,
+    finalConfidence: parsed.finalConfidence || 0,
+    requiresHumanReview: !!parsed.requiresHumanReview,
+    raw,
+  };
+}
+
 function parseVerificationResponse(content: string): ExtractedMetadata {
   const cleaned = content
     .replace(/^```(?:json)?\s*/im, '')
@@ -172,35 +249,49 @@ function shuffleArray<T>(array: T[]): T[] {
 }
 
 // =============================================================================
-// Second-Pass Result Handler (shared between parts-present and fallback paths)
+// Final Result Handler (handles DB updates, PDF splitting, and auto-approval)
 // =============================================================================
 
-async function handleSecondPassResult(
+async function finalizeSmartUploadSession(
   sessionId: string,
   smartSession: { parseStatus: string | null; routingDecision: string | null; fileName: string; uploadSessionId: string },
   updateData: Record<string, unknown>,
-  secondPassResult: ExtractedMetadata,
-  verificationConfidence: number,
-  secondPassRaw: string,
-  correctedCuttingInstructions: CuttingInstruction[] | undefined,
+  finalMetadata: ExtractedMetadata,
+  finalConfidence: number,
   originalPdfBuffer: Buffer,
   parsedParts: ParsedPartRecord[] | null,
   llmConfig: LLMRuntimeConfig,
+  adjudicationData?: { 
+    raw: string; 
+    notes: string | null; 
+    requiresHumanReview: boolean;
+    status: string;
+    model: string;
+  }
 ): Promise<void> {
+  // Base update data
   Object.assign(updateData, {
-    secondPassResult,
-    secondPassRaw,
-    secondPassStatus: 'COMPLETE',
+    extractedMetadata: finalMetadata,
+    confidenceScore: finalConfidence,
     llmProvider: llmConfig.provider,
-    llmVisionModel: llmConfig.verificationModel,
-    llmVerifyModel: llmConfig.verificationModel,
-    llmModelParams: { temperature: 0.1, max_tokens: 4096 },
     llmPromptVersion: llmConfig.promptVersion || '2.0.0',
   });
 
+  // Add adjudication data if present
+  if (adjudicationData) {
+    Object.assign(updateData, {
+      adjudicatorStatus: adjudicationData.status,
+      adjudicatorResult: finalMetadata, // Adjudicated metadata is the final metadata
+      adjudicatorRaw: adjudicationData.raw,
+      finalConfidence: finalConfidence,
+      requiresHumanReview: adjudicationData.requiresHumanReview,
+      llmAdjudicatorModel: adjudicationData.model,
+    });
+  }
+
+  const correctedCuttingInstructions = finalMetadata.cuttingInstructions;
+
   if (correctedCuttingInstructions && correctedCuttingInstructions.length > 0) {
-    const existingMetadata = updateData.extractedMetadata as Record<string, unknown> | undefined;
-    updateData.extractedMetadata = { ...(existingMetadata ?? {}), cuttingInstructions: correctedCuttingInstructions };
     updateData.cuttingInstructions = correctedCuttingInstructions;
 
     if (smartSession.parseStatus !== 'PARSED') {
@@ -262,9 +353,13 @@ async function handleSecondPassResult(
 
   // Auto-approve if legacy mode
   const routingDecision = smartSession.routingDecision as string;
-  if (verificationConfidence >= llmConfig.autoApproveThreshold && routingDecision === 'auto_parse_second_pass' && updateData.parseStatus === 'PARSED') {
+  const isHighConfidence = finalConfidence >= llmConfig.autoApproveThreshold;
+  const isAutonomousThreshold = finalConfidence >= llmConfig.autonomousApprovalThreshold;
+  const isParsed = updateData.parseStatus === 'PARSED' || smartSession.parseStatus === 'PARSED';
+
+  if (isHighConfidence && routingDecision === 'auto_parse_second_pass' && isParsed && !updateData.requiresHumanReview) {
     updateData.autoApproved = true;
-    logger.info('Session auto-approved after second pass (legacy threshold)', { sessionId, verificationConfidence });
+    logger.info('Session auto-approved after processing (legacy threshold)', { sessionId, finalConfidence });
   }
 
   await prisma.smartUploadSession.update({ where: { uploadSessionId: sessionId }, data: updateData });
@@ -272,10 +367,11 @@ async function handleSecondPassResult(
   // Trigger fully-autonomous auto-commit if configured
   if (
     llmConfig.enableFullyAutonomousMode &&
-    verificationConfidence >= llmConfig.autonomousApprovalThreshold &&
-    updateData.parseStatus === 'PARSED'
+    isAutonomousThreshold &&
+    isParsed &&
+    !updateData.requiresHumanReview
   ) {
-    logger.info('Autonomous mode: queueing auto-commit after second pass', { sessionId, verificationConfidence });
+    logger.info('Autonomous mode: queueing auto-commit', { sessionId, finalConfidence });
     await queueSmartUploadAutoCommit(sessionId);
   }
 }
@@ -437,12 +533,47 @@ async function processSecondPass(job: Job<SmartUploadSecondPassJobData>): Promis
 
       const verificationConfidence = (secondPassResult as unknown as Record<string, unknown>).verificationConfidence as number
         ?? secondPassResult.confidenceScore;
-      const correctedCuttingInstructions = secondPassResult.cuttingInstructions;
 
       await progress('verification', 70, 'Verification complete with parts');
-      await handleSecondPassResult(
-        sessionId, smartSession, updateData, secondPassResult, verificationConfidence,
-        secondPassRaw, correctedCuttingInstructions, originalPdfBuffer, parsedParts, llmConfig
+
+      // --- ADJUDICATION LOGIC ---
+      const disagreements = detectDisagreements(metadata, secondPassResult);
+      const lowConfidence = (verificationConfidence < 85) || (metadata.confidenceScore < 80);
+      const needsAdjudication = disagreements.length > 0 || lowConfidence;
+
+      let finalMetadata = secondPassResult;
+      let finalConfidence = verificationConfidence;
+      let adjudicationData = undefined;
+
+      if (needsAdjudication) {
+        await progress('adjudicating', 80, 'Starting adjudication pass');
+        const adjudicatorPrompt = buildAdjudicatorPrompt(
+          llmConfig.adjudicatorPrompt || '',
+          {
+            firstPassMetadata: metadata as unknown as Record<string, unknown>,
+            secondPassMetadata: secondPassResult as unknown as Record<string, unknown>,
+            disagreements,
+            pageCount: originalPageImages.length,
+          }
+        );
+
+        const adjResult = await callAdjudicatorLLM(originalPageImages, llmConfig, adjudicatorPrompt);
+        finalMetadata = adjResult.adjudicatedMetadata;
+        finalConfidence = adjResult.finalConfidence;
+        adjudicationData = {
+          raw: adjResult.raw,
+          notes: adjResult.adjudicationNotes,
+          requiresHumanReview: adjResult.requiresHumanReview,
+          status: 'COMPLETE',
+          model: llmConfig.adjudicatorModel || llmConfig.verificationModel,
+        };
+        await progress('adjudicating', 90, 'Adjudication complete');
+      }
+
+      Object.assign(updateData, { secondPassResult, secondPassRaw, secondPassStatus: 'COMPLETE', llmVerifyModel: llmConfig.verificationModel });
+      await finalizeSmartUploadSession(
+        sessionId, smartSession, updateData, finalMetadata, finalConfidence,
+        originalPdfBuffer, parsedParts, llmConfig, adjudicationData
       );
     } else {
       // No parts parsed yet - re-run full vision extraction as second opinion
@@ -466,12 +597,46 @@ Include a "corrections" field explaining any corrections made from the first pas
       const { parsed: secondPassResult, raw: secondPassRaw } = await callVerificationLLM(originalPageImages, llmConfig, fallbackPrompt);
       const verificationConfidence = (secondPassResult as unknown as Record<string, unknown>).verificationConfidence as number
         ?? secondPassResult.confidenceScore;
-      const correctedCuttingInstructions = secondPassResult.cuttingInstructions;
 
       await progress('verification', 70, 'Fallback verification complete');
-      await handleSecondPassResult(
-        sessionId, smartSession, updateData, secondPassResult, verificationConfidence,
-        secondPassRaw, correctedCuttingInstructions, originalPdfBuffer, parsedParts, llmConfig
+
+      // --- ADJUDICATION LOGIC (Fallback path) ---
+      const disagreements = detectDisagreements(metadata, secondPassResult);
+      const needsAdjudication = disagreements.length > 0 || verificationConfidence < 85;
+
+      let finalMetadata = secondPassResult;
+      let finalConfidence = verificationConfidence;
+      let adjudicationData = undefined;
+
+      if (needsAdjudication) {
+        await progress('adjudicating', 80, 'Starting adjudication pass');
+        const adjudicatorPrompt = buildAdjudicatorPrompt(
+          llmConfig.adjudicatorPrompt || '',
+          {
+            firstPassMetadata: metadata as unknown as Record<string, unknown>,
+            secondPassMetadata: secondPassResult as unknown as Record<string, unknown>,
+            disagreements,
+            pageCount: originalPageImages.length,
+          }
+        );
+
+        const adjResult = await callAdjudicatorLLM(originalPageImages, llmConfig, adjudicatorPrompt);
+        finalMetadata = adjResult.adjudicatedMetadata;
+        finalConfidence = adjResult.finalConfidence;
+        adjudicationData = {
+          raw: adjResult.raw,
+          notes: adjResult.adjudicationNotes,
+          requiresHumanReview: adjResult.requiresHumanReview,
+          status: 'COMPLETE',
+          model: llmConfig.adjudicatorModel || llmConfig.verificationModel,
+        };
+        await progress('adjudicating', 90, 'Adjudication complete');
+      }
+
+      Object.assign(updateData, { secondPassResult, secondPassRaw, secondPassStatus: 'COMPLETE', llmVerifyModel: llmConfig.verificationModel });
+      await finalizeSmartUploadSession(
+        sessionId, smartSession, updateData, finalMetadata, finalConfidence,
+        originalPdfBuffer, parsedParts, llmConfig, adjudicationData
       );
     }
 
@@ -521,7 +686,10 @@ export function startSmartUploadWorker(): void {
       if (job.name === 'smartupload.secondPass') {
         await processSecondPass(job as Job<SmartUploadSecondPassJobData>);
       } else {
-        throw new Error(`Unknown job type: ${job.name}`);
+        // This worker only handles secondPass; other job types are handled by
+        // smart-upload-processor-worker. Skip gracefully instead of throwing
+        // so we don't burn retries on jobs we don't own.
+        logger.debug('smart-upload-worker: skipping unowned job', { name: job.name, jobId: job.id });
       }
     },
   });

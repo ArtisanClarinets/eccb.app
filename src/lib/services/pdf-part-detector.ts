@@ -3,6 +3,14 @@
  *
  * Analyzes extracted metadata and PDF structure to identify if it's a multi-part
  * score and which parts need to be split.
+ *
+ * Corp-grade goals:
+ * - Never log PDF bytes or extracted text content
+ * - Defensive parsing and stable return shapes
+ * - Best-effort resource cleanup (pdfjs loadingTask)
+ * - Per-stage structured logging with useful diagnostics
+ *
+ * IMPORTANT: Detection logic/heuristics are preserved (no behavior-breaking changes).
  */
 
 import { logger } from '@/lib/logger';
@@ -36,6 +44,40 @@ interface ExtractedMetadata {
   parts?: ExtractedMetadataPart[];
 }
 
+type PdfGetDocumentParams = Parameters<typeof pdfjsLib.getDocument>[0];
+
+function asError(err: unknown): Error {
+  return err instanceof Error ? err : new Error(String(err));
+}
+
+function safeErrorDetails(err: unknown) {
+  const e = asError(err);
+  return {
+    errorMessage: e.message,
+    errorName: e.name,
+    errorStack: e.stack,
+  };
+}
+
+function nowMs(): number {
+   
+  const perf = (globalThis as any)?.performance;
+  if (perf?.now) return perf.now();
+  return Date.now();
+}
+
+async function destroyLoadingTask(loadingTask: unknown) {
+  try {
+     
+    const task = loadingTask as any;
+    if (task && typeof task.destroy === 'function') {
+      await task.destroy();
+    }
+  } catch {
+    // best-effort
+  }
+}
+
 /**
  * Analyze PDF to detect multi-part structure.
  * Returns information about which pages belong to which parts.
@@ -44,19 +86,28 @@ export async function analyzePdfParts(
   pdfBuffer: Buffer,
   extractedMetadata: ExtractedMetadata | null
 ): Promise<SmartUploadPartAnalysis> {
+  const start = nowMs();
+
+   
+  let loadingTask: any | undefined;
+   
+  let pdfDocument: any | undefined;
+
   try {
     // Load PDF - convert Buffer to Uint8Array for pdfjs-dist compatibility
     const pdfData = new Uint8Array(pdfBuffer);
-    const loadingTask = pdfjsLib.getDocument({
+    loadingTask = pdfjsLib.getDocument({
       data: pdfData,
       disableWorker: true,
-    } as unknown as Parameters<typeof pdfjsLib.getDocument>[0]);
-    const pdfDocument = await loadingTask.promise;
-    const totalPages = pdfDocument.numPages;
+    } as unknown as PdfGetDocumentParams);
+
+    pdfDocument = await loadingTask.promise;
+    const totalPages: number = pdfDocument.numPages;
 
     logger.info('Analyzing PDF for multi-part structure', {
       totalPages,
-      hasMetadataParts: !!extractedMetadata?.parts,
+      hasMetadataParts: Array.isArray(extractedMetadata?.parts) && extractedMetadata!.parts!.length > 0,
+      metadataIsMultiPart: !!extractedMetadata?.isMultiPart,
     });
 
     // If metadata indicates multi-part, estimate page distribution
@@ -91,6 +142,13 @@ export async function analyzePdfParts(
         lastPart.pageRange[1] = totalPages - 1;
       }
 
+      logger.info('Multi-part detected from metadata', {
+        totalPages,
+        partsCount,
+        pagesPerPart,
+        durationMs: Math.round(nowMs() - start),
+      });
+
       return {
         isMultiPart: true,
         totalPages,
@@ -106,6 +164,13 @@ export async function analyzePdfParts(
     const structureAnalysis = await analyzePdfStructure(pdfDocument, totalPages);
 
     if (structureAnalysis.potentialParts > 1) {
+      logger.info('Multi-part detected from structure heuristics', {
+        totalPages,
+        potentialParts: structureAnalysis.potentialParts,
+        confidence: structureAnalysis.confidence,
+        durationMs: Math.round(nowMs() - start),
+      });
+
       return {
         isMultiPart: true,
         totalPages,
@@ -115,6 +180,11 @@ export async function analyzePdfParts(
       };
     }
 
+    logger.info('Single-part detected', {
+      totalPages,
+      durationMs: Math.round(nowMs() - start),
+    });
+
     return {
       isMultiPart: false,
       totalPages,
@@ -123,27 +193,43 @@ export async function analyzePdfParts(
       notes: 'Single-part score detected.',
     };
   } catch (error) {
-    const err = error instanceof Error ? error : new Error(String(error));
+    const details = safeErrorDetails(error);
     logger.error('Failed to analyze PDF parts', {
-      message: err.message,
-      stack: err.stack,
-      name: err.name,
+      ...details,
+      // no PDF bytes or text included
     });
+
     return {
       isMultiPart: false,
       totalPages: 0,
       estimatedParts: [],
       confidence: 0,
-      notes: 'Error analyzing PDF: ' + err.message,
+      notes: 'Error analyzing PDF: ' + asError(error).message,
     };
+  } finally {
+    // Best-effort cleanup
+    try {
+      if (pdfDocument && typeof pdfDocument.cleanup === 'function') {
+        await pdfDocument.cleanup();
+      }
+    } catch {
+      // ignore
+    }
+    await destroyLoadingTask(loadingTask);
   }
 }
 
 /**
  * Analyze PDF structure to detect potential multi-part layouts.
  * This uses heuristics such as page count and content patterns.
+ *
+ * NOTE: This preserves the existing heuristic logic exactly:
+ * - <=2 pages => single
+ * - otherwise potentialParts = min(ceil(totalPages/4), totalPages)
+ * - consider multi-part if potentialParts>1 && totalPages>=4
  */
 async function analyzePdfStructure(
+   
   pdfDocument: pdfjsLib.PDFDocumentProxy,
   totalPages: number
 ): Promise<{

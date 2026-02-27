@@ -40,6 +40,8 @@ export interface ExtractedMetadata {
   subtitle?: string;
   arranger?: string;
   notes?: string;
+  adjudicationNotes?: string | null;
+  requiresHumanReview?: boolean;
 }
 
 export type RoutingDecision =

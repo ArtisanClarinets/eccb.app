@@ -3,6 +3,13 @@
  *
  * Splits a multi-part PDF into individual part PDFs based on page ranges.
  * Uses pdf-lib for PDF manipulation.
+ *
+ * Design goals (enterprise-grade):
+ * - Stable, predictable outputs (never leak PDF bytes into logs)
+ * - Defensive validation + clamping for page ranges
+ * - Per-part failure isolation (one bad instruction shouldn't kill the whole job)
+ * - Best-effort resource cleanup and structured logging
+ * - No behavior-breaking changes from the existing logic
  */
 
 import { PDFDocument } from 'pdf-lib';
@@ -22,10 +29,54 @@ export interface SplitPart {
   pageCount: number;
 }
 
+function asError(err: unknown): Error {
+  return err instanceof Error ? err : new Error(String(err));
+}
+
+function safeErrorDetails(err: unknown) {
+  const e = asError(err);
+  return {
+    errorMessage: e.message,
+    errorName: e.name,
+    errorStack: e.stack,
+  };
+}
+
+function nowMs(): number {
+   
+  const perf = (globalThis as any)?.performance;
+  if (perf?.now) return perf.now();
+  return Date.now();
+}
+
+/**
+ * Sanitize filename by replacing invalid characters.
+ * NOTE: This preserves existing behavior (simple replacement).
+ */
+function sanitizeFileName(fileName: string): string {
+  return fileName.replace(/[\\/:*?"<>|]/g, '_');
+}
+
+/**
+ * Best-effort cleanup for PDFDocument resources.
+ * (pdf-lib is generally GC-managed, but some versions expose cleanup helpers.)
+ */
+ 
+async function cleanupPdfDoc(doc: any) {
+  try {
+    if (doc && typeof doc.flush === 'function') {
+      // flush() exists in some builds; best-effort.
+      await doc.flush();
+    }
+  } catch {
+    // ignore
+  }
+}
+
 /**
  * Split PDF into separate files by page ranges.
  *
- * @param pdfBuffer - The original PDF as a Buffer
+ * @param pdfBuffer  - The original PDF as a Buffer
  * @param pageRanges - Array of page ranges with names for each part
  * @returns Array of split parts with names and buffers
  */
@@ -45,10 +96,15 @@ export async function splitPdfByPageRanges(
     ];
   }
 
+  const startAll = nowMs();
+   
+  let sourcePdf: any | undefined;
+
   try {
     // Convert Buffer to Uint8Array for pdf-lib compatibility
     const pdfData = new Uint8Array(pdfBuffer);
-    const sourcePdf = await PDFDocument.load(pdfData);
+    sourcePdf = await PDFDocument.load(pdfData);
+
     const totalPages = sourcePdf.getPageCount();
     const results: SplitPart[] = [];
 
@@ -85,6 +141,7 @@ export async function splitPdfByPageRanges(
         continue;
       }
 
+      const partStart = nowMs();
       try {
         // Create new PDF for this part
         const newPdf = await PDFDocument.create();
@@ -109,12 +166,19 @@ export async function splitPdfByPageRanges(
           partName: range.name,
           pages: pageIndices.length,
           pageIndexRange: `${validStart}-${validEnd}`,
+          durationMs: Math.round(nowMs() - partStart),
         });
+
+        await cleanupPdfDoc(newPdf);
       } catch (partError) {
-        const err = partError instanceof Error ? partError : new Error(String(partError));
-        logger.error('Failed to create split part', err, {
-          name: range.name,
-          range,
+        const details = safeErrorDetails(partError);
+        logger.error('Failed to create split part', {
+          ...details,
+          partName: range.name,
+          start: range.start,
+          end: range.end,
+          validStart,
+          validEnd,
         });
         // Continue with other parts even if one fails
       }
@@ -134,13 +198,16 @@ export async function splitPdfByPageRanges(
     logger.info('PDF split complete', {
       partsCreated: results.length,
       totalPagesProcessed: results.reduce((sum, part) => sum + part.pageCount, 0),
+      durationMs: Math.round(nowMs() - startAll),
     });
 
     return results;
   } catch (error) {
-    const err = error instanceof Error ? error : new Error(String(error));
-    logger.error('Failed to split PDF', err);
-    throw new Error(`Failed to split PDF: ${err.message}`);
+    const details = safeErrorDetails(error);
+    logger.error('Failed to split PDF', details);
+    throw new Error(`Failed to split PDF: ${asError(error).message}`);
+  } finally {
+    await cleanupPdfDoc(sourcePdf);
   }
 }
 
@@ -152,19 +219,23 @@ export async function validatePdfBuffer(pdfBuffer: Buffer): Promise<{
   pageCount?: number;
   error?: string;
 }> {
+   
+  let pdfDoc: any | undefined;
   try {
     const pdfData = new Uint8Array(pdfBuffer);
-    const pdfDoc = await PDFDocument.load(pdfData);
+    pdfDoc = await PDFDocument.load(pdfData);
     return {
       valid: true,
       pageCount: pdfDoc.getPageCount(),
     };
   } catch (error) {
-    const err = error instanceof Error ? error : new Error(String(error));
+    const err = asError(error);
     return {
       valid: false,
       error: err.message,
     };
+  } finally {
+    await cleanupPdfDoc(pdfDoc);
   }
 }
 
@@ -179,9 +250,11 @@ export async function getPdfMetadata(
   author?: string;
   subject?: string;
 }> {
+   
+  let pdfDoc: any | undefined;
   try {
     const pdfData = new Uint8Array(pdfBuffer);
-    const pdfDoc = await PDFDocument.load(pdfData);
+    pdfDoc = await PDFDocument.load(pdfData);
 
     return {
       pageCount: pdfDoc.getPageCount(),
@@ -190,20 +263,14 @@ export async function getPdfMetadata(
       subject: pdfDoc.getSubject(),
     };
   } catch (error) {
-    const err = error instanceof Error ? error : new Error(String(error));
-    logger.error('Failed to get PDF metadata', err);
+    const details = safeErrorDetails(error);
+    logger.error('Failed to get PDF metadata', details);
     return {
       pageCount: 0,
     };
+  } finally {
+    await cleanupPdfDoc(pdfDoc);
   }
-}
-
-
-/**
- * Sanitize filename by replacing invalid characters
- */
-function sanitizeFileName(fileName: string): string {
-  return fileName.replace(/[\\/:*?"<>|]/g, '_');
 }
 
 /**
@@ -224,23 +291,31 @@ export async function splitPdfByCuttingInstructions(
   originalBaseName: string,
   instructions: CuttingInstruction[],
   options: SplitPdfOptions = {}
-): Promise<Array<{
-  instruction: CuttingInstruction;
-  buffer: Buffer;
-  pageCount: number;
-  fileName: string;
-}>> {
+): Promise<
+  Array<{
+    instruction: CuttingInstruction;
+    buffer: Buffer;
+    pageCount: number;
+    fileName: string;
+  }>
+> {
   if (instructions.length === 0) {
     logger.warn('No cutting instructions provided');
     return [];
   }
+
+  const startAll = nowMs();
+
+   
+  let sourcePdf: any | undefined;
 
   try {
     const { generateFilename, indexing = 'zero' } = options;
 
     // Convert Buffer to Uint8Array for pdf-lib compatibility
     const pdfData = new Uint8Array(pdfBuffer);
-    const sourcePdf = await PDFDocument.load(pdfData);
+    sourcePdf = await PDFDocument.load(pdfData);
+
     const totalPages = sourcePdf.getPageCount();
     const results: Array<{
       instruction: CuttingInstruction;
@@ -254,9 +329,12 @@ export async function splitPdfByCuttingInstructions(
     logger.info('Starting PDF split by cutting instructions', {
       totalPages,
       instructionsCount: instructions.length,
+      indexing,
     });
 
     for (const instruction of instructions) {
+      const partStart = nowMs();
+
       let [startPage, endPage] = instruction.pageRange;
 
       if (indexing === 'one') {
@@ -275,6 +353,7 @@ export async function splitPdfByCuttingInstructions(
           requestedStart: startPage,
           requestedEnd: endPage,
           totalPages,
+          indexing,
         });
         clampedStart = Math.max(0, Math.min(startPage, totalPages - 1));
         clampedEnd = Math.max(clampedStart, Math.min(endPage, totalPages - 1));
@@ -290,6 +369,7 @@ export async function splitPdfByCuttingInstructions(
         logger.warn('No valid pages for instruction', {
           partName: instruction.partName,
           pageRange: instruction.pageRange,
+          indexing,
         });
         continue;
       }
@@ -325,12 +405,19 @@ export async function splitPdfByCuttingInstructions(
           pages: copiedPages.length,
           pageIndexRange: `${clampedStart}-${clampedEnd}`,
           fileName,
+          durationMs: Math.round(nowMs() - partStart),
         });
+
+        await cleanupPdfDoc(newPdf);
       } catch (partError) {
-        const err = partError instanceof Error ? partError : new Error(String(partError));
-        logger.error('Failed to create split part from instruction', err, {
+        const details = safeErrorDetails(partError);
+        logger.error('Failed to create split part from instruction', {
+          ...details,
           partName: instruction.partName,
           pageRange: instruction.pageRange,
+          indexing,
+          clampedStart,
+          clampedEnd,
         });
         // Continue with other instructions
       }
@@ -344,12 +431,15 @@ export async function splitPdfByCuttingInstructions(
     logger.info('PDF split by cutting instructions complete', {
       partsCreated: results.length,
       totalPagesProcessed: results.reduce((sum, part) => sum + part.pageCount, 0),
+      durationMs: Math.round(nowMs() - startAll),
     });
 
     return results;
   } catch (error) {
-    const err = error instanceof Error ? error : new Error(String(error));
-    logger.error('Failed to split PDF by cutting instructions', err);
-    throw new Error(`Failed to split PDF: ${err.message}`);
+    const details = safeErrorDetails(error);
+    logger.error('Failed to split PDF by cutting instructions', details);
+    throw new Error(`Failed to split PDF: ${asError(error).message}`);
+  } finally {
+    await cleanupPdfDoc(sourcePdf);
   }
 }

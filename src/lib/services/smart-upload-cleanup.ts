@@ -10,11 +10,47 @@ import { logger } from '@/lib/logger';
  *   - The original upload file (storageKey on SmartUploadSession)
  *   - Any MusicFile storageKeys that have already been committed to the DB
  *
+ * Corp-grade goals:
+ * - Stable, defensive handling when JSON fields are malformed
+ * - No sensitive content logging
+ * - Reduce N+1 queries without changing results
+ * - Structured success/failure metrics
+ */
+
+function asError(err: unknown): Error {
+  return err instanceof Error ? err : new Error(String(err));
+}
+
+function safeErrorDetails(err: unknown) {
+  const e = asError(err);
+  return { errorMessage: e.message, errorName: e.name, errorStack: e.stack };
+}
+
+function asStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((v) => typeof v === 'string') as string[];
+}
+
+function asParsedPartsArray(
+  value: unknown
+): Array<{ storageKey?: string }> {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((v) => v && typeof v === 'object')
+    .map((v) => v as { storageKey?: unknown })
+    .map((v) => ({
+      storageKey: typeof v.storageKey === 'string' ? v.storageKey : undefined,
+    }));
+}
+
+/**
+ * Delete all temporary files associated with a SmartUploadSession.
+ *
  * @param sessionId - The uploadSessionId of the SmartUploadSession
  */
-export async function cleanupSmartUploadTempFiles(
-  sessionId: string
-): Promise<void> {
+export async function cleanupSmartUploadTempFiles(sessionId: string): Promise<void> {
+  const start = Date.now();
+
   // Step 1: Fetch the SmartUploadSession by uploadSessionId
   const session = await prisma.smartUploadSession.findUnique({
     where: { uploadSessionId: sessionId },
@@ -26,7 +62,7 @@ export async function cleanupSmartUploadTempFiles(
   }
 
   // Step 2: Parse tempFiles JSON array from the session
-  const tempFiles = (session.tempFiles as string[]) || [];
+  const tempFiles = asStringArray(session.tempFiles);
 
   if (tempFiles.length === 0) {
     logger.info('No temp files to clean up', { sessionId });
@@ -34,7 +70,7 @@ export async function cleanupSmartUploadTempFiles(
   }
 
   // Step 3: Parse parsedParts JSON array from the session
-  const parsedParts = (session.parsedParts as Array<{ storageKey?: string }>) || [];
+  const parsedParts = asParsedPartsArray(session.parsedParts);
 
   // Step 4: Get storageKeys from parsedParts (these are the split part files)
   const committedStorageKeys = new Set<string>();
@@ -44,44 +80,45 @@ export async function cleanupSmartUploadTempFiles(
     committedStorageKeys.add(session.storageKey);
   }
 
-  // Step 5: Query MusicFile table to find any storageKeys that have been
-  // committed to the DB
-  for (const part of parsedParts) {
-    if (part.storageKey) {
-      // Check if this storageKey exists in any MusicFile record
-      const existingFile = await prisma.musicFile.findFirst({
-        where: { storageKey: part.storageKey },
-        select: { storageKey: true },
-      });
-
-      if (existingFile) {
-        committedStorageKeys.add(part.storageKey);
-      }
-    }
-  }
-
-  // Also check MusicPart table for any committed storageKeys
+  // Collect candidate part keys
   const partStorageKeys = parsedParts
-    .filter((p) => p.storageKey)
-    .map((p) => p.storageKey as string);
+    .map((p) => p.storageKey)
+    .filter((k): k is string => typeof k === 'string' && k.length > 0);
 
-  if (partStorageKeys.length > 0) {
-    const committedParts = await prisma.musicPart.findMany({
-      where: { storageKey: { in: partStorageKeys } },
-      select: { storageKey: true },
-    });
+  // Step 5: Query MusicFile + MusicPart to find any storageKeys that have been committed to the DB
+  // (Optimization: do bulk queries; behavior equivalent to the old per-key findFirst loop)
+  try {
+    if (partStorageKeys.length > 0) {
+      const [committedFiles, committedParts] = await Promise.all([
+        prisma.musicFile.findMany({
+          where: { storageKey: { in: partStorageKeys } },
+          select: { storageKey: true },
+        }),
+        prisma.musicPart.findMany({
+          where: { storageKey: { in: partStorageKeys } },
+          select: { storageKey: true },
+        }),
+      ]);
 
-    for (const part of committedParts) {
-      if (part.storageKey) {
-        committedStorageKeys.add(part.storageKey);
+      for (const f of committedFiles) {
+        if (f.storageKey) committedStorageKeys.add(f.storageKey);
+      }
+      for (const p of committedParts) {
+        if (p.storageKey) committedStorageKeys.add(p.storageKey);
       }
     }
+  } catch (err) {
+    // If this check fails, we should be conservative and avoid deleting anything risky.
+    const details = safeErrorDetails(err);
+    logger.error('Failed to query committed storage keys; aborting cleanup to be safe', {
+      sessionId,
+      ...details,
+    });
+    return;
   }
 
-  // Step 6: Determine which tempFiles are NOT in any committed MusicFile record
-  const filesToDelete = tempFiles.filter(
-    (fileKey) => !committedStorageKeys.has(fileKey)
-  );
+  // Step 6: Determine which tempFiles are NOT in any committed MusicFile/MusicPart record
+  const filesToDelete = tempFiles.filter((fileKey) => !committedStorageKeys.has(fileKey));
 
   if (filesToDelete.length === 0) {
     logger.info('All temp files are committed, nothing to delete', {
@@ -102,15 +139,29 @@ export async function cleanupSmartUploadTempFiles(
       logger.info('Deleted temp file', { sessionId, fileKey });
     } catch (error) {
       failedCount++;
-      logger.error('Failed to delete temp file', { sessionId, fileKey, error });
+      const details = safeErrorDetails(error);
+      logger.error('Failed to delete temp file', {
+        sessionId,
+        fileKey,
+        ...details,
+      });
     }
   }
 
   // Step 8: Update SmartUploadSession.tempFiles to empty array
-  await prisma.smartUploadSession.update({
-    where: { uploadSessionId: sessionId },
-    data: { tempFiles: [] },
-  });
+  try {
+    await prisma.smartUploadSession.update({
+      where: { uploadSessionId: sessionId },
+      data: { tempFiles: [] },
+    });
+  } catch (err) {
+    const details = safeErrorDetails(err);
+    // Cleanup succeeded but session update failed; log loudly but do not throw.
+    logger.error('Failed to clear SmartUploadSession.tempFiles after cleanup', {
+      sessionId,
+      ...details,
+    });
+  }
 
   // Step 9: Log all deletions
   logger.info('Smart upload temp files cleanup complete', {
@@ -118,6 +169,8 @@ export async function cleanupSmartUploadTempFiles(
     totalTempFiles: tempFiles.length,
     deletedCount,
     failedCount,
-    skippedCount: committedStorageKeys.size,
+    // This is count of committed keys we excluded from deletion (not necessarily 1:1 with tempFiles)
+    skippedCommittedKeyCount: committedStorageKeys.size,
+    durationMs: Date.now() - start,
   });
 }

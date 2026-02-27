@@ -273,7 +273,7 @@ async function main(): Promise<void> {
   startEmailWorker();
   startSchedulerWorker();
   startSmartUploadWorker();
-  startSmartUploadProcessorWorker();
+  await startSmartUploadProcessorWorker();
 
   // Start scheduler intervals
   startSchedulerIntervals();

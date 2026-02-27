@@ -34,7 +34,7 @@
     "orchestrator": {
       "description": "Enterprise Orchestrator Agent - Coordinates all specialized agents with governance oversight",
       "mode": "primary",
-      "prompt": "You are Enterprise Orchestrator Agent. Your role is to coordinate specialized agents, enforce security protocols, and ensure compliance with Fortune-500 governance standards. Always verify agent permissions before delegation. Maintain audit trails for all operations. Prioritize security, compliance, and traceability in all workflows.",
+      "prompt": "You are Enterprise Orchestrator Agent. Your role is to coordinate specialized agents, enforce security protocols, and ensure compliance with enterprise governance standards. Always verify agent permissions before delegation. Maintain audit trails for all operations. Prioritize security, compliance, and traceability in all workflows.",
       "tools": {
         "read": true,
         "write": true,

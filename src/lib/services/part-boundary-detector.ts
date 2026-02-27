@@ -4,11 +4,16 @@
  * Deterministically segments a multi-part PDF into per-instrument parts
  * by analysing page header labels.
  *
- * Algorithm:
+ * Algorithm (unchanged):
  *  1. Normalise header text → canonical instrument label
  *  2. Smooth "blips" (single-page label changes likely due to OCR artifacts)
  *  3. Group consecutive pages with the same label into segments
  *  4. Return 0-indexed CuttingInstructions ready for the splitter
+ *
+ * Corp-grade goals:
+ * - No sensitive content logging (no raw header text)
+ * - Stable return shapes and defensive handling
+ * - Structured diagnostics for debugging segmentation quality
  */
 
 import { logger } from '@/lib/logger';
@@ -57,6 +62,41 @@ export interface SegmentationResult {
   segmentBoundaries: Array<{ label: string; start: number; end: number }>;
   /** Per-page confidence diagnostics */
   perPageConfidence: Array<{ pageIndex: number; confidence: number; label: string }>;
+}
+
+// =============================================================================
+// Utilities
+// =============================================================================
+
+function nowMs(): number {
+   
+  const perf = (globalThis as any)?.performance;
+  if (perf?.now) return perf.now();
+  return Date.now();
+}
+
+function safeInt(n: unknown, fallback: number): number {
+  if (typeof n !== 'number' || !Number.isFinite(n)) return fallback;
+  return Math.trunc(n);
+}
+
+function safeString(s: unknown): string {
+  return typeof s === 'string' ? s : '';
+}
+
+function safeErrorDetails(err: unknown) {
+  const e = err instanceof Error ? err : new Error(String(err));
+  return { errorMessage: e.message, errorName: e.name, errorStack: e.stack };
+}
+
+/**
+ * Prevent accidental logging of raw header text. For diagnostics, log lengths only.
+ */
+function headerDiagnostics(headerText: string) {
+  return {
+    headerChars: headerText.length,
+    headerPreviewPresent: headerText.length > 0,
+  };
 }
 
 // =============================================================================
@@ -125,8 +165,12 @@ const PART_PATTERNS: Array<{ pattern: RegExp; template: string }> = [
 /**
  * Normalise a raw header text string into a canonical instrument label.
  * Returns null if no recognisable instrument is found.
+ *
+ * LOGIC UNCHANGED.
  */
-export function normaliseLabelFromHeader(headerText: string): { label: string; confidence: number } | null {
+export function normaliseLabelFromHeader(
+  headerText: string
+): { label: string; confidence: number } | null {
   const text = headerText.trim();
   if (!text || text.length < 3) return null;
 
@@ -154,6 +198,8 @@ export function normaliseLabelFromHeader(headerText: string): { label: string; c
  * Smooth "blips" — single-page label changes likely caused by OCR artifacts
  * or title page spillover. A blip is a different label for exactly 1 page
  * surrounded by the same label on both sides.
+ *
+ * LOGIC UNCHANGED.
  */
 function smoothBlips(labels: PageLabel[]): PageLabel[] {
   if (labels.length <= 2) return labels;
@@ -178,13 +224,24 @@ function smoothBlips(labels: PageLabel[]): PageLabel[] {
 /**
  * Segment pages into parts from page header labels.
  * Input comes from either PDF text extraction or LLM header OCR.
+ *
+ * LOGIC UNCHANGED.
  */
 export function detectPartBoundaries(
   pageHeaders: PageHeader[],
   totalPages: number,
   fromTextLayer: boolean
 ): SegmentationResult {
+  const start = nowMs();
+
+  const safeTotalPages = Math.max(0, safeInt(totalPages, 0));
+
   if (pageHeaders.length === 0) {
+    logger.info('Part boundary detection skipped (no headers)', {
+      totalPages: safeTotalPages,
+      fromTextLayer,
+    });
+
     return {
       pageLabels: [],
       segments: [],
@@ -198,11 +255,16 @@ export function detectPartBoundaries(
 
   // Step 1: Assign labels to each page
   let pageLabels: PageLabel[] = pageHeaders.map((header) => {
-    const result = normaliseLabelFromHeader(header.headerText || header.fullText);
+    const headerText = safeString(header.headerText);
+    const fullText = safeString(header.fullText);
+    const candidateText = headerText || fullText;
+
+    const result = normaliseLabelFromHeader(candidateText);
+
     return {
-      pageIndex: header.pageIndex,
+      pageIndex: safeInt(header.pageIndex, 0),
       label: result?.label ?? '',
-      rawHeader: header.headerText,
+      rawHeader: headerText, // returned for internal use / UI (do not log)
       confidence: result?.confidence ?? 0,
     };
   });
@@ -235,8 +297,8 @@ export function detectPartBoundaries(
   // Step 5: Add any pages not in pageHeaders with unknown labels.
   // Do not propagate labels into pages that were never analyzed.
   const coveredIndices = new Set(pageLabels.map((p) => p.pageIndex));
-  if (totalPages > pageHeaders.length) {
-    for (let i = 0; i < totalPages; i++) {
+  if (safeTotalPages > pageHeaders.length) {
+    for (let i = 0; i < safeTotalPages; i++) {
       if (!coveredIndices.has(i)) {
         pageLabels.push({
           pageIndex: i,
@@ -272,27 +334,32 @@ export function detectPartBoundaries(
   }
 
   // Step 7: Build 0-indexed cutting instructions
-  const cuttingInstructions: CuttingInstruction[] = segments.map((seg, idx) => ({
-    partName: seg.label,
-    instrument: seg.label,
-    section: normalizeInstrumentLabel(seg.label).section,
-    transposition: normalizeInstrumentLabel(seg.label).transposition,
-    partNumber: idx + 1,
-    pageRange: [seg.pageStart, seg.pageEnd] as [number, number],
-  }));
+  // Minor optimization: avoid repeated normalizeInstrumentLabel calls for same label.
+  const normCache = new Map<string, ReturnType<typeof normalizeInstrumentLabel>>();
+  const getNorm = (label: string) => {
+    const existing = normCache.get(label);
+    if (existing) return existing;
+    const norm = normalizeInstrumentLabel(label);
+    normCache.set(label, norm);
+    return norm;
+  };
+
+  const cuttingInstructions: CuttingInstruction[] = segments.map((seg, idx) => {
+    const norm = getNorm(seg.label);
+    return {
+      partName: seg.label,
+      instrument: seg.label,
+      section: norm.section,
+      transposition: norm.transposition,
+      partNumber: idx + 1,
+      pageRange: [seg.pageStart, seg.pageEnd] as [number, number],
+    };
+  });
 
   // Step 8: Calculate overall confidence
   const labelledPages = pageLabels.filter((p) => p.confidence >= 70).length;
-  const segmentationConfidence = pageLabels.length > 0
-    ? Math.round((labelledPages / pageLabels.length) * 100)
-    : 0;
-
-  logger.info('Part boundary detection complete', {
-    totalPages,
-    segments: segments.length,
-    segmentationConfidence,
-    fromTextLayer,
-  });
+  const segmentationConfidence =
+    pageLabels.length > 0 ? Math.round((labelledPages / pageLabels.length) * 100) : 0;
 
   const segmentBoundaries = segments.map((segment) => ({
     label: segment.label,
@@ -305,6 +372,34 @@ export function detectPartBoundaries(
     confidence: label.confidence,
     label: label.label,
   }));
+
+  logger.info('Part boundary detection complete', {
+    totalPages: safeTotalPages,
+    segments: segments.length,
+    segmentationConfidence,
+    fromTextLayer,
+    durationMs: Math.round(nowMs() - start),
+    // no header text logged
+  });
+
+  // Optional debug-only details at debug level (still no raw header content)
+  logger.debug('Part boundary detection diagnostics', {
+    totalPages: safeTotalPages,
+    fromTextLayer,
+    pageCountLabeled: pageLabels.length,
+    labelledHighConfidence: labelledPages,
+    firstPageDiag: pageLabels[0]
+      ? { pageIndex: pageLabels[0].pageIndex, label: pageLabels[0].label, confidence: pageLabels[0].confidence, ...headerDiagnostics(pageLabels[0].rawHeader) }
+      : undefined,
+    lastPageDiag: pageLabels[pageLabels.length - 1]
+      ? {
+          pageIndex: pageLabels[pageLabels.length - 1].pageIndex,
+          label: pageLabels[pageLabels.length - 1].label,
+          confidence: pageLabels[pageLabels.length - 1].confidence,
+          ...headerDiagnostics(pageLabels[pageLabels.length - 1].rawHeader),
+        }
+      : undefined,
+  });
 
   return {
     pageLabels,

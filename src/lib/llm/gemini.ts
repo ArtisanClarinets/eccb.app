@@ -80,7 +80,8 @@ export class GeminiAdapter implements LLMAdapter {
       throw new Error('Gemini API key is required but not configured');
     }
 
-    const model = config.llm_vision_model || 'gemini-2.0-flash-exp';
+    // Updated baseline model to Gemini 2.5 Flash for improved vision parsing speed and accuracy
+    const model = config.llm_vision_model || 'gemini-2.5-flash';
 
     // Build parts array with images and text for Gemini format
     const parts: Array<
@@ -107,23 +108,33 @@ export class GeminiAdapter implements LLMAdapter {
       }
     }
 
-    // If JSON mode requested, append instruction to prompt
-    const promptText = request.responseFormat?.type === 'json'
+    // Set baseline generation configuration
+    const generationConfig: Record<string, unknown> = {
+      maxOutputTokens: request.maxTokens ?? 4096,
+      temperature: request.temperature ?? 0.1,
+    };
+
+    // Natively handle Structured Outputs (JSON Schema) for high-fidelity parsing
+    let isStrictSchema = false;
+    if (request.responseFormat?.type === 'json') {
+      generationConfig.responseMimeType = 'application/json';
+      
+      // Safely apply JSON schema if included in the extended RequestFormat type by routing through unknown
+      const schema = (request.responseFormat as unknown as Record<string, unknown>).schema;
+      if (schema) {
+        generationConfig.responseSchema = schema;
+        isStrictSchema = true;
+      }
+    }
+
+    // Only append manual JSON prompt overrides if a strict native schema is absent
+    const promptText = (request.responseFormat?.type === 'json' && !isStrictSchema)
       ? `${request.prompt}\n\nIMPORTANT: Respond with valid JSON only, no markdown fences or prose.`
       : request.prompt;
 
     parts.push({ text: promptText });
 
     const baseUrl = (config.llm_endpoint_url || 'https://generativelanguage.googleapis.com/v1beta').replace(/\/$/, '');
-
-    const generationConfig: Record<string, unknown> = {
-      maxOutputTokens: request.maxTokens ?? 4096,
-      temperature: request.temperature ?? 0.1,
-      // Request JSON output when responseFormat is json
-      ...(request.responseFormat?.type === 'json'
-        ? { response_mime_type: 'application/json' }
-        : {}),
-    };
 
     mergeGenerationConfigParams(generationConfig, request.modelParams);
 

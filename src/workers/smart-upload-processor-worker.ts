@@ -51,7 +51,9 @@ export async function startSmartUploadProcessorWorker(): Promise<void> {
         await commitSmartUploadSessionToLibrary(sessionId, {}, 'system:auto-commit');
         logger.info('Auto-commit complete', { sessionId });
       } else {
-        throw new Error(`Unknown job type: ${job.name}`);
+        // This worker only handles PROCESS and AUTO_COMMIT; secondPass is
+        // handled by smart-upload-worker. Skip gracefully.
+        logger.debug('smart-upload-processor-worker: skipping unowned job', { name: job.name, jobId: job.id });
       }
     },
   });
