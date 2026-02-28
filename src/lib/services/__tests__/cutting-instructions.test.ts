@@ -321,6 +321,73 @@ describe('cutting-instructions', () => {
       expect(overlaps[0].overlap).toEqual([0, 5]);
     });
 
+    it('should detect nested ranges (one completely inside another)', () => {
+      const instructions: NormalizedInstruction[] = [
+        { partName: 'Part 1', pageStart: 0, pageEnd: 10 },
+        { partName: 'Part 2', pageStart: 3, pageEnd: 7 },
+      ];
+
+      const overlaps = detectOverlaps(instructions);
+
+      expect(overlaps).toHaveLength(1);
+      expect(overlaps[0].overlap).toEqual([3, 7]);
+    });
+
+    it('should detect single-page overlap (shared edge page)', () => {
+      const instructions: NormalizedInstruction[] = [
+        { partName: 'Part 1', pageStart: 0, pageEnd: 2 },
+        { partName: 'Part 2', pageStart: 2, pageEnd: 4 },
+      ];
+
+      const overlaps = detectOverlaps(instructions);
+
+      expect(overlaps).toHaveLength(1);
+      expect(overlaps[0].overlap).toEqual([2, 2]);
+    });
+
+    it('should detect ranges starting on the same page', () => {
+      const instructions: NormalizedInstruction[] = [
+        { partName: 'Part 1', pageStart: 0, pageEnd: 5 },
+        { partName: 'Part 2', pageStart: 0, pageEnd: 3 },
+      ];
+
+      const overlaps = detectOverlaps(instructions);
+
+      expect(overlaps).toHaveLength(1);
+      expect(overlaps[0].overlap).toEqual([0, 3]);
+    });
+
+    it('should detect ranges ending on the same page', () => {
+      const instructions: NormalizedInstruction[] = [
+        { partName: 'Part 1', pageStart: 0, pageEnd: 5 },
+        { partName: 'Part 2', pageStart: 2, pageEnd: 5 },
+      ];
+
+      const overlaps = detectOverlaps(instructions);
+
+      expect(overlaps).toHaveLength(1);
+      expect(overlaps[0].overlap).toEqual([2, 5]);
+    });
+
+    it('should detect multiple parts overlapping on the same pages', () => {
+      const instructions: NormalizedInstruction[] = [
+        { partName: 'Part 1', pageStart: 0, pageEnd: 10 },
+        { partName: 'Part 2', pageStart: 5, pageEnd: 10 },
+        { partName: 'Part 3', pageStart: 5, pageEnd: 15 },
+      ];
+
+      const overlaps = detectOverlaps(instructions);
+
+      expect(overlaps).toHaveLength(3);
+
+      // Part 1 & Part 2 overlap on 5-10
+      expect(overlaps.some(o => o.part1 === 'Part 1' && o.part2 === 'Part 2' && o.overlap[0] === 5 && o.overlap[1] === 10)).toBe(true);
+      // Part 1 & Part 3 overlap on 5-10
+      expect(overlaps.some(o => o.part1 === 'Part 1' && o.part2 === 'Part 3' && o.overlap[0] === 5 && o.overlap[1] === 10)).toBe(true);
+      // Part 2 & Part 3 overlap on 5-10
+      expect(overlaps.some(o => o.part1 === 'Part 2' && o.part2 === 'Part 3' && o.overlap[0] === 5 && o.overlap[1] === 10)).toBe(true);
+    });
+
     it('should return empty array for single instruction', () => {
       const instructions: NormalizedInstruction[] = [
         { partName: 'Part 1', pageStart: 0, pageEnd: 5 },
@@ -406,6 +473,71 @@ describe('cutting-instructions', () => {
 
       expect(gaps).toHaveLength(3);
     });
+
+    it('should handle out-of-bounds page ranges', () => {
+      const instructions: NormalizedInstruction[] = [
+        { partName: 'Part 1', pageStart: -2, pageEnd: 1 }, // partially before start
+        { partName: 'Part 2', pageStart: 8, pageEnd: 12 }, // partially after end
+      ];
+
+      const gaps = detectGaps(instructions, 10);
+
+      expect(gaps).toHaveLength(1);
+      expect(gaps[0]).toEqual({ start: 2, end: 7 }); // middle gap
+    });
+
+    it('should detect single-page gaps', () => {
+      const instructions: NormalizedInstruction[] = [
+        { partName: 'Part 1', pageStart: 0, pageEnd: 1 },
+        { partName: 'Part 2', pageStart: 3, pageEnd: 4 },
+      ];
+
+      const gaps = detectGaps(instructions, 5);
+
+      expect(gaps).toHaveLength(1);
+      expect(gaps[0]).toEqual({ start: 2, end: 2 });
+    });
+
+    it('should correctly handle unordered instructions', () => {
+      const instructions: NormalizedInstruction[] = [
+        { partName: 'Part 2', pageStart: 7, pageEnd: 9 },
+        { partName: 'Part 1', pageStart: 0, pageEnd: 2 },
+      ];
+
+      const gaps = detectGaps(instructions, 10);
+
+      expect(gaps).toHaveLength(1);
+      expect(gaps[0]).toEqual({ start: 3, end: 6 });
+    });
+
+    it('should handle overlapping instructions that leave gaps', () => {
+      const instructions: NormalizedInstruction[] = [
+        { partName: 'Part 1', pageStart: 0, pageEnd: 5 },
+        { partName: 'Part 2', pageStart: 3, pageEnd: 6 },
+      ];
+
+      const gaps = detectGaps(instructions, 10);
+
+      expect(gaps).toHaveLength(1);
+      expect(gaps[0]).toEqual({ start: 7, end: 9 });
+    });
+
+    it('should handle instructions when totalPages is 0', () => {
+      const instructions: NormalizedInstruction[] = [
+        { partName: 'Part 1', pageStart: 0, pageEnd: 2 },
+      ];
+
+      const gaps = detectGaps(instructions, 0);
+
+      expect(gaps).toHaveLength(0);
+    });
+
+    it('should handle no instructions when totalPages is 1', () => {
+      const gaps = detectGaps([], 1);
+
+      expect(gaps).toHaveLength(1);
+      expect(gaps[0]).toEqual({ start: 0, end: 0 });
+    });
   });
 
   describe('generateUniqueFilename', () => {
@@ -468,6 +600,43 @@ describe('cutting-instructions', () => {
       expect(filename).toContain('-');
       expect(filename).toContain('_');
       expect(filename).toBe('Woodwinds - Bb Clarinet_1__p0-2_0.pdf');
+    });
+
+    it('should strip emojis and non-ASCII characters', () => {
+      // The function calls .trim() after removing unsafe characters
+      const filename = generateUniqueFilename('🎻Violin part', 1, 3, 2);
+
+      expect(filename).toBe('Violin part__p1-3_2.pdf');
+    });
+
+    it('should handle strings that become completely empty after sanitization', () => {
+      const filename = generateUniqueFilename('???!!!', 5, 5, 1);
+
+      expect(filename).toBe('__p5-5_1.pdf');
+    });
+
+    it('should preserve consecutive spaces internally but trim ends', () => {
+      const filename = generateUniqueFilename(' Trumpet   in   Bb ', 0, 10, 0);
+
+      expect(filename).toBe('Trumpet   in   Bb__p0-10_0.pdf');
+    });
+
+    it('should handle negative page numbers correctly', () => {
+      const filename = generateUniqueFilename('Flute', -1, -5, 0);
+
+      expect(filename).toBe('Flute__p-1--5_0.pdf');
+    });
+
+    it('should handle large indices and page numbers', () => {
+      const filename = generateUniqueFilename('Tuba', 10000, 20000, 999999);
+
+      expect(filename).toBe('Tuba__p10000-20000_999999.pdf');
+    });
+
+    it('should strip invisible characters', () => {
+      const filename = generateUniqueFilename('Horn\x00\x1F\x7F1', 0, 1, 0);
+
+      expect(filename).toBe('Horn1__p0-1_0.pdf');
     });
   });
 
@@ -579,6 +748,63 @@ describe('cutting-instructions', () => {
       expect(result[1].partName).toBe('Part 2');
       expect(result[1].pageStart).toBe(5);
       expect(result[1].pageEnd).toBe(10);
+    });
+
+    it('should skip parts that are completely swallowed (adjustedEnd < current.pageStart)', () => {
+      const instructions: NormalizedInstruction[] = [
+        { partName: 'Part 1', pageStart: 3, pageEnd: 5 },
+        { partName: 'Part 2', pageStart: 3, pageEnd: 7 },
+      ];
+
+      const result = splitOverlappingRanges(instructions);
+
+      expect(result).toHaveLength(1);
+      // Part 1 gets swallowed because they start at the same page and Part 1 ends before or at Part 2's end.
+      expect(result[0]).toEqual(instructions[1]);
+    });
+
+    it('should handle three parts starting at the same page (stable sorting)', () => {
+      const instructions: NormalizedInstruction[] = [
+        { partName: 'Part 1', pageStart: 1, pageEnd: 5 },
+        { partName: 'Part 2', pageStart: 1, pageEnd: 5 },
+        { partName: 'Part 3', pageStart: 1, pageEnd: 5 },
+      ];
+
+      const result = splitOverlappingRanges(instructions);
+
+      expect(result).toHaveLength(1);
+      // Due to stable sorting, Part 1 is checked against Part 2 and swallowed.
+      // Part 2 is checked against Part 3 and swallowed.
+      // Only Part 3 should remain.
+      expect(result[0]).toEqual(instructions[2]);
+    });
+
+    it('should preserve originalMetadata when splitting', () => {
+      const instructions: NormalizedInstruction[] = [
+        {
+          partName: 'Part 1',
+          pageStart: 0,
+          pageEnd: 5,
+          originalMetadata: { instrument: 'Flute', partNumber: 1 },
+        },
+        {
+          partName: 'Part 2',
+          pageStart: 3,
+          pageEnd: 7,
+          originalMetadata: { instrument: 'Oboe', partNumber: 2 },
+        },
+      ];
+
+      const result = splitOverlappingRanges(instructions);
+
+      expect(result).toHaveLength(2);
+      // Part 1 is truncated, but its originalMetadata should be preserved.
+      expect(result[0].partName).toBe('Part 1');
+      expect(result[0].pageEnd).toBe(2);
+      expect(result[0].originalMetadata).toEqual({ instrument: 'Flute', partNumber: 1 });
+      // Part 2 is unchanged.
+      expect(result[1].partName).toBe('Part 2');
+      expect(result[1].originalMetadata).toEqual({ instrument: 'Oboe', partNumber: 2 });
     });
   });
 });
