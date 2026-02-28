@@ -96,6 +96,7 @@ vi.mock('@/lib/logger', () => ({
 // Imports (after mocks)
 // ---------------------------------------------------------------------------
 import { prisma } from '@/lib/db';
+import { deepCloneJSON } from '@/lib/json';
 import { downloadFile, uploadFile } from '@/lib/services/storage';
 import { callVisionModel } from '@/lib/llm';
 import { loadSmartUploadRuntimeConfig } from '@/lib/llm/config-loader';
@@ -292,7 +293,7 @@ describe('processSmartUpload — integration', () => {
     const data = (finalUpdate![0] as any).data;
     expect(data.parseStatus).toBe('PARSED');
 
-    const parsedParts = JSON.parse(JSON.stringify(data.parsedParts));
+    const parsedParts = deepCloneJSON(data.parsedParts) as any[];
     expect(parsedParts).toHaveLength(3);
 
     // Each split part was uploaded to storage

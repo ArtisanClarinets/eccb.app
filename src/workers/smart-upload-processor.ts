@@ -35,6 +35,7 @@ import { buildPartFilename, buildPartStorageSlug, normalizeInstrumentLabel } fro
 import { evaluateQualityGates } from '@/lib/smart-upload/quality-gates';
 import { jsonrepair as repairJson } from 'jsonrepair';
 import { logger } from '@/lib/logger';
+import { deepCloneJSON } from '@/lib/json';
 import {
   buildHeaderLabelPrompt,
   buildVisionPrompt,
@@ -625,21 +626,19 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
     await prisma.smartUploadSession.update({
       where: { uploadSessionId: sessionId },
       data: {
-        extractedMetadata: JSON.parse(JSON.stringify(extraction)),
+        extractedMetadata: deepCloneJSON(extraction) as any,
         confidenceScore: extraction.confidenceScore,
         routingDecision: 'no_parse_second_pass',
         parseStatus: 'NOT_PARSED',
         secondPassStatus: 'QUEUED',
-        cuttingInstructions: JSON.parse(JSON.stringify(normalizedInstructionsOne)),
+        cuttingInstructions: deepCloneJSON(normalizedInstructionsOne) as any,
         llmProvider: llmConfig.provider,
         llmVisionModel: llmConfig.visionModel,
         llmVerifyModel: llmConfig.verificationModel,
-        llmModelParams: JSON.parse(
-          JSON.stringify({
-            vision: llmConfig.visionModelParams,
-            verification: llmConfig.verificationModelParams,
-          })
-        ),
+        llmModelParams: deepCloneJSON({
+          vision: llmConfig.visionModelParams,
+          verification: llmConfig.verificationModelParams,
+        }) as any,
         llmPromptVersion: llmConfig.promptVersion || PROMPT_VERSION,
         firstPassRaw: firstPassRaw ?? null,
       },
@@ -748,26 +747,24 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
   await prisma.smartUploadSession.update({
     where: { uploadSessionId: sessionId },
     data: {
-      extractedMetadata: JSON.parse(JSON.stringify(extraction)),
+      extractedMetadata: deepCloneJSON(extraction) as any,
       confidenceScore: extraction.confidenceScore,
       finalConfidence,
       routingDecision,
       parseStatus: 'PARSED',
-      parsedParts: JSON.parse(JSON.stringify(parsedParts)),
-      cuttingInstructions: JSON.parse(JSON.stringify(normalizedInstructionsOne)),
-      tempFiles: JSON.parse(JSON.stringify(tempFiles)),
+      parsedParts: deepCloneJSON(parsedParts) as any,
+      cuttingInstructions: deepCloneJSON(normalizedInstructionsOne) as any,
+      tempFiles: deepCloneJSON(tempFiles) as any,
       autoApproved: shouldAutoCommit,
       requiresHumanReview: qualityGateFailed || undefined,
       secondPassStatus: secondPassStatus === 'NOT_NEEDED' ? 'NOT_NEEDED' : secondPassStatus,
       llmProvider: llmConfig.provider,
       llmVisionModel: llmConfig.visionModel,
       llmVerifyModel: llmConfig.verificationModel,
-      llmModelParams: JSON.parse(
-        JSON.stringify({
-          vision: llmConfig.visionModelParams,
-          verification: llmConfig.verificationModelParams,
-        })
-      ),
+      llmModelParams: deepCloneJSON({
+        vision: llmConfig.visionModelParams,
+        verification: llmConfig.verificationModelParams,
+      }) as any,
       llmPromptVersion: llmConfig.promptVersion || PROMPT_VERSION,
       ...(firstPassRaw ? { firstPassRaw } : {}),
     },
