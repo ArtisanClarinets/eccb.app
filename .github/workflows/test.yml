@@ -47,17 +47,17 @@ jobs:
       mysql:
         image: mysql:8
         env:
-          MYSQL_ROOT_PASSWORD: test
+          MYSQL_ROOT_PASSWORD: root
           MYSQL_DATABASE: eccb_test
           MYSQL_USER: test
           MYSQL_PASSWORD: test
         ports:
           - 3306:3306
         options: >-
-          --health-cmd="mysqladmin ping"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=3
+          --health-cmd "mysqladmin ping -h localhost"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
       redis:
         image: redis:7
@@ -70,7 +70,7 @@ jobs:
           --health-retries 5
 
     env:
-      DATABASE_URL: mysql://test:test@127.0.0.1:3306/eccb_test
+      DATABASE_URL: mysql://test:test@localhost:3306/eccb_test
       REDIS_URL: redis://localhost:6379
       NODE_ENV: test
       BETTER_AUTH_SECRET: test-secret-key-for-testing-min-32-chars
@@ -138,7 +138,7 @@ jobs:
     needs: [lint, test]
     
     env:
-      DATABASE_URL: mysql://test:test@127.0.0.1:3306/eccb_test
+      DATABASE_URL: mysql://test:test@localhost:3306/eccb_test
       REDIS_URL: redis://localhost:6379
       NODE_ENV: production
       BETTER_AUTH_SECRET: test-secret-key-for-testing-min-32-chars
