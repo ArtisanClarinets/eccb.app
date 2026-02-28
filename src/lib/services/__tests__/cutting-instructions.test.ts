@@ -5,6 +5,7 @@ import {
   detectGaps,
   generateUniqueFilename,
   splitOverlappingRanges,
+  buildGapInstructions,
   type NormalizedInstruction,
 } from '../cutting-instructions';
 
@@ -258,7 +259,80 @@ describe('cutting-instructions', () => {
       expect(result.isValid).toBe(true);
       expect(result.instructions[0].partName.trim()).toBe('Flute 1');
     });
-  });
+
+    describe('pageRange handling', () => {
+      it('should prefer pageRange over pageStart/pageEnd', () => {
+        const rawInstructions = [
+          { partName: 'Flute 1', pageRange: [1, 3], pageStart: 5, pageEnd: 7 },
+        ];
+        const result = validateAndNormalizeInstructions(rawInstructions, 10, { oneIndexed: false });
+        expect(result.isValid).toBe(true);
+        expect(result.instructions[0].pageRange).toEqual([1, 3]);
+      });
+
+      it('should handle invalid pageRange[0]', () => {
+        const rawInstructions = [
+          { partName: 'Flute 1', pageRange: ['not a number', 3] },
+        ];
+        const result = validateAndNormalizeInstructions(rawInstructions, 10, {});
+        expect(result.isValid).toBe(false);
+        expect(result.errors[0]).toContain('pageRange[0] must be a finite integer');
+      });
+
+      it('should handle invalid pageRange[1]', () => {
+        const rawInstructions = [
+          { partName: 'Flute 1', pageRange: [1, null] },
+        ];
+        const result = validateAndNormalizeInstructions(rawInstructions, 10, {});
+        expect(result.isValid).toBe(false);
+        expect(result.errors[0]).toContain('pageRange[1] must be a finite integer');
+      });
+
+      it('should handle missing pageRange and pageStart/pageEnd', () => {
+        const rawInstructions = [
+          { partName: 'Flute 1' },
+        ];
+        const result = validateAndNormalizeInstructions(rawInstructions, 10, {});
+        expect(result.isValid).toBe(false);
+        expect(result.errors[0]).toContain('Missing pageRange or pageStart/pageEnd');
+      });
+    });
+
+    describe('metadata handling', () => {
+      it('should apply default metadata values when missing or invalid', () => {
+        const rawInstructions = [
+          { partName: 'Flute 1', pageStart: 0, pageEnd: 2 },
+          { partName: 'Flute 2', pageStart: 3, pageEnd: 5, instrument: '  ', section: 123, transposition: null, partNumber: 'invalid' },
+        ];
+        const result = validateAndNormalizeInstructions(rawInstructions, 10, {});
+        expect(result.isValid).toBe(true);
+
+        // First instruction (missing)
+        expect(result.instructions[0].instrument).toBe('Unknown');
+        expect(result.instructions[0].section).toBe('Other');
+        expect(result.instructions[0].transposition).toBe('C');
+        expect(result.instructions[0].partNumber).toBe(1);
+
+        // Second instruction (invalid)
+        expect(result.instructions[1].instrument).toBe('Unknown');
+        expect(result.instructions[1].section).toBe('Other');
+        expect(result.instructions[1].transposition).toBe('C');
+        expect(result.instructions[1].partNumber).toBe(2);
+      });
+
+      it('should preserve valid metadata values', () => {
+        const rawInstructions = [
+          { partName: 'Flute 1', pageStart: 0, pageEnd: 2, instrument: 'Flute', section: 'Woodwinds', transposition: 'C', partNumber: 5 },
+        ];
+        const result = validateAndNormalizeInstructions(rawInstructions, 10, {});
+        expect(result.isValid).toBe(true);
+        expect(result.instructions[0].instrument).toBe('Flute');
+        expect(result.instructions[0].section).toBe('Woodwinds');
+        expect(result.instructions[0].transposition).toBe('C');
+        expect(result.instructions[0].partNumber).toBe(5);
+      });
+    });
+});
 
   describe('detectOverlaps', () => {
     it('should return empty array when no overlaps', () => {
@@ -581,4 +655,50 @@ describe('cutting-instructions', () => {
       expect(result[1].pageEnd).toBe(10);
     });
   });
+
+  describe('buildGapInstructions', () => {
+    it('should generate instructions for unlabelled gaps', () => {
+      const instructions = [
+        { instrument: 'Unknown', partName: 'Part 1', section: 'Other' as const, transposition: 'C' as const, partNumber: 1, pageRange: [1, 2] as [number, number] },
+        { instrument: 'Unknown', partName: 'Part 2', section: 'Other' as const, transposition: 'C' as const, partNumber: 2, pageRange: [5, 6] as [number, number] }
+      ];
+
+      const gaps = buildGapInstructions(instructions, 10);
+
+      expect(gaps).toHaveLength(3);
+
+      // Gap 1: page 0 (1-based label: 1-1)
+      expect(gaps[0].partName).toBe('Unlabelled Pages 1-1');
+      expect(gaps[0].pageRange).toEqual([0, 0]);
+      expect(gaps[0].partNumber).toBe(9900);
+
+      // Gap 2: pages 3-4 (1-based label: 4-5)
+      expect(gaps[1].partName).toBe('Unlabelled Pages 4-5');
+      expect(gaps[1].pageRange).toEqual([3, 4]);
+      expect(gaps[1].partNumber).toBe(9901);
+
+      // Gap 3: pages 7-9 (1-based label: 8-10)
+      expect(gaps[2].partName).toBe('Unlabelled Pages 8-10');
+      expect(gaps[2].pageRange).toEqual([7, 9]);
+      expect(gaps[2].partNumber).toBe(9902);
+    });
+
+    it('should return empty array if no gaps', () => {
+      const instructions = [
+        { instrument: 'Unknown', partName: 'Part 1', section: 'Other' as const, transposition: 'C' as const, partNumber: 1, pageRange: [0, 9] as [number, number] }
+      ];
+
+      const gaps = buildGapInstructions(instructions, 10);
+      expect(gaps).toHaveLength(0);
+    });
+
+    it('should treat all pages as gap if no instructions provided', () => {
+      const gaps = buildGapInstructions([], 5);
+      expect(gaps).toHaveLength(1);
+      expect(gaps[0].partName).toBe('Unlabelled Pages 1-5');
+      expect(gaps[0].pageRange).toEqual([0, 4]);
+      expect(gaps[0].partNumber).toBe(9900);
+    });
+  });
+
 });
