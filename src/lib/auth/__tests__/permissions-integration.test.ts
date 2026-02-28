@@ -437,6 +437,7 @@ describe('Permission Constants Integration', () => {
       CMS_PERMISSIONS,
       COMMUNICATION_PERMISSIONS,
       ADMIN_PERMISSIONS,
+      STAND_PERMISSIONS,
       ALL_PERMISSIONS,
     } = await import('../permission-constants');
 
@@ -448,7 +449,8 @@ describe('Permission Constants Integration', () => {
       ATTENDANCE_PERMISSIONS.length +
       CMS_PERMISSIONS.length +
       COMMUNICATION_PERMISSIONS.length +
-      ADMIN_PERMISSIONS.length;
+      ADMIN_PERMISSIONS.length +
+      STAND_PERMISSIONS.length;
 
     expect(ALL_PERMISSIONS.length).toBe(totalFromGroups);
   });

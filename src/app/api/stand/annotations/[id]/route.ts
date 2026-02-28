@@ -63,6 +63,23 @@ export async function PUT(
       );
     }
 
+    // SECTION layer requires section membership
+    let serverSectionId: string | null | undefined = undefined;
+    if (validated.layer === 'SECTION') {
+      const member = await prisma.member.findFirst({
+        where: { userId: session.user.id },
+        select: { sections: { select: { sectionId: true }, take: 1 } },
+      });
+      serverSectionId = member?.sections[0]?.sectionId ?? null;
+
+      if (!serverSectionId) {
+        return NextResponse.json(
+          { error: 'Forbidden: you must belong to a section to write SECTION annotations' },
+          { status: 403 }
+        );
+      }
+    }
+
     const annotation = await prisma.annotation.update({
       where: { id },
       data: {
@@ -70,7 +87,12 @@ export async function PUT(
           strokeData: validated.strokeData as Prisma.InputJsonValue,
         }),
         ...(validated.layer && { layer: validated.layer }),
-        ...(validated.sectionId !== undefined && { sectionId: validated.sectionId }),
+        // Use server-computed sectionId for SECTION layer, otherwise preserve client value
+        ...(serverSectionId !== undefined
+          ? { sectionId: serverSectionId }
+          : validated.sectionId !== undefined
+            ? { sectionId: validated.sectionId }
+            : {}),
       },
       include: {
         user: {

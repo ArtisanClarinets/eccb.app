@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db';
 import { StandViewer, StandLoaderData } from '@/components/member/stand/StandViewer';
 import { auth } from '@/lib/auth/config';
 import { getUserRoles } from '@/lib/auth/permissions';
+import { isFeatureEnabled, FEATURES } from '@/lib/feature-flags';
 import { headers } from 'next/headers';
 
 export const metadata: Metadata = {
@@ -53,6 +54,11 @@ async function canAccessEvent(
 }
 
 export default async function StandPage({ params }: PageProps) {
+  // Kill-switch: if the stand feature is disabled, show 404
+  if (!isFeatureEnabled(FEATURES.MUSIC_STAND)) {
+    notFound();
+  }
+
   const session = await auth.api.getSession({
     headers: await headers(),
   });
