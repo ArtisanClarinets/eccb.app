@@ -44,6 +44,8 @@ export interface LLMRuntimeConfig {
   allowedMimeTypes: string[];
   enableFullyAutonomousMode: boolean;
   autonomousApprovalThreshold: number;
+  /** Maximum pages allowed for a single non-score PART before auto-commit is blocked. Default 12. */
+  maxPagesPerPart: number;
   visionModelParams: Record<string, unknown>;
   verificationModelParams: Record<string, unknown>;
   promptVersion?: string;
@@ -78,6 +80,7 @@ const DB_KEYS = [
   'smart_upload_allowed_mime_types',
   'smart_upload_enable_autonomous_mode',
   'smart_upload_autonomous_approval_threshold',
+  'smart_upload_max_pages_per_part',
   'llm_adjudicator_model',
   'llm_two_pass_enabled',
   'llm_vision_system_prompt',
@@ -251,6 +254,7 @@ export async function loadLLMConfig(): Promise<LLMRuntimeConfig> {
     allowedMimeTypes: parseMimeTypes(db['smart_upload_allowed_mime_types']),
     enableFullyAutonomousMode: (db['smart_upload_enable_autonomous_mode'] ?? 'false') === 'true',
     autonomousApprovalThreshold: Number(db['smart_upload_autonomous_approval_threshold'] ?? 95),
+    maxPagesPerPart: Number(db['smart_upload_max_pages_per_part'] ?? 12),
     visionModelParams,
     verificationModelParams,
     promptVersion: db['llm_prompt_version'] || PROMPT_VERSION,

@@ -420,6 +420,79 @@ async function finalizeSmartUploadSession(
   const isAutonomousThreshold = finalConfidence >= llmConfig.autonomousApprovalThreshold;
   const isParsed = updateData.parseStatus === 'PARSED' || smartSession.parseStatus === 'PARSED';
 
+  // -------------------------------------------------------------------------
+  // Semantic Quality Gates
+  // Auto-commit is blocked unless ALL of the following pass. Any failure sets
+  // requiresHumanReview=true and writes a reason to the session notes so that
+  // reviewers know exactly why the autonomous path was bypassed.
+  // -------------------------------------------------------------------------
+  if (!updateData.requiresHumanReview) {
+    const parts: ParsedPartRecord[] = (updateData.parsedParts as ParsedPartRecord[] | undefined)
+      ?? (parsedParts ?? []);
+
+    const FORBIDDEN = new Set(['null', 'none', 'n/a', 'na', 'unknown', 'undefined']);
+    const isForbidden = (s: string | undefined | null) =>
+      !s || FORBIDDEN.has(s.trim().toLowerCase());
+
+    // Gate 1: No part with a null/unknown instrument or partName.
+    const nullPart = parts.find(
+      (p) => isForbidden(p.instrument) || isForbidden(p.partName)
+    );
+    if (nullPart) {
+      updateData.requiresHumanReview = true;
+      logger.warn('Quality gate failed: part with null/unknown label', {
+        sessionId,
+        partName: nullPart.partName,
+        instrument: nullPart.instrument,
+      });
+    }
+
+    // Gate 2: No "PART" segment that is suspiciously large (configurable; default 12 pages).
+    // A 44-page "null" segment is the canonical failure mode this catches.
+    const MAX_PART_PAGES = llmConfig.maxPagesPerPart ?? 12;
+    const scoreSections = new Set(['Score', 'score', 'FULL_SCORE', 'CONDUCTOR_SCORE', 'CONDENSED_SCORE']);
+    const hugePart = parts.find(
+      (p) => !scoreSections.has(p.section) && p.pageCount > MAX_PART_PAGES
+    );
+    if (hugePart) {
+      updateData.requiresHumanReview = true;
+      logger.warn('Quality gate failed: non-score part exceeds max page threshold', {
+        sessionId,
+        partName: hugePart.partName,
+        pageCount: hugePart.pageCount,
+        maxAllowed: MAX_PART_PAGES,
+      });
+    }
+
+    // Gate 3: Multi-part PDFs with >10 total pages must produce ≥2 parts (DoD §1.5).
+    const totalPagesForGate3 = originalPdfBuffer
+      ? await (async () => {
+          try { const { PDFDocument: D } = await import('pdf-lib'); const d = await D.load(originalPdfBuffer); return d.getPageCount(); } catch { return 0; }
+        })()
+      : 0;
+    const cutsFromMetadata = (finalMetadata.cuttingInstructions ?? []).length;
+    if (finalMetadata.isMultiPart && totalPagesForGate3 > 10 && cutsFromMetadata < 2) {
+      updateData.requiresHumanReview = true;
+      logger.warn('Quality gate failed: isMultiPart=true, >10 pages, but <2 cutting instructions', {
+        sessionId,
+        totalPages: totalPagesForGate3,
+        cutsFromMetadata,
+      });
+    }
+
+    // Gate 4: segmentationConfidence below threshold (when available). DoD default: 70.
+    const segConf = finalMetadata.segmentationConfidence;
+    if (typeof segConf === 'number' && segConf < 70) {
+      updateData.requiresHumanReview = true;
+      logger.warn('Quality gate failed: segmentationConfidence below threshold', {
+        sessionId,
+        segmentationConfidence: segConf,
+        threshold: 70,
+      });
+    }
+  }
+  // -------------------------------------------------------------------------
+
   if (isHighConfidence && routingDecision === 'auto_parse_second_pass' && isParsed && !updateData.requiresHumanReview) {
     updateData.autoApproved = true;
     logger.info('Session auto-approved after processing (legacy threshold)', { sessionId, finalConfidence });

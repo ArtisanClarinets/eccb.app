@@ -121,6 +121,16 @@ async function samplePdfPages(
   return { images, totalPages, sampledIndices: indices };
 }
 
+// Labels returned by the LLM that must be treated as "no label" rather than a real
+// instrument name.  The model is sometimes asked to return null JSON but instead
+// returns one of these sentinel strings.
+const FORBIDDEN_LABEL_STRINGS = new Set(['null', 'none', 'n/a', 'na', 'unknown', 'undefined']);
+
+/** Returns true when a string value should be treated as an absent/unknown label. */
+function isForbiddenLabel(s: string): boolean {
+  return FORBIDDEN_LABEL_STRINGS.has(s.trim().toLowerCase());
+}
+
 interface HeaderLabelEntry {
   page: number;
   label: string | null;
@@ -149,10 +159,13 @@ function parseHeaderLabelResponse(content: string): HeaderLabelEntry[] {
         const value = entry as Record<string, unknown>;
         const page = Number(value.page);
         const confidence = Number(value.confidence);
-        const label =
+        const rawLabel =
           typeof value.label === 'string' && value.label.trim().length > 0
             ? value.label.trim()
             : null;
+        // Treat sentinel strings returned by the LLM as absent labels so they
+        // never propagate into segmentation as fake instrument names.
+        const label = rawLabel && !isForbiddenLabel(rawLabel) ? rawLabel : null;
 
         if (!Number.isFinite(page) || !Number.isInteger(page) || page < 1) {
           return null;
@@ -259,6 +272,12 @@ function parseVisionResponse(content: string, totalPages: number): ExtractedMeta
     composer: typeof parsed.composer === 'string' ? parsed.composer : undefined,
     arranger: typeof parsed.arranger === 'string' ? parsed.arranger : undefined,
     publisher: typeof parsed.publisher === 'string' ? parsed.publisher : undefined,
+    copyrightYear:
+      typeof parsed.copyrightYear === 'number'
+        ? parsed.copyrightYear
+        : typeof parsed.copyrightYear === 'string' && parsed.copyrightYear.trim()
+          ? parsed.copyrightYear.trim()
+          : undefined,
     ensembleType: typeof parsed.ensembleType === 'string' ? parsed.ensembleType : undefined,
     keySignature: typeof parsed.keySignature === 'string' ? parsed.keySignature : undefined,
     timeSignature: typeof parsed.timeSignature === 'string' ? parsed.timeSignature : undefined,
@@ -685,11 +704,98 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
     await queueSmartUploadSecondPass(sessionId);
   }
 
+  // ---------------------------------------------------------------------------
+  // DoD §1.5 — Autonomous Mode Quality Gates
+  // Auto-commit only when ALL of the following gates pass. Any failure keeps
+  // the session in PENDING_REVIEW and records the reason for reviewers.
+  // ---------------------------------------------------------------------------
+  const FORBIDDEN_AUTO_LABELS = new Set(['null', 'none', 'n/a', 'na', 'unknown', 'undefined']);
+  const isForbiddenAutoLabel = (s: string | undefined | null) =>
+    !s || FORBIDDEN_AUTO_LABELS.has(s.trim().toLowerCase());
+
+  const maxPagesPerPart = llmConfig.maxPagesPerPart ?? 12;
+  const SCORE_SECTIONS = new Set(['Score', 'score', 'FULL_SCORE', 'CONDUCTOR_SCORE', 'CONDENSED_SCORE']);
+  const SEG_CONFIDENCE_THRESHOLD = 70;
+
+  let qualityGateFailed = false;
+  const qualityGateReasons: string[] = [];
+
+  // Gate 1: No part with a null/unknown/forbidden instrument or partName.
+  const nullLabelPart = parsedParts.find(
+    (p) => isForbiddenAutoLabel(p.instrument) || isForbiddenAutoLabel(p.partName)
+  );
+  if (nullLabelPart) {
+    qualityGateFailed = true;
+    qualityGateReasons.push(
+      `Part with null/unknown label: instrument="${nullLabelPart.instrument}" partName="${nullLabelPart.partName}"`
+    );
+    logger.warn('Auto-commit quality gate 1 failed: null/unknown part label', {
+      sessionId,
+      instrument: nullLabelPart.instrument,
+      partName: nullLabelPart.partName,
+    });
+  }
+
+  // Gate 2: No non-score PART segment exceeding maxPagesPerPart.
+  const oversizedPart = parsedParts.find(
+    (p) => !SCORE_SECTIONS.has(p.section) && p.pageCount > maxPagesPerPart
+  );
+  if (oversizedPart) {
+    qualityGateFailed = true;
+    qualityGateReasons.push(
+      `Non-score part "${oversizedPart.partName}" has ${oversizedPart.pageCount} pages (max ${maxPagesPerPart})`
+    );
+    logger.warn('Auto-commit quality gate 2 failed: oversized non-score part', {
+      sessionId,
+      partName: oversizedPart.partName,
+      pageCount: oversizedPart.pageCount,
+      maxAllowed: maxPagesPerPart,
+    });
+  }
+
+  // Gate 3: Multi-part PDFs with >10 pages must produce ≥2 parts.
+  if (extraction.isMultiPart && totalPages > 10 && parsedParts.length < 2) {
+    qualityGateFailed = true;
+    qualityGateReasons.push(
+      `isMultiPart=true with ${totalPages} pages but only ${parsedParts.length} part(s) produced`
+    );
+    logger.warn('Auto-commit quality gate 3 failed: suspiciously low part count', {
+      sessionId,
+      totalPages,
+      partsProduced: parsedParts.length,
+    });
+  }
+
+  // Gate 4: segmentationConfidence below threshold when available.
+  const segConf = extraction.segmentationConfidence;
+  if (typeof segConf === 'number' && segConf < SEG_CONFIDENCE_THRESHOLD) {
+    qualityGateFailed = true;
+    qualityGateReasons.push(
+      `segmentationConfidence ${segConf} < threshold ${SEG_CONFIDENCE_THRESHOLD}`
+    );
+    logger.warn('Auto-commit quality gate 4 failed: low segmentation confidence', {
+      sessionId,
+      segmentationConfidence: segConf,
+      threshold: SEG_CONFIDENCE_THRESHOLD,
+    });
+  }
+
+  // Compute finalConfidence = min(extractionConfidence, segmentationConfidence).
+  // verificationConfidence is only available after the second pass; use what we have.
+  const finalConfidence = typeof segConf === 'number'
+    ? Math.min(extraction.confidenceScore, segConf)
+    : extraction.confidenceScore;
+
   // Determine if we should auto-commit (fully autonomous mode)
   const shouldAutoCommit =
     llmConfig.enableFullyAutonomousMode &&
-    extraction.confidenceScore >= llmConfig.autonomousApprovalThreshold &&
-    secondPassStatus === 'NOT_NEEDED';
+    finalConfidence >= llmConfig.autonomousApprovalThreshold &&
+    secondPassStatus === 'NOT_NEEDED' &&
+    !qualityGateFailed;
+
+  if (qualityGateFailed && llmConfig.enableFullyAutonomousMode) {
+    logger.info('Auto-commit blocked by quality gate(s)', { sessionId, reasons: qualityGateReasons });
+  }
 
   // Update session with results
   await prisma.smartUploadSession.update({
@@ -697,12 +803,14 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
     data: {
       extractedMetadata: JSON.parse(JSON.stringify(extraction)),
       confidenceScore: extraction.confidenceScore,
+      finalConfidence,
       routingDecision,
       parseStatus: 'PARSED',
       parsedParts: JSON.parse(JSON.stringify(parsedParts)),
       cuttingInstructions: JSON.parse(JSON.stringify(normalizedInstructionsOne)),
       tempFiles: JSON.parse(JSON.stringify(tempFiles)),
       autoApproved: shouldAutoCommit,
+      requiresHumanReview: qualityGateFailed || undefined,
       secondPassStatus: secondPassStatus === 'NOT_NEEDED' ? 'NOT_NEEDED' : secondPassStatus,
       llmProvider: llmConfig.provider,
       llmVisionModel: llmConfig.visionModel,
@@ -722,7 +830,7 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
   if (shouldAutoCommit) {
     logger.info('Autonomous mode: queueing auto-commit', {
       sessionId,
-      confidence: extraction.confidenceScore,
+      finalConfidence,
       threshold: llmConfig.autonomousApprovalThreshold,
     });
     await queueSmartUploadAutoCommit(sessionId);

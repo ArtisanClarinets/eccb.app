@@ -5,6 +5,13 @@ export interface CuttingInstruction {
   transposition: 'Bb' | 'Eb' | 'F' | 'C' | 'D' | 'G' | 'A';
   partNumber: number;
   pageRange: [number, number];
+  /** Chair designation extracted from the part label (e.g. '1st', '2nd', 'Solo'). Stored separately
+   *  from `instrument` so canonical instrument names stay clean (e.g. "Bb Clarinet", not "1st Bb Clarinet"). */
+  chair?: '1st' | '2nd' | '3rd' | '4th' | 'Aux' | 'Solo' | null;
+  /** Type of this part in the ensemble packet. */
+  partType?: 'PART' | 'FULL_SCORE' | 'CONDUCTOR_SCORE' | 'CONDENSED_SCORE';
+  /** Per-label confidence score from the OCR/LLM pass that assigned this instruction's label (0–100). */
+  labelConfidence?: number;
 }
 
 export interface ParsedPartRecord {
@@ -24,6 +31,8 @@ export interface ExtractedMetadata {
   title: string;
   composer?: string;
   publisher?: string;
+  /** Copyright year extracted from the score (e.g. 1977). */
+  copyrightYear?: number | string;
   instrument?: string;
   partNumber?: string;
   confidenceScore: number;

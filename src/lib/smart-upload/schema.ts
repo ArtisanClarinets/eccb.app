@@ -65,6 +65,7 @@ export const SMART_UPLOAD_SETTING_KEYS = [
   // Autonomy settings
   'smart_upload_enable_autonomous_mode',
   'smart_upload_autonomous_approval_threshold',
+  'smart_upload_max_pages_per_part',
   'llm_adjudicator_model',
   'llm_header_label_prompt',
   'llm_adjudicator_prompt',  
@@ -197,6 +198,14 @@ export const SmartUploadSettingsSchema = z.object({
       return Math.max(0, Math.min(100, isNaN(num) ? 95 : num));
     })
     .default(95),
+
+  smart_upload_max_pages_per_part: z
+    .union([z.string(), z.number()])
+    .transform((v) => {
+      const num = typeof v === 'string' ? Number(v) : v;
+      return Math.max(1, isNaN(num) ? 12 : num);
+    })
+    .default(12),
 
   llm_adjudicator_model: z.string().optional(),
   llm_header_label_prompt: z.string().optional(),

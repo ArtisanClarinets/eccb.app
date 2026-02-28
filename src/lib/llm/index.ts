@@ -145,10 +145,14 @@ export async function callVisionModel(
       const { url, headers, body } = adapter.buildRequest(config, request);
       requestUrl = url;
 
+      // SECURITY: Never log the full URL which may contain API keys as query params.
+      // Log only the origin+path, stripping all query parameters.
+      const safeUrl = (() => { try { const u = new URL(url); return `${u.origin}${u.pathname}`; } catch { return '[url-parse-error]'; } })();
+
       logger.debug('Calling vision LLM', {
         provider: config.llm_provider,
         model: (body as any)?.model || config.llm_vision_model,
-        endpoint: url,
+        endpoint: safeUrl,
         attempt,
       });
 
@@ -170,7 +174,7 @@ export async function callVisionModel(
           logger.warn('LLM call failed, retrying...', {
             provider: config.llm_provider,
             model: config.llm_vision_model,
-            endpoint: url,
+            endpoint: safeUrl,
             status: response.status,
             attempt,
             wait,
@@ -182,7 +186,7 @@ export async function callVisionModel(
         logger.error('LLM API non-retryable error', {
           provider: config.llm_provider,
           model: config.llm_vision_model,
-          endpoint: url,
+          endpoint: safeUrl,
           status: response.status,
           errorBody: errorText.slice(0, 500),
         });
@@ -206,10 +210,14 @@ export async function callVisionModel(
       }
       if (attempt < MAX_RETRIES) {
         const wait = RETRY_BASE_MS * 2 ** (attempt - 1);
+        // SECURITY: Strip query params (may contain API keys) before logging.
+        const safeRetryUrl = requestUrl
+          ? (() => { try { const u = new URL(requestUrl); return `${u.origin}${u.pathname}`; } catch { return '[url-parse-error]'; } })()
+          : undefined;
         logger.warn('LLM call failed, retrying...', {
           provider: config.llm_provider,
           model: config.llm_vision_model,
-          endpoint: requestUrl,
+          endpoint: safeRetryUrl,
           error: lastError.message,
           attempt,
           wait,

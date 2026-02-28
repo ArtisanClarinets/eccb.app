@@ -99,9 +99,15 @@ function headerDiagnostics(headerText: string) {
   };
 }
 
-// =============================================================================
-// Label Patterns
-// =============================================================================
+// Labels that must never be treated as real instrument/part names.
+// They can appear when an LLM returns a sentinel string instead of null JSON.
+const FORBIDDEN_LABEL_STRINGS = new Set(['null', 'none', 'n/a', 'na', 'unknown', 'undefined']);
+
+/** Returns true when a string should be treated as an absent label. */
+function isForbiddenLabel(s: string): boolean {
+  return FORBIDDEN_LABEL_STRINGS.has(s.trim().toLowerCase());
+}
+
 
 /** Patterns to identify part-change boundaries in header text */
 const PART_PATTERNS: Array<{ pattern: RegExp; template: string }> = [
@@ -173,6 +179,9 @@ export function normaliseLabelFromHeader(
 ): { label: string; confidence: number } | null {
   const text = headerText.trim();
   if (!text || text.length < 3) return null;
+
+  // Never accept LLM sentinel strings as real instrument labels.
+  if (isForbiddenLabel(text)) return null;
 
   for (const { pattern, template } of PART_PATTERNS) {
     if (pattern.test(text)) {

@@ -146,6 +146,28 @@ export function normalizeChair(raw: string | number | undefined | null): string 
 }
 
 /**
+ * Extract a chair designation from a part name string.
+ * e.g. "1st Bb Clarinet" → "1st", "2nd Trombone" → "2nd", "Solo Cornet" → "Solo"
+ * Returns null when no chair prefix is found.
+ */
+export function extractChairFromPartName(partName: string | undefined | null): string | null {
+  if (!partName) return null;
+  const str = partName.trim();
+  // Ordinal prefixes (most to least specific to avoid false positives)
+  if (/^(1st|first)\b/i.test(str)) return '1st';
+  if (/^(2nd|second)\b/i.test(str)) return '2nd';
+  if (/^(3rd|third)\b/i.test(str)) return '3rd';
+  if (/^(4th|fourth)\b/i.test(str)) return '4th';
+  if (/^aux\b/i.test(str)) return 'Aux';
+  if (/^solo\b/i.test(str)) return 'Solo';
+  // Roman numeral prefixes: "I Bb Clarinet", "II Trombone"
+  if (/^i\b(?!\S)/i.test(str)) return '1st';
+  if (/^ii\b/i.test(str)) return '2nd';
+  if (/^iii\b/i.test(str)) return '3rd';
+  if (/^iv\b/i.test(str)) return '4th';
+  return null;
+}
+/**
  * Normalize a transposition key string to canonical form.
  */
 export function normalizeTransposition(raw: string | undefined | null): Transposition {
@@ -224,7 +246,12 @@ export function normalizeExtractedMetadata(
 
   const parts: NormalizedPart[] = instructions.map((ci) => {
     const { canonicalName, section, transposition } = normalizeInstrument(ci.instrument);
-    const chair = normalizeChair(ci.partNumber);
+    // Prefer the explicit chair field (new in CuttingInstruction v2) over the old
+    // partNumber-as-chair fallback. When neither is present, parse from partName.
+    const chair =
+      ci.chair !== undefined
+        ? (ci.chair ?? null)
+        : (extractChairFromPartName(ci.partName) ?? normalizeChair(ci.partNumber));
 
     return {
       rawInstrument: ci.instrument,

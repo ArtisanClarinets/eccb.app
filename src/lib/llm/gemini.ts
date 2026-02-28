@@ -193,10 +193,12 @@ export class GeminiAdapter implements LLMAdapter {
     // double-prefix URL '…/models/models/gemini-2.0-flash' that causes 404s.
     const modelId = model.startsWith('models/') ? model.slice('models/'.length) : model;
 
+    // SECURITY: The API key is passed as a query parameter per Gemini's spec.
+    // Never log this URL — use safeUrlForLogging() instead.
+    const url = `${baseUrl}/models/${modelId}:generateContent?key=${encodeURIComponent(apiKey)}`;
+
     return {
-      url: `${baseUrl}/models/${modelId}:generateContent?key=${encodeURIComponent(
-        apiKey,
-      )}`,
+      url,
       headers: { 'Content-Type': 'application/json' },
       body: bodyObj,
     };
@@ -221,7 +223,11 @@ export class GeminiAdapter implements LLMAdapter {
       };
     };
 
-    const content = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+    // Join ALL parts[].text — Gemini can split a single response across multiple
+    // part objects. Reading only parts[0] truncates the response and causes
+    // downstream JSON parse failures when the closing brace lands in a later part.
+    const parts = data.candidates?.[0]?.content?.parts ?? [];
+    const content = parts.map((p) => p.text ?? '').join('');
 
     return {
       content,

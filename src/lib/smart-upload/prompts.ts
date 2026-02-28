@@ -17,7 +17,10 @@ export const DEFAULT_VERIFICATION_SYSTEM_PROMPT =
   'You are a strict verification assistant. Reconcile metadata against provided pages and return corrected JSON only.';
 
 export const DEFAULT_HEADER_LABEL_SYSTEM_PROMPT =
-  'You identify instrument-part labels from sheet-music page header crops with high precision.';
+  'You identify instrument-part labels from sheet-music page header crops with high precision. '
+  + 'When a page header is unreadable or contains no instrument name, you MUST return a JSON null value — '
+  + 'never return the string "null", "none", "unknown", "n/a", or any similar placeholder. '
+  + 'A JSON null means the page label is absent. A non-null string means you are confident the text is a real instrument name.';
 
 export const DEFAULT_ADJUDICATOR_SYSTEM_PROMPT =
   'You are a senior adjudicator that resolves disagreements between extraction passes and produces a single final JSON decision.';
@@ -102,12 +105,19 @@ Page labels for this batch:
 Rules:
 1. Each image is labeled "Page N" and page numbers are 1-indexed.
 2. Return one output entry for each provided page label.
-3. If unreadable, set label to null and confidence to 0.
-4. Return JSON only.
+3. Focus exclusively on the instrument or part name visible in the page header (e.g. "1st Bb Clarinet", "Tuba", "Percussion").
+   - Ignore title text, composer names, copyright notices, and measure numbers.
+4. If the header is unreadable or shows no instrument name, set label to JSON null (not the string "null") and confidence to 0.
+5. NEVER return the string literals "null", "none", "unknown", "n/a" as a label value — use JSON null instead.
+6. Common instrument families for reference: Piccolo, Flute, Oboe, Bassoon, Eb Clarinet, Bb Clarinet, Bass Clarinet,
+   Alto Saxophone, Tenor Saxophone, Baritone Saxophone, Trumpet, Cornet, F Horn, Trombone, Euphonium, Tuba,
+   Timpani, Percussion, Mallet Percussion, String Bass, Piano, Full Score, Conductor Score, Condensed Score.
+7. Return JSON only.
 
 Return exactly this JSON shape:
 [
-  { "page": 1, "label": "Bb Clarinet 1", "confidence": 95 }
+  { "page": 1, "label": "Bb Clarinet 1", "confidence": 95 },
+  { "page": 2, "label": null, "confidence": 0 }
 ]`;
 
 export const DEFAULT_ADJUDICATOR_USER_PROMPT_TEMPLATE = `Adjudicate first-pass and second-pass extraction outputs and produce a final result.
