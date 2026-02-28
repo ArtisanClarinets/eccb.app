@@ -44,14 +44,18 @@ export function AudioPlayer() {
   // Persist A-B loop points to localStorage whenever they change
   useEffect(() => {
     if (!currentPieceId) return;
-    try {
-      localStorage.setItem(
-        LOOP_STORAGE_KEY(currentPieceId),
-        JSON.stringify({ start: audioLoopStart, end: audioLoopEnd })
-      );
-    } catch {
-      // ignore storage quota errors
-    }
+    const timeoutId = setTimeout(() => {
+      try {
+        localStorage.setItem(
+          LOOP_STORAGE_KEY(currentPieceId),
+          JSON.stringify({ start: audioLoopStart, end: audioLoopEnd })
+        );
+      } catch {
+        // ignore storage quota errors
+      }
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
   }, [audioLoopStart, audioLoopEnd, currentPieceId]);
 
   const setA = useCallback(() => {

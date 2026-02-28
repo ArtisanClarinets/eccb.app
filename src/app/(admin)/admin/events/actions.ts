@@ -5,6 +5,7 @@ import { prisma } from '@/lib/db';
 import { requirePermission } from '@/lib/auth/guards';
 import { auditLog } from '@/lib/services/audit';
 import { z } from 'zod';
+import { EventType, AttendanceStatus } from '@prisma/client';
 import {
   EVENT_CREATE,
   EVENT_EDIT,
@@ -54,7 +55,7 @@ export async function createEvent(formData: FormData) {
       data: {
         title: validated.title,
         description: validated.description,
-        type: validated.eventType as any,
+        type: validated.eventType as EventType,
         startTime: new Date(validated.startDate),
         endTime: validated.endDate ? new Date(validated.endDate) : new Date(validated.startDate),
         venueId: validated.venueId || undefined,
@@ -112,7 +113,7 @@ export async function updateEvent(id: string, formData: FormData) {
       data: {
         title: validated.title,
         description: validated.description,
-        type: validated.eventType as any,
+        type: validated.eventType as EventType,
         startTime: new Date(validated.startDate),
         endTime: validated.endDate ? new Date(validated.endDate) : new Date(validated.startDate),
         venueId: validated.venueId || null,
@@ -187,7 +188,7 @@ export async function recordAttendance(
       data: records.map((record) => ({
         eventId,
         memberId: record.memberId,
-        status: record.status as any,
+        status: record.status as AttendanceStatus,
         notes: record.notes,
         markedBy: session.user.id,
       })),
