@@ -130,7 +130,7 @@ export async function rateLimit(
     }
     
     // Add current request to the sorted set with timestamp as score
-    await redis.zadd(redisKey, now, `${now}-${Math.random().toString(36).slice(2)}`);
+    await redis.zadd(redisKey, now, `${now}-${crypto.randomUUID()}`);
     
     // Set expiry on the key
     await redis.expire(redisKey, window);
