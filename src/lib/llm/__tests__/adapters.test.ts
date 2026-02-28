@@ -317,7 +317,7 @@ describe('LLM Adapters', () => {
         temperature: 0.1,
       });
 
-      expect(result.url).toBe('http://localhost:11434/chat/completions');
+      expect(result.url).toBe('http://localhost:11434/v1/chat/completions');
       expect(result.headers['Content-Type']).toBe('application/json');
       expect(result.headers).not.toHaveProperty('Authorization');
       expect(result.body).toHaveProperty('model', 'llama3.2-vision');
