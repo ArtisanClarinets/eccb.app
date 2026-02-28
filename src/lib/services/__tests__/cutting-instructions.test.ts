@@ -406,6 +406,71 @@ describe('cutting-instructions', () => {
 
       expect(gaps).toHaveLength(3);
     });
+
+    it('should handle out-of-bounds page ranges', () => {
+      const instructions: NormalizedInstruction[] = [
+        { partName: 'Part 1', pageStart: -2, pageEnd: 1 }, // partially before start
+        { partName: 'Part 2', pageStart: 8, pageEnd: 12 }, // partially after end
+      ];
+
+      const gaps = detectGaps(instructions, 10);
+
+      expect(gaps).toHaveLength(1);
+      expect(gaps[0]).toEqual({ start: 2, end: 7 }); // middle gap
+    });
+
+    it('should detect single-page gaps', () => {
+      const instructions: NormalizedInstruction[] = [
+        { partName: 'Part 1', pageStart: 0, pageEnd: 1 },
+        { partName: 'Part 2', pageStart: 3, pageEnd: 4 },
+      ];
+
+      const gaps = detectGaps(instructions, 5);
+
+      expect(gaps).toHaveLength(1);
+      expect(gaps[0]).toEqual({ start: 2, end: 2 });
+    });
+
+    it('should correctly handle unordered instructions', () => {
+      const instructions: NormalizedInstruction[] = [
+        { partName: 'Part 2', pageStart: 7, pageEnd: 9 },
+        { partName: 'Part 1', pageStart: 0, pageEnd: 2 },
+      ];
+
+      const gaps = detectGaps(instructions, 10);
+
+      expect(gaps).toHaveLength(1);
+      expect(gaps[0]).toEqual({ start: 3, end: 6 });
+    });
+
+    it('should handle overlapping instructions that leave gaps', () => {
+      const instructions: NormalizedInstruction[] = [
+        { partName: 'Part 1', pageStart: 0, pageEnd: 5 },
+        { partName: 'Part 2', pageStart: 3, pageEnd: 6 },
+      ];
+
+      const gaps = detectGaps(instructions, 10);
+
+      expect(gaps).toHaveLength(1);
+      expect(gaps[0]).toEqual({ start: 7, end: 9 });
+    });
+
+    it('should handle instructions when totalPages is 0', () => {
+      const instructions: NormalizedInstruction[] = [
+        { partName: 'Part 1', pageStart: 0, pageEnd: 2 },
+      ];
+
+      const gaps = detectGaps(instructions, 0);
+
+      expect(gaps).toHaveLength(0);
+    });
+
+    it('should handle no instructions when totalPages is 1', () => {
+      const gaps = detectGaps([], 1);
+
+      expect(gaps).toHaveLength(1);
+      expect(gaps[0]).toEqual({ start: 0, end: 0 });
+    });
   });
 
   describe('generateUniqueFilename', () => {
