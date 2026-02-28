@@ -469,6 +469,42 @@ describe('cutting-instructions', () => {
       expect(filename).toContain('_');
       expect(filename).toBe('Woodwinds - Bb Clarinet_1__p0-2_0.pdf');
     });
+
+    it('should strip emojis and non-ASCII characters', () => {
+      const filename = generateUniqueFilename('Violin 🎻 part áéíóú', 1, 3, 2);
+
+      expect(filename).toBe('Violin  part__p1-3_2.pdf');
+    });
+
+    it('should handle strings that become completely empty after sanitization', () => {
+      const filename = generateUniqueFilename('???!!!', 5, 5, 1);
+
+      expect(filename).toBe('__p5-5_1.pdf');
+    });
+
+    it('should preserve consecutive spaces', () => {
+      const filename = generateUniqueFilename('Trumpet   in   Bb', 0, 10, 0);
+
+      expect(filename).toBe('Trumpet   in   Bb__p0-10_0.pdf');
+    });
+
+    it('should handle negative page numbers', () => {
+      const filename = generateUniqueFilename('Flute', -1, -5, 0);
+
+      expect(filename).toBe('Flute__p-1--5_0.pdf');
+    });
+
+    it('should handle large indices and page numbers', () => {
+      const filename = generateUniqueFilename('Tuba', 10000, 20000, 999999);
+
+      expect(filename).toBe('Tuba__p10000-20000_999999.pdf');
+    });
+
+    it('should strip invisible characters', () => {
+      const filename = generateUniqueFilename('Horn\x00\x1F\x7F1', 0, 1, 0);
+
+      expect(filename).toBe('Horn1__p0-1_0.pdf');
+    });
   });
 
   describe('splitOverlappingRanges', () => {
