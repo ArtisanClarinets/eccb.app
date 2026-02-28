@@ -5,6 +5,7 @@ import { StandViewer, StandLoaderData } from '@/components/member/stand/StandVie
 import { auth } from '@/lib/auth/config';
 import { getUserRoles } from '@/lib/auth/permissions';
 import { isFeatureEnabled, FEATURES } from '@/lib/feature-flags';
+import { canAccessEvent } from '@/lib/stand/access';
 import { headers } from 'next/headers';
 
 export const metadata: Metadata = {
@@ -17,41 +18,6 @@ interface PageProps {
 
 /** Privileged role types that can access any event's stand */
 const PRIVILEGED_ROLE_TYPES = ['DIRECTOR', 'SUPER_ADMIN', 'ADMIN', 'STAFF'];
-
-/**
- * Check whether a user may open a music stand.
- *
- * Access policy (open / practice-friendly):
- *   - Directors / admins / staff always have access.
- *   - Any active Member may open the stand for any published event with music,
- *     without needing an attendance/RSVP record. This lets members practice on
- *     their own time and browse the full library stand.
- */
-async function canAccessEvent(
-  userId: string,
-  eventId: string
-): Promise<boolean> {
-  // Check privileged roles first (no further checks needed)
-  const privilegedRole = await prisma.userRole.findFirst({
-    where: {
-      userId,
-      role: { type: { in: PRIVILEGED_ROLE_TYPES as any } },
-      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
-    },
-  });
-  if (privilegedRole) return true;
-
-  // Any member with an active record can view a published event's stand.
-  const member = await prisma.member.findFirst({ where: { userId } });
-  if (!member) return false;
-
-  // Verify the event exists and is published (or has ended — allow reviewing past events)
-  const event = await prisma.event.findFirst({
-    where: { id: eventId, isPublished: true },
-    select: { id: true },
-  });
-  return !!event;
-}
 
 export default async function StandPage({ params }: PageProps) {
   // Kill-switch: if the stand feature is disabled, show 404

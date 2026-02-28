@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+import * as nodePath from 'path';
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { createCanvas } from '@napi-rs/canvas';
 import sharp from 'sharp';
@@ -34,6 +36,61 @@ export interface RenderOptions {
   scale?: number;
   /** Optional cache tag (e.g. session-id) to enable cross-call render caching */
   cacheTag?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Node.js filesystem-backed CMap and standard font data factories.
+//
+// pdfjs-dist ships CMap tables (.bcmap) and standard font fallbacks (.pfb)
+// inside the package but does NOT export its internal NodeCMapReaderFactory.
+// Node.js built-in fetch also does NOT support file:// URLs (as of Node 18/20),
+// so we cannot use the `cMapUrl` / `standardFontDataUrl` string options.
+//
+// Without these factories, pdfjs falls back to DOM-based font loading which
+// fails silently on the server, producing scrambled / garbled glyphs —
+// especially pronounced in sheet music PDFs that use CIDFonts with CMaps.
+// ---------------------------------------------------------------------------
+
+// Next.js always starts with cwd=project root, so this resolves correctly
+// in both `next dev` and `next start` (standalone mode mounts node_modules).
+const PDFJS_DIST_DIR = nodePath.join(process.cwd(), 'node_modules', 'pdfjs-dist');
+const CMAP_DIR   = nodePath.join(PDFJS_DIST_DIR, 'cmaps');
+const FONTS_DIR  = nodePath.join(PDFJS_DIST_DIR, 'standard_fonts');
+
+/**
+ * Reads pdfjs CMap files directly from the pdfjs-dist package on disk.
+ * The BCMap (.bcmap) packed binary format is tried first; raw .cmap falls back.
+ */
+class NodeFsCMapReaderFactory {
+  fetch({ name }: { name: string }): Promise<{ cMapData: Uint8Array; isCompressed: boolean }> {
+    const bcmapPath = nodePath.join(CMAP_DIR, `${name}.bcmap`);
+    const cmapPath  = nodePath.join(CMAP_DIR, name);
+
+    if (fs.existsSync(bcmapPath)) {
+      const data = fs.readFileSync(bcmapPath);
+      return Promise.resolve({ cMapData: new Uint8Array(data), isCompressed: true });
+    }
+    if (fs.existsSync(cmapPath)) {
+      const data = fs.readFileSync(cmapPath);
+      return Promise.resolve({ cMapData: new Uint8Array(data), isCompressed: false });
+    }
+    return Promise.reject(new Error(`CMap not found: ${name}`));
+  }
+}
+
+/**
+ * Reads pdfjs standard font fallback files (.pfb) from the pdfjs-dist
+ * package on disk so that PDFs without embedded fonts still render legibly.
+ */
+class NodeFsStandardFontDataFactory {
+  fetch({ filename }: { filename: string }): Promise<Uint8Array> {
+    const fontPath = nodePath.join(FONTS_DIR, filename);
+    if (fs.existsSync(fontPath)) {
+      const data = fs.readFileSync(fontPath);
+      return Promise.resolve(new Uint8Array(data));
+    }
+    return Promise.reject(new Error(`Standard font not found: ${filename}`));
+  }
 }
 
 // Minimal 100×100 white PNG used as a placeholder for pages that fail to render
@@ -76,6 +133,15 @@ async function openPdfDocument(pdfBuffer: Buffer) {
   const loadingTask = pdfjsLib.getDocument({
     data: pdfData,
     disableWorker: true,
+    // Supply filesystem-backed font/CMap factories so pdfjs can decode CIDFonts
+    // and standard font fallbacks without needing a DOM or network access.
+    // Without these, sheet music PDFs (which rely heavily on CMaps for their
+    // notation character encodings) render as scrambled/garbled glyphs.
+    CMapReaderFactory: NodeFsCMapReaderFactory,
+    StandardFontDataFactory: NodeFsStandardFontDataFactory,
+    cMapPacked: true,
+    useSystemFonts: false,
+    isEvalSupported: false,
   } as unknown as PdfGetDocumentParams);
 
   const pdfDocument = await loadingTask.promise;

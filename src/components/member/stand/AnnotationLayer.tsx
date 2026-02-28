@@ -145,8 +145,12 @@ export function AnnotationLayer() {
       if (type === Tool.HIGHLIGHTER) {
         ctx.globalCompositeOperation = 'multiply';
         ctx.globalAlpha = 0.4;
-      } else if (type === Tool.WHITEOUT || type === Tool.ERASER) {
+      } else if (type === Tool.ERASER) {
         ctx.globalCompositeOperation = 'destination-out';
+      } else if (type === Tool.WHITEOUT) {
+        // P0 FIX: Whiteout paints opaque white (not transparent erase)
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 1;
       } else {
         ctx.globalAlpha = opacity || 1;
       }
@@ -291,8 +295,8 @@ export function AnnotationLayer() {
       if (currentTool === Tool.TEXT) {
         setTextInput({
           visible: true,
-          x: e.clientX,
-          y: e.clientY,
+          x,
+          y,
           value: '',
         });
         return;

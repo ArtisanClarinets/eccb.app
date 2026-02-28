@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth/config';
 import { headers } from 'next/headers';
 import { prisma } from '@/lib/db';
 import { getUserRoles } from '@/lib/auth/permissions';
+import { applyRateLimit } from '@/lib/rate-limit';
 import { z } from 'zod';
 
 // Zod schemas for validation
@@ -74,6 +75,10 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit navigation link writes
+    const rateLimited = await applyRateLimit(request, 'stand-annotation');
+    if (rateLimited) return rateLimited;
+
     const headersList = await headers();
     const session = await auth.api.getSession({ headers: headersList });
 

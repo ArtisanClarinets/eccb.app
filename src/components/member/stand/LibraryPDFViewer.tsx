@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import { usePdf } from './usePdf';
 import { Loader2, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -22,10 +22,7 @@ export function LibraryPDFViewer({
   onPageChange,
   nightMode = false,
 }: LibraryPDFViewerProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  const { isLoading, error, numPages, renderCurrentPage } = usePdf({
+  const { canvasRef, containerRef, isLoading, error, numPages, renderCurrentPage } = usePdf({
     url,
     pageNumber: page,
     scale: 1.5,

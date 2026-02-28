@@ -54,11 +54,6 @@ const SCORE_SECTIONS = new Set([
   'Score', 'score', 'FULL_SCORE', 'CONDUCTOR_SCORE', 'CONDENSED_SCORE',
 ]);
 
-/** Part types that represent score/conductor pages (not individual instrument parts). */
-const SCORE_PART_TYPES = new Set([
-  'FULL_SCORE', 'CONDUCTOR_SCORE', 'CONDENSED_SCORE',
-]);
-
 const DEFAULT_SEG_CONFIDENCE_THRESHOLD = 70;
 
 // =============================================================================
@@ -69,6 +64,21 @@ const DEFAULT_SEG_CONFIDENCE_THRESHOLD = 70;
 export function isForbiddenLabel(s: string | undefined | null): boolean {
   if (!s) return true;
   return FORBIDDEN_LABELS.has(s.trim().toLowerCase());
+}
+
+/** Returns true when a part represents blank/spacer pages with no real instrument. */
+function isBlankOrSpacerPart(
+  instrument: string | undefined | null,
+  partName: string | undefined | null,
+): boolean {
+  const pn = (partName ?? '').trim().toLowerCase();
+  return (
+    pn.includes('blank') ||
+    pn.includes('spacer') ||
+    pn.includes('separator') ||
+    pn === 'blank pages' ||
+    pn === 'blank page'
+  );
 }
 
 // =============================================================================
@@ -95,8 +105,11 @@ export function evaluateQualityGates(input: QualityGateInput): QualityGateResult
   const reasons: string[] = [];
 
   // ── Gate 1: No part with a forbidden instrument or partName ──────────────
+  // Exception: blank/spacer pages legitimately have no instrument.
   const nullPart = parsedParts.find(
-    (p) => isForbiddenLabel(p.instrument) || isForbiddenLabel(p.partName),
+    (p) =>
+      !isBlankOrSpacerPart(p.instrument, p.partName) &&
+      (isForbiddenLabel(p.instrument) || isForbiddenLabel(p.partName)),
   );
   if (nullPart) {
     reasons.push(
@@ -107,7 +120,9 @@ export function evaluateQualityGates(input: QualityGateInput): QualityGateResult
   // ── Gate 1b: Cutting instructions must also have valid labels ────────────
   const cuttingInstructions = metadata.cuttingInstructions ?? [];
   const forbiddenCut = cuttingInstructions.find(
-    (ci) => isForbiddenLabel(ci.instrument) || isForbiddenLabel(ci.partName),
+    (ci) =>
+      !isBlankOrSpacerPart(ci.instrument, ci.partName) &&
+      (isForbiddenLabel(ci.instrument) || isForbiddenLabel(ci.partName)),
   );
   if (forbiddenCut) {
     reasons.push(

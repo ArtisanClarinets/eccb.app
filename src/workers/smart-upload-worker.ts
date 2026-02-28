@@ -13,10 +13,12 @@ import { renderPdfPageBatch } from '@/lib/services/pdf-renderer';
 import { callVisionModel } from '@/lib/llm';
 import { loadSmartUploadRuntimeConfig, runtimeToAdapterConfig } from '@/lib/llm/config-loader';
 import type { LLMRuntimeConfig } from '@/lib/llm/config-loader';
+import { getProviderMeta } from '@/lib/llm/providers';
+import type { LabeledDocument } from '@/lib/llm/types';
 import { splitPdfByCuttingInstructions } from '@/lib/services/pdf-splitter';
 import { buildGapInstructions, validateAndNormalizeInstructions, sanitizeCuttingInstructionsForSplit } from '@/lib/services/cutting-instructions';
 import { queueSmartUploadAutoCommit } from '@/lib/jobs/smart-upload';
-import { evaluateQualityGates } from '@/lib/smart-upload/quality-gates';
+import { evaluateQualityGates, isForbiddenLabel } from '@/lib/smart-upload/quality-gates';
 import { buildPartStorageSlug, buildPartFilename } from '@/lib/smart-upload/part-naming';
 import { parseJsonLenient } from '@/lib/smart-upload/json';
 import { logger } from '@/lib/logger';
@@ -109,12 +111,14 @@ const llmRateLimiter = new TokenBucketRateLimiter(15);
  * Call the verification LLM using the shared adapter pattern.
  * Uses verificationModel instead of visionModel for the second pass.
  * Accepts optional labeled inputs (sampled parts) for cross-reference.
+ * When pdfDocuments is provided, sends the PDF natively instead of images.
  */
 async function callVerificationLLM(
   pageImages: string[],
   cfg: LLMRuntimeConfig,
   prompt: string,
   labeledImages?: Array<{ label: string; base64Data: string }>,
+  pdfDocuments?: LabeledDocument[],
 ): Promise<{ parsed: ExtractedMetadata; raw: string }> {
   // setLimit BEFORE consume (rate limiter fix)
   llmRateLimiter.setLimit(cfg.rateLimit);
@@ -126,26 +130,30 @@ async function callVerificationLLM(
     llm_vision_model: cfg.verificationModel,
   };
 
-  const images = pageImages.map((base64Data) => ({
-    mimeType: 'image/png' as const,
-    base64Data,
-  }));
+  const images = pdfDocuments && pdfDocuments.length > 0
+    ? [] // No images when sending native PDF
+    : pageImages.map((base64Data) => ({
+        mimeType: 'image/png' as const,
+        base64Data,
+      }));
 
   const response = await callVisionModel(adapterConfig, images, prompt, {
     system: cfg.verificationSystemPrompt || DEFAULT_VERIFICATION_SYSTEM_PROMPT,
     responseFormat: { type: 'json' as const },
-    maxTokens: 4096,
+    maxTokens: 8192,
     temperature: 0.1,
     modelParams: cfg.verificationModelParams,
-    ...(labeledImages && labeledImages.length > 0
-      ? {
-          labeledInputs: labeledImages.map(({ label, base64Data }) => ({
-            label,
-            mimeType: 'image/png' as const,
-            base64Data,
-          })),
-        }
-      : {}),
+    ...(pdfDocuments && pdfDocuments.length > 0
+      ? { documents: pdfDocuments }
+      : labeledImages && labeledImages.length > 0
+        ? {
+            labeledInputs: labeledImages.map(({ label, base64Data }) => ({
+              label,
+              mimeType: 'image/png' as const,
+              base64Data,
+            })),
+          }
+        : {}),
   });
 
   const raw = response.content;
@@ -182,11 +190,13 @@ function detectDisagreements(
 
 /**
  * Call the adjudicator LLM to resolve disagreements.
+ * When pdfDocuments is provided, sends the PDF natively instead of images.
  */
 async function callAdjudicatorLLM(
   pageImages: string[],
   cfg: LLMRuntimeConfig,
-  prompt: string
+  prompt: string,
+  pdfDocuments?: LabeledDocument[],
 ): Promise<{ 
   adjudicatedMetadata: ExtractedMetadata; 
   adjudicationNotes: string | null;
@@ -203,20 +213,29 @@ async function callAdjudicatorLLM(
     llm_vision_model: cfg.adjudicatorModel || cfg.verificationModel,
   };
 
-  // Sample evenly across all available pages so the adjudicator sees the full document,
-  // not just the first 10 pages (which would miss instrument parts near the end of large PDFs).
-  const adjStep = Math.max(1, Math.floor(pageImages.length / MAX_ADJUDICATOR_PAGES));
-  const adjudicatorPageImages = pageImages.filter((_, i) => i % adjStep === 0).slice(0, MAX_ADJUDICATOR_PAGES);
-  const images = adjudicatorPageImages.map((base64Data) => ({
-    mimeType: 'image/png' as const,
-    base64Data,
-  }));
+  let images: Array<{ mimeType: 'image/png'; base64Data: string }>;
+  let documents: LabeledDocument[] | undefined;
+
+  if (pdfDocuments && pdfDocuments.length > 0) {
+    // Native PDF mode — no image sampling needed
+    images = [];
+    documents = pdfDocuments;
+  } else {
+    // Image mode — sample evenly across all available pages
+    const adjStep = Math.max(1, Math.floor(pageImages.length / MAX_ADJUDICATOR_PAGES));
+    const adjudicatorPageImages = pageImages.filter((_, i) => i % adjStep === 0).slice(0, MAX_ADJUDICATOR_PAGES);
+    images = adjudicatorPageImages.map((base64Data) => ({
+      mimeType: 'image/png' as const,
+      base64Data,
+    }));
+  }
 
   const response = await callVisionModel(adapterConfig, images, prompt, {
     system: DEFAULT_ADJUDICATOR_SYSTEM_PROMPT,
     responseFormat: { type: 'json' as const },
-    maxTokens: 4096,
+    maxTokens: 8192,
     temperature: 0.1,
+    ...(documents ? { documents } : {}),
   });
 
   const raw = response.content;
@@ -225,7 +244,7 @@ async function callAdjudicatorLLM(
   return {
     adjudicatedMetadata: parsed.adjudicatedMetadata || parsed,
     adjudicationNotes: parsed.adjudicationNotes || null,
-    finalConfidence: parsed.finalConfidence || 0,
+    finalConfidence: normalizeConfidence(parsed.finalConfidence),
     requiresHumanReview: !!parsed.requiresHumanReview,
     raw,
   };
@@ -238,6 +257,19 @@ function parseVerificationResponse(content: string): ExtractedMetadata {
     throw new Error('No JSON found in verification LLM response');
   }
   return result.value;
+}
+
+/**
+ * Normalize a confidence value to the 0-100 integer scale.
+ * LLMs sometimes return values on a 0-1 probability scale (e.g., 0.9 for 90%).
+ */
+function normalizeConfidence(value: unknown): number {
+  if (typeof value !== 'number' || isNaN(value)) return 0;
+  // Detect 0-1 probability scale: fractional values > 0 and < 1
+  if (value > 0 && value < 1) {
+    return Math.round(value * 100);
+  }
+  return Math.max(0, Math.min(100, Math.round(value)));
 }
 
 function shuffleArray<T>(array: T[]): T[] {
@@ -270,18 +302,30 @@ async function finalizeSmartUploadSession(
     model: string;
   }
 ): Promise<void> {
-  // ── Carry forward segmentationConfidence from first-pass session ──────────
-  // The first-pass processor stores segmentationConfidence inside extractedMetadata.
-  // If the second pass did not produce its own segConf, use the first pass value.
+  // ── Carry forward / compute segmentationConfidence ──────────────────────
+  // The first-pass processor stores segmentationConfidence inside extractedMetadata
+  // based on deterministic (text-layer) segmentation. When the second pass LLM
+  // produces cutting instructions, the LLM's confidence supersedes the first-pass
+  // deterministic confidence — the segmentation quality is now LLM-driven.
   const firstPassMeta = smartSession.extractedMetadata as ExtractedMetadata | null;
   const firstPassSegConf = firstPassMeta?.segmentationConfidence;
-  if (typeof firstPassSegConf === 'number' && finalMetadata.segmentationConfidence === undefined) {
-    finalMetadata = { ...finalMetadata, segmentationConfidence: firstPassSegConf };
+  const hasSecondPassInstructions = (finalMetadata.cuttingInstructions?.length ?? 0) > 0;
+
+  if (finalMetadata.segmentationConfidence === undefined) {
+    if (hasSecondPassInstructions) {
+      // Second pass LLM produced cutting instructions — use LLM confidence
+      // instead of the (possibly failed) deterministic first-pass value.
+      finalMetadata = { ...finalMetadata, segmentationConfidence: finalConfidence };
+    } else if (typeof firstPassSegConf === 'number') {
+      // No second-pass instructions: carry forward first-pass segConf
+      finalMetadata = { ...finalMetadata, segmentationConfidence: firstPassSegConf };
+    }
   }
   const effectiveSegConf = finalMetadata.segmentationConfidence;
 
-  // Recompute finalConfidence = min(verificationConfidence, segmentationConfidence)
-  if (typeof effectiveSegConf === 'number') {
+  // Only cap finalConfidence by segmentationConfidence when the seg confidence
+  // was set independently (not derived from finalConfidence itself above).
+  if (typeof effectiveSegConf === 'number' && !hasSecondPassInstructions) {
     finalConfidence = Math.min(finalConfidence, effectiveSegConf);
   }
   // Base update data
@@ -305,6 +349,56 @@ async function finalizeSmartUploadSession(
   }
 
   let correctedCuttingInstructions = finalMetadata.cuttingInstructions;
+
+  // ── Handle single-document scores (conductor score, full score, etc.) ───
+  // When cutting instructions are missing or all garbage (forbidden labels) AND
+  // the fileType is a score type, replace with a single "Full Score" part.
+  // Only apply for small PDFs (≤ MAX_FULL_SCORE_PAGES) — large documents with
+  // garbage instructions are multi-part PDFs where the LLM failed.
+  const SCORE_FILE_TYPES = ['FULL_SCORE', 'CONDUCTOR_SCORE', 'CONDENSED_SCORE'];
+  const MAX_FULL_SCORE_PAGES = 30;
+  const isScoreFileType = SCORE_FILE_TYPES.includes(finalMetadata.fileType ?? '');
+  const allGarbage =
+    !correctedCuttingInstructions ||
+    correctedCuttingInstructions.length === 0 ||
+    correctedCuttingInstructions.every(
+      (ci) => isForbiddenLabel(ci.instrument) || isForbiddenLabel(ci.partName),
+    );
+  if (allGarbage && isScoreFileType) {
+    const { PDFDocument: PDFDoc } = await import('pdf-lib');
+    const tmpDoc = await PDFDoc.load(originalPdfBuffer);
+    const totalPages = tmpDoc.getPageCount();
+    if (totalPages <= MAX_FULL_SCORE_PAGES) {
+      const scoreType =
+        finalMetadata.fileType === 'CONDUCTOR_SCORE'
+          ? 'Conductor Score'
+          : finalMetadata.fileType === 'CONDENSED_SCORE'
+            ? 'Condensed Score'
+            : 'Full Score';
+      correctedCuttingInstructions = [
+        {
+          partName: scoreType,
+          instrument: scoreType,
+          section: 'Score' as CuttingInstruction['section'],
+          transposition: 'C' as CuttingInstruction['transposition'],
+          partNumber: 1,
+          pageRange: [1, totalPages] as [number, number],
+        },
+      ];
+      finalMetadata = {
+        ...finalMetadata,
+        cuttingInstructions: correctedCuttingInstructions,
+        isMultiPart: false,
+      };
+      updateData.extractedMetadata = finalMetadata;
+      logger.info('Second pass: single-document score — replaced garbage instructions with full-score', {
+        sessionId,
+        scoreType,
+        totalPages,
+        fileType: finalMetadata.fileType,
+      });
+    }
+  }
 
   // Gap detection — ensure no pages are silently dropped when the LLM doesn't cover
   // the full PDF (common for large scores where sampling misses later instrument parts).
@@ -507,9 +601,9 @@ async function processSecondPass(job: Job<SmartUploadSecondPassJobData>): Promis
     throw new Error('Session not found');
   }
 
-  // Check secondPassStatus is QUEUED or FAILED
+  // Check secondPassStatus is QUEUED, FAILED, or null (race condition safety)
   const currentSecondPassStatus = smartSession.secondPassStatus as SecondPassStatus;
-  if (currentSecondPassStatus !== 'QUEUED' && currentSecondPassStatus !== 'FAILED') {
+  if (currentSecondPassStatus !== 'QUEUED' && currentSecondPassStatus !== 'FAILED' && currentSecondPassStatus !== null) {
     throw new Error(`Session is not eligible for second pass. Current status: ${currentSecondPassStatus}`);
   }
 
@@ -538,18 +632,43 @@ async function processSecondPass(job: Job<SmartUploadSecondPassJobData>): Promis
     const originalPdfBuffer = await streamToBuffer(downloadResult.stream);
     await progress('downloading', 25, 'PDF downloaded');
 
-    // Convert all pages to images
-    const allPageIndices = Array.from({ length: Math.min( 
-      (await (async () => { const { PDFDocument } = await import('pdf-lib'); const d = await PDFDocument.load(originalPdfBuffer); return d.getPageCount(); })()), 
-      MAX_PDF_PAGES_FOR_LLM 
-    ) }, (_, i) => i);
-    const originalPageImages = await renderPdfPageBatch(originalPdfBuffer, allPageIndices, {
-      scale: 2,
-      maxWidth: 1024,
-      quality: 85,
-      format: 'png',
-    });
-    await progress('rendering', 35, 'PDF rendered to images');
+    // Determine whether we can send the PDF natively to the LLM
+    const providerMeta = getProviderMeta(llmConfig.provider);
+    const canSendPdf = llmConfig.sendFullPdfToLlm && (providerMeta?.supportsPdfInput ?? false);
+
+    // Build a reusable PDF document for native-PDF-to-LLM mode
+    let pdfDocument: LabeledDocument | undefined;
+    let originalPageImages: string[] = [];
+
+    if (canSendPdf) {
+      // ── PDF-to-LLM mode: skip expensive per-page rendering ───────────────
+      logger.info('Second pass: using PDF-to-LLM mode — skipping image rendering', {
+        sessionId,
+        provider: llmConfig.provider,
+      });
+      pdfDocument = {
+        mimeType: 'application/pdf',
+        base64Data: originalPdfBuffer.toString('base64'),
+        label: 'Full Score PDF',
+      };
+      await progress('rendering', 35, 'PDF prepared for AI analysis (native mode)');
+    } else {
+      // ── Image mode: render every page ────────────────────────────────────
+      const { PDFDocument: PDFDoc } = await import('pdf-lib');
+      const tmpDoc = await PDFDoc.load(originalPdfBuffer);
+      const totalPageCount = tmpDoc.getPageCount();
+      const allPageIndices = Array.from(
+        { length: Math.min(totalPageCount, MAX_PDF_PAGES_FOR_LLM) },
+        (_, i) => i,
+      );
+      originalPageImages = await renderPdfPageBatch(originalPdfBuffer, allPageIndices, {
+        scale: 2,
+        maxWidth: 1024,
+        quality: 85,
+        format: 'png',
+      });
+      await progress('rendering', 35, 'PDF rendered to images');
+    }
 
     // FIX: Treat fields as JSON directly, NOT strings (Bug #2 fix)
     const metadata = smartSession.extractedMetadata as ExtractedMetadata | null;
@@ -577,12 +696,24 @@ async function processSecondPass(job: Job<SmartUploadSecondPassJobData>): Promis
         sessionId,
         totalParts: parsedParts.length,
         sampledCount: sampledParts.length,
+        mode: canSendPdf ? 'pdf' : 'images',
       });
 
-      // Collect labeled images from each sampled part (the actual fix)
+      // Collect labeled images from each sampled part (only in image mode)
       const labeledImages: Array<{ label: string; base64Data: string }> = [];
+
+      // Get effective page count for prompt
+      let effectivePageCount: number;
+      if (canSendPdf) {
+        const { PDFDocument: PDFDoc } = await import('pdf-lib');
+        const tmpDoc = await PDFDoc.load(originalPdfBuffer);
+        effectivePageCount = tmpDoc.getPageCount();
+      } else {
+        effectivePageCount = originalPageImages.length;
+      }
+
       let promptContent = `## ORIGINAL SCORE (ALL PAGES)\n`;
-      promptContent += `Analyze all ${originalPageImages.length} pages of the original score above.\n\n`;
+      promptContent += `Analyze all ${effectivePageCount} pages of the original score above.\n\n`;
 
       for (const part of sampledParts) {
         promptContent += `=== PART: ${part.partName} ===\n`;
@@ -590,26 +721,29 @@ async function processSecondPass(job: Job<SmartUploadSecondPassJobData>): Promis
         promptContent += `Section: ${part.section}\n`;
         promptContent += `Page Range: ${part.pageRange[0]}-${part.pageRange[1]}\n\n`;
 
-        try {
-          const partDownloadResult = await downloadFile(part.storageKey);
-          if (typeof partDownloadResult !== 'string') {
-            const partPdfBuffer = await streamToBuffer(partDownloadResult.stream);
-            const partPageImages = await convertAllPdfPagesToImages(partPdfBuffer);
+        // Only render part images in image mode
+        if (!canSendPdf) {
+          try {
+            const partDownloadResult = await downloadFile(part.storageKey);
+            if (typeof partDownloadResult !== 'string') {
+              const partPdfBuffer = await streamToBuffer(partDownloadResult.stream);
+              const partPageImages = await convertAllPdfPagesToImages(partPdfBuffer);
 
-            // Build labeled images with clear part identification
-            for (let i = 0; i < partPageImages.length; i++) {
-              labeledImages.push({
-                label: `Part "${part.partName}" Page ${i + 1}`,
-                base64Data: partPageImages[i],
-              });
+              // Build labeled images with clear part identification
+              for (let i = 0; i < partPageImages.length; i++) {
+                labeledImages.push({
+                  label: `Part "${part.partName}" Page ${i + 1}`,
+                  base64Data: partPageImages[i],
+                });
+              }
             }
+          } catch (partError) {
+            logger.warn('Failed to download part for verification', {
+              sessionId,
+              partName: part.partName,
+              error: partError,
+            });
           }
-        } catch (partError) {
-          logger.warn('Failed to download part for verification', {
-            sessionId,
-            partName: part.partName,
-            error: partError,
-          });
         }
       }
 
@@ -623,30 +757,37 @@ async function processSecondPass(job: Job<SmartUploadSecondPassJobData>): Promis
       promptContent += `Include a "corrections" field explaining any changes made, or null if no corrections were needed.`;
 
       verificationPrompt = buildVerificationPrompt(
-        llmConfig.verificationSystemPrompt || '',
+        llmConfig.verificationUserPrompt || llmConfig.verificationSystemPrompt || '',
         {
           originalMetadata: metadata as unknown as Record<string, unknown>,
-          pageCount: originalPageImages.length,
+          pageCount: effectivePageCount,
         }
       ) + '\n\n' + promptContent;
 
-      // Call the verification LLM with labeled part images
+      // Call the verification LLM — pass PDF document or labeled images
       const { parsed: secondPassResult, raw: secondPassRaw } = await callVerificationLLM(
         originalPageImages,
         llmConfig,
         verificationPrompt,
-        labeledImages,
+        labeledImages.length > 0 ? labeledImages : undefined,
+        pdfDocument ? [pdfDocument] : undefined,
       );
 
-      const verificationConfidence = (secondPassResult as unknown as Record<string, unknown>).verificationConfidence as number
-        ?? secondPassResult.confidenceScore;
+      const verificationConfidence = normalizeConfidence(
+        (secondPassResult as unknown as Record<string, unknown>).verificationConfidence
+        ?? secondPassResult.confidenceScore
+      );
 
       await progress('verification', 70, 'Verification complete with parts');
 
       // --- ADJUDICATION LOGIC ---
       const disagreements = detectDisagreements(metadata, secondPassResult);
       const lowConfidence = (verificationConfidence < 85) || (metadata.confidenceScore < 80);
-      const needsAdjudication = disagreements.length > 0 || lowConfidence;
+      // Detect garbage cutting instructions (missing, empty, or all forbidden labels)
+      const spCuts = secondPassResult.cuttingInstructions || [];
+      const garbageInstructions = spCuts.length === 0 ||
+        spCuts.every(ci => isForbiddenLabel(ci.instrument) || isForbiddenLabel(ci.partName));
+      const needsAdjudication = disagreements.length > 0 || lowConfidence || garbageInstructions;
 
       let finalMetadata = secondPassResult;
       let finalConfidence = verificationConfidence;
@@ -655,16 +796,19 @@ async function processSecondPass(job: Job<SmartUploadSecondPassJobData>): Promis
       if (needsAdjudication) {
         await progress('adjudicating', 80, 'Starting adjudication pass');
         const adjudicatorPrompt = buildAdjudicatorPrompt(
-          llmConfig.adjudicatorPrompt || '',
+          llmConfig.adjudicatorUserPrompt || llmConfig.adjudicatorPrompt || '',
           {
             firstPassMetadata: metadata as unknown as Record<string, unknown>,
             secondPassMetadata: secondPassResult as unknown as Record<string, unknown>,
             disagreements,
-            pageCount: originalPageImages.length,
+            pageCount: effectivePageCount,
           }
         );
 
-        const adjResult = await callAdjudicatorLLM(originalPageImages, llmConfig, adjudicatorPrompt);
+        const adjResult = await callAdjudicatorLLM(
+          originalPageImages, llmConfig, adjudicatorPrompt,
+          pdfDocument ? [pdfDocument] : undefined,
+        );
         finalMetadata = adjResult.adjudicatedMetadata;
         finalConfidence = adjResult.finalConfidence;
         adjudicationData = {
@@ -684,7 +828,16 @@ async function processSecondPass(job: Job<SmartUploadSecondPassJobData>): Promis
       );
     } else {
       // No parts parsed yet - re-run full vision extraction as second opinion
-      const fallbackContext = `Extract metadata from ALL ${originalPageImages.length} pages of this music score.
+      let effectivePageCount: number;
+      if (canSendPdf) {
+        const { PDFDocument: PDFDoc } = await import('pdf-lib');
+        const tmpDoc = await PDFDoc.load(originalPdfBuffer);
+        effectivePageCount = tmpDoc.getPageCount();
+      } else {
+        effectivePageCount = originalPageImages.length;
+      }
+
+      const fallbackContext = `Extract metadata from ALL ${effectivePageCount} pages of this music score.
 This is a second-pass verification - please review carefully and provide any corrections.
 
 Return JSON with title, composer, confidenceScore, fileType, isMultiPart, ensembleType, keySignature, timeSignature, tempo, parts, and cuttingInstructions.
@@ -692,24 +845,34 @@ Include a "verificationConfidence" field (0-100) indicating your confidence in t
 Include a "corrections" field explaining any corrections made from the first pass, or null if no corrections were needed.`;
 
       const fallbackPrompt = buildVerificationPrompt(
-        llmConfig.verificationSystemPrompt || '',
+        llmConfig.verificationUserPrompt || llmConfig.verificationSystemPrompt || '',
         {
           originalMetadata: metadata as unknown as Record<string, unknown>,
-          pageCount: originalPageImages.length,
+          pageCount: effectivePageCount,
         }
       ) + '\n\n' + fallbackContext;
 
       await progress('analyzing', 50, 'Running full vision re-extraction');
 
-      const { parsed: secondPassResult, raw: secondPassRaw } = await callVerificationLLM(originalPageImages, llmConfig, fallbackPrompt);
-      const verificationConfidence = (secondPassResult as unknown as Record<string, unknown>).verificationConfidence as number
-        ?? secondPassResult.confidenceScore;
+      const { parsed: secondPassResult, raw: secondPassRaw } = await callVerificationLLM(
+        originalPageImages, llmConfig, fallbackPrompt,
+        undefined,
+        pdfDocument ? [pdfDocument] : undefined,
+      );
+      const verificationConfidence = normalizeConfidence(
+        (secondPassResult as unknown as Record<string, unknown>).verificationConfidence
+        ?? secondPassResult.confidenceScore
+      );
 
       await progress('verification', 70, 'Fallback verification complete');
 
       // --- ADJUDICATION LOGIC (Fallback path) ---
       const disagreements = detectDisagreements(metadata, secondPassResult);
-      const needsAdjudication = disagreements.length > 0 || verificationConfidence < 85;
+      // Detect garbage cutting instructions (missing, empty, or all forbidden labels)
+      const spCuts = secondPassResult.cuttingInstructions || [];
+      const garbageInstructions = spCuts.length === 0 ||
+        spCuts.every(ci => isForbiddenLabel(ci.instrument) || isForbiddenLabel(ci.partName));
+      const needsAdjudication = disagreements.length > 0 || verificationConfidence < 85 || garbageInstructions;
 
       let finalMetadata = secondPassResult;
       let finalConfidence = verificationConfidence;
@@ -718,16 +881,19 @@ Include a "corrections" field explaining any corrections made from the first pas
       if (needsAdjudication) {
         await progress('adjudicating', 80, 'Starting adjudication pass');
         const adjudicatorPrompt = buildAdjudicatorPrompt(
-          llmConfig.adjudicatorPrompt || '',
+          llmConfig.adjudicatorUserPrompt || llmConfig.adjudicatorPrompt || '',
           {
             firstPassMetadata: metadata as unknown as Record<string, unknown>,
             secondPassMetadata: secondPassResult as unknown as Record<string, unknown>,
             disagreements,
-            pageCount: originalPageImages.length,
+            pageCount: effectivePageCount,
           }
         );
 
-        const adjResult = await callAdjudicatorLLM(originalPageImages, llmConfig, adjudicatorPrompt);
+        const adjResult = await callAdjudicatorLLM(
+          originalPageImages, llmConfig, adjudicatorPrompt,
+          pdfDocument ? [pdfDocument] : undefined,
+        );
         finalMetadata = adjResult.adjudicatedMetadata;
         finalConfidence = adjResult.finalConfidence;
         adjudicationData = {

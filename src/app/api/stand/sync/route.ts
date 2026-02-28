@@ -4,6 +4,8 @@ import { headers } from 'next/headers';
 import { prisma } from '@/lib/db';
 import { applyRateLimit } from '@/lib/rate-limit';
 import { z } from 'zod';
+import { buildAccessContext, annotationVisibilityFilter, canAccessEvent } from '@/lib/stand/access';
+import { recordTelemetry } from '@/lib/stand/telemetry';
 
 /**
  * Sync endpoint for stand real-time updates
@@ -102,52 +104,6 @@ function updateStandState(eventId: string, updates: Partial<{
 }
 
 /**
- * Check if a user can access an event
- */
-async function canAccessEvent(userId: string, eventId: string): Promise<boolean> {
-  // Check if user is a conductor/director for this event
-  const conductorRole = await prisma.userRole.findFirst({
-    where: {
-      userId,
-      role: {
-        type: { in: ['DIRECTOR', 'SUPER_ADMIN', 'ADMIN', 'STAFF'] },
-      },
-      OR: [
-        { expiresAt: null },
-        { expiresAt: { gt: new Date() } },
-      ],
-    },
-  });
-
-  if (conductorRole) {
-    return true;
-  }
-
-  // Check if user is a member assigned to this event
-  const member = await prisma.member.findFirst({
-    where: { userId },
-  });
-
-  if (!member) {
-    return false;
-  }
-
-  // Check if the event has this member in attendance (any status)
-  const eventAttendance = await prisma.event.findFirst({
-    where: {
-      id: eventId,
-      attendance: {
-        some: {
-          memberId: member.id,
-        },
-      },
-    },
-  });
-
-  return !!eventAttendance;
-}
-
-/**
  * GET /api/stand/sync
  * Returns sync state for an event (polling endpoint)
  * Query params: eventId, musicId
@@ -176,14 +132,16 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Verify event access
+    // Verify event access — return 404 (non-enumerating)
     const hasAccess = await canAccessEvent(session.user.id, eventId);
     if (!hasAccess) {
       return NextResponse.json(
-        { error: 'Access denied to this event' },
-        { status: 403 }
+        { error: 'Not found' },
+        { status: 404 }
       );
     }
+
+    recordTelemetry({ event: 'stand.sync.poll', userId: session.user.id, eventId });
 
     // Get sync state for this event
     const state = getStandState(eventId);
@@ -202,19 +160,22 @@ export async function GET(request: NextRequest) {
     const activeUsers = Array.from(presenceMap.values())
       .filter((p) => p.eventId === eventId && p.lastSeen > new Date(Date.now() - 30000));
 
-    // Get recent annotations for this music piece
-    const recentAnnotations = musicId
-      ? await prisma.annotation.findMany({
+    // Get recent annotations with privacy filtering (P0 FIX)
+    let recentAnnotations: unknown[] = [];
+    if (musicId) {
+      const ctx = await buildAccessContext(session.user.id);
+      const visibilityFilter = annotationVisibilityFilter(ctx, musicId);
+      recentAnnotations = await prisma.annotation.findMany({
           where: {
-            musicId,
+            ...visibilityFilter,
             updatedAt: {
               gte: new Date(Date.now() - 5 * 60 * 1000),
             },
           },
           orderBy: { updatedAt: 'desc' },
           take: 10,
-        })
-      : [];
+        });
+    }
 
     return NextResponse.json({
       eventId,
@@ -264,12 +225,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify event access
+    // Verify event access — return 404 (non-enumerating)
     const hasAccess = await canAccessEvent(session.user.id, eventId);
     if (!hasAccess) {
       return NextResponse.json(
-        { error: 'Access denied to this event' },
-        { status: 403 }
+        { error: 'Not found' },
+        { status: 404 }
       );
     }
 

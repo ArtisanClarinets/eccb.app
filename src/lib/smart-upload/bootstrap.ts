@@ -53,7 +53,7 @@ const DEFAULT_NUMERIC_SETTINGS: Record<string, string> = {
   smart_upload_local_ocr_enabled: 'true',
   smart_upload_ocr_confidence_threshold: '60',
   // Enterprise: PDF-to-LLM
-  smart_upload_send_full_pdf_to_llm: 'false',
+  smart_upload_send_full_pdf_to_llm: 'true',
   // Enterprise: Budget system
   smart_upload_budget_max_llm_calls_per_session: '5',
   smart_upload_budget_max_input_tokens_per_session: '500000',

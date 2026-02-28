@@ -33,6 +33,8 @@ model User {
   annotations       Annotation[]
   userPreferences   UserPreferences?
   practiceLogs      PracticeLog[]
+  standBookmarks    StandBookmark[]
+  standSetlists     StandSetlist[]
 
   @@index([email])
   @@index([deletedAt])
@@ -299,6 +301,8 @@ model MusicPiece {
   navigationLinksTo   NavigationLink[] @relation("NavigationLinksTo")
   audioLinks        AudioLink[]
   practiceLogs      PracticeLog[]
+  standBookmarks    StandBookmark[]
+  setlistItems      StandSetlistItem[]
 
   @@index([title])
   @@index([composerId])
@@ -1069,6 +1073,8 @@ model Annotation {
   @@index([userId])
   @@index([layer])
   @@index([sectionId])
+  @@index([musicId, page, layer])
+  @@index([musicId, userId, page])
 }
 
 enum AnnotationLayer {
@@ -1150,6 +1156,48 @@ model PracticeLog {
   @@index([pieceId])
   @@index([practicedAt])
   @@index([userId, pieceId])
+}
+
+model StandBookmark {
+  id        String     @id @default(cuid())
+  userId    String
+  pieceId   String
+  sortOrder Int        @default(0)
+  createdAt DateTime   @default(now())
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  piece     MusicPiece @relation(fields: [pieceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, pieceId])
+  @@index([userId])
+  @@index([pieceId])
+}
+
+model StandSetlist {
+  id          String             @id @default(cuid())
+  userId      String
+  name        String
+  description String?
+  isDefault   Boolean            @default(false)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items       StandSetlistItem[]
+
+  @@index([userId])
+}
+
+model StandSetlistItem {
+  id        String       @id @default(cuid())
+  setlistId String
+  pieceId   String
+  sortOrder Int          @default(0)
+  notes     String?
+  setlist   StandSetlist @relation(fields: [setlistId], references: [id], onDelete: Cascade)
+  piece     MusicPiece   @relation(fields: [pieceId], references: [id], onDelete: Cascade)
+
+  @@unique([setlistId, pieceId])
+  @@index([setlistId])
+  @@index([pieceId])
 }
 
 model TaskModelConfig {

@@ -1,6 +1,7 @@
 import { Server as SocketIOServer } from 'socket.io';
 
 import { prisma } from '@/lib/db';
+import { canAccessEvent } from '@/lib/stand/access';
 import { z } from 'zod';
 
 // =============================================================================
@@ -94,52 +95,6 @@ export function getStandSocketServer(): SocketIOServer {
     );
   }
   return io;
-}
-
-/**
- * Check if a user can access an event (member or conductor)
- */
-async function canAccessEvent(userId: string, eventId: string): Promise<boolean> {
-  // Check if user is a conductor/director for this event
-  const conductorRole = await prisma.userRole.findFirst({
-    where: {
-      userId,
-      role: {
-        type: { in: ['DIRECTOR', 'SUPER_ADMIN', 'ADMIN', 'STAFF'] },
-      },
-      OR: [
-        { expiresAt: null },
-        { expiresAt: { gt: new Date() } },
-      ],
-    },
-  });
-
-  if (conductorRole) {
-    return true;
-  }
-
-  // Check if user is a member assigned to this event
-  const member = await prisma.member.findFirst({
-    where: { userId },
-  });
-
-  if (!member) {
-    return false;
-  }
-
-  // Check if the event has this member in attendance (any status)
-  const eventAttendance = await prisma.event.findFirst({
-    where: {
-      id: eventId,
-      attendance: {
-        some: {
-          memberId: member.id,
-        },
-      },
-    },
-  });
-
-  return !!eventAttendance;
 }
 
 /**

@@ -46,7 +46,8 @@ export interface LLMRuntimeConfig {
   autonomousApprovalThreshold: number;
   /** Maximum pages allowed for a single non-score PART before auto-commit is blocked. Default 12. */
   maxPagesPerPart: number;
-  /** When true AND provider supports PDF input, send the full PDF instead of rendered images. */
+  /** When true AND provider supports PDF input, send the full PDF instead of rendered images.
+   *  Defaults to true — native PDF input is faster and more accurate than image rendering. */
   sendFullPdfToLlm: boolean;
   /** Maximum LLM calls allowed per upload session. 0 = unlimited. */
   budgetMaxLlmCalls: number;
@@ -55,6 +56,16 @@ export interface LLMRuntimeConfig {
   visionModelParams: Record<string, unknown>;
   verificationModelParams: Record<string, unknown>;
   promptVersion?: string;
+  /** User prompt template for vision extraction (image mode) */
+  visionUserPrompt?: string;
+  /** User prompt template for PDF-to-LLM vision extraction */
+  pdfVisionUserPrompt?: string;
+  /** User prompt template for verification (second pass) */
+  verificationUserPrompt?: string;
+  /** User prompt template for header-label detection */
+  headerLabelUserPrompt?: string;
+  /** User prompt template for adjudicator (third pass) */
+  adjudicatorUserPrompt?: string;
 }
 
 const DB_KEYS = [
@@ -96,6 +107,12 @@ const DB_KEYS = [
   'llm_verification_system_prompt',
   'llm_header_label_prompt',
   'llm_adjudicator_prompt',
+  // User prompt templates (stored in DB as single source of truth)
+  'llm_vision_user_prompt',
+  'llm_pdf_vision_user_prompt',
+  'llm_verification_user_prompt',
+  'llm_header_label_user_prompt',
+  'llm_adjudicator_user_prompt',
   // Legacy behaviour keys
   'llm_confidence_threshold',
   'llm_rate_limit_rpm',
@@ -264,12 +281,18 @@ export async function loadLLMConfig(): Promise<LLMRuntimeConfig> {
     enableFullyAutonomousMode: (db['smart_upload_enable_autonomous_mode'] ?? 'false') === 'true',
     autonomousApprovalThreshold: Number(db['smart_upload_autonomous_approval_threshold'] ?? 95),
     maxPagesPerPart: Number(db['smart_upload_max_pages_per_part'] ?? 12),
-    sendFullPdfToLlm: (db['smart_upload_send_full_pdf_to_llm'] ?? 'false') === 'true',
+    sendFullPdfToLlm: (db['smart_upload_send_full_pdf_to_llm'] ?? 'true') === 'true',
     budgetMaxLlmCalls: Number(db['smart_upload_budget_max_llm_calls_per_session'] ?? 5),
     budgetMaxInputTokens: Number(db['smart_upload_budget_max_input_tokens_per_session'] ?? 500000),
     visionModelParams,
     verificationModelParams,
     promptVersion: db['llm_prompt_version'] || PROMPT_VERSION,
+    // User prompt templates — DB is the single source of truth
+    visionUserPrompt: db['llm_vision_user_prompt'] || undefined,
+    pdfVisionUserPrompt: db['llm_pdf_vision_user_prompt'] || undefined,
+    verificationUserPrompt: db['llm_verification_user_prompt'] || undefined,
+    headerLabelUserPrompt: db['llm_header_label_user_prompt'] || undefined,
+    adjudicatorUserPrompt: db['llm_adjudicator_user_prompt'] || undefined,
   };
 }
 

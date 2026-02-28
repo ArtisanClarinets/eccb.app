@@ -21,6 +21,16 @@ const nextConfig: NextConfig = {
     // the total number of concurrent MariaDB connections stays within the
     // server's connection limit (each worker opens its own pool).
     cpus: 4,
+    // Raise the body size limit for route handlers (e.g. /api/files/smart-upload).
+    // Music PDFs can easily exceed the 10 MB default, causing FormData parsing failures.
+    serverActions: {
+      bodySizeLimit: '50mb',
+    },
+    // Raise the proxy middleware body buffer limit to match.  Without this,
+    // proxy.ts truncates request bodies at 10 MB before they even reach the
+    // route handler, causing "Failed to parse body as FormData" errors for
+    // large music PDFs.
+    proxyClientMaxBodySize: '50mb',
   },
 
   // Security headers configuration
@@ -53,11 +63,12 @@ const nextConfig: NextConfig = {
         key: 'Permissions-Policy',
         value: [
           'camera=()',
-          'microphone=()',
+          'microphone=(self)',
           'geolocation=()',
           'interest-cohort=()',
           'payment=()',
           'sync-xhr=(self)',
+          'midi=(self)',
         ].join(', '),
       },
       // Content Security Policy

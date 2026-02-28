@@ -4,7 +4,7 @@
 // System prompts define behavior; user prompts define task input/output.
 // ============================================================
 
-export const PROMPT_VERSION = '2.0.0';
+export const PROMPT_VERSION = '3.0.0';
 
 // =============================================================================
 // System Prompts
@@ -76,7 +76,7 @@ Required object schema:
     }
   ],
   "totalPageCount": number,
-  "confidenceScore": number,
+  "confidenceScore": integer 0-100,
   "notes": string | null
 }`;
 
@@ -143,7 +143,7 @@ Return:
 {
   "adjudicatedMetadata": { ...same structure as extraction metadata... },
   "adjudicationNotes": string | null,
-  "finalConfidence": number,
+  "finalConfidence": integer 0-100,
   "requiresHumanReview": boolean
 }`;
 
@@ -184,7 +184,7 @@ Required object schema:
   "tempo": string | null,
   "fileType": "FULL_SCORE" | "CONDUCTOR_SCORE" | "CONDENSED_SCORE" | "PART",
   "isMultiPart": boolean,
-  "confidenceScore": number,
+  "confidenceScore": integer 0-100,
   "parts": [
     {
       "instrument": string,
@@ -298,14 +298,23 @@ export function buildAdjudicatorPrompt(
 // =============================================================================
 
 /**
- * Get default prompts as a settings record
+ * Get default prompts as a settings record.
+ * Includes ALL system + user prompt templates so the DB is the single source of truth.
  */
 export function getDefaultPromptsRecord(): Record<string, string> {
   return {
+    // System prompts
     llm_vision_system_prompt: DEFAULT_VISION_SYSTEM_PROMPT,
     llm_verification_system_prompt: DEFAULT_VERIFICATION_SYSTEM_PROMPT,
     llm_header_label_prompt: DEFAULT_HEADER_LABEL_PROMPT,
     llm_adjudicator_prompt: DEFAULT_ADJUDICATOR_PROMPT,
+    // User prompt templates
+    llm_vision_user_prompt: DEFAULT_VISION_USER_PROMPT_TEMPLATE,
+    llm_pdf_vision_user_prompt: DEFAULT_PDF_VISION_USER_PROMPT_TEMPLATE,
+    llm_verification_user_prompt: DEFAULT_VERIFICATION_USER_PROMPT_TEMPLATE,
+    llm_header_label_user_prompt: DEFAULT_HEADER_LABEL_USER_PROMPT_TEMPLATE,
+    llm_adjudicator_user_prompt: DEFAULT_ADJUDICATOR_USER_PROMPT_TEMPLATE,
+    // Version
     llm_prompt_version: PROMPT_VERSION,
   };
 }
@@ -316,7 +325,8 @@ export function getDefaultPromptsRecord(): Record<string, string> {
 export function promptsNeedReset(currentSettings: Record<string, string>): boolean {
   const hasVisionPrompt = !!currentSettings.llm_vision_system_prompt?.trim();
   const hasVerificationPrompt = !!currentSettings.llm_verification_system_prompt?.trim();
+  const hasPdfVisionPrompt = !!currentSettings.llm_pdf_vision_user_prompt?.trim();
   const versionMatch = currentSettings.llm_prompt_version === PROMPT_VERSION;
 
-  return !hasVisionPrompt || !hasVerificationPrompt || !versionMatch;
+  return !hasVisionPrompt || !hasVerificationPrompt || !hasPdfVisionPrompt || !versionMatch;
 }

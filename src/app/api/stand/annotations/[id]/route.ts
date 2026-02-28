@@ -3,13 +3,13 @@ import { auth } from '@/lib/auth/config';
 import { headers } from 'next/headers';
 import { prisma } from '@/lib/db';
 import { getUserRoles } from '@/lib/auth/permissions';
+import { applyRateLimit } from '@/lib/rate-limit';
 import { z } from 'zod';
 import type { Prisma } from '@prisma/client';
 
 const annotationUpdateSchema = z.object({
   strokeData: z.record(z.string(), z.any()).optional(),
   layer: z.enum(['PERSONAL', 'SECTION', 'DIRECTOR']).optional(),
-  sectionId: z.string().nullable().optional(),
 });
 
 export type AnnotationUpdateInput = z.infer<typeof annotationUpdateSchema>;
@@ -23,6 +23,10 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Rate limit annotation writes
+    const rateLimited = await applyRateLimit(request, 'stand-annotation');
+    if (rateLimited) return rateLimited;
+
     const headersList = await headers();
     const session = await auth.api.getSession({ headers: headersList });
 
@@ -87,12 +91,8 @@ export async function PUT(
           strokeData: validated.strokeData as Prisma.InputJsonValue,
         }),
         ...(validated.layer && { layer: validated.layer }),
-        // Use server-computed sectionId for SECTION layer, otherwise preserve client value
-        ...(serverSectionId !== undefined
-          ? { sectionId: serverSectionId }
-          : validated.sectionId !== undefined
-            ? { sectionId: validated.sectionId }
-            : {}),
+        // Always use server-computed sectionId — never trust client
+        ...(serverSectionId !== undefined && { sectionId: serverSectionId }),
       },
       include: {
         user: {

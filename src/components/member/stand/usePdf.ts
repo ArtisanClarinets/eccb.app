@@ -116,6 +116,12 @@ export function usePdf(options: UsePdfOptions): UsePdfReturn {
 
     let cancelled = false;
 
+    // Cancel any ongoing render before starting a new one
+    if (renderRef.current) {
+      renderRef.current.cancel();
+      renderRef.current = null;
+    }
+
     async function loadAndRenderPage() {
       const doc = document;
       if (!doc) return;
@@ -137,24 +143,20 @@ export function usePdf(options: UsePdfOptions): UsePdfReturn {
 
         // Render to canvas if available
         if (canvasRef.current) {
-          // Cancel any ongoing render
-          if (renderRef.current) {
-            renderRef.current.cancel();
+          const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+          try {
+            const handle = await renderPageToCanvas(page, canvasRef.current, scale, dpr);
+            if (!cancelled) {
+              renderRef.current = handle;
+            } else {
+              handle.cancel();
+            }
+          } catch (renderErr) {
+            // Cancelled renders throw — ignore if we triggered it
+            if (!cancelled) {
+              console.error('Error rendering page:', renderErr);
+            }
           }
-
-          const renderPromise = page.render({
-            canvas: canvasRef.current,
-            canvasContext: canvasRef.current.getContext('2d')!,
-            viewport: page.getViewport({ scale }),
-          });
-
-          renderRef.current = {
-            cancel: () => {
-              // PDF.js render task cancellation
-            },
-          };
-
-          await renderPromise.promise;
         }
       } catch (err) {
         if (!cancelled) {
@@ -167,6 +169,10 @@ export function usePdf(options: UsePdfOptions): UsePdfReturn {
 
     return () => {
       cancelled = true;
+      if (renderRef.current) {
+        renderRef.current.cancel();
+        renderRef.current = null;
+      }
     };
   }, [document, pageNumber, scale, numPages, enableAutoCrop]);
 
@@ -232,7 +238,13 @@ export function usePdf(options: UsePdfOptions): UsePdfReturn {
     if (!currentPage || !canvasRef.current) return;
 
     try {
-      await renderPageToCanvas(currentPage, canvasRef.current, scale);
+      const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+      if (renderRef.current) {
+        renderRef.current.cancel();
+        renderRef.current = null;
+      }
+      const handle = await renderPageToCanvas(currentPage, canvasRef.current, scale, dpr);
+      renderRef.current = handle;
     } catch (err) {
       console.error('Error re-rendering page:', err);
     }

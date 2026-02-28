@@ -244,7 +244,7 @@ export const SmartUploadSettingsSchema = z.object({
   smart_upload_send_full_pdf_to_llm: z
     .union([z.boolean(), z.string()])
     .transform((v) => (typeof v === 'string' ? v === 'true' : v))
-    .default(false),
+    .default(true),
 
   // Enterprise: Budget system
   smart_upload_budget_max_llm_calls_per_session: z

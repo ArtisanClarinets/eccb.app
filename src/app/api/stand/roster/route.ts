@@ -3,7 +3,7 @@ import { auth } from '@/lib/auth/config';
 import { headers } from 'next/headers';
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
-import { getUserRoles } from '@/lib/auth/permissions';
+import { canAccessEvent } from '@/lib/stand/access';
 
 // Zod schemas for validation
 const rosterCreateSchema = z.object({
@@ -19,21 +19,6 @@ const rosterUpdateSchema = z.object({
 
 export type RosterCreateInput = z.infer<typeof rosterCreateSchema>;
 export type RosterUpdateInput = z.infer<typeof rosterUpdateSchema>;
-
-const PRIVILEGED_ROLES = ['SUPER_ADMIN', 'ADMIN', 'DIRECTOR', 'STAFF'];
-
-async function canAccessEvent(userId: string, eventId: string): Promise<boolean> {
-  const roles = await getUserRoles(userId);
-  if (roles.some((r) => PRIVILEGED_ROLES.includes(r))) return true;
-
-  const member = await prisma.member.findFirst({ where: { userId } });
-  if (!member) return false;
-
-  const attendance = await prisma.event.findFirst({
-    where: { id: eventId, attendance: { some: { memberId: member.id } } },
-  });
-  return !!attendance;
-}
 
 /**
  * GET /api/stand/roster
@@ -61,7 +46,7 @@ export async function GET(request: NextRequest) {
 
     const hasAccess = await canAccessEvent(session.user.id, eventId);
     if (!hasAccess) {
-      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
 
     const roster = await prisma.standSession.findMany({
@@ -105,19 +90,20 @@ export async function POST(request: NextRequest) {
 
     const hasAccess = await canAccessEvent(session.user.id, validated.eventId);
     if (!hasAccess) {
-      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
 
+    // Always use session userId — never trust client-provided userId for presence
     const standSession = await prisma.standSession.upsert({
       where: {
         eventId_userId: {
           eventId: validated.eventId,
-          userId,
+          userId: session.user.id,
         },
       },
       create: {
         eventId: validated.eventId,
-        userId,
+        userId: session.user.id,
         section: validated.section,
         lastSeenAt: new Date(),
       },

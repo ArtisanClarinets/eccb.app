@@ -148,13 +148,15 @@ export function createOffscreenCanvas(width: number, height: number): HTMLCanvas
  * @param page - PDF page object
  * @param canvas - Target canvas element
  * @param scale - Scale factor
- * @returns Promise resolving when rendering is complete
+ * @param dpr - Device pixel ratio (defaults to 1 for offscreen, pass window.devicePixelRatio for on-screen)
+ * @returns Promise with cancel handle resolving when rendering is complete
  */
 export async function renderPageToCanvas(
   page: PdfPage,
   canvas: HTMLCanvasElement,
-  scale: number
-): Promise<void> {
+  scale: number,
+  dpr: number = 1
+): Promise<{ cancel: () => void }> {
   const viewport = page.getViewport({ scale });
   const context = canvas.getContext('2d');
 
@@ -162,9 +164,18 @@ export async function renderPageToCanvas(
     throw new Error('Failed to get canvas context');
   }
 
-  // Set canvas dimensions to match viewport
-  canvas.width = Math.floor(viewport.width);
-  canvas.height = Math.floor(viewport.height);
+  // Set canvas buffer size to viewport × DPR for crisp rendering
+  canvas.width = Math.floor(viewport.width * dpr);
+  canvas.height = Math.floor(viewport.height * dpr);
+
+  // Set CSS display size to viewport (only applies to on-screen canvases)
+  canvas.style.width = `${Math.floor(viewport.width)}px`;
+  canvas.style.height = `${Math.floor(viewport.height)}px`;
+
+  // Scale context so PDF renders at DPR resolution
+  if (dpr !== 1) {
+    context.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
 
   const renderTask = page.render({
     canvas,
@@ -172,7 +183,18 @@ export async function renderPageToCanvas(
     viewport,
   });
 
+  const cancelHandle = {
+    cancel: () => {
+      try {
+        renderTask.cancel();
+      } catch {
+        // Already finished or cancelled
+      }
+    },
+  };
+
   await renderTask.promise;
+  return cancelHandle;
 }
 
 export { pdfjs };

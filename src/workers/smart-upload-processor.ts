@@ -1,13 +1,19 @@
 /**
  * Smart Upload Processor Worker
  *
- * Handles the main Smart Upload pipeline:
- * 1. Download and render PDF to images
- * 2. Vision LLM analysis for metadata extraction
- * 3. Validate cutting instructions
- * 4. Split PDF into parts
- * 5. Save part records to database
- * 6. Queue for second pass if needed
+ * Handles the main Smart Upload pipeline with OCR-first architecture:
+ *
+ * 1. Download PDF
+ * 2. Extract text layer → deterministic part-boundary detection
+ * 3. If deterministic segmentation confidence ≥ threshold:
+ *    → OCR-first path: extract title/composer from text layer + filename
+ *    → Skip LLM entirely (zero API calls, zero cost)
+ * 4. Otherwise, fall back to LLM:
+ *    → Send entire PDF (or rendered images) for AI analysis
+ * 5. Validate cutting instructions
+ * 6. Split PDF into parts
+ * 7. Quality gates for auto-commit eligibility
+ * 8. Route: auto-commit, second-pass, or human review
  */
 
 import { Job } from 'bullmq';
@@ -26,6 +32,7 @@ import {
 import { splitPdfByCuttingInstructions } from '@/lib/services/pdf-splitter';
 import { extractPdfPageHeaders, type PageHeader } from '@/lib/services/pdf-text-extractor';
 import { detectPartBoundaries } from '@/lib/services/part-boundary-detector';
+import { extractOcrFallbackMetadata } from '@/lib/services/ocr-fallback';
 import {
   queueSmartUploadSecondPass,
   queueSmartUploadAutoCommit,
@@ -33,7 +40,7 @@ import {
 } from '@/lib/jobs/smart-upload';
 import { buildPartFilename, buildPartStorageSlug, normalizeInstrumentLabel } from '@/lib/smart-upload/part-naming';
 import { evaluateQualityGates, isForbiddenLabel } from '@/lib/smart-upload/quality-gates';
-import { parseJsonLenient, safePreview } from '@/lib/smart-upload/json';
+import { parseJsonLenient } from '@/lib/smart-upload/json';
 import { createSessionBudget } from '@/lib/smart-upload/budgets';
 import { getProviderMeta } from '@/lib/llm/providers';
 import type { LabeledDocument } from '@/lib/llm/types';
@@ -185,6 +192,22 @@ function toOneIndexedInstructions(instructions: CuttingInstruction[]): CuttingIn
 
 
 
+/**
+ * Normalize a confidence value to the 0-100 integer scale.
+ * LLMs sometimes return values on a 0-1 probability scale (e.g., 0.9 for 90%).
+ * This function detects fractional values strictly less than 1 and converts them.
+ */
+function normalizeConfidence(value: unknown): number {
+  if (typeof value !== 'number' || isNaN(value)) return 0;
+  // Detect 0-1 probability scale: fractional values > 0 and < 1
+  // A value of exactly 1 is treated as 1% (not 100%) — the prompt
+  // instructs the LLM to return "integer 0-100".
+  if (value > 0 && value < 1) {
+    return Math.round(value * 100);
+  }
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
 function parseVisionResponse(content: string, totalPages: number): ExtractedMetadata {
   const result = parseJsonLenient<Record<string, unknown>>(content, 'object');
   if (!result.ok) {
@@ -201,10 +224,7 @@ function parseVisionResponse(content: string, totalPages: number): ExtractedMeta
       ? parsed.title.trim()
       : 'Unknown Title';
 
-  const confidenceScore =
-    typeof parsed.confidenceScore === 'number'
-      ? Math.max(0, Math.min(100, Math.round(parsed.confidenceScore)))
-      : 0;
+  const confidenceScore = normalizeConfidence(parsed.confidenceScore);
 
   const isMultiPart = parsed.isMultiPart === true;
 
@@ -347,7 +367,7 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
   const providerMeta = getProviderMeta(llmConfig.provider);
   const canSendPdf = llmConfig.sendFullPdfToLlm && (providerMeta?.supportsPdfInput ?? false);
 
-  // Step 1: Download and render PDF to images
+  // Step 1: Download PDF
   await progress('downloading', 5, 'Downloading PDF from storage');
 
   const downloadResult = await downloadFile(smartSession.storageKey);
@@ -357,14 +377,14 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
 
   const pdfBuffer = await streamToBuffer(downloadResult.stream);
 
-  await progress('rendering', 10, 'Rendering PDF pages to images');
-
-  const { images: pageImages, totalPages, sampledIndices } = await samplePdfPages(pdfBuffer, sessionId);
+  // Get total page count (lightweight — no rendering)
+  const pdfDoc = await PDFDocument.load(pdfBuffer);
+  const totalPages = pdfDoc.getPageCount();
 
   // -----------------------------------------------------------------
   // Text layer detection (deterministic segmentation when available)
   // -----------------------------------------------------------------
-  await progress('analyzing', 20, 'Detecting text layer for deterministic segmentation');
+  await progress('analyzing', 15, 'Detecting text layer for deterministic segmentation');
 
   const pageHeaderResult = await extractPdfPageHeaders(
     pdfBuffer,
@@ -400,219 +420,400 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
     }
   }
 
-  // For scanned/image PDFs, try a header-crop labeling pass to recover boundaries.
-  if (!deterministicInstructions || deterministicConfidence < llmConfig.skipParseThreshold) {
-    await progress('analyzing', 25, 'Running header-label pass for scanned pages');
+  // -----------------------------------------------------------------
+  // OCR-First Pipeline:
+  // If deterministic segmentation produced high-confidence cutting
+  // instructions, skip the LLM entirely — extract title/composer via
+  // OCR fallback (text-layer + filename parsing) and proceed directly
+  // to validation, splitting, and quality gates.
+  //
+  // The LLM is only invoked when:
+  //  (a) No text layer or segmentation confidence is too low
+  //  (b) Single-part PDFs where boundary detection is irrelevant
+  // -----------------------------------------------------------------
 
-    try {
-      const allPageIndices = Array.from({ length: totalPages }, (_, i) => i);
-      const headerCropImages = await renderPdfHeaderCropBatch(pdfBuffer, allPageIndices, {
-        scale: 2,
-        maxWidth: 1024,
-        quality: 85,
-        format: 'png',
-        cropHeightFraction: 0.2,
-        cacheTag: sessionId,
-      });
+  let extraction: ExtractedMetadata;
+  let firstPassRaw: string | null = null;
 
-      const headerAdapterConfig = {
-        ...adapterConfig,
-        llm_vision_model: llmConfig.verificationModel,
-      };
+  const ocrFirstEligible =
+    deterministicInstructions !== null &&
+    deterministicInstructions.length > 0 &&
+    deterministicConfidence >= llmConfig.skipParseThreshold;
 
-      // -----------------------------------------------------------------------
-      // Batched header-label LLM call.
-      // We chunk the pages so each LLM request stays within
-      // MAX_HEADER_CROP_BATCH_SIZE images — crucial for providers with small
-      // context windows (GPT-4V, Groq). Gemini handles >67 images but batching
-      // keeps latency and cost predictable across all providers.
-      // -----------------------------------------------------------------------
-      const allParsedHeaderLabels: HeaderLabelEntry[] = [];
-      for (let batchStart = 0; batchStart < headerCropImages.length; batchStart += MAX_HEADER_CROP_BATCH_SIZE) {
-        // Budget check before each header-label batch call
-        const headerBudgetCheck = budget.check();
-        if (!headerBudgetCheck.allowed) {
-          logger.warn('Budget exhausted during header-label pass; using partial results', {
-            sessionId,
-            reason: headerBudgetCheck.reason,
-            labelsCollected: allParsedHeaderLabels.length,
-          });
-          break;
-        }
+  if (ocrFirstEligible) {
+    // ── OCR-first path: deterministic segmentation is sufficient ──────────
+    await progress('analyzing', 30, 'OCR-first: using deterministic segmentation (no LLM needed)');
 
-        const batchEnd = Math.min(batchStart + MAX_HEADER_CROP_BATCH_SIZE, headerCropImages.length);
-        const batchPageIndices = allPageIndices.slice(batchStart, batchEnd);
-        const batchImages = headerCropImages.slice(batchStart, batchEnd);
+    logger.info('OCR-first pipeline: skipping LLM — deterministic confidence sufficient', {
+      sessionId,
+      deterministicConfidence,
+      threshold: llmConfig.skipParseThreshold,
+      segments: deterministicInstructions!.length,
+    });
 
-        const batchPrompt = buildHeaderLabelPrompt(llmConfig.headerLabelPrompt || '', {
-          pageNumbers: batchPageIndices.map((index) => index + 1),
-        });
+    // Extract title/composer from text-layer + filename parsing
+    const ocrMeta = await extractOcrFallbackMetadata({
+      pdfBuffer,
+      filename: smartSession.fileName,
+    });
 
-        const batchResult = await callVisionModel(
-          headerAdapterConfig,
-          batchImages.map((base64Data, i) => ({
-            mimeType: 'image/png' as const,
-            base64Data,
-            label: `Page ${batchPageIndices[i] + 1}`,
-          })),
-          batchPrompt,
-          {
-            system: DEFAULT_HEADER_LABEL_SYSTEM_PROMPT,
-            responseFormat: { type: 'json' },
-            maxTokens: 2048,
-            temperature: 0.1,
-            modelParams: llmConfig.verificationModelParams,
-          }
-        );
-        budget.record();
-
-        const batchLabels = parseHeaderLabelResponse(batchResult.content);
-        allParsedHeaderLabels.push(...batchLabels);
-
-        logger.info('Header-label batch complete', {
-          sessionId,
-          batchStart: batchStart + 1,
-          batchEnd,
-          labelsFound: batchLabels.length,
-        });
-      }
-
-      const pageHeaders: PageHeader[] = allParsedHeaderLabels.map((entry) => ({
-        pageIndex: entry.page - 1,
-        headerText: entry.label ?? '',
-        fullText: entry.label ?? '',
-        hasText: Boolean(entry.label),
-      }));
-
-      if (pageHeaders.length > 0) {
-        const segResult = detectPartBoundaries(pageHeaders, totalPages, false);
-        if (segResult.segments.length > 1 || segResult.segmentationConfidence >= 55) {
-          deterministicInstructions = segResult.cuttingInstructions;
-          deterministicConfidence = Math.max(
-            deterministicConfidence,
-            segResult.segmentationConfidence
-          );
-          // Persist per-page header labels from vision pass for Review UI
-          for (const h of pageHeaders) {
-            if (h.hasText && h.headerText) {
-              pageLabels[h.pageIndex + 1] = h.headerText;
-            }
-          }
-          logger.info('Header-label segmentation succeeded', {
-            sessionId,
-            segments: segResult.segments.length,
-            confidence: segResult.segmentationConfidence,
-          });
-        }
-      }
-    } catch (error) {
-      logger.warn('Header-label segmentation failed; continuing with first-pass vision', {
-        sessionId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-
-  // Step 2: Vision LLM analysis
-  await progress('analyzing', 30, 'Running AI vision analysis on pages');
-
-  let visionResult: { content: string };
-
-  if (canSendPdf) {
-    // ── PDF-to-LLM mode: send the whole PDF as a native document ──────────
-    logger.info('Using PDF-to-LLM mode', { sessionId, provider: llmConfig.provider });
-
-    const budgetCheck = budget.check();
-    if (!budgetCheck.allowed) {
-      logger.warn('Budget exhausted before vision call', { sessionId, reason: budgetCheck.reason });
-      throw new Error(`Smart Upload budget exhausted: ${budgetCheck.reason}`);
-    }
-
-    const pdfDocument: LabeledDocument = {
-      mimeType: 'application/pdf',
-      base64Data: pdfBuffer.toString('base64'),
-      label: 'Full Score PDF',
+    extraction = {
+      title: ocrMeta.title || smartSession.fileName.replace(/\.pdf$/i, ''),
+      composer: ocrMeta.composer,
+      confidenceScore: deterministicConfidence,
+      fileType: 'FULL_SCORE',
+      isMultiPart: deterministicInstructions!.length > 1,
+      parts: deterministicInstructions!.map((ci, i) => ({
+        instrument: ci.instrument,
+        partName: ci.partName,
+        section: ci.section,
+        transposition: ci.transposition,
+        partNumber: ci.partNumber ?? i + 1,
+      })),
+      cuttingInstructions: toOneIndexedInstructions(deterministicInstructions!),
+      pageLabels,
+      segmentationConfidence: deterministicConfidence,
+      notes: `Processed via OCR-first pipeline (deterministic segmentation, confidence: ${deterministicConfidence}%). No LLM calls used.`,
     };
 
-    const pdfPrompt = buildPdfVisionPrompt(
-      DEFAULT_PDF_VISION_USER_PROMPT_TEMPLATE,
-      { totalPages },
-    );
-
-    visionResult = await callVisionModel(
-      adapterConfig,
-      [], // no images — PDF is the input
-      pdfPrompt,
-      {
-        system: llmConfig.visionSystemPrompt || DEFAULT_VISION_SYSTEM_PROMPT,
-        responseFormat: { type: 'json' },
-        modelParams: llmConfig.visionModelParams,
-        maxTokens: 4096,
-        temperature: 0.1,
-        documents: [pdfDocument],
-      },
-    );
-    budget.record();
+    logger.info('OCR-first extraction complete', {
+      sessionId,
+      title: extraction.title,
+      composer: extraction.composer,
+      parts: extraction.cuttingInstructions?.length ?? 0,
+      confidence: extraction.confidenceScore,
+    });
   } else {
-    // ── Standard image-based vision mode ──────────────────────────────────
-    const budgetCheck = budget.check();
-    if (!budgetCheck.allowed) {
-      logger.warn('Budget exhausted before vision call', { sessionId, reason: budgetCheck.reason });
-      throw new Error(`Smart Upload budget exhausted: ${budgetCheck.reason}`);
+    // ── LLM fallback: deterministic segmentation insufficient ─────────────
+    // When the provider supports native PDF input, send the entire PDF
+    // directly — this is faster and far more accurate than rendering
+    // individual page images or header crops.
+    // -----------------------------------------------------------------
+
+    let visionResult: { content: string };
+    let sampledIndices: number[] = [];
+    // Hoisted for retry access across both PDF and image branches
+    let pdfDocumentRef: LabeledDocument | undefined;
+    let visionPromptRef: string = '';
+    let pageImagesRef: string[] = [];
+
+    if (canSendPdf) {
+      // ── PDF-to-LLM mode: send the whole PDF as a native document ──────────
+      // Skips page sampling AND header-crop labeling — the LLM sees everything.
+      await progress('analyzing', 30, 'Sending full PDF to AI for analysis (OCR insufficient)');
+
+      logger.info('Using PDF-to-LLM mode — skipping image rendering', {
+        sessionId,
+        provider: llmConfig.provider,
+        totalPages,
+        deterministicConfidence,
+        reason: deterministicInstructions
+          ? `Deterministic confidence ${deterministicConfidence} < threshold ${llmConfig.skipParseThreshold}`
+          : 'No deterministic segmentation available',
+      });
+
+      const budgetCheck = budget.check();
+      if (!budgetCheck.allowed) {
+        logger.warn('Budget exhausted before vision call', { sessionId, reason: budgetCheck.reason });
+        throw new Error(`Smart Upload budget exhausted: ${budgetCheck.reason}`);
+      }
+
+      const pdfDocument: LabeledDocument = {
+        mimeType: 'application/pdf',
+        base64Data: pdfBuffer.toString('base64'),
+        label: 'Full Score PDF',
+      };
+      pdfDocumentRef = pdfDocument;
+
+      const pdfPrompt = buildPdfVisionPrompt(
+        llmConfig.pdfVisionUserPrompt || DEFAULT_PDF_VISION_USER_PROMPT_TEMPLATE,
+        { totalPages },
+      );
+      visionPromptRef = pdfPrompt;
+
+      visionResult = await callVisionModel(
+        adapterConfig,
+        [], // no images — PDF is the input
+        pdfPrompt,
+        {
+          system: llmConfig.visionSystemPrompt || DEFAULT_VISION_SYSTEM_PROMPT,
+          responseFormat: { type: 'json' },
+          modelParams: llmConfig.visionModelParams,
+          maxTokens: 8192,
+          temperature: 0.1,
+          documents: [pdfDocument],
+        },
+      );
+      budget.record();
+    } else {
+      // ── Standard image-based vision mode (fallback for non-PDF providers) ─
+      await progress('rendering', 10, 'Rendering PDF pages to images');
+
+      const sampleResult = await samplePdfPages(pdfBuffer, sessionId);
+      const pageImages = sampleResult.images;
+      pageImagesRef = pageImages;
+      sampledIndices = sampleResult.sampledIndices;
+
+      // For scanned/image PDFs without text layer, try header-crop labeling
+      if (!deterministicInstructions || deterministicConfidence < llmConfig.skipParseThreshold) {
+        await progress('analyzing', 25, 'Running header-label pass for scanned pages');
+
+        try {
+          const allPageIndices = Array.from({ length: totalPages }, (_, i) => i);
+          const headerCropImages = await renderPdfHeaderCropBatch(pdfBuffer, allPageIndices, {
+            scale: 2,
+            maxWidth: 1024,
+            quality: 85,
+            format: 'png',
+            cropHeightFraction: 0.2,
+            cacheTag: sessionId,
+          });
+
+          const headerAdapterConfig = {
+            ...adapterConfig,
+            llm_vision_model: llmConfig.verificationModel,
+          };
+
+          const allParsedHeaderLabels: HeaderLabelEntry[] = [];
+          for (let batchStart = 0; batchStart < headerCropImages.length; batchStart += MAX_HEADER_CROP_BATCH_SIZE) {
+            const headerBudgetCheck = budget.check();
+            if (!headerBudgetCheck.allowed) {
+              logger.warn('Budget exhausted during header-label pass; using partial results', {
+                sessionId,
+                reason: headerBudgetCheck.reason,
+                labelsCollected: allParsedHeaderLabels.length,
+              });
+              break;
+            }
+
+            const batchEnd = Math.min(batchStart + MAX_HEADER_CROP_BATCH_SIZE, headerCropImages.length);
+            const batchPageIndices = allPageIndices.slice(batchStart, batchEnd);
+            const batchImages = headerCropImages.slice(batchStart, batchEnd);
+
+            const batchPrompt = buildHeaderLabelPrompt(llmConfig.headerLabelUserPrompt || llmConfig.headerLabelPrompt || '', {
+              pageNumbers: batchPageIndices.map((index) => index + 1),
+            });
+
+            const batchResult = await callVisionModel(
+              headerAdapterConfig,
+              batchImages.map((base64Data, i) => ({
+                mimeType: 'image/png' as const,
+                base64Data,
+                label: `Page ${batchPageIndices[i] + 1}`,
+              })),
+              batchPrompt,
+              {
+                system: llmConfig.headerLabelPrompt || DEFAULT_HEADER_LABEL_SYSTEM_PROMPT,
+                responseFormat: { type: 'json' },
+                maxTokens: 2048,
+                temperature: 0.1,
+                modelParams: llmConfig.verificationModelParams,
+              }
+            );
+            budget.record();
+
+            const batchLabels = parseHeaderLabelResponse(batchResult.content);
+            allParsedHeaderLabels.push(...batchLabels);
+
+            logger.info('Header-label batch complete', {
+              sessionId,
+              batchStart: batchStart + 1,
+              batchEnd,
+              labelsFound: batchLabels.length,
+            });
+          }
+
+          const pageHeaders: PageHeader[] = allParsedHeaderLabels.map((entry) => ({
+            pageIndex: entry.page - 1,
+            headerText: entry.label ?? '',
+            fullText: entry.label ?? '',
+            hasText: Boolean(entry.label),
+          }));
+
+          if (pageHeaders.length > 0) {
+            const segResult = detectPartBoundaries(pageHeaders, totalPages, false);
+            if (segResult.segments.length > 1 || segResult.segmentationConfidence >= 55) {
+              deterministicInstructions = segResult.cuttingInstructions;
+              deterministicConfidence = Math.max(
+                deterministicConfidence,
+                segResult.segmentationConfidence
+              );
+              for (const h of pageHeaders) {
+                if (h.hasText && h.headerText) {
+                  pageLabels[h.pageIndex + 1] = h.headerText;
+                }
+              }
+              logger.info('Header-label segmentation succeeded', {
+                sessionId,
+                segments: segResult.segments.length,
+                confidence: segResult.segmentationConfidence,
+              });
+            }
+          }
+        } catch (error) {
+          logger.warn('Header-label segmentation failed; continuing with first-pass vision', {
+            sessionId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
+      // Send sampled images to vision LLM
+      await progress('analyzing', 30, 'Running AI vision analysis on pages');
+
+      const budgetCheck = budget.check();
+      if (!budgetCheck.allowed) {
+        logger.warn('Budget exhausted before vision call', { sessionId, reason: budgetCheck.reason });
+        throw new Error(`Smart Upload budget exhausted: ${budgetCheck.reason}`);
+      }
+
+      const images = pageImages.map((base64Data, index) => ({
+        mimeType: 'image/png' as const,
+        base64Data,
+        label: `Original Page ${sampledIndices[index] + 1}`,
+      }));
+
+      const visionPrompt = buildVisionPrompt(
+        llmConfig.visionUserPrompt || DEFAULT_VISION_USER_PROMPT_TEMPLATE,
+        {
+          totalPages,
+          sampledPageNumbers: sampledIndices,
+        },
+      );
+      visionPromptRef = visionPrompt;
+
+      visionResult = await callVisionModel(
+        adapterConfig,
+        images,
+        visionPrompt,
+        {
+          system: llmConfig.visionSystemPrompt || DEFAULT_VISION_SYSTEM_PROMPT,
+          responseFormat: { type: 'json' },
+          modelParams: llmConfig.visionModelParams,
+          maxTokens: 8192,
+          temperature: 0.1,
+        },
+      );
+      budget.record();
     }
 
-    const images = pageImages.map((base64Data, index) => ({
-      mimeType: 'image/png' as const,
-      base64Data,
-      label: `Original Page ${sampledIndices[index] + 1}`,
-    }));
+    extraction = parseVisionResponse(visionResult.content, totalPages);
 
-    const visionPrompt = buildVisionPrompt(
-      DEFAULT_VISION_USER_PROMPT_TEMPLATE,
-      {
-        totalPages,
-        sampledPageNumbers: sampledIndices,
-      },
-    );
-
-    visionResult = await callVisionModel(
-      adapterConfig,
-      images,
-      visionPrompt,
-      {
+    // ── Retry once if LLM response appears truncated ───────────────────────
+    // When isMultiPart=true but no cuttingInstructions, the LLM likely stopped
+    // generating before completing the JSON. Retry once with the same model.
+    if (
+      extraction.isMultiPart &&
+      (!extraction.cuttingInstructions || extraction.cuttingInstructions.length === 0) &&
+      budget.check().allowed
+    ) {
+      logger.warn('First pass: isMultiPart=true but no cuttingInstructions — retrying', {
+        sessionId,
+        originalTokens: visionResult.content.length,
+      });
+      // Re-call the same model (uses either PDF or image path already set up)
+      const retryOptions = {
         system: llmConfig.visionSystemPrompt || DEFAULT_VISION_SYSTEM_PROMPT,
-        responseFormat: { type: 'json' },
+        responseFormat: { type: 'json' as const },
         modelParams: llmConfig.visionModelParams,
-        maxTokens: 4096,
+        maxTokens: 8192,
         temperature: 0.1,
+      };
+      if (pdfDocumentRef) {
+        visionResult = await callVisionModel(adapterConfig, [], visionPromptRef, {
+          ...retryOptions,
+          documents: [pdfDocumentRef],
+        });
+      } else {
+        const retryImages = pageImagesRef.map((base64Data, index) => ({
+          mimeType: 'image/png' as const,
+          base64Data,
+          label: `Original Page ${sampledIndices[index] + 1}`,
+        }));
+        visionResult = await callVisionModel(adapterConfig, retryImages, visionPromptRef, retryOptions);
+      }
+      budget.record();
+
+      const retryExtraction = parseVisionResponse(visionResult.content, totalPages);
+      // Use retry result only if it has better cutting instructions
+      if (retryExtraction.cuttingInstructions && retryExtraction.cuttingInstructions.length > 0) {
+        logger.info('Retry produced valid cutting instructions', {
+          sessionId,
+          instructionCount: retryExtraction.cuttingInstructions.length,
+        });
+        extraction = retryExtraction;
+        firstPassRaw = visionResult.content;
+      } else {
+        logger.warn('Retry also produced no cutting instructions — keeping original', { sessionId });
+      }
+    }
+
+    // If deterministic segmentation produced instructions, overlay them on the LLM extraction
+    if (deterministicInstructions && deterministicInstructions.length > 0) {
+      extraction.cuttingInstructions = toOneIndexedInstructions(deterministicInstructions);
+      // Boost confidence when deterministic path used
+      extraction.confidenceScore = Math.max(
+        extraction.confidenceScore,
+        deterministicConfidence
+      );
+      logger.info('Using deterministic cutting instructions (with LLM metadata)', {
+        sessionId,
+        parts: deterministicInstructions.length,
+      });
+    }
+
+    // Persist per-page labels and segmentation confidence in extractedMetadata
+    if (Object.keys(pageLabels).length > 0) {
+      extraction.pageLabels = pageLabels;
+    }
+    if (deterministicConfidence > 0) {
+      extraction.segmentationConfidence = deterministicConfidence;
+    }
+
+    // Store the raw first-pass LLM response for audit purposes
+    firstPassRaw = visionResult.content;
+  }
+
+  // ── Handle single-document scores (conductor score, full score, etc.) ───
+  // When the LLM provides no valid cutting instructions, create a single "Full
+  // Score" part covering all pages rather than letting gap-fill create garbage.
+  // This handles conductor scores where ALL instruments are on every page.
+  // We do NOT rely on isMultiPart because the LLM is inconsistent about it.
+  // Guard: only apply for PDFs ≤ MAX_FULL_SCORE_PAGES. Larger documents with
+  // no cutting instructions are multi-part PDFs where the LLM failed to
+  // generate instructions (e.g., output truncation).
+  const SCORE_FILE_TYPES = ['FULL_SCORE', 'CONDUCTOR_SCORE', 'CONDENSED_SCORE'];
+  const MAX_FULL_SCORE_PAGES = 30;
+  const hasNoCuttingInstructions =
+    !extraction.cuttingInstructions || extraction.cuttingInstructions.length === 0;
+  const isScoreFileType = SCORE_FILE_TYPES.includes(extraction.fileType ?? '');
+
+  if (hasNoCuttingInstructions && isScoreFileType && totalPages <= MAX_FULL_SCORE_PAGES) {
+    const scoreType =
+      extraction.fileType === 'CONDUCTOR_SCORE'
+        ? 'Conductor Score'
+        : extraction.fileType === 'CONDENSED_SCORE'
+          ? 'Condensed Score'
+          : 'Full Score';
+    extraction.cuttingInstructions = [
+      {
+        partName: scoreType,
+        instrument: scoreType,
+        section: 'Score' as CuttingInstruction['section'],
+        transposition: 'C' as CuttingInstruction['transposition'],
+        partNumber: 1,
+        pageRange: [1, totalPages] as [number, number],
       },
-    );
-    budget.record();
+    ];
+    // Single-page-range score → not multi-part for pipeline purposes
+    extraction.isMultiPart = false;
+    logger.info('Single-document score detected — created full-score cutting instruction', {
+      sessionId,
+      scoreType,
+      totalPages,
+      fileType: extraction.fileType,
+    });
   }
-
-  const extraction = parseVisionResponse(visionResult.content, totalPages);
-
-  // If deterministic segmentation produced instructions, overlay them on the LLM extraction
-  if (deterministicInstructions && deterministicInstructions.length > 0) {
-    extraction.cuttingInstructions = toOneIndexedInstructions(deterministicInstructions);
-    // Boost confidence when deterministic path used
-    extraction.confidenceScore = Math.max(
-      extraction.confidenceScore,
-      deterministicConfidence
-    );
-    logger.info('Using deterministic cutting instructions', { sessionId, parts: deterministicInstructions.length });
-  }
-
-  // Persist per-page labels and segmentation confidence in extractedMetadata
-  if (Object.keys(pageLabels).length > 0) {
-    extraction.pageLabels = pageLabels;
-  }
-  if (deterministicConfidence > 0) {
-    extraction.segmentationConfidence = deterministicConfidence;
-  }
-
-  // Store the raw first-pass LLM response for audit purposes
-  const firstPassRaw = visionResult.content;
 
   // Step 3: Validate cutting instructions
   await progress('validating', 50, 'Validating extracted cutting instructions');
@@ -635,6 +836,38 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
     validation.warnings.push(
       `${gapInstructions.length} uncovered page range(s) were added as 'Unlabelled' parts`
     );
+
+    // If ALL instructions are gap-fills (LLM returned 0 valid cutting instructions),
+    // the extraction is fundamentally incomplete — force low confidence.
+    const validLlmInstructions = validation.instructions.length - gapInstructions.length;
+    if (validLlmInstructions === 0) {
+      logger.warn('No valid cutting instructions from LLM — forcing low confidence', {
+        sessionId,
+        originalConfidence: extraction.confidenceScore,
+      });
+      extraction.confidenceScore = Math.min(extraction.confidenceScore, 10);
+    } else {
+      // Some valid instructions exist but gaps remain — the extraction is incomplete.
+      // Cap confidence below auto-approve to force review or second pass.
+      const gapPageCount = gapInstructions.reduce(
+        (sum, g) => sum + (g.pageRange[1] - g.pageRange[0] + 1), 0
+      );
+      if (gapPageCount > 0) {
+        const cappedConfidence = Math.min(
+          extraction.confidenceScore,
+          llmConfig.autoApproveThreshold - 1,
+        );
+        if (cappedConfidence < extraction.confidenceScore) {
+          logger.info('Gap pages exist — capping confidence below auto-approve threshold', {
+            sessionId,
+            originalConfidence: extraction.confidenceScore,
+            cappedConfidence,
+            gapPageCount,
+          });
+          extraction.confidenceScore = cappedConfidence;
+        }
+      }
+    }
   }
 
   const normalizedInstructionsZero = validation.instructions;
@@ -744,6 +977,12 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
   let secondPassStatus: SecondPassStatus = 'NOT_NEEDED';
   if (routingDecision === 'auto_parse_second_pass') {
     secondPassStatus = 'QUEUED';
+    // Pre-update secondPassStatus BEFORE queueing the job to prevent
+    // race condition where the worker reads stale NOT_NEEDED status.
+    await prisma.smartUploadSession.update({
+      where: { uploadSessionId: sessionId },
+      data: { secondPassStatus: 'QUEUED' },
+    });
     await queueSmartUploadSecondPass(sessionId);
   }
 

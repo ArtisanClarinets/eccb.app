@@ -19,15 +19,19 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 
 const navigation = [
-  { name: 'Dashboard', href: '/member', icon: Home },
-  { name: 'Music Stand', href: '/member/stand', icon: BookOpen },
-  { name: 'My Music', href: '/member/music', icon: Music },
-  { name: 'Calendar', href: '/member/calendar', icon: Calendar },
-  { name: 'Attendance', href: '/member/attendance', icon: ClipboardCheck },
-  { name: 'Notifications', href: '/member/notifications', icon: Bell },
-  { name: 'Profile', href: '/member/profile', icon: User },
-  { name: 'Settings', href: '/member/settings', icon: Settings },
+  { name: 'Dashboard', href: '/member', icon: Home, featureKey: null },
+  { name: 'Music Stand', href: '/member/stand', icon: BookOpen, featureKey: 'musicStand' as const },
+  { name: 'My Music', href: '/member/music', icon: Music, featureKey: null },
+  { name: 'Calendar', href: '/member/calendar', icon: Calendar, featureKey: null },
+  { name: 'Attendance', href: '/member/attendance', icon: ClipboardCheck, featureKey: null },
+  { name: 'Notifications', href: '/member/notifications', icon: Bell, featureKey: null },
+  { name: 'Profile', href: '/member/profile', icon: User, featureKey: null },
+  { name: 'Settings', href: '/member/settings', icon: Settings, featureKey: null },
 ];
+
+interface EnabledFeatures {
+  musicStand: boolean;
+}
 
 interface MemberSidebarProps {
   user: {
@@ -43,9 +47,10 @@ interface MemberSidebarProps {
       }>;
     } | null;
   } | null;
+  enabledFeatures?: EnabledFeatures;
 }
 
-export function MemberSidebar({ user }: MemberSidebarProps) {
+export function MemberSidebar({ user, enabledFeatures }: MemberSidebarProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -119,7 +124,12 @@ export function MemberSidebar({ user }: MemberSidebarProps) {
 
         {/* Navigation */}
         <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
-          {navigation.map((item) => {
+          {navigation
+            .filter((item) => {
+              if (!item.featureKey) return true;
+              return enabledFeatures?.[item.featureKey] !== false;
+            })
+            .map((item) => {
             const isActive = pathname === item.href || 
               (item.href !== '/member' && pathname.startsWith(item.href));
 

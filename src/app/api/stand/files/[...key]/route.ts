@@ -1,27 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth/guards';
 import { downloadFile } from '@/lib/services/storage';
 import { prisma } from '@/lib/db';
 import { logger } from '@/lib/logger';
-import { getUserRoles } from '@/lib/auth/permissions';
 import { applyRateLimit } from '@/lib/rate-limit';
 import { Readable } from 'stream';
-
-const PRIVILEGED_ROLE_TYPES = ['DIRECTOR', 'SUPER_ADMIN', 'ADMIN', 'STAFF'];
+import { requireStandAccess } from '@/lib/stand/access';
+import { recordTelemetry } from '@/lib/stand/telemetry';
 
 /**
- * Authenticated & event-scoped stand file proxy.
+ * Authenticated & scoped stand file proxy.
  *
  * Requires:
- *   - Active session (any authenticated user)
- *   - `?eventId=<id>` query param (used to scope the access check)
+ *   - Active session with member status
+ *   - Scope via `?eventId=<id>` or `?pieceId=<id>` query param
  *
- * Security checks:
- *   1. The requesting user is a privileged role OR is an active Member
- *   2. The requested storageKey belongs to a PDF file of a piece in the given event
- *
- * Falls back to session-only check when no eventId provided (for backwards
- * compatibility with direct admin / library access).
+ * Security:
+ *   - Session-only access is NOT allowed (P0 fix)
+ *   - Returns 404 (non-enumerating) for access denied
+ *   - Path traversal blocked
  */
 export async function GET(
   request: NextRequest,
@@ -31,10 +27,8 @@ export async function GET(
   const rateLimited = await applyRateLimit(request, 'stand-file');
   if (rateLimited) return rateLimited;
 
-  const session = await getSession();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const ctx = await requireStandAccess();
+  if (ctx instanceof NextResponse) return ctx;
 
   const { key } = await params;
   const storageKey = decodeURIComponent(key.join('/'));
@@ -45,56 +39,76 @@ export async function GET(
     return NextResponse.json({ error: 'Invalid file path' }, { status: 400 });
   }
 
-  // If eventId specified, verify the file belongs to that event
   const { searchParams } = new URL(request.url);
   const eventId = searchParams.get('eventId');
+  const pieceId = searchParams.get('pieceId');
 
-  if (eventId) {
-    const userId = session.user.id;
+  // P0 FIX: Require at least one scope — session-only access is NOT allowed
+  if (!eventId && !pieceId) {
+    recordTelemetry({ event: 'stand.file.denied', userId: ctx.userId, meta: { reason: 'no-scope', storageKey } });
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
 
-    // Privileged roles skip the per-event file check
-    const roles = await getUserRoles(userId);
-    const isPrivileged = roles.some((r) => PRIVILEGED_ROLE_TYPES.includes(r));
+  // Privileged roles skip the per-file ownership check
+  if (!ctx.isPrivileged) {
+    let hasAccess = false;
 
-    if (!isPrivileged) {
-      // Must be an active member
-      const member = await prisma.member.findFirst({ where: { userId } });
-      if (!member) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-      }
-
-      // Verify the storageKey belongs to a PDF of a piece included in this event
+    if (eventId) {
+      // Verify file belongs to the event
       const eventFile = await prisma.musicFile.findFirst({
         where: {
           storageKey,
           mimeType: 'application/pdf',
           isArchived: false,
-          piece: {
-            eventMusic: { some: { eventId } },
-          },
+          piece: { eventMusic: { some: { eventId } } },
         },
         select: { id: true },
       });
 
-      // Also check MusicPart storageKey (parts can also be served)
-      const eventPart = eventFile
-        ? null
-        : await prisma.musicPart.findFirst({
-            where: {
-              storageKey,
-              piece: {
-                eventMusic: { some: { eventId } },
-              },
-            },
-            select: { id: true },
-          });
+      if (!eventFile) {
+        // Also check MusicPart storageKey
+        const eventPart = await prisma.musicPart.findFirst({
+          where: {
+            storageKey,
+            piece: { eventMusic: { some: { eventId } } },
+          },
+          select: { id: true },
+        });
+        hasAccess = !!eventPart;
+      } else {
+        hasAccess = true;
+      }
+    } else if (pieceId) {
+      // Verify file belongs to the piece (library mode)
+      const pieceFile = await prisma.musicFile.findFirst({
+        where: {
+          storageKey,
+          mimeType: 'application/pdf',
+          isArchived: false,
+          pieceId,
+        },
+        select: { id: true },
+      });
 
-      if (!eventFile && !eventPart) {
-        logger.warn('Stand file proxy: key not in event', { storageKey, eventId, userId });
-        return NextResponse.json({ error: 'File not found in this event' }, { status: 403 });
+      if (!pieceFile) {
+        const piecePart = await prisma.musicPart.findFirst({
+          where: { storageKey, pieceId },
+          select: { id: true },
+        });
+        hasAccess = !!piecePart;
+      } else {
+        hasAccess = true;
       }
     }
+
+    if (!hasAccess) {
+      // P0 FIX: Return 404 (non-enumerating) instead of 403
+      recordTelemetry({ event: 'stand.file.denied', userId: ctx.userId, meta: { storageKey, eventId, pieceId } });
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
   }
+
+  recordTelemetry({ event: 'stand.file.access', userId: ctx.userId, meta: { storageKey, eventId, pieceId } });
 
   try {
     const result = await downloadFile(storageKey);

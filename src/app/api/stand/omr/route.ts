@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth/config';
 import { headers } from 'next/headers';
 import { prisma } from '@/lib/db';
+import { getUserRoles } from '@/lib/auth/permissions';
+import { applyRateLimit } from '@/lib/rate-limit';
 import { z } from 'zod';
 
 // Zod schema for OMR request validation
@@ -41,6 +43,10 @@ interface OMRMetadata {
  */
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit OMR requests
+    const rateLimited = await applyRateLimit(request, 'stand-annotation');
+    if (rateLimited) return rateLimited;
+
     const headersList = await headers();
     const session = await auth.api.getSession({ headers: headersList });
 
@@ -48,29 +54,47 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Only directors and librarians can trigger OMR analysis
+    const roles = await getUserRoles(session.user.id);
+    const canRunOMR = roles.includes('DIRECTOR') ||
+      roles.includes('SUPER_ADMIN') ||
+      roles.includes('LIBRARIAN');
+
+    if (!canRunOMR) {
+      return NextResponse.json(
+        { error: 'Forbidden: Only directors and librarians can trigger OMR analysis' },
+        { status: 403 }
+      );
+    }
+
     // Parse and validate request body
     const body = await request.json();
     const validated = omrRequestSchema.parse(body);
 
-    // Get user preferences to retrieve their personal API key
-    const userPrefs = await prisma.userPreferences.findUnique({
-      where: { userId: session.user.id },
-      select: { otherSettings: true },
-    });
+    // Use server-configured API keys (never store in user preferences)
+    const omrProvider = process.env.OMR_PROVIDER || 'openai';
+    let omrApiKey: string | undefined;
 
-    // Check if user has configured their personal API key
-    const otherSettings = userPrefs?.otherSettings as Record<string, unknown> | null;
-    const omrApiKey = otherSettings?.omrApiKey as string | undefined;
-    const omrProvider = (otherSettings?.omrProvider as string) || 'openai';
+    switch (omrProvider.toLowerCase()) {
+      case 'openai':
+        omrApiKey = process.env.LLM_OPENAI_API_KEY;
+        break;
+      case 'anthropic':
+        omrApiKey = process.env.LLM_ANTHROPIC_API_KEY;
+        break;
+      case 'google':
+        omrApiKey = process.env.LLM_GEMINI_API_KEY;
+        break;
+    }
 
     if (!omrApiKey) {
       return NextResponse.json(
         {
-          error: 'OMR API key not configured',
-          code: 'API_KEY_REQUIRED',
-          message: 'Please configure your personal LLM/vision API key in settings to use OMR features.',
+          error: 'OMR not configured',
+          code: 'SERVER_KEY_REQUIRED',
+          message: 'Server-side AI API key is not configured. Contact an administrator.',
         },
-        { status: 403 }
+        { status: 503 }
       );
     }
 
