@@ -32,6 +32,7 @@ model User {
   sessions          Session[]
   annotations       Annotation[]
   userPreferences   UserPreferences?
+  practiceLogs      PracticeLog[]
 
   @@index([email])
   @@index([deletedAt])
@@ -297,6 +298,7 @@ model MusicPiece {
   navigationLinksFrom NavigationLink[] @relation("NavigationLinksFrom")
   navigationLinksTo   NavigationLink[] @relation("NavigationLinksTo")
   audioLinks        AudioLink[]
+  practiceLogs      PracticeLog[]
 
   @@index([title])
   @@index([composerId])
@@ -1130,6 +1132,24 @@ model UserPreferences {
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+model PracticeLog {
+  id              String     @id @default(cuid())
+  userId          String
+  pieceId         String
+  assignmentId    String?
+  durationSeconds Int
+  notes           String?    @db.Text
+  practicedAt     DateTime   @default(now())
+  createdAt       DateTime   @default(now())
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  piece           MusicPiece @relation(fields: [pieceId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([pieceId])
+  @@index([practicedAt])
+  @@index([userId, pieceId])
 }
 
 model TaskModelConfig {
