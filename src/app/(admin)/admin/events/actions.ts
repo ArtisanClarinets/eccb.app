@@ -273,8 +273,9 @@ export async function reorderEventMusic(eventId: string, orderedIds: string[]) {
   const _session = await requirePermission(EVENT_EDIT);
 
   try {
-    // Update sortOrder for each entry in the given order
-    await Promise.all(
+    // Update sortOrder for each entry in the given order within a single transaction
+    // to prevent N+1 queries and avoid exhausting connection pool
+    await prisma.$transaction(
       orderedIds.map((id, index) =>
         prisma.eventMusic.update({
           where: { id },
