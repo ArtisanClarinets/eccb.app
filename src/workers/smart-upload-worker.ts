@@ -17,7 +17,7 @@ import { splitPdfByCuttingInstructions } from '@/lib/services/pdf-splitter';
 import { buildGapInstructions, validateAndNormalizeInstructions } from '@/lib/services/cutting-instructions';
 import { queueSmartUploadAutoCommit } from '@/lib/jobs/smart-upload';
 import { evaluateQualityGates } from '@/lib/smart-upload/quality-gates';
-import { buildPartStorageSlug, buildPartFilename, normalizeInstrumentLabel } from '@/lib/smart-upload/part-naming';
+import { buildPartStorageSlug, buildPartFilename } from '@/lib/smart-upload/part-naming';
 import { jsonrepair as repairJson } from 'jsonrepair';
 import { logger } from '@/lib/logger';
 import {
