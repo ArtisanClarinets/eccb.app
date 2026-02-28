@@ -2,6 +2,10 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { GET, POST } from '@/app/api/stand/annotations/route';
 import { NextRequest } from 'next/server';
 
+vi.mock('@/lib/rate-limit', () => ({
+  applyRateLimit: vi.fn().mockResolvedValue(null),
+}));
+
 // Mock auth
 vi.mock('@/lib/auth/config', () => ({
   auth: {

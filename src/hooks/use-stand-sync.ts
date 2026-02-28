@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useStandStore } from '@/store/standStore';
 import { io as socketIoClient, type Socket } from 'socket.io-client';
-const isDev = process.env.NODE_ENV !== "production";
+import { logger } from '@/lib/logger';
 
 // =============================================================================
 // TYPES
@@ -214,7 +214,7 @@ export function useStandSync({
         setConnectionError(null);
       }
     } catch (error) {
-      if (isDev) console.error('[useStandSync] Polling error:', error);
+      logger.error('[useStandSync] Polling error:', error as Error);
     }
   }, [eventId, onStateChange, onRosterChange]);
 
@@ -224,7 +224,7 @@ export function useStandSync({
     }
 
     setIsPollingFallback(true);
-    if (isDev) console.log('[useStandSync] Starting polling fallback - WebSocket unavailable');
+    logger.debug('[useStandSync] Starting polling fallback - WebSocket unavailable');
 
     // Send join presence so server tracks us
     fetch('/api/stand/sync', {
@@ -259,7 +259,7 @@ export function useStandSync({
     }
 
     reconnectAttemptsRef.current += 1;
-    if (isDev) console.log(
+    logger.debug(
       `[useStandSync] Scheduling reconnect attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts}`
     );
 
@@ -276,7 +276,7 @@ export function useStandSync({
   const connect = useCallback(() => {
     // Check if WebSocket is available
     if (!isWebSocketAvailable() || !canUseSocketIO()) {
-      if (isDev) console.warn('[useStandSync] WebSocket not available, using polling fallback');
+      logger.warn('[useStandSync] WebSocket not available, using polling fallback');
       startPollingFallback();
       return;
     }
@@ -300,7 +300,7 @@ export function useStandSync({
       });
 
       socket.on('connect', () => {
-        if (isDev) console.log('[useStandSync] Connected to stand sync server');
+        logger.debug('[useStandSync] Connected to stand sync server');
         setIsConnected(true);
         setConnectionError(null);
         reconnectAttemptsRef.current = 0;
@@ -308,7 +308,7 @@ export function useStandSync({
       });
 
       socket.on('disconnect', (reason) => {
-        if (isDev) console.log('[useStandSync] Disconnected:', reason);
+        logger.debug(`[useStandSync] Disconnected: ${reason}`);
         setIsConnected(false);
 
         // Attempt reconnection if not manually disconnected
@@ -321,7 +321,7 @@ export function useStandSync({
       });
 
       socket.on('connect_error', (error) => {
-        if (isDev) console.error('[useStandSync] Connection error:', error);
+        logger.error('[useStandSync] Connection error:', error);
         setConnectionError(new Error(error.message));
         setIsConnected(false);
         
@@ -334,7 +334,7 @@ export function useStandSync({
       });
 
       socket.on('error', (error: { message: string }) => {
-        if (isDev) console.error('[useStandSync] Socket error:', error);
+        logger.error('[useStandSync] Socket error:', new Error(error.message));
         onError?.(new Error(error.message));
       });
 
@@ -403,7 +403,7 @@ export function useStandSync({
 
       socketRef.current = socket;
     } catch (error) {
-      if (isDev) console.error('[useStandSync] Failed to create socket:', error);
+      logger.error('[useStandSync] Failed to create socket:', error as Error);
       setConnectionError(error as Error);
       startPollingFallback();
     }
@@ -422,12 +422,12 @@ export function useStandSync({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ eventId, command: { type: 'command', ...command } }),
-        }).catch((err) => { if (isDev) console.error('[useStandSync] Failed to send command:', err); });
+        }).catch((err) => { logger.error('[useStandSync] Failed to send command:', err as Error); });
         return;
       }
 
       if (!socketRef.current?.connected) {
-        if (isDev) console.warn('[useStandSync] Cannot send command: not connected');
+        logger.warn('[useStandSync] Cannot send command: not connected');
         return;
       }
 
@@ -451,12 +451,12 @@ export function useStandSync({
             eventId,
             command: { type: 'command', action: 'toggleNightMode', value: name === 'nightMode' ? value : undefined },
           }),
-        }).catch((err) => { if (isDev) console.error('[useStandSync] Failed to send mode:', err); });
+        }).catch((err) => { logger.error('[useStandSync] Failed to send mode:', err as Error); });
         return;
       }
 
       if (!socketRef.current?.connected) {
-        if (isDev) console.warn('[useStandSync] Cannot send mode: not connected');
+        logger.warn('[useStandSync] Cannot send mode: not connected');
         return;
       }
 
@@ -478,7 +478,7 @@ export function useStandSync({
       }
 
       if (!socketRef.current?.connected) {
-        if (isDev) console.warn('[useStandSync] Cannot send annotation: not connected');
+        logger.warn('[useStandSync] Cannot send annotation: not connected');
         return;
       }
 
