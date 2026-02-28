@@ -321,6 +321,73 @@ describe('cutting-instructions', () => {
       expect(overlaps[0].overlap).toEqual([0, 5]);
     });
 
+    it('should detect nested ranges (one completely inside another)', () => {
+      const instructions: NormalizedInstruction[] = [
+        { partName: 'Part 1', pageStart: 0, pageEnd: 10 },
+        { partName: 'Part 2', pageStart: 3, pageEnd: 7 },
+      ];
+
+      const overlaps = detectOverlaps(instructions);
+
+      expect(overlaps).toHaveLength(1);
+      expect(overlaps[0].overlap).toEqual([3, 7]);
+    });
+
+    it('should detect single-page overlap (shared edge page)', () => {
+      const instructions: NormalizedInstruction[] = [
+        { partName: 'Part 1', pageStart: 0, pageEnd: 2 },
+        { partName: 'Part 2', pageStart: 2, pageEnd: 4 },
+      ];
+
+      const overlaps = detectOverlaps(instructions);
+
+      expect(overlaps).toHaveLength(1);
+      expect(overlaps[0].overlap).toEqual([2, 2]);
+    });
+
+    it('should detect ranges starting on the same page', () => {
+      const instructions: NormalizedInstruction[] = [
+        { partName: 'Part 1', pageStart: 0, pageEnd: 5 },
+        { partName: 'Part 2', pageStart: 0, pageEnd: 3 },
+      ];
+
+      const overlaps = detectOverlaps(instructions);
+
+      expect(overlaps).toHaveLength(1);
+      expect(overlaps[0].overlap).toEqual([0, 3]);
+    });
+
+    it('should detect ranges ending on the same page', () => {
+      const instructions: NormalizedInstruction[] = [
+        { partName: 'Part 1', pageStart: 0, pageEnd: 5 },
+        { partName: 'Part 2', pageStart: 2, pageEnd: 5 },
+      ];
+
+      const overlaps = detectOverlaps(instructions);
+
+      expect(overlaps).toHaveLength(1);
+      expect(overlaps[0].overlap).toEqual([2, 5]);
+    });
+
+    it('should detect multiple parts overlapping on the same pages', () => {
+      const instructions: NormalizedInstruction[] = [
+        { partName: 'Part 1', pageStart: 0, pageEnd: 10 },
+        { partName: 'Part 2', pageStart: 5, pageEnd: 10 },
+        { partName: 'Part 3', pageStart: 5, pageEnd: 15 },
+      ];
+
+      const overlaps = detectOverlaps(instructions);
+
+      expect(overlaps).toHaveLength(3);
+
+      // Part 1 & Part 2 overlap on 5-10
+      expect(overlaps.some(o => o.part1 === 'Part 1' && o.part2 === 'Part 2' && o.overlap[0] === 5 && o.overlap[1] === 10)).toBe(true);
+      // Part 1 & Part 3 overlap on 5-10
+      expect(overlaps.some(o => o.part1 === 'Part 1' && o.part2 === 'Part 3' && o.overlap[0] === 5 && o.overlap[1] === 10)).toBe(true);
+      // Part 2 & Part 3 overlap on 5-10
+      expect(overlaps.some(o => o.part1 === 'Part 2' && o.part2 === 'Part 3' && o.overlap[0] === 5 && o.overlap[1] === 10)).toBe(true);
+    });
+
     it('should return empty array for single instruction', () => {
       const instructions: NormalizedInstruction[] = [
         { partName: 'Part 1', pageStart: 0, pageEnd: 5 },
