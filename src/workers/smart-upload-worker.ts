@@ -13,6 +13,7 @@ import { callVisionModel } from '@/lib/llm';
 import { loadSmartUploadRuntimeConfig, runtimeToAdapterConfig } from '@/lib/llm/config-loader';
 import type { LLMRuntimeConfig } from '@/lib/llm/config-loader';
 import { splitPdfByCuttingInstructions } from '@/lib/services/pdf-splitter';
+import { buildGapInstructions, validateAndNormalizeInstructions } from '@/lib/services/cutting-instructions';
 import { queueSmartUploadAutoCommit } from '@/lib/jobs/smart-upload';
 import { logger } from '@/lib/logger';
 import {
@@ -33,8 +34,10 @@ import type { SmartUploadSecondPassJobData } from '@/lib/jobs/definitions';
 // Constants
 // =============================================================================
 
-const MAX_PDF_PAGES_FOR_LLM = 50;
+const MAX_PDF_PAGES_FOR_LLM = 100; // Raised from 50 — ensures large PDFs (e.g. 67-page band parts) are fully covered
 const MAX_SAMPLED_PARTS = 3;
+/** Number of pages sent to the adjudicator — sampled evenly across the whole PDF */
+const MAX_ADJUDICATOR_PAGES = 20;
 
 
 
@@ -196,7 +199,11 @@ async function callAdjudicatorLLM(
     llm_vision_model: cfg.adjudicatorModel || cfg.verificationModel,
   };
 
-  const images = pageImages.slice(0, 10).map((base64Data) => ({
+  // Sample evenly across all available pages so the adjudicator sees the full document,
+  // not just the first 10 pages (which would miss instrument parts near the end of large PDFs).
+  const adjStep = Math.max(1, Math.floor(pageImages.length / MAX_ADJUDICATOR_PAGES));
+  const adjudicatorPageImages = pageImages.filter((_, i) => i % adjStep === 0).slice(0, MAX_ADJUDICATOR_PAGES);
+  const images = adjudicatorPageImages.map((base64Data) => ({
     mimeType: 'image/png' as const,
     base64Data,
   }));
@@ -288,7 +295,64 @@ async function finalizeSmartUploadSession(
     });
   }
 
-  const correctedCuttingInstructions = finalMetadata.cuttingInstructions;
+  let correctedCuttingInstructions = finalMetadata.cuttingInstructions;
+
+  // Gap detection — ensure no pages are silently dropped when the LLM doesn't cover
+  // the full PDF (common for large scores where sampling misses later instrument parts).
+  if (correctedCuttingInstructions && correctedCuttingInstructions.length > 0) {
+    try {
+      const { PDFDocument: PDFDoc } = await import('pdf-lib');
+      const tmpDoc = await PDFDoc.load(originalPdfBuffer);
+      const totalPages = tmpDoc.getPageCount();
+      // validateAndNormalizeInstructions normalises to zero-indexed; buildGapInstructions
+      // expects zero-indexed ranges and totalPages as a count.
+      const oneIndexed = correctedCuttingInstructions;
+      const zeroIndexed = oneIndexed.map((ins) => ({
+        ...ins,
+        pageRange: [ins.pageRange[0] - 1, ins.pageRange[1] - 1] as [number, number],
+      }));
+      const validation = validateAndNormalizeInstructions(zeroIndexed, totalPages, {
+        oneIndexed: false,
+        detectGaps: true,
+      });
+      const gapInstructions = buildGapInstructions(validation.instructions, totalPages);
+      if (gapInstructions.length > 0) {
+        // Convert gaps back to one-indexed to match the rest of the payload
+        const oneIndexedGaps = gapInstructions.map((g) => ({
+          ...g,
+          pageRange: [g.pageRange[0] + 1, g.pageRange[1] + 1] as [number, number],
+        }));
+        logger.warn('Second pass gap detection: adding unlabelled parts for uncovered pages', {
+          sessionId,
+          gaps: oneIndexedGaps.map((g) => g.pageRange),
+          totalPages,
+        });
+        correctedCuttingInstructions = [...oneIndexed, ...oneIndexedGaps].sort(
+          (a, b) => a.pageRange[0] - b.pageRange[0]
+        );
+        finalMetadata = { ...finalMetadata, cuttingInstructions: correctedCuttingInstructions };
+        // Keep updateData in sync with the enriched metadata
+        updateData.extractedMetadata = finalMetadata;
+        // If any single unlabelled gap covers more than 10 pages the session
+        // cannot be auto-approved — a human reviewer must adjust the splits.
+        const largeGap = oneIndexedGaps.some(
+          (g) => g.pageRange[1] - g.pageRange[0] + 1 > 10
+        );
+        if (largeGap) {
+          updateData.requiresHumanReview = true;
+          logger.warn('Large unlabelled gap detected — marking session for human review', {
+            sessionId,
+            largestGap: Math.max(...oneIndexedGaps.map((g) => g.pageRange[1] - g.pageRange[0] + 1)),
+          });
+        }
+      } // end if (gapInstructions.length > 0)
+    } catch (gapErr) {
+      logger.warn('Second pass gap detection failed; proceeding without gap fill', {
+        sessionId,
+        error: gapErr instanceof Error ? gapErr.message : String(gapErr),
+      });
+    }
+  }
 
   if (correctedCuttingInstructions && correctedCuttingInstructions.length > 0) {
     updateData.cuttingInstructions = correctedCuttingInstructions;

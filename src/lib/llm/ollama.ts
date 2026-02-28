@@ -61,7 +61,12 @@ export class OllamaAdapter implements LLMAdapter {
       throw new Error('Ollama endpoint URL is not configured.');
     }
 
-    const url = `${llm_endpoint_url.replace(/\/$/, '')}/chat/completions`;
+    // Ollama's OpenAI-compatible API lives at /v1/chat/completions.
+    // If the user supplies the bare host (http://localhost:11434) we add /v1
+    // automatically; if they already included /v1 or a deeper path we leave it.
+    const cleanBase = llm_endpoint_url.replace(/\/$/, '');
+    const base = /\/v\d+/.test(cleanBase) ? cleanBase : `${cleanBase}/v1`;
+    const url = `${base}/chat/completions`;
 
     const headers = {
       'Content-Type': 'application/json',

@@ -18,6 +18,7 @@ import {
   DEFAULT_VERIFICATION_SYSTEM_PROMPT,
   PROMPT_VERSION,
 } from '@/lib/smart-upload/prompts';
+import { maskSecretValue } from '@/lib/smart-upload/secret-settings';
 
 // =============================================================================
 // Schema Validation
@@ -151,21 +152,21 @@ export async function GET() {
     const settingsArray: SystemSetting[] = Object.values(settingsMap);
 
     // Mask secret values
+    const SECRET_KEY_SET = new Set([
+      'llm_openai_api_key',
+      'llm_anthropic_api_key',
+      'llm_openrouter_api_key',
+      'llm_gemini_api_key',
+      'llm_custom_api_key',
+    ]);
+
     const maskedSettings = settingsArray.map((setting) => {
-      if (SMART_UPLOAD_SETTING_KEYS.includes(setting.key as typeof SMART_UPLOAD_SETTING_KEYS[number])) {
-        const secretMapping: Record<string, boolean> = {
-          llm_openai_api_key: true,
-          llm_anthropic_api_key: true,
-          llm_openrouter_api_key: true,
-          llm_gemini_api_key: true,
-          llm_custom_api_key: true,
+      if (SECRET_KEY_SET.has(setting.key)) {
+        const masked = maskSecretValue(setting.value);
+        return {
+          ...setting,
+          value: masked || '__UNSET__',
         };
-        if (secretMapping[setting.key]) {
-          return {
-            ...setting,
-            value: setting.value ? '__SET__' : '__UNSET__',
-          };
-        }
       }
       return setting;
     });

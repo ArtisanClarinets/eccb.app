@@ -42,6 +42,10 @@ export interface ExtractedMetadata {
   notes?: string;
   adjudicationNotes?: string | null;
   requiresHumanReview?: boolean;
+  /** Per-page header labels extracted during segmentation (1-indexed page → label text) */
+  pageLabels?: Record<number, string>;
+  /** Segmentation confidence from deterministic or vision-based segmentation */
+  segmentationConfidence?: number;
 }
 
 export type RoutingDecision =

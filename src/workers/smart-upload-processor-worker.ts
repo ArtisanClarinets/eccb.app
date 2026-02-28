@@ -17,6 +17,7 @@ import { createWorker } from '@/lib/jobs/queue';
 import { processSmartUpload } from './smart-upload-processor';
 import { processSecondPass } from './smart-upload-worker';
 import { commitSmartUploadSessionToLibrary } from '@/lib/smart-upload/commit';
+import { cleanupSmartUploadTempFiles } from '@/lib/services/smart-upload-cleanup';
 import { SMART_UPLOAD_JOB_NAMES } from '@/lib/jobs/smart-upload';
 import { loadSmartUploadRuntimeConfig } from '@/lib/llm/config-loader';
 import { logger } from '@/lib/logger';
@@ -47,7 +48,7 @@ export async function startSmartUploadProcessorWorker(): Promise<void> {
     attempts: 3,
     backoff: { type: 'exponential' as const, delay: 5000 },
     removeOnComplete: 100,
-    removeOnFail: 50,
+    removeOnFail: false,
     concurrency,
   };
 
@@ -55,31 +56,46 @@ export async function startSmartUploadProcessorWorker(): Promise<void> {
     queueName: 'SMART_UPLOAD',
     concurrency: config.concurrency,
     processor: async (job: Job) => {
-      switch (job.name) {
-        case SMART_UPLOAD_JOB_NAMES.PROCESS:
-          await processSmartUpload(job);
-          break;
+      const sessionId = (job.data as { sessionId?: string })?.sessionId;
+      try {
+        switch (job.name) {
+          case SMART_UPLOAD_JOB_NAMES.PROCESS:
+            await processSmartUpload(job);
+            break;
 
-        case SMART_UPLOAD_JOB_NAMES.SECOND_PASS:
-          await processSecondPass(job as Job<SmartUploadSecondPassJobData>);
-          break;
+          case SMART_UPLOAD_JOB_NAMES.SECOND_PASS:
+            await processSecondPass(job as Job<SmartUploadSecondPassJobData>);
+            break;
 
-        case SMART_UPLOAD_JOB_NAMES.AUTO_COMMIT: {
-          const { sessionId } = job.data as { sessionId: string };
-          logger.info('Running auto-commit for session', { sessionId, jobId: job.id });
-          await commitSmartUploadSessionToLibrary(sessionId, {}, 'system:auto-commit');
-          logger.info('Auto-commit complete', { sessionId });
-          break;
+          case SMART_UPLOAD_JOB_NAMES.AUTO_COMMIT: {
+            logger.info('Running auto-commit for session', { sessionId, jobId: job.id });
+            await commitSmartUploadSessionToLibrary(sessionId!, {}, 'system:auto-commit');
+            logger.info('Auto-commit complete', { sessionId });
+            break;
+          }
+
+          default:
+            // Treat unknown job names as programmer errors — throw so BullMQ
+            // retries (and eventually dead-letters) rather than silently losing
+            // the job.
+            throw new Error(
+              `smart-upload-worker: unknown job name "${job.name}" (id=${job.id}). ` +
+              `Expected one of: ${Object.values(SMART_UPLOAD_JOB_NAMES).join(', ')}`
+            );
         }
-
-        default:
-          // Treat unknown job names as programmer errors — throw so BullMQ
-          // retries (and eventually dead-letters) rather than silently losing
-          // the job.
-          throw new Error(
-            `smart-upload-worker: unknown job name "${job.name}" (id=${job.id}). ` +
-            `Expected one of: ${Object.values(SMART_UPLOAD_JOB_NAMES).join(', ')}`
-          );
+      } catch (error) {
+        // Best-effort cleanup of temporary files on failure
+        if (sessionId) {
+          try {
+            await cleanupSmartUploadTempFiles(sessionId);
+          } catch (cleanupErr) {
+            logger.warn('Failed to cleanup temp files after worker error', {
+              sessionId,
+              error: cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr),
+            });
+          }
+        }
+        throw error;
       }
     },
   });

@@ -170,7 +170,7 @@ export function buildPartFilename(displayName: string): string {
   return (
     displayName
       .trim()
-      .replace(/[/\\:*?"<>|]/g, '') // remove filesystem-unsafe chars
+      .replace(/[/\\:*?"<>|']/g, '') // remove filesystem-unsafe chars
       .replace(/\s+/g, '_')         // spaces → underscores
       .replace(/_{2,}/g, '_')       // collapse multiple underscores
       .slice(0, 200) +              // max 200 chars before extension

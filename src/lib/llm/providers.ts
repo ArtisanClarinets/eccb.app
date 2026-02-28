@@ -112,7 +112,8 @@ export const LLM_PROVIDERS: ProviderMeta[] = [
     description: 'High-performance open and commercial models from France.',
     requiresApiKey: true,
     defaultEndpoint: 'https://api.mistral.ai/v1',
-    defaultVisionModel: 'mistral-large-latest', // Note: Vision model may change
+    // pixtral-large-2411 is Mistral\'s latest multimodal (vision) model
+    defaultVisionModel: 'pixtral-large-2411',
     defaultVerificationModel: 'mistral-large-latest',
     apiKeyLabel: 'Mistral API Key',
     apiKeyPlaceholder: 'm_...',
@@ -124,8 +125,9 @@ export const LLM_PROVIDERS: ProviderMeta[] = [
     description: 'The world\'s fastest inference, running on custom LPU hardware.',
     requiresApiKey: true,
     defaultEndpoint: 'https://api.groq.com/openai/v1',
-    defaultVisionModel: 'llama3-70b-8192', // Groq does not have vision models as of last check
-    defaultVerificationModel: 'llama3-70b-8192',
+    // llama-3.2-90b-vision-preview is Groq\'s most capable vision model
+    defaultVisionModel: 'llama-3.2-90b-vision-preview',
+    defaultVerificationModel: 'llama-3.3-70b-versatile',
     apiKeyLabel: 'Groq API Key',
     apiKeyPlaceholder: 'gsk_...',
     docsUrl: 'https://console.groq.com/keys',

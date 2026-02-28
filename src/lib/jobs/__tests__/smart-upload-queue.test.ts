@@ -111,7 +111,7 @@ describe('Smart Upload Queue', () => {
           delay: 5000,
         },
         removeOnComplete: 100,
-        removeOnFail: 50,
+        removeOnFail: false,
       });
     });
   });
@@ -147,7 +147,7 @@ describe('Smart Upload Queue', () => {
           delay: 5000,
         },
         removeOnComplete: 100,
-        removeOnFail: 50,
+        removeOnFail: false,
       });
     });
   });

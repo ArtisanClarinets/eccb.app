@@ -155,10 +155,11 @@ export class GeminiAdapter implements LLMAdapter {
     parts.push({ text: request.prompt });
 
     // 2. Set up the `generationConfig`.
-    const generationConfig: Record<string, unknown> = {
-      maxOutputTokens: request.maxTokens,
-      temperature: request.temperature,
-    };
+    // Only include fields that are explicitly set — undefined values serialize
+    // to nothing in JSON but omitting them avoids potential API validation errors.
+    const generationConfig: Record<string, unknown> = {};
+    if (request.maxTokens !== undefined) generationConfig.maxOutputTokens = request.maxTokens;
+    if (request.temperature !== undefined) generationConfig.temperature = request.temperature;
 
     if (request.responseFormat?.type === 'json') {
       generationConfig.responseMimeType = 'application/json';
@@ -187,8 +188,13 @@ export class GeminiAdapter implements LLMAdapter {
     // if (request.tools) { bodyObj['tools'] = request.tools; }
     // if (config.safetySettings) { bodyObj['safetySettings'] = config.safetySettings; }
 
+    // Strip the 'models/' prefix if the stored model name already includes it
+    // (e.g. 'models/gemini-2.0-flash' → 'gemini-2.0-flash') to avoid the
+    // double-prefix URL '…/models/models/gemini-2.0-flash' that causes 404s.
+    const modelId = model.startsWith('models/') ? model.slice('models/'.length) : model;
+
     return {
-      url: `${baseUrl}/models/${model}:generateContent?key=${encodeURIComponent(
+      url: `${baseUrl}/models/${modelId}:generateContent?key=${encodeURIComponent(
         apiKey,
       )}`,
       headers: { 'Content-Type': 'application/json' },

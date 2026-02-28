@@ -14,7 +14,7 @@ import { Job } from 'bullmq';
 import { PDFDocument } from 'pdf-lib';
 import { prisma } from '@/lib/db';
 import { downloadFile, uploadFile } from '@/lib/services/storage';
-import { renderPdfHeaderCropBatch, renderPdfPageBatch } from '@/lib/services/pdf-renderer';
+import { renderPdfHeaderCropBatch, renderPdfPageBatch, clearRenderCache } from '@/lib/services/pdf-renderer';
 import { callVisionModel } from '@/lib/llm';
 import { loadSmartUploadRuntimeConfig, runtimeToAdapterConfig } from '@/lib/llm/config-loader';
 import type { LLMRuntimeConfig } from '@/lib/llm/config-loader';
@@ -55,6 +55,10 @@ import type { SmartUploadProcessData } from '@/lib/jobs/smart-upload';
 // =============================================================================
 
 const MAX_SAMPLED_PAGES = 8; // hard cap for vision pass
+/** Maximum header-crop images sent to LLM in a single call.
+ *  Providers with small context windows (GPT-4V, Groq) can struggle with >20
+ *  images; Gemini handles much more, but batching keeps costs predictable. */
+const MAX_HEADER_CROP_BATCH_SIZE = 30;
 
 // =============================================================================
 // Vision System Prompt
@@ -79,7 +83,8 @@ async function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
  * Returns base64-encoded PNG images in page order.
  */
 async function samplePdfPages(
-  pdfBuffer: Buffer
+  pdfBuffer: Buffer,
+  cacheTag?: string,
 ): Promise<{ images: string[]; totalPages: number; sampledIndices: number[] }> {
   const pdfDoc = await PDFDocument.load(pdfBuffer);
   const totalPages = pdfDoc.getPageCount();
@@ -104,6 +109,7 @@ async function samplePdfPages(
     maxWidth: 1024,
     quality: 85,
     format: 'png',
+    cacheTag,
   });
 
   logger.info('PDF pages sampled for LLM', {
@@ -349,7 +355,7 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
 
   await progress('rendering', 10, 'Rendering PDF pages to images');
 
-  const { images: pageImages, totalPages, sampledIndices } = await samplePdfPages(pdfBuffer);
+  const { images: pageImages, totalPages, sampledIndices } = await samplePdfPages(pdfBuffer, sessionId);
 
   // -----------------------------------------------------------------
   // Text layer detection (deterministic segmentation when available)
@@ -363,6 +369,8 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
 
   let deterministicInstructions: CuttingInstruction[] | null = null;
   let deterministicConfidence = 0;
+  /** Per-page labels collected during segmentation (1-indexed page → label text) */
+  const pageLabels: Record<number, string> = {};
 
   if (pageHeaderResult.hasTextLayer) {
     logger.info('Text layer detected — attempting deterministic segmentation', {
@@ -374,6 +382,12 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
     if (segResult.segments.length > 1 || segResult.segmentationConfidence >= 60) {
       deterministicInstructions = segResult.cuttingInstructions;
       deterministicConfidence = segResult.segmentationConfidence;
+      // Persist per-page header text for Review UI
+      for (const h of pageHeaderResult.pageHeaders) {
+        if (h.hasText && h.headerText) {
+          pageLabels[h.pageIndex + 1] = h.headerText;
+        }
+      }
       logger.info('Deterministic segmentation succeeded', {
         sessionId,
         segments: segResult.segments.length,
@@ -394,10 +408,7 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
         quality: 85,
         format: 'png',
         cropHeightFraction: 0.2,
-      });
-
-      const headerLabelPrompt = buildHeaderLabelPrompt(llmConfig.headerLabelPrompt || '', {
-        pageNumbers: allPageIndices.map((index) => index + 1),
+        cacheTag: sessionId,
       });
 
       const headerAdapterConfig = {
@@ -405,25 +416,52 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
         llm_vision_model: llmConfig.verificationModel,
       };
 
-      const headerResult = await callVisionModel(
-        headerAdapterConfig,
-        headerCropImages.map((base64Data, index) => ({
-          mimeType: 'image/png' as const,
-          base64Data,
-          label: `Page ${index + 1}`,
-        })),
-        headerLabelPrompt,
-        {
-          system: DEFAULT_HEADER_LABEL_SYSTEM_PROMPT,
-          responseFormat: { type: 'json' },
-          maxTokens: 2048,
-          temperature: 0.1,
-          modelParams: llmConfig.verificationModelParams,
-        }
-      );
+      // -----------------------------------------------------------------------
+      // Batched header-label LLM call.
+      // We chunk the pages so each LLM request stays within
+      // MAX_HEADER_CROP_BATCH_SIZE images — crucial for providers with small
+      // context windows (GPT-4V, Groq). Gemini handles >67 images but batching
+      // keeps latency and cost predictable across all providers.
+      // -----------------------------------------------------------------------
+      const allParsedHeaderLabels: HeaderLabelEntry[] = [];
+      for (let batchStart = 0; batchStart < headerCropImages.length; batchStart += MAX_HEADER_CROP_BATCH_SIZE) {
+        const batchEnd = Math.min(batchStart + MAX_HEADER_CROP_BATCH_SIZE, headerCropImages.length);
+        const batchPageIndices = allPageIndices.slice(batchStart, batchEnd);
+        const batchImages = headerCropImages.slice(batchStart, batchEnd);
 
-      const parsedHeaderLabels = parseHeaderLabelResponse(headerResult.content);
-      const pageHeaders: PageHeader[] = parsedHeaderLabels.map((entry) => ({
+        const batchPrompt = buildHeaderLabelPrompt(llmConfig.headerLabelPrompt || '', {
+          pageNumbers: batchPageIndices.map((index) => index + 1),
+        });
+
+        const batchResult = await callVisionModel(
+          headerAdapterConfig,
+          batchImages.map((base64Data, i) => ({
+            mimeType: 'image/png' as const,
+            base64Data,
+            label: `Page ${batchPageIndices[i] + 1}`,
+          })),
+          batchPrompt,
+          {
+            system: DEFAULT_HEADER_LABEL_SYSTEM_PROMPT,
+            responseFormat: { type: 'json' },
+            maxTokens: 2048,
+            temperature: 0.1,
+            modelParams: llmConfig.verificationModelParams,
+          }
+        );
+
+        const batchLabels = parseHeaderLabelResponse(batchResult.content);
+        allParsedHeaderLabels.push(...batchLabels);
+
+        logger.info('Header-label batch complete', {
+          sessionId,
+          batchStart: batchStart + 1,
+          batchEnd,
+          labelsFound: batchLabels.length,
+        });
+      }
+
+      const pageHeaders: PageHeader[] = allParsedHeaderLabels.map((entry) => ({
         pageIndex: entry.page - 1,
         headerText: entry.label ?? '',
         fullText: entry.label ?? '',
@@ -438,6 +476,12 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
             deterministicConfidence,
             segResult.segmentationConfidence
           );
+          // Persist per-page header labels from vision pass for Review UI
+          for (const h of pageHeaders) {
+            if (h.hasText && h.headerText) {
+              pageLabels[h.pageIndex + 1] = h.headerText;
+            }
+          }
           logger.info('Header-label segmentation succeeded', {
             sessionId,
             segments: segResult.segments.length,
@@ -494,6 +538,14 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
       deterministicConfidence
     );
     logger.info('Using deterministic cutting instructions', { sessionId, parts: deterministicInstructions.length });
+  }
+
+  // Persist per-page labels and segmentation confidence in extractedMetadata
+  if (Object.keys(pageLabels).length > 0) {
+    extraction.pageLabels = pageLabels;
+  }
+  if (deterministicConfidence > 0) {
+    extraction.segmentationConfidence = deterministicConfidence;
   }
 
   // Store the raw first-pass LLM response for audit purposes
@@ -562,6 +614,7 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
           })
         ),
         llmPromptVersion: llmConfig.promptVersion || PROMPT_VERSION,
+        firstPassRaw: firstPassRaw ?? null,
       },
     });
 
@@ -683,6 +736,9 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
     routingDecision,
     confidence: extraction.confidenceScore,
   });
+
+  // Free render cache for this session
+  clearRenderCache(sessionId);
 
   return {
     status: 'complete',

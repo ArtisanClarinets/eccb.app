@@ -140,12 +140,15 @@ export async function callVisionModel(
   let lastError: Error | undefined;
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    let requestUrl: string | undefined;
     try {
       const { url, headers, body } = adapter.buildRequest(config, request);
+      requestUrl = url;
 
       logger.debug('Calling vision LLM', {
         provider: config.llm_provider,
         model: (body as any)?.model || config.llm_vision_model,
+        endpoint: url,
         attempt,
       });
 
@@ -164,10 +167,25 @@ export async function callVisionModel(
         const errorText = await response.text().catch(() => '');
         if ((response.status === 429 || response.status >= 500) && attempt < MAX_RETRIES) {
           const wait = RETRY_BASE_MS * 2 ** (attempt - 1);
-          logger.warn('LLM call failed, retrying...', { status: response.status, attempt, wait });
+          logger.warn('LLM call failed, retrying...', {
+            provider: config.llm_provider,
+            model: config.llm_vision_model,
+            endpoint: url,
+            status: response.status,
+            attempt,
+            wait,
+          });
           await new Promise((r) => setTimeout(r, wait));
           continue;
         }
+        // Log diagnostic details for non-retryable errors (4xx) to aid debugging
+        logger.error('LLM API non-retryable error', {
+          provider: config.llm_provider,
+          model: config.llm_vision_model,
+          endpoint: url,
+          status: response.status,
+          errorBody: errorText.slice(0, 500),
+        });
         throw new Error(`LLM API request failed: ${response.status} ${errorText.slice(0, 300)}`);
       }
 
@@ -176,6 +194,7 @@ export async function callVisionModel(
 
       logger.info('Vision LLM response received', {
         provider: config.llm_provider,
+        model: config.llm_vision_model,
         usage: result.usage,
       });
 
@@ -187,7 +206,14 @@ export async function callVisionModel(
       }
       if (attempt < MAX_RETRIES) {
         const wait = RETRY_BASE_MS * 2 ** (attempt - 1);
-        logger.warn('LLM call failed, retrying...', { error: lastError.message, attempt, wait });
+        logger.warn('LLM call failed, retrying...', {
+          provider: config.llm_provider,
+          model: config.llm_vision_model,
+          endpoint: requestUrl,
+          error: lastError.message,
+          attempt,
+          wait,
+        });
         await new Promise((r) => setTimeout(r, wait));
       }
     }

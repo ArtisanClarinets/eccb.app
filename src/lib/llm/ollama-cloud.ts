@@ -66,7 +66,11 @@ export class OllamaCloudAdapter implements LLMAdapter {
       throw new Error('Ollama Cloud API key is not configured.');
     }
 
-    const url = `${llm_endpoint_url.replace(/\/$/, '')}/chat/completions`;
+    // Ollama Cloud follows the same OpenAI-compat layout as local Ollama:
+    // the actual endpoint is /v1/chat/completions under whatever base URL is configured.
+    const cleanBase = llm_endpoint_url.replace(/\/$/, '');
+    const base = /\/v\d+/.test(cleanBase) ? cleanBase : `${cleanBase}/v1`;
+    const url = `${base}/chat/completions`;
 
     const headers = {
       'Content-Type': 'application/json',

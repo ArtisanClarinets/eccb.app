@@ -1,5 +1,5 @@
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
-import { createCanvas } from 'canvas';
+import { createCanvas } from '@napi-rs/canvas';
 import sharp from 'sharp';
 import { logger } from '@/lib/logger';
 
@@ -11,6 +11,13 @@ import { logger } from '@/lib/logger';
 // instead of spawning a web-worker. This is the correct mode for
 // server-side rendering where neither a DOM nor a SharedArrayBuffer worker
 // is available (pdfjs-dist v5 compatibility).
+//
+// Canvas backend: pdfjs-dist v5 ships a built-in NodeCanvasFactory that
+// uses @napi-rs/canvas automatically when running under Node.js. We use
+// the same package for all canvas operations in this module so that the
+// objects passed between our code and pdfjs's internal rendering pipeline
+// are the same types — avoiding the "Image or Canvas expected" TypeError
+// that occurs when mixing node-canvas (canvas) and @napi-rs/canvas objects.
 //
 // Notes:
 // - This module intentionally avoids logging any PDF bytes or sensitive content.
@@ -25,6 +32,8 @@ export interface RenderOptions {
   format?: 'png' | 'jpeg';
   /** DPI multiplier. Default 2 → ~192 DPI for sharp sheet music OCR */
   scale?: number;
+  /** Optional cache tag (e.g. session-id) to enable cross-call render caching */
+  cacheTag?: string;
 }
 
 // Minimal 100×100 white PNG used as a placeholder for pages that fail to render
@@ -55,10 +64,15 @@ function nowMs(): number {
   return Date.now();
 }
 
+
 async function openPdfDocument(pdfBuffer: Buffer) {
   // pdfjs-dist requires Uint8Array, not Buffer
   const pdfData = new Uint8Array(pdfBuffer);
 
+  // pdfjs-dist v5 automatically selects its built-in NodeCanvasFactory
+  // (backed by @napi-rs/canvas) when running in Node.js. Do not pass a
+  // custom canvasFactory — mixing canvas package types causes
+  // "Image or Canvas expected" errors in ctx.drawImage() calls.
   const loadingTask = pdfjsLib.getDocument({
     data: pdfData,
     disableWorker: true,
@@ -123,6 +137,48 @@ function normalizeScale(s: unknown, fallback: number): number {
   if (!Number.isFinite(n)) return fallback;
   // Prevent invalid viewport scale. Avoid aggressive clamping to preserve output.
   return n <= 0 ? fallback : n;
+}
+
+// ---------------------------------------------------------------------------
+// In-process render cache
+//
+// Keyed by `${cacheTag}:${pageIndex}:${scale}:${maxWidth}:${format}:${quality}`.
+// The processor fills `cacheTag` with the session-id so different sessions
+// never collide.  Call `clearRenderCache(tag)` at the end of a pipeline run
+// to free memory.
+// ---------------------------------------------------------------------------
+
+/** Cache key → base64 image string */
+const renderCache = new Map<string, string>();
+
+function cacheKey(
+  tag: string,
+  pageIndex: number,
+  scale: number,
+  maxWidth: number,
+  format: string,
+  quality: number,
+  variant: string = 'full',
+): string {
+  return `${tag}:${pageIndex}:${scale}:${maxWidth}:${format}:${quality}:${variant}`;
+}
+
+/**
+ * Clear cached render results.
+ * Call with a `tag` to clear only that session's entries,
+ * or with no arguments to flush the entire cache.
+ */
+export function clearRenderCache(tag?: string): void {
+  if (!tag) {
+    renderCache.clear();
+    return;
+  }
+  const prefix = `${tag}:`;
+  for (const key of renderCache.keys()) {
+    if (key.startsWith(prefix)) {
+      renderCache.delete(key);
+    }
+  }
 }
 
 /**
@@ -243,7 +299,7 @@ export async function renderPdfPageBatch(
   pageIndices: number[],
   options: Omit<RenderOptions, 'pageIndex'> = {}
 ): Promise<string[]> {
-  const { scale = 2, maxWidth = 1024, quality = 85, format = 'png' } = options;
+  const { scale = 2, maxWidth = 1024, quality = 85, format = 'png', cacheTag } = options;
 
   const fmt = normalizeFormat(format);
   const q = normalizeQuality(quality, 85);
@@ -251,6 +307,29 @@ export async function renderPdfPageBatch(
   const sc = normalizeScale(scale, 2);
 
   const start = nowMs();
+
+  // Check cache first — return early if all pages are cached
+  if (cacheTag) {
+    const allCached: string[] = [];
+    let miss = false;
+    for (const idxRaw of pageIndices) {
+      const key = cacheKey(cacheTag, idxRaw, sc, mw, fmt, q, 'full');
+      const cached = renderCache.get(key);
+      if (cached) {
+        allCached.push(cached);
+      } else {
+        miss = true;
+        break;
+      }
+    }
+    if (!miss) {
+      logger.debug('renderPdfPageBatch: served entirely from cache', {
+        cacheTag,
+        count: allCached.length,
+      });
+      return allCached;
+    }
+  }
 
    
   let loadingTask: any | undefined;
@@ -274,6 +353,16 @@ export async function renderPdfPageBatch(
         });
         results.push(PLACEHOLDER_IMAGE);
         continue;
+      }
+
+      // Per-page cache check
+      if (cacheTag) {
+        const key = cacheKey(cacheTag, idx, sc, mw, fmt, q, 'full');
+        const cached = renderCache.get(key);
+        if (cached) {
+          results.push(cached);
+          continue;
+        }
       }
 
       try {
@@ -315,7 +404,14 @@ export async function renderPdfPageBatch(
           imageBuffer = rawBuffer;
         }
 
-        results.push(imageBuffer.toString('base64'));
+        const b64 = imageBuffer.toString('base64');
+
+        // Store in cache if tag provided
+        if (cacheTag) {
+          renderCache.set(cacheKey(cacheTag, idx, sc, mw, fmt, q, 'full'), b64);
+        }
+
+        results.push(b64);
 
         logger.debug('renderPdfPageBatch: rendered page', {
           idx,
@@ -373,6 +469,7 @@ export async function renderPdfHeaderCropBatch(
     quality = 85,
     format = 'png',
     cropHeightFraction = 0.2,
+    cacheTag,
   } = options;
 
   const fmt = normalizeFormat(format);
@@ -381,6 +478,7 @@ export async function renderPdfHeaderCropBatch(
   const sc = normalizeScale(scale, 2);
 
   const safeCropHeightFraction = Math.min(0.8, Math.max(0.05, cropHeightFraction));
+  const variant = `header-${safeCropHeightFraction}`;
 
   const start = nowMs();
 
@@ -406,6 +504,16 @@ export async function renderPdfHeaderCropBatch(
         });
         results.push(PLACEHOLDER_IMAGE);
         continue;
+      }
+
+      // Per-page header crop cache check
+      if (cacheTag) {
+        const key = cacheKey(cacheTag, idx, sc, mw, fmt, q, variant);
+        const cached = renderCache.get(key);
+        if (cached) {
+          results.push(cached);
+          continue;
+        }
       }
 
       try {
@@ -456,7 +564,14 @@ export async function renderPdfHeaderCropBatch(
           // Keep as-is (already png)
         }
 
-        results.push(headerBuffer.toString('base64'));
+        const headerB64 = headerBuffer.toString('base64');
+
+        // Store in cache if tag provided
+        if (cacheTag) {
+          renderCache.set(cacheKey(cacheTag, idx, sc, mw, fmt, q, variant), headerB64);
+        }
+
+        results.push(headerB64);
 
         logger.debug('renderPdfHeaderCropBatch: rendered header crop', {
           idx,

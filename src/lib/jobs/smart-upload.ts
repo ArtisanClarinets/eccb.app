@@ -68,7 +68,7 @@ export async function queueSmartUploadProcess(
       attempts: 3,
       backoff: { type: 'exponential', delay: 5000 },
       removeOnComplete: 100,
-      removeOnFail: 50,
+      removeOnFail: false,
     }
   );
 
@@ -106,7 +106,7 @@ export async function queueSmartUploadSecondPass(
       attempts: 3,
       backoff: { type: 'exponential', delay: 5000 },
       removeOnComplete: 100,
-      removeOnFail: 50,
+      removeOnFail: false,
     }
   );
 
@@ -141,7 +141,7 @@ export async function queueSmartUploadAutoCommit(sessionId: string): Promise<Job
       attempts: 3,
       backoff: { type: 'exponential', delay: 5000 },
       removeOnComplete: 100,
-      removeOnFail: 50,
+      removeOnFail: false,
     }
   );
 

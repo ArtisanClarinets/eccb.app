@@ -406,7 +406,7 @@
     "@mohak34/opencode-notifier@latest",
     "opencode-scheduler",
     "octto",
-    "@nick-vi/opencode-type-inject"
-
+    "@nick-vi/opencode-type-inject",
+    "code-yeongyu/oh-my-opencode"
   ]
 }

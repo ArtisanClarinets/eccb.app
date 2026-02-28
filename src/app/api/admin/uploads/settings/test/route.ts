@@ -148,6 +148,29 @@ export async function POST(request: NextRequest) {
         break;
       }
 
+      case 'mistral': {
+        const base = (endpoint?.trim() || getDefaultEndpointForProvider('mistral')).replace(/\/$/, '');
+        testUrl = `${base}/models`;
+        if (apiKey) testHeaders['Authorization'] = `Bearer ${apiKey}`;
+        break;
+      }
+
+      case 'groq': {
+        const base = (endpoint?.trim() || getDefaultEndpointForProvider('groq')).replace(/\/$/, '');
+        testUrl = `${base}/models`;
+        if (apiKey) testHeaders['Authorization'] = `Bearer ${apiKey}`;
+        break;
+      }
+
+      case 'ollama-cloud': {
+        // Ollama Cloud uses the same OpenAI-compat /models endpoint
+        const raw = (endpoint?.trim() || getDefaultEndpointForProvider('ollama-cloud')).replace(/\/$/, '');
+        const base = /\/v\d+/.test(raw) ? raw : `${raw}/v1`;
+        testUrl = `${base}/models`;
+        if (apiKey) testHeaders['Authorization'] = `Bearer ${apiKey}`;
+        break;
+      }
+
       case 'custom': {
         const base = (endpoint || '').replace(/\/$/, '');
         if (!base) {
