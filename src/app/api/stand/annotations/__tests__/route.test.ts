@@ -331,5 +331,138 @@ describe('Annotations API', () => {
         })
       );
     });
+
+    it('should reject SECTION layer write when user has no section membership', async () => {
+      mockAuth.api.getSession.mockResolvedValue({
+        user: { id: 'user-1' },
+      });
+
+      // User has no sections
+      vi.mocked(prisma.member.findFirst).mockResolvedValueOnce({
+        id: 'member-1',
+        sections: [],
+      } as any);
+
+      const request = new NextRequest(
+        new URL('http://localhost:3000/api/stand/annotations'),
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            musicId: 'music-1',
+            page: 1,
+            layer: 'SECTION',
+            strokeData: {},
+          }),
+        }
+      );
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(403);
+      expect(data.error).toContain('section');
+    });
+
+    it('should reject SECTION layer write when user has no member record', async () => {
+      mockAuth.api.getSession.mockResolvedValue({
+        user: { id: 'user-1' },
+      });
+
+      // No member record at all
+      vi.mocked(prisma.member.findFirst).mockResolvedValueOnce(null);
+
+      const request = new NextRequest(
+        new URL('http://localhost:3000/api/stand/annotations'),
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            musicId: 'music-1',
+            page: 1,
+            layer: 'SECTION',
+            strokeData: {},
+          }),
+        }
+      );
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(403);
+      expect(data.error).toContain('section');
+    });
+
+    it('should allow SECTION layer write when user belongs to a section', async () => {
+      mockAuth.api.getSession.mockResolvedValue({
+        user: { id: 'user-1' },
+      });
+
+      vi.mocked(prisma.member.findFirst).mockResolvedValueOnce({
+        id: 'member-1',
+        sections: [{ sectionId: 'section-clarinet' }],
+      } as any);
+
+      vi.mocked(prisma.annotation.create).mockResolvedValueOnce({
+        id: 'annotation-2',
+        musicId: 'music-1',
+        page: 1,
+        layer: 'SECTION',
+        strokeData: {},
+        userId: 'user-1',
+        sectionId: 'section-clarinet',
+        user: { id: 'user-1', name: 'Test', email: 'test@test.com' },
+      } as any);
+
+      const request = new NextRequest(
+        new URL('http://localhost:3000/api/stand/annotations'),
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            musicId: 'music-1',
+            page: 1,
+            layer: 'SECTION',
+            strokeData: {},
+          }),
+        }
+      );
+
+      const response = await POST(request);
+      await response.json();
+
+      expect(response.status).toBe(201);
+      expect(prisma.annotation.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            sectionId: 'section-clarinet',
+          }),
+        })
+      );
+    });
+
+    it('should reject non-directors from writing DIRECTOR layer', async () => {
+      mockAuth.api.getSession.mockResolvedValue({
+        user: { id: 'user-1' },
+      });
+
+      vi.mocked(getUserRoles).mockResolvedValueOnce(['MUSICIAN']);
+
+      const request = new NextRequest(
+        new URL('http://localhost:3000/api/stand/annotations'),
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            musicId: 'music-1',
+            page: 1,
+            layer: 'DIRECTOR',
+            strokeData: {},
+          }),
+        }
+      );
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(403);
+      expect(data.error).toContain('director');
+    });
   });
 });

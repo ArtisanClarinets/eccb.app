@@ -4,6 +4,7 @@ import { downloadFile } from '@/lib/services/storage';
 import { prisma } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { getUserRoles } from '@/lib/auth/permissions';
+import { applyRateLimit } from '@/lib/rate-limit';
 import { Readable } from 'stream';
 
 const PRIVILEGED_ROLE_TYPES = ['DIRECTOR', 'SUPER_ADMIN', 'ADMIN', 'STAFF'];
@@ -26,6 +27,10 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ key: string[] }> }
 ) {
+  // Rate limit file proxy requests
+  const rateLimited = await applyRateLimit(request, 'stand-file');
+  if (rateLimited) return rateLimited;
+
   const session = await getSession();
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
