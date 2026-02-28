@@ -38,6 +38,16 @@ export const RATE_LIMIT_CONFIGS = {
   'smart-upload': { limit: 5, window: 60 }, // 5 uploads per minute
   // Second pass - moderate limit for additional AI processing
   'second-pass': { limit: 10, window: 60 }, // 10 requests per minute
+  // Stand annotation CRUD - generous but bounded
+  'stand-annotation': { limit: 60, window: 60 }, // 60 per minute
+  // Stand file proxy - moderate limit
+  'stand-file': { limit: 120, window: 60 }, // 120 per minute
+  // Stand sync polling
+  'stand-sync': { limit: 120, window: 60 }, // 120 per minute
+  // Stand preferences writes
+  'stand-preferences': { limit: 30, window: 60 }, // 30 per minute
+  // Stand practice log writes
+  'stand-practice': { limit: 30, window: 60 }, // 30 per minute
 } as const;
 
 export type RateLimitType = keyof typeof RATE_LIMIT_CONFIGS;
@@ -120,7 +130,7 @@ export async function rateLimit(
     }
     
     // Add current request to the sorted set with timestamp as score
-    await redis.zadd(redisKey, now, `${now}-${Math.random().toString(36).slice(2)}`);
+    await redis.zadd(redisKey, now, `${now}-${crypto.randomUUID()}`);
     
     // Set expiry on the key
     await redis.expire(redisKey, window);

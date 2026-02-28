@@ -159,7 +159,7 @@ describe('PDF Splitter Service', () => {
   describe('validatePdfBuffer', () => {
     it('should validate a real PDF', async () => {
       const { validatePdfBuffer } = await import('@/lib/services/pdf-splitter');
-      const pdfBuffer = fs.readFileSync(samplePdfPath);
+      const pdfBuffer = await fs.promises.readFile(samplePdfPath);
       const result = await validatePdfBuffer(pdfBuffer);
 
       expect(result.valid).toBe(true);
@@ -179,7 +179,7 @@ describe('PDF Splitter Service', () => {
   describe('splitPdfByPageRanges', () => {
     it('should return original when no ranges provided', async () => {
       const { splitPdfByPageRanges } = await import('@/lib/services/pdf-splitter');
-      const pdfBuffer = fs.readFileSync(samplePdfPath);
+      const pdfBuffer = await fs.promises.readFile(samplePdfPath);
       const result = await splitPdfByPageRanges(pdfBuffer, []);
 
       expect(result).toHaveLength(1);
@@ -188,7 +188,7 @@ describe('PDF Splitter Service', () => {
 
     it('should split PDF into parts', async () => {
       const { splitPdfByPageRanges } = await import('@/lib/services/pdf-splitter');
-      const pdfBuffer = fs.readFileSync(samplePdfPath);
+      const pdfBuffer = await fs.promises.readFile(samplePdfPath);
       const result = await splitPdfByPageRanges(pdfBuffer, [
         { start: 0, end: 0, name: 'page1.pdf' },
       ]);
@@ -204,7 +204,7 @@ describe('PDF Part Detector Service', () => {
   describe('analyzePdfParts', () => {
     it('should analyze PDF for parts', async () => {
       const { analyzePdfParts } = await import('@/lib/services/pdf-part-detector');
-      const pdfBuffer = fs.readFileSync(samplePdfPath);
+      const pdfBuffer = await fs.promises.readFile(samplePdfPath);
       const result = await analyzePdfParts(pdfBuffer, null);
 
       // Note: The minimal PDF may not be fully valid for pdfjs-dist
@@ -223,7 +223,7 @@ describe('PDF Part Detector Service', () => {
 
     it('should detect multi-part from metadata', async () => {
       const { analyzePdfParts } = await import('@/lib/services/pdf-part-detector');
-      const pdfBuffer = fs.readFileSync(samplePdfPath);
+      const pdfBuffer = await fs.promises.readFile(samplePdfPath);
       const metadata = {
         isMultiPart: true,
         parts: [
