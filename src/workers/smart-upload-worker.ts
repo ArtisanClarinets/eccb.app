@@ -5,6 +5,7 @@
  * This runs as a background job to avoid blocking the upload API.
  */
 
+import { randomInt } from 'crypto';
 import { Job } from 'bullmq';
 import { prisma } from '@/lib/db';
 import { downloadFile, uploadFile } from '@/lib/services/storage';
@@ -256,7 +257,7 @@ function parseVerificationResponse(content: string): ExtractedMetadata {
 function shuffleArray<T>(array: T[]): T[] {
   const shuffled = [...array];
   for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = randomInt(0, i + 1);
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
   return shuffled;
