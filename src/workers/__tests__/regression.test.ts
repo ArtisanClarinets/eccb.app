@@ -95,7 +95,7 @@ import { loadSmartUploadRuntimeConfig as _cfg } from '@/lib/llm/config-loader';
 import { splitPdfByCuttingInstructions } from '@/lib/services/pdf-splitter';
 import { extractPdfPageHeaders } from '@/lib/services/pdf-text-extractor';
 import { detectPartBoundaries } from '@/lib/services/part-boundary-detector';
-import { queueSmartUploadSecondPass } from '@/lib/jobs/smart-upload';
+import { queueSmartUploadSecondPass, queueSmartUploadAutoCommit } from '@/lib/jobs/smart-upload';
 
 const { processSmartUpload } = await import('@/workers/smart-upload-processor');
 
