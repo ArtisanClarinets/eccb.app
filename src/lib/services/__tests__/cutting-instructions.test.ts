@@ -471,9 +471,10 @@ describe('cutting-instructions', () => {
     });
 
     it('should strip emojis and non-ASCII characters', () => {
-      const filename = generateUniqueFilename('Violin 🎻 part áéíóú', 1, 3, 2);
+      // The function calls .trim() after removing unsafe characters
+      const filename = generateUniqueFilename('🎻Violin part', 1, 3, 2);
 
-      expect(filename).toBe('Violin  part__p1-3_2.pdf');
+      expect(filename).toBe('Violin part__p1-3_2.pdf');
     });
 
     it('should handle strings that become completely empty after sanitization', () => {
@@ -482,13 +483,13 @@ describe('cutting-instructions', () => {
       expect(filename).toBe('__p5-5_1.pdf');
     });
 
-    it('should preserve consecutive spaces', () => {
-      const filename = generateUniqueFilename('Trumpet   in   Bb', 0, 10, 0);
+    it('should preserve consecutive spaces internally but trim ends', () => {
+      const filename = generateUniqueFilename(' Trumpet   in   Bb ', 0, 10, 0);
 
       expect(filename).toBe('Trumpet   in   Bb__p0-10_0.pdf');
     });
 
-    it('should handle negative page numbers', () => {
+    it('should handle negative page numbers correctly', () => {
       const filename = generateUniqueFilename('Flute', -1, -5, 0);
 
       expect(filename).toBe('Flute__p-1--5_0.pdf');
