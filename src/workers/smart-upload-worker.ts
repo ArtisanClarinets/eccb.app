@@ -15,6 +15,9 @@ import type { LLMRuntimeConfig } from '@/lib/llm/config-loader';
 import { splitPdfByCuttingInstructions } from '@/lib/services/pdf-splitter';
 import { buildGapInstructions, validateAndNormalizeInstructions } from '@/lib/services/cutting-instructions';
 import { queueSmartUploadAutoCommit } from '@/lib/jobs/smart-upload';
+import { evaluateQualityGates } from '@/lib/smart-upload/quality-gates';
+import { buildPartStorageSlug, buildPartFilename, normalizeInstrumentLabel } from '@/lib/smart-upload/part-naming';
+import { jsonrepair as repairJson } from 'jsonrepair';
 import { logger } from '@/lib/logger';
 import {
   buildVerificationPrompt,
@@ -239,9 +242,14 @@ function parseVerificationResponse(content: string): ExtractedMetadata {
   }
   try {
     return JSON.parse(jsonMatch[0]) as ExtractedMetadata;
-  } catch (err) {
-    logger.error('parseVerificationResponse: JSON.parse failed', { err });
-    throw new Error('Invalid JSON in verification LLM response');
+  } catch {
+    // Fallback: attempt to repair malformed JSON from LLM
+    try {
+      return JSON.parse(repairJson(jsonMatch[0])) as ExtractedMetadata;
+    } catch (repairErr) {
+      logger.error('parseVerificationResponse: JSON.parse and jsonrepair both failed', { repairErr });
+      throw new Error('Invalid JSON in verification LLM response');
+    }
   }
 }
 
@@ -260,7 +268,7 @@ function shuffleArray<T>(array: T[]): T[] {
 
 async function finalizeSmartUploadSession(
   sessionId: string,
-  smartSession: { parseStatus: string | null; routingDecision: string | null; fileName: string; uploadSessionId: string },
+  smartSession: { parseStatus: string | null; routingDecision: string | null; fileName: string; uploadSessionId: string; extractedMetadata: unknown },
   updateData: Record<string, unknown>,
   finalMetadata: ExtractedMetadata,
   finalConfidence: number,
@@ -275,6 +283,20 @@ async function finalizeSmartUploadSession(
     model: string;
   }
 ): Promise<void> {
+  // ── Carry forward segmentationConfidence from first-pass session ──────────
+  // The first-pass processor stores segmentationConfidence inside extractedMetadata.
+  // If the second pass did not produce its own segConf, use the first pass value.
+  const firstPassMeta = smartSession.extractedMetadata as ExtractedMetadata | null;
+  const firstPassSegConf = firstPassMeta?.segmentationConfidence;
+  if (typeof firstPassSegConf === 'number' && finalMetadata.segmentationConfidence === undefined) {
+    finalMetadata = { ...finalMetadata, segmentationConfidence: firstPassSegConf };
+  }
+  const effectiveSegConf = finalMetadata.segmentationConfidence;
+
+  // Recompute finalConfidence = min(verificationConfidence, segmentationConfidence)
+  if (typeof effectiveSegConf === 'number') {
+    finalConfidence = Math.min(finalConfidence, effectiveSegConf);
+  }
   // Base update data
   Object.assign(updateData, {
     extractedMetadata: finalMetadata,
@@ -367,8 +389,8 @@ async function finalizeSmartUploadSession(
       const newParsedParts: ParsedPartRecord[] = [];
       const tempFiles: string[] = [];
       for (const part of splitResults) {
-        const safePartName = part.instruction.partName.replace(/[^a-zA-Z0-9\-_ ]/g, '_');
-        const partStorageKey = `smart-upload/${sessionId}/parts/${safePartName}.pdf`;
+        const slug = buildPartStorageSlug(part.instruction.partName) || `part_${part.instruction.partNumber ?? 0}`;
+        const partStorageKey = `smart-upload/${sessionId}/parts/${slug}.pdf`;
         await uploadFile(partStorageKey, part.buffer, {
           contentType: 'application/pdf',
           metadata: { sessionId, instrument: part.instruction.instrument, partName: part.instruction.partName, section: part.instruction.section, originalUploadId: sessionId },
@@ -378,7 +400,8 @@ async function finalizeSmartUploadSession(
           partName: part.instruction.partName, instrument: part.instruction.instrument,
           section: part.instruction.section, transposition: part.instruction.transposition,
           partNumber: part.instruction.partNumber, storageKey: partStorageKey,
-          fileName: part.fileName, fileSize: part.buffer.length,
+          fileName: buildPartFilename(part.instruction.partName || `Part_${part.instruction.partNumber ?? 0}`),
+          fileSize: part.buffer.length,
           pageCount: part.pageCount, pageRange: part.instruction.pageRange,
         });
       }
@@ -395,8 +418,8 @@ async function finalizeSmartUploadSession(
       );
       const newParsedParts: ParsedPartRecord[] = [];
       for (const part of splitResults) {
-        const safePartName = part.instruction.partName.replace(/[^a-zA-Z0-9\-_ ]/g, '_');
-        const partStorageKey = `smart-upload/${sessionId}/parts/${safePartName}.pdf`;
+        const slug = buildPartStorageSlug(part.instruction.partName) || `part_${part.instruction.partNumber ?? 0}`;
+        const partStorageKey = `smart-upload/${sessionId}/parts/${slug}.pdf`;
         await uploadFile(partStorageKey, part.buffer, {
           contentType: 'application/pdf',
           metadata: { sessionId, instrument: part.instruction.instrument, partName: part.instruction.partName, section: part.instruction.section, originalUploadId: sessionId },
@@ -405,7 +428,8 @@ async function finalizeSmartUploadSession(
           partName: part.instruction.partName, instrument: part.instruction.instrument,
           section: part.instruction.section, transposition: part.instruction.transposition,
           partNumber: part.instruction.partNumber, storageKey: partStorageKey,
-          fileName: part.fileName, fileSize: part.buffer.length,
+          fileName: buildPartFilename(part.instruction.partName || `Part_${part.instruction.partNumber ?? 0}`),
+          fileSize: part.buffer.length,
           pageCount: part.pageCount, pageRange: part.instruction.pageRange,
         });
       }
@@ -420,78 +444,34 @@ async function finalizeSmartUploadSession(
   const isAutonomousThreshold = finalConfidence >= llmConfig.autonomousApprovalThreshold;
   const isParsed = updateData.parseStatus === 'PARSED' || smartSession.parseStatus === 'PARSED';
 
-  // -------------------------------------------------------------------------
-  // Semantic Quality Gates
-  // Auto-commit is blocked unless ALL of the following pass. Any failure sets
-  // requiresHumanReview=true and writes a reason to the session notes so that
-  // reviewers know exactly why the autonomous path was bypassed.
-  // -------------------------------------------------------------------------
+  // ── Shared Quality Gates ───────────────────────────────────────────────
   if (!updateData.requiresHumanReview) {
-    const parts: ParsedPartRecord[] = (updateData.parsedParts as ParsedPartRecord[] | undefined)
-      ?? (parsedParts ?? []);
+    const parts: ParsedPartRecord[] =
+      (updateData.parsedParts as ParsedPartRecord[] | undefined) ?? (parsedParts ?? []);
 
-    const FORBIDDEN = new Set(['null', 'none', 'n/a', 'na', 'unknown', 'undefined']);
-    const isForbidden = (s: string | undefined | null) =>
-      !s || FORBIDDEN.has(s.trim().toLowerCase());
+    let totalPagesForGates = 0;
+    try {
+      const { PDFDocument: PDFDoc } = await import('pdf-lib');
+      const tmpDoc = await PDFDoc.load(originalPdfBuffer);
+      totalPagesForGates = tmpDoc.getPageCount();
+    } catch { /* best-effort */ }
 
-    // Gate 1: No part with a null/unknown instrument or partName.
-    const nullPart = parts.find(
-      (p) => isForbidden(p.instrument) || isForbidden(p.partName)
-    );
-    if (nullPart) {
+    const gateResult = evaluateQualityGates({
+      parsedParts: parts,
+      metadata: finalMetadata,
+      totalPages: totalPagesForGates,
+      maxPagesPerPart: llmConfig.maxPagesPerPart ?? 12,
+      segmentationConfidence: effectiveSegConf,
+    });
+
+    if (gateResult.failed) {
       updateData.requiresHumanReview = true;
-      logger.warn('Quality gate failed: part with null/unknown label', {
-        sessionId,
-        partName: nullPart.partName,
-        instrument: nullPart.instrument,
-      });
+      for (const reason of gateResult.reasons) {
+        logger.warn('Quality gate failed', { sessionId, reason });
+      }
     }
-
-    // Gate 2: No "PART" segment that is suspiciously large (configurable; default 12 pages).
-    // A 44-page "null" segment is the canonical failure mode this catches.
-    const MAX_PART_PAGES = llmConfig.maxPagesPerPart ?? 12;
-    const scoreSections = new Set(['Score', 'score', 'FULL_SCORE', 'CONDUCTOR_SCORE', 'CONDENSED_SCORE']);
-    const hugePart = parts.find(
-      (p) => !scoreSections.has(p.section) && p.pageCount > MAX_PART_PAGES
-    );
-    if (hugePart) {
-      updateData.requiresHumanReview = true;
-      logger.warn('Quality gate failed: non-score part exceeds max page threshold', {
-        sessionId,
-        partName: hugePart.partName,
-        pageCount: hugePart.pageCount,
-        maxAllowed: MAX_PART_PAGES,
-      });
-    }
-
-    // Gate 3: Multi-part PDFs with >10 total pages must produce ≥2 parts (DoD §1.5).
-    const totalPagesForGate3 = originalPdfBuffer
-      ? await (async () => {
-          try { const { PDFDocument: D } = await import('pdf-lib'); const d = await D.load(originalPdfBuffer); return d.getPageCount(); } catch { return 0; }
-        })()
-      : 0;
-    const cutsFromMetadata = (finalMetadata.cuttingInstructions ?? []).length;
-    if (finalMetadata.isMultiPart && totalPagesForGate3 > 10 && cutsFromMetadata < 2) {
-      updateData.requiresHumanReview = true;
-      logger.warn('Quality gate failed: isMultiPart=true, >10 pages, but <2 cutting instructions', {
-        sessionId,
-        totalPages: totalPagesForGate3,
-        cutsFromMetadata,
-      });
-    }
-
-    // Gate 4: segmentationConfidence below threshold (when available). DoD default: 70.
-    const segConf = finalMetadata.segmentationConfidence;
-    if (typeof segConf === 'number' && segConf < 70) {
-      updateData.requiresHumanReview = true;
-      logger.warn('Quality gate failed: segmentationConfidence below threshold', {
-        sessionId,
-        segmentationConfidence: segConf,
-        threshold: 70,
-      });
-    }
+    finalConfidence = gateResult.finalConfidence;
   }
-  // -------------------------------------------------------------------------
 
   if (isHighConfidence && routingDecision === 'auto_parse_second_pass' && isParsed && !updateData.requiresHumanReview) {
     updateData.autoApproved = true;

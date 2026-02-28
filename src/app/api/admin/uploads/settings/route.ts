@@ -158,6 +158,9 @@ export async function GET() {
       'llm_openrouter_api_key',
       'llm_gemini_api_key',
       'llm_custom_api_key',
+      'llm_ollama_cloud_api_key',
+      'llm_mistral_api_key',
+      'llm_groq_api_key',
     ]);
 
     const maskedSettings = settingsArray.map((setting) => {

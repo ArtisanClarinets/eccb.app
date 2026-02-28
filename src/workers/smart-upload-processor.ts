@@ -32,6 +32,8 @@ import {
   SmartUploadJobProgress,
 } from '@/lib/jobs/smart-upload';
 import { buildPartFilename, buildPartStorageSlug, normalizeInstrumentLabel } from '@/lib/smart-upload/part-naming';
+import { evaluateQualityGates } from '@/lib/smart-upload/quality-gates';
+import { jsonrepair as repairJson } from 'jsonrepair';
 import { logger } from '@/lib/logger';
 import {
   buildHeaderLabelPrompt,
@@ -216,9 +218,15 @@ function parseVisionResponse(content: string, totalPages: number): ExtractedMeta
   let parsed: Record<string, unknown>;
   try {
     parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
-  } catch (err) {
-    logger.error('parseVisionResponse: JSON.parse failed', { err });
-    return buildFallbackMetadata(totalPages);
+  } catch {
+    // Fallback: attempt to repair malformed JSON from LLM
+    try {
+      parsed = JSON.parse(repairJson(jsonMatch[0])) as Record<string, unknown>;
+      logger.warn('parseVisionResponse: JSON repaired successfully');
+    } catch (repairErr) {
+      logger.error('parseVisionResponse: JSON.parse and jsonrepair both failed', { repairErr });
+      return buildFallbackMetadata(totalPages);
+    }
   }
 
   const title =
@@ -705,86 +713,25 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
   }
 
   // ---------------------------------------------------------------------------
-  // DoD §1.5 — Autonomous Mode Quality Gates
-  // Auto-commit only when ALL of the following gates pass. Any failure keeps
-  // the session in PENDING_REVIEW and records the reason for reviewers.
+  // DoD §1.5 — Autonomous Mode Quality Gates (shared module)
   // ---------------------------------------------------------------------------
-  const FORBIDDEN_AUTO_LABELS = new Set(['null', 'none', 'n/a', 'na', 'unknown', 'undefined']);
-  const isForbiddenAutoLabel = (s: string | undefined | null) =>
-    !s || FORBIDDEN_AUTO_LABELS.has(s.trim().toLowerCase());
+  const gateResult = evaluateQualityGates({
+    parsedParts,
+    metadata: extraction,
+    totalPages,
+    maxPagesPerPart: llmConfig.maxPagesPerPart ?? 12,
+    segmentationConfidence: extraction.segmentationConfidence,
+  });
 
-  const maxPagesPerPart = llmConfig.maxPagesPerPart ?? 12;
-  const SCORE_SECTIONS = new Set(['Score', 'score', 'FULL_SCORE', 'CONDUCTOR_SCORE', 'CONDENSED_SCORE']);
-  const SEG_CONFIDENCE_THRESHOLD = 70;
+  const qualityGateFailed = gateResult.failed;
+  const qualityGateReasons = gateResult.reasons;
+  const finalConfidence = gateResult.finalConfidence;
 
-  let qualityGateFailed = false;
-  const qualityGateReasons: string[] = [];
-
-  // Gate 1: No part with a null/unknown/forbidden instrument or partName.
-  const nullLabelPart = parsedParts.find(
-    (p) => isForbiddenAutoLabel(p.instrument) || isForbiddenAutoLabel(p.partName)
-  );
-  if (nullLabelPart) {
-    qualityGateFailed = true;
-    qualityGateReasons.push(
-      `Part with null/unknown label: instrument="${nullLabelPart.instrument}" partName="${nullLabelPart.partName}"`
-    );
-    logger.warn('Auto-commit quality gate 1 failed: null/unknown part label', {
-      sessionId,
-      instrument: nullLabelPart.instrument,
-      partName: nullLabelPart.partName,
-    });
+  if (qualityGateFailed) {
+    for (const reason of qualityGateReasons) {
+      logger.warn('Auto-commit quality gate failed', { sessionId, reason });
+    }
   }
-
-  // Gate 2: No non-score PART segment exceeding maxPagesPerPart.
-  const oversizedPart = parsedParts.find(
-    (p) => !SCORE_SECTIONS.has(p.section) && p.pageCount > maxPagesPerPart
-  );
-  if (oversizedPart) {
-    qualityGateFailed = true;
-    qualityGateReasons.push(
-      `Non-score part "${oversizedPart.partName}" has ${oversizedPart.pageCount} pages (max ${maxPagesPerPart})`
-    );
-    logger.warn('Auto-commit quality gate 2 failed: oversized non-score part', {
-      sessionId,
-      partName: oversizedPart.partName,
-      pageCount: oversizedPart.pageCount,
-      maxAllowed: maxPagesPerPart,
-    });
-  }
-
-  // Gate 3: Multi-part PDFs with >10 pages must produce ≥2 parts.
-  if (extraction.isMultiPart && totalPages > 10 && parsedParts.length < 2) {
-    qualityGateFailed = true;
-    qualityGateReasons.push(
-      `isMultiPart=true with ${totalPages} pages but only ${parsedParts.length} part(s) produced`
-    );
-    logger.warn('Auto-commit quality gate 3 failed: suspiciously low part count', {
-      sessionId,
-      totalPages,
-      partsProduced: parsedParts.length,
-    });
-  }
-
-  // Gate 4: segmentationConfidence below threshold when available.
-  const segConf = extraction.segmentationConfidence;
-  if (typeof segConf === 'number' && segConf < SEG_CONFIDENCE_THRESHOLD) {
-    qualityGateFailed = true;
-    qualityGateReasons.push(
-      `segmentationConfidence ${segConf} < threshold ${SEG_CONFIDENCE_THRESHOLD}`
-    );
-    logger.warn('Auto-commit quality gate 4 failed: low segmentation confidence', {
-      sessionId,
-      segmentationConfidence: segConf,
-      threshold: SEG_CONFIDENCE_THRESHOLD,
-    });
-  }
-
-  // Compute finalConfidence = min(extractionConfidence, segmentationConfidence).
-  // verificationConfidence is only available after the second pass; use what we have.
-  const finalConfidence = typeof segConf === 'number'
-    ? Math.min(extraction.confidenceScore, segConf)
-    : extraction.confidenceScore;
 
   // Determine if we should auto-commit (fully autonomous mode)
   const shouldAutoCommit =

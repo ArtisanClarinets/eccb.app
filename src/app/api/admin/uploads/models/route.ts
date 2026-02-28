@@ -60,7 +60,7 @@ async function resolveEndpoint(provider: Provider, clientEndpoint?: string): Pro
 // Enhanced Types with Recommendation Support
 // =============================================================================
 
-type Provider = 'ollama' | 'openai' | 'anthropic' | 'gemini' | 'openrouter' | 'custom';
+type Provider = 'ollama' | 'openai' | 'anthropic' | 'gemini' | 'openrouter' | 'mistral' | 'groq' | 'ollama-cloud' | 'custom';
 
 interface ModelInfo {
   id: string;
@@ -704,7 +704,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const validProviders: Provider[] = ['ollama', 'openai', 'anthropic', 'gemini', 'openrouter', 'custom'];
+    const validProviders: Provider[] = ['ollama', 'openai', 'anthropic', 'gemini', 'openrouter', 'mistral', 'groq', 'ollama-cloud', 'custom'];
     if (!validProviders.includes(provider)) {
       return NextResponse.json(
         { error: `Invalid provider: ${provider}. Must be one of: ${validProviders.join(', ')}` },
@@ -780,6 +780,42 @@ export async function GET(request: NextRequest) {
         }
         models = await fetchCustomModels(endpoint, apiKey);
         warning = 'Custom provider: vision capability detection unavailable. Please verify model supports vision.';
+        break;
+      }
+
+      case 'mistral': {
+        if (!apiKey) {
+          return NextResponse.json(
+            { error: 'Missing required parameter: apiKey for mistral provider' },
+            { status: 400 }
+          );
+        }
+        // Mistral uses an OpenAI-compatible API at https://api.mistral.ai/v1
+        models = await fetchCustomModels('https://api.mistral.ai/v1', apiKey);
+        filteredForVision = true;
+        warning = 'Mistral: vision capability detection is best-effort. Verify your model supports vision.';
+        break;
+      }
+
+      case 'groq': {
+        if (!apiKey) {
+          return NextResponse.json(
+            { error: 'Missing required parameter: apiKey for groq provider' },
+            { status: 400 }
+          );
+        }
+        // Groq uses an OpenAI-compatible API at https://api.groq.com/openai/v1
+        models = await fetchCustomModels('https://api.groq.com/openai/v1', apiKey);
+        filteredForVision = true;
+        warning = 'Groq: vision capability detection is best-effort. Verify your model supports vision.';
+        break;
+      }
+
+      case 'ollama-cloud': {
+        // Ollama instance at a remote URL (same API as local Ollama)
+        const ollamaCloudEndpoint = endpoint || 'http://localhost:11434';
+        models = await fetchOllamaModels(ollamaCloudEndpoint);
+        filteredForVision = true;
         break;
       }
 
