@@ -656,6 +656,7 @@ describe('cutting-instructions', () => {
     });
   });
 
+
   describe('buildGapInstructions', () => {
     it('should generate instructions for unlabelled gaps', () => {
       const instructions = [
