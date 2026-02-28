@@ -6,6 +6,7 @@
 **Version:** 1.0
 **Status:** Proposed Release Standard
 **Primary Goal:** Convert uploaded music PDFs into correctly segmented, normalized, committed library records and individual part PDFs with no human intervention for normal cases.
+**Date**: 2026-02-27
 
 ---
 
