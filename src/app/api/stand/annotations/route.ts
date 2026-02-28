@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth/config';
 import { headers } from 'next/headers';
 import { prisma } from '@/lib/db';
 import { getUserRoles } from '@/lib/auth/permissions';
+import { applyRateLimit } from '@/lib/rate-limit';
 import { z } from 'zod';
 
 // Zod schemas for validation
@@ -102,6 +103,10 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit annotation writes
+    const rateLimited = await applyRateLimit(request, 'stand-annotation');
+    if (rateLimited) return rateLimited;
+
     const headersList = await headers();
     const session = await auth.api.getSession({ headers: headersList });
 
@@ -131,6 +136,14 @@ export async function POST(request: NextRequest) {
         select: { sections: { select: { sectionId: true }, take: 1 } },
       });
       serverSectionId = member?.sections[0]?.sectionId ?? null;
+
+      // Reject SECTION writes for users who do not belong to any section
+      if (!serverSectionId) {
+        return NextResponse.json(
+          { error: 'Forbidden: you must belong to a section to write SECTION annotations' },
+          { status: 403 }
+        );
+      }
     }
 
     const annotation = await prisma.annotation.create({

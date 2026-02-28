@@ -12,6 +12,7 @@ import {
   GripVertical,
   Music,
   CheckCircle2,
+  AlertTriangle,
   ArrowUp,
   ArrowDown,
 } from 'lucide-react';
@@ -47,6 +48,9 @@ export function EventMusicManager({ eventId, eventMusic: initial, library }: Eve
 
   // IDs already in the program
   const addedPieceIds = new Set(program.map((em) => em.piece.id));
+
+  // Program completeness check: pieces missing PDFs
+  const missingPdfPieces = program.filter((em) => !em.piece.hasPdf);
 
   // Filter library to show pieces not already in the program
   const filteredLibrary = library.filter(
@@ -109,6 +113,23 @@ export function EventMusicManager({ eventId, eventMusic: initial, library }: Eve
 
   return (
     <div className="space-y-6">
+      {/* Program completeness warning */}
+      {program.length > 0 && missingPdfPieces.length > 0 && (
+        <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30 px-4 py-3">
+          <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+              {missingPdfPieces.length} piece{missingPdfPieces.length !== 1 ? 's' : ''} missing PDF
+            </p>
+            <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
+              Members won&apos;t be able to view{' '}
+              {missingPdfPieces.map((em) => em.piece.title).join(', ')} in the Digital Music
+              Stand until PDFs are uploaded.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Current program */}
       <div>
         <h3 className="font-semibold mb-3 text-sm">
@@ -149,11 +170,15 @@ export function EventMusicManager({ eventId, eventMusic: initial, library }: Eve
                   )}
                 </div>
 
-                {em.piece.hasPdf && (
+                {em.piece.hasPdf ? (
                   <CheckCircle2
                     className="h-4 w-4 text-green-500 shrink-0"
                     aria-label="Has PDF"
                   />
+                ) : (
+                  <Badge variant="outline" className="text-amber-600 border-amber-300 shrink-0 text-xs px-1.5">
+                    No PDF
+                  </Badge>
                 )}
 
                 {/* Reorder */}

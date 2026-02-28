@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth/config';
 import { headers } from 'next/headers';
 import { prisma } from '@/lib/db';
+import { applyRateLimit } from '@/lib/rate-limit';
 import { z } from 'zod';
 
 /**
@@ -153,6 +154,10 @@ async function canAccessEvent(userId: string, eventId: string): Promise<boolean>
  */
 export async function GET(request: NextRequest) {
   try {
+    // Rate limit sync polling
+    const rateLimited = await applyRateLimit(request, 'stand-sync');
+    if (rateLimited) return rateLimited;
+
     const headersList = await headers();
     const session = await auth.api.getSession({ headers: headersList });
 
