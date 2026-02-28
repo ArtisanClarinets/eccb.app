@@ -54,5 +54,8 @@ EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
 -- 5. StandSession unique index — already exists in DB, create only if missing
-CREATE UNIQUE INDEX IF NOT EXISTS `StandSession_eventId_userId_key`
-  ON `StandSession`(`eventId`, `userId`);
+SET @idxCount = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'StandSession' AND INDEX_NAME = 'StandSession_eventId_userId_key');
+SET @sql = IF(@idxCount = 0, 'CREATE UNIQUE INDEX `StandSession_eventId_userId_key` ON `StandSession`(`eventId`, `userId`)', 'SELECT "Index StandSession_eventId_userId_key already exists"');
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;

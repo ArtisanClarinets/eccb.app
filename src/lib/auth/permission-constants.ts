@@ -143,6 +143,37 @@ export const MESSAGE_SEND_ALL = 'message.send.all';
 export const MESSAGE_SEND_SECTION = 'message.send.section';
 
 // =============================================================================
+// STAND (DIGITAL MUSIC STAND) PERMISSIONS
+// =============================================================================
+
+/** Access the Digital Music Stand */
+export const STAND_ACCESS = 'stand.access';
+
+/** Write personal annotations on stand */
+export const STAND_ANNOTATE_PERSONAL = 'stand.annotate.personal';
+
+/** Write section annotations on stand */
+export const STAND_ANNOTATE_SECTION = 'stand.annotate.section';
+
+/** Write director annotations on stand */
+export const STAND_ANNOTATE_DIRECTOR = 'stand.annotate.director';
+
+/** Create/edit/delete navigation links (smart nav hotspots) */
+export const STAND_NAV_MANAGE = 'stand.nav.manage';
+
+/** Create/edit/delete audio links */
+export const STAND_AUDIO_MANAGE = 'stand.audio.manage';
+
+/** Control sync (director commands: set page, set piece) */
+export const STAND_SYNC_CONTROL = 'stand.sync.control';
+
+/** View practice logs (own) */
+export const STAND_PRACTICE_VIEW_OWN = 'stand.practice-view.own';
+
+/** View practice logs (aggregate/director view) */
+export const STAND_PRACTICE_VIEW_ALL = 'stand.practice-view.all';
+
+// =============================================================================
 // ADMIN PERMISSIONS
 // =============================================================================
 
@@ -204,6 +235,15 @@ export type Permission =
   | typeof ANNOUNCEMENT_CREATE
   | typeof MESSAGE_SEND_ALL
   | typeof MESSAGE_SEND_SECTION
+  | typeof STAND_ACCESS
+  | typeof STAND_ANNOTATE_PERSONAL
+  | typeof STAND_ANNOTATE_SECTION
+  | typeof STAND_ANNOTATE_DIRECTOR
+  | typeof STAND_NAV_MANAGE
+  | typeof STAND_AUDIO_MANAGE
+  | typeof STAND_SYNC_CONTROL
+  | typeof STAND_PRACTICE_VIEW_OWN
+  | typeof STAND_PRACTICE_VIEW_ALL
   | typeof REPORT_VIEW
   | typeof REPORT_EXPORT
   | typeof SYSTEM_CONFIG
@@ -282,6 +322,19 @@ export const ADMIN_PERMISSIONS = [
   AUDIT_VIEW,
 ] as const;
 
+/** All stand (Digital Music Stand) permissions */
+export const STAND_PERMISSIONS = [
+  STAND_ACCESS,
+  STAND_ANNOTATE_PERSONAL,
+  STAND_ANNOTATE_SECTION,
+  STAND_ANNOTATE_DIRECTOR,
+  STAND_NAV_MANAGE,
+  STAND_AUDIO_MANAGE,
+  STAND_SYNC_CONTROL,
+  STAND_PRACTICE_VIEW_OWN,
+  STAND_PRACTICE_VIEW_ALL,
+] as const;
+
 /** All permissions array for seeding and validation */
 export const ALL_PERMISSIONS: readonly Permission[] = [
   ...MUSIC_PERMISSIONS,
@@ -291,6 +344,7 @@ export const ALL_PERMISSIONS: readonly Permission[] = [
   ...CMS_PERMISSIONS,
   ...COMMUNICATION_PERMISSIONS,
   ...ADMIN_PERMISSIONS,
+  ...STAND_PERMISSIONS,
 ] as const;
 
 // =============================================================================

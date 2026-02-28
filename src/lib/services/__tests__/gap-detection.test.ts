@@ -80,4 +80,56 @@ describe('buildGapInstructions', () => {
       expect(g.transposition).toBe('C');
     }
   });
+
+  it('formats single-page gaps correctly', () => {
+    const instructions = [makeInst(0, 0), makeInst(2, 4)];
+    const gaps = buildGapInstructions(instructions, 5);
+    expect(gaps).toHaveLength(1);
+    expect(gaps[0].pageRange).toEqual([1, 1]);
+    expect(gaps[0].partName).toBe('Unlabelled Pages 2-2');
+  });
+
+  it('handles overlapping instructions correctly', () => {
+    const instructions = [makeInst(0, 3), makeInst(2, 5)];
+    const gaps = buildGapInstructions(instructions, 8);
+    expect(gaps).toHaveLength(1);
+    expect(gaps[0].pageRange).toEqual([6, 7]);
+    expect(gaps[0].partName).toBe('Unlabelled Pages 7-8');
+  });
+
+  it('handles out-of-bounds instruction ranges gracefully', () => {
+    // Instruction covers pages that don't exist in the document (totalPages = 5)
+    const instructions = [makeInst(0, 2), makeInst(10, 15)];
+    const gaps = buildGapInstructions(instructions, 5);
+
+    // The instruction covering 10-15 should be ignored since totalPages is 5,
+    // so pages 3-4 will be considered a gap.
+    expect(gaps).toHaveLength(1);
+    expect(gaps[0].pageRange).toEqual([3, 4]);
+    expect(gaps[0].partName).toBe('Unlabelled Pages 4-5');
+  });
+
+  it('assigns correct metadata mapping to all generated gaps', () => {
+    const gaps = buildGapInstructions([makeInst(1, 1)], 4);
+
+    expect(gaps).toHaveLength(2);
+
+    expect(gaps[0]).toEqual({
+      partName: 'Unlabelled Pages 1-1',
+      instrument: 'Unknown',
+      section: 'Other',
+      transposition: 'C',
+      partNumber: 9900,
+      pageRange: [0, 0],
+    });
+
+    expect(gaps[1]).toEqual({
+      partName: 'Unlabelled Pages 3-4',
+      instrument: 'Unknown',
+      section: 'Other',
+      transposition: 'C',
+      partNumber: 9901,
+      pageRange: [2, 3],
+    });
+  });
 });

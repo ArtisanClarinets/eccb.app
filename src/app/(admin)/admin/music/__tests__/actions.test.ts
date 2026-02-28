@@ -54,6 +54,10 @@ vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }));
 
+vi.mock('@/lib/cache', () => ({
+  invalidateMusicCache: vi.fn(),
+}));
+
 describe('Music File Actions', () => {
   const mockSession = {
     user: { id: 'user-1', email: 'test@example.com' },
