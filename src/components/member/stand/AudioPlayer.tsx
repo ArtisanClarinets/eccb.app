@@ -45,13 +45,21 @@ export function AudioPlayer() {
   useEffect(() => {
     if (!currentPieceId) return;
     const timeoutId = setTimeout(() => {
-      try {
-        localStorage.setItem(
-          LOOP_STORAGE_KEY(currentPieceId),
-          JSON.stringify({ start: audioLoopStart, end: audioLoopEnd })
-        );
-      } catch {
-        // ignore storage quota errors
+      const persist = () => {
+        try {
+          localStorage.setItem(
+            LOOP_STORAGE_KEY(currentPieceId),
+            JSON.stringify({ start: audioLoopStart, end: audioLoopEnd })
+          );
+        } catch {
+          // ignore storage quota errors
+        }
+      };
+
+      if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+        window.requestIdleCallback(persist);
+      } else {
+        persist();
       }
     }, 500);
 
