@@ -580,5 +580,62 @@ describe('cutting-instructions', () => {
       expect(result[1].pageStart).toBe(5);
       expect(result[1].pageEnd).toBe(10);
     });
+
+    it('should skip parts that are completely swallowed (adjustedEnd < current.pageStart)', () => {
+      const instructions: NormalizedInstruction[] = [
+        { partName: 'Part 1', pageStart: 3, pageEnd: 5 },
+        { partName: 'Part 2', pageStart: 3, pageEnd: 7 },
+      ];
+
+      const result = splitOverlappingRanges(instructions);
+
+      expect(result).toHaveLength(1);
+      // Part 1 gets swallowed because they start at the same page and Part 1 ends before or at Part 2's end.
+      expect(result[0]).toEqual(instructions[1]);
+    });
+
+    it('should handle three parts starting at the same page (stable sorting)', () => {
+      const instructions: NormalizedInstruction[] = [
+        { partName: 'Part 1', pageStart: 1, pageEnd: 5 },
+        { partName: 'Part 2', pageStart: 1, pageEnd: 5 },
+        { partName: 'Part 3', pageStart: 1, pageEnd: 5 },
+      ];
+
+      const result = splitOverlappingRanges(instructions);
+
+      expect(result).toHaveLength(1);
+      // Due to stable sorting, Part 1 is checked against Part 2 and swallowed.
+      // Part 2 is checked against Part 3 and swallowed.
+      // Only Part 3 should remain.
+      expect(result[0]).toEqual(instructions[2]);
+    });
+
+    it('should preserve originalMetadata when splitting', () => {
+      const instructions: NormalizedInstruction[] = [
+        {
+          partName: 'Part 1',
+          pageStart: 0,
+          pageEnd: 5,
+          originalMetadata: { instrument: 'Flute', partNumber: 1 },
+        },
+        {
+          partName: 'Part 2',
+          pageStart: 3,
+          pageEnd: 7,
+          originalMetadata: { instrument: 'Oboe', partNumber: 2 },
+        },
+      ];
+
+      const result = splitOverlappingRanges(instructions);
+
+      expect(result).toHaveLength(2);
+      // Part 1 is truncated, but its originalMetadata should be preserved.
+      expect(result[0].partName).toBe('Part 1');
+      expect(result[0].pageEnd).toBe(2);
+      expect(result[0].originalMetadata).toEqual({ instrument: 'Flute', partNumber: 1 });
+      // Part 2 is unchanged.
+      expect(result[1].partName).toBe('Part 2');
+      expect(result[1].originalMetadata).toEqual({ instrument: 'Oboe', partNumber: 2 });
+    });
   });
 });
