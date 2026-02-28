@@ -473,6 +473,71 @@ describe('cutting-instructions', () => {
 
       expect(gaps).toHaveLength(3);
     });
+
+    it('should handle out-of-bounds page ranges', () => {
+      const instructions: NormalizedInstruction[] = [
+        { partName: 'Part 1', pageStart: -2, pageEnd: 1 }, // partially before start
+        { partName: 'Part 2', pageStart: 8, pageEnd: 12 }, // partially after end
+      ];
+
+      const gaps = detectGaps(instructions, 10);
+
+      expect(gaps).toHaveLength(1);
+      expect(gaps[0]).toEqual({ start: 2, end: 7 }); // middle gap
+    });
+
+    it('should detect single-page gaps', () => {
+      const instructions: NormalizedInstruction[] = [
+        { partName: 'Part 1', pageStart: 0, pageEnd: 1 },
+        { partName: 'Part 2', pageStart: 3, pageEnd: 4 },
+      ];
+
+      const gaps = detectGaps(instructions, 5);
+
+      expect(gaps).toHaveLength(1);
+      expect(gaps[0]).toEqual({ start: 2, end: 2 });
+    });
+
+    it('should correctly handle unordered instructions', () => {
+      const instructions: NormalizedInstruction[] = [
+        { partName: 'Part 2', pageStart: 7, pageEnd: 9 },
+        { partName: 'Part 1', pageStart: 0, pageEnd: 2 },
+      ];
+
+      const gaps = detectGaps(instructions, 10);
+
+      expect(gaps).toHaveLength(1);
+      expect(gaps[0]).toEqual({ start: 3, end: 6 });
+    });
+
+    it('should handle overlapping instructions that leave gaps', () => {
+      const instructions: NormalizedInstruction[] = [
+        { partName: 'Part 1', pageStart: 0, pageEnd: 5 },
+        { partName: 'Part 2', pageStart: 3, pageEnd: 6 },
+      ];
+
+      const gaps = detectGaps(instructions, 10);
+
+      expect(gaps).toHaveLength(1);
+      expect(gaps[0]).toEqual({ start: 7, end: 9 });
+    });
+
+    it('should handle instructions when totalPages is 0', () => {
+      const instructions: NormalizedInstruction[] = [
+        { partName: 'Part 1', pageStart: 0, pageEnd: 2 },
+      ];
+
+      const gaps = detectGaps(instructions, 0);
+
+      expect(gaps).toHaveLength(0);
+    });
+
+    it('should handle no instructions when totalPages is 1', () => {
+      const gaps = detectGaps([], 1);
+
+      expect(gaps).toHaveLength(1);
+      expect(gaps[0]).toEqual({ start: 0, end: 0 });
+    });
   });
 
   describe('generateUniqueFilename', () => {
@@ -535,6 +600,43 @@ describe('cutting-instructions', () => {
       expect(filename).toContain('-');
       expect(filename).toContain('_');
       expect(filename).toBe('Woodwinds - Bb Clarinet_1__p0-2_0.pdf');
+    });
+
+    it('should strip emojis and non-ASCII characters', () => {
+      // The function calls .trim() after removing unsafe characters
+      const filename = generateUniqueFilename('🎻Violin part', 1, 3, 2);
+
+      expect(filename).toBe('Violin part__p1-3_2.pdf');
+    });
+
+    it('should handle strings that become completely empty after sanitization', () => {
+      const filename = generateUniqueFilename('???!!!', 5, 5, 1);
+
+      expect(filename).toBe('__p5-5_1.pdf');
+    });
+
+    it('should preserve consecutive spaces internally but trim ends', () => {
+      const filename = generateUniqueFilename(' Trumpet   in   Bb ', 0, 10, 0);
+
+      expect(filename).toBe('Trumpet   in   Bb__p0-10_0.pdf');
+    });
+
+    it('should handle negative page numbers correctly', () => {
+      const filename = generateUniqueFilename('Flute', -1, -5, 0);
+
+      expect(filename).toBe('Flute__p-1--5_0.pdf');
+    });
+
+    it('should handle large indices and page numbers', () => {
+      const filename = generateUniqueFilename('Tuba', 10000, 20000, 999999);
+
+      expect(filename).toBe('Tuba__p10000-20000_999999.pdf');
+    });
+
+    it('should strip invisible characters', () => {
+      const filename = generateUniqueFilename('Horn\x00\x1F\x7F1', 0, 1, 0);
+
+      expect(filename).toBe('Horn1__p0-1_0.pdf');
     });
   });
 
