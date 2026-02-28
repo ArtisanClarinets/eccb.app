@@ -242,7 +242,7 @@ export async function commitSmartUploadSessionToLibrary(
         const instrumentName = part.instrument?.trim() || 'Unknown';
         const family = getSectionForLabel(instrumentName);
 
-        let instrument = await tx.instrument.findFirst({ where: { name: { equals: instrumentName } } });
+        let instrument = await tx.instrument.findFirst({ where: { name: { equals: instrumentName} } });
         if (!instrument) {
           instrument = await tx.instrument.create({
             data: { name: instrumentName, family, sortOrder: 999 },
@@ -295,7 +295,7 @@ export async function commitSmartUploadSessionToLibrary(
         if (!instrumentName) continue;
         const family = getSectionForLabel(instrumentName);
 
-        let instrument = await tx.instrument.findFirst({ where: { name: { equals: instrumentName } } });
+        let instrument = await tx.instrument.findFirst({ where: { name: { equals: instrumentName} } });
         if (!instrument) {
           instrument = await tx.instrument.create({
             data: { name: instrumentName, family, sortOrder: 999 },
@@ -320,7 +320,7 @@ export async function commitSmartUploadSessionToLibrary(
       );
       if (instrumentName) {
         const family = getSectionForLabel(instrumentName);
-        let instrument = await tx.instrument.findFirst({ where: { name: { equals: instrumentName } } });
+        let instrument = await tx.instrument.findFirst({ where: { name: { equals: instrumentName} } });
         if (!instrument) {
           instrument = await tx.instrument.create({
             data: { name: instrumentName, family, sortOrder: 999 },
