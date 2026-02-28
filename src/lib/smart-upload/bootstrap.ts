@@ -49,6 +49,14 @@ const DEFAULT_NUMERIC_SETTINGS: Record<string, string> = {
   // Autonomy settings
   smart_upload_enable_autonomous_mode: 'false',
   smart_upload_autonomous_approval_threshold: '95',
+  // Enterprise: OCR-first pipeline
+  smart_upload_local_ocr_enabled: 'true',
+  smart_upload_ocr_confidence_threshold: '60',
+  // Enterprise: PDF-to-LLM
+  smart_upload_send_full_pdf_to_llm: 'false',
+  // Enterprise: Budget system
+  smart_upload_budget_max_llm_calls_per_session: '5',
+  smart_upload_budget_max_input_tokens_per_session: '500000',
 };
 
 const DEFAULT_JSON_SETTINGS: Record<string, string> = {

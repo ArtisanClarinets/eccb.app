@@ -72,6 +72,17 @@ export const SMART_UPLOAD_SETTING_KEYS = [
   // Model parameters (JSON)
   'vision_model_params',
   'verification_model_params',
+
+  // Enterprise: OCR-first pipeline
+  'smart_upload_local_ocr_enabled',
+  'smart_upload_ocr_confidence_threshold',
+
+  // Enterprise: PDF-to-LLM (send full PDF instead of images)
+  'smart_upload_send_full_pdf_to_llm',
+
+  // Enterprise: Budget system
+  'smart_upload_budget_max_llm_calls_per_session',
+  'smart_upload_budget_max_input_tokens_per_session',
   
   // Metadata
   'smart_upload_schema_version',
@@ -214,6 +225,43 @@ export const SmartUploadSettingsSchema = z.object({
   // Model parameters
   vision_model_params: JsonParamsSchema,
   verification_model_params: JsonParamsSchema,
+
+  // Enterprise: OCR-first pipeline
+  smart_upload_local_ocr_enabled: z
+    .union([z.boolean(), z.string()])
+    .transform((v) => (typeof v === 'string' ? v === 'true' : v))
+    .default(true),
+
+  smart_upload_ocr_confidence_threshold: z
+    .union([z.string(), z.number()])
+    .transform((v) => {
+      const num = typeof v === 'string' ? Number(v) : v;
+      return Math.max(0, Math.min(100, isNaN(num) ? 60 : num));
+    })
+    .default(60),
+
+  // Enterprise: PDF-to-LLM
+  smart_upload_send_full_pdf_to_llm: z
+    .union([z.boolean(), z.string()])
+    .transform((v) => (typeof v === 'string' ? v === 'true' : v))
+    .default(false),
+
+  // Enterprise: Budget system
+  smart_upload_budget_max_llm_calls_per_session: z
+    .union([z.string(), z.number()])
+    .transform((v) => {
+      const num = typeof v === 'string' ? Number(v) : v;
+      return Math.max(0, isNaN(num) ? 5 : num);
+    })
+    .default(5),
+
+  smart_upload_budget_max_input_tokens_per_session: z
+    .union([z.string(), z.number()])
+    .transform((v) => {
+      const num = typeof v === 'string' ? Number(v) : v;
+      return Math.max(0, isNaN(num) ? 500000 : num);
+    })
+    .default(500000),
   
   // Schema version for migrations
   smart_upload_schema_version: z.string().default(SMART_UPLOAD_SCHEMA_VERSION),

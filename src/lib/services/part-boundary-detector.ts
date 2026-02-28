@@ -366,9 +366,29 @@ export function detectPartBoundaries(
   });
 
   // Step 8: Calculate overall confidence
-  const labelledPages = pageLabels.filter((p) => p.confidence >= 70).length;
+  // Weighted approach: pages with higher individual confidence contribute more
+  // to the overall score. Front-matter pages (first 1-2 pages with low confidence)
+  // are treated leniently — they shouldn't tank the whole score.
+  const FRONT_MATTER_MAX_PAGES = 2;
+
+  let weightedSum = 0;
+  let weightedCount = 0;
+
+  for (let i = 0; i < pageLabels.length; i++) {
+    const pl = pageLabels[i];
+    const isFrontMatter = i < FRONT_MATTER_MAX_PAGES && pl.confidence < 50;
+
+    if (isFrontMatter) {
+      // Front matter gets a generous floor — it's expected to lack instrument labels
+      weightedSum += Math.max(pl.confidence, 50);
+    } else {
+      weightedSum += pl.confidence;
+    }
+    weightedCount++;
+  }
+
   const segmentationConfidence =
-    pageLabels.length > 0 ? Math.round((labelledPages / pageLabels.length) * 100) : 0;
+    weightedCount > 0 ? Math.round(weightedSum / weightedCount) : 0;
 
   const segmentBoundaries = segments.map((segment) => ({
     label: segment.label,
@@ -396,7 +416,7 @@ export function detectPartBoundaries(
     totalPages: safeTotalPages,
     fromTextLayer,
     pageCountLabeled: pageLabels.length,
-    labelledHighConfidence: labelledPages,
+    labelledHighConfidence: pageLabels.filter((p) => p.confidence >= 70).length,
     firstPageDiag: pageLabels[0]
       ? { pageIndex: pageLabels[0].pageIndex, label: pageLabels[0].label, confidence: pageLabels[0].confidence, ...headerDiagnostics(pageLabels[0].rawHeader) }
       : undefined,

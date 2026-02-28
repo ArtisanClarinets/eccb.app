@@ -144,12 +144,26 @@ export class GeminiAdapter implements LLMAdapter {
       });
     };
 
-    for (const image of request.images) {
-      pushLabeledImage(image);
-    }
-    if (request.labeledInputs) {
-      for (const labeledInput of request.labeledInputs) {
-        pushLabeledImage(labeledInput);
+    // If documents (PDFs) are provided, send them as inline_data.
+    // Gemini natively supports PDF documents via inline_data.
+    if (request.documents && request.documents.length > 0) {
+      for (const doc of request.documents) {
+        if (doc.label?.trim()) {
+          parts.push({ text: `[${doc.label.trim()}]` });
+        }
+        parts.push({
+          inline_data: { mime_type: doc.mimeType, data: doc.base64Data },
+        });
+      }
+    } else {
+      // Fallback: send rendered images
+      for (const image of request.images) {
+        pushLabeledImage(image);
+      }
+      if (request.labeledInputs) {
+        for (const labeledInput of request.labeledInputs) {
+          pushLabeledImage(labeledInput);
+        }
       }
     }
     parts.push({ text: request.prompt });

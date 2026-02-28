@@ -47,10 +47,16 @@ export interface QualityGateResult {
 
 const FORBIDDEN_LABELS = new Set([
   'null', 'none', 'n/a', 'na', 'unknown', 'undefined', '',
+  'untitled', 'blank', 'cover', 'placeholder',
 ]);
 
 const SCORE_SECTIONS = new Set([
   'Score', 'score', 'FULL_SCORE', 'CONDUCTOR_SCORE', 'CONDENSED_SCORE',
+]);
+
+/** Part types that represent score/conductor pages (not individual instrument parts). */
+const SCORE_PART_TYPES = new Set([
+  'FULL_SCORE', 'CONDUCTOR_SCORE', 'CONDENSED_SCORE',
 ]);
 
 const DEFAULT_SEG_CONFIDENCE_THRESHOLD = 70;
@@ -98,6 +104,31 @@ export function evaluateQualityGates(input: QualityGateInput): QualityGateResult
     );
   }
 
+  // ── Gate 1b: Cutting instructions must also have valid labels ────────────
+  const cuttingInstructions = metadata.cuttingInstructions ?? [];
+  const forbiddenCut = cuttingInstructions.find(
+    (ci) => isForbiddenLabel(ci.instrument) || isForbiddenLabel(ci.partName),
+  );
+  if (forbiddenCut) {
+    reasons.push(
+      `Cutting instruction with forbidden label: instrument="${forbiddenCut.instrument}" partName="${forbiddenCut.partName}"`,
+    );
+  }
+
+  // ── Gate 1c: Every cutting instruction must have a valid pageRange ───────
+  const missingRange = cuttingInstructions.find(
+    (ci) =>
+      !Array.isArray(ci.pageRange) ||
+      ci.pageRange.length < 2 ||
+      typeof ci.pageRange[0] !== 'number' ||
+      typeof ci.pageRange[1] !== 'number',
+  );
+  if (missingRange) {
+    reasons.push(
+      `Cutting instruction "${missingRange.partName}" missing valid pageRange`,
+    );
+  }
+
   // ── Gate 2: No non-score PART that exceeds maxPagesPerPart ───────────────
   const oversizedPart = parsedParts.find(
     (p) => !SCORE_SECTIONS.has(p.section) && p.pageCount > maxPagesPerPart,
@@ -109,11 +140,38 @@ export function evaluateQualityGates(input: QualityGateInput): QualityGateResult
   }
 
   // ── Gate 3: Multi-part PDFs with >10 pages must produce ≥2 parts ─────────
-  const cutsCount = (metadata.cuttingInstructions ?? []).length;
+  const cutsCount = cuttingInstructions.length;
   if (metadata.isMultiPart && totalPages > 10 && cutsCount < 2) {
     reasons.push(
       `isMultiPart=true with ${totalPages} pages but only ${cutsCount} cutting instruction(s)`,
     );
+  }
+
+  // ── Gate 5: Page coverage — all pages should be covered by cutting instructions
+  if (cuttingInstructions.length > 0 && !missingRange) {
+    const coveredPages = new Set<number>();
+    for (const ci of cuttingInstructions) {
+      if (Array.isArray(ci.pageRange) && ci.pageRange.length >= 2) {
+        for (let p = ci.pageRange[0]; p <= ci.pageRange[1]; p++) {
+          coveredPages.add(p);
+        }
+      }
+    }
+    // Check for uncovered pages (1-indexed)
+    const uncovered: number[] = [];
+    for (let p = 1; p <= totalPages; p++) {
+      if (!coveredPages.has(p)) uncovered.push(p);
+    }
+    if (uncovered.length > 0 && uncovered.length <= 5) {
+      // A small number of uncovered pages is suspicious
+      reasons.push(
+        `${uncovered.length} page(s) not covered by cutting instructions: [${uncovered.join(', ')}]`,
+      );
+    } else if (uncovered.length > 5) {
+      reasons.push(
+        `${uncovered.length} pages not covered by cutting instructions (of ${totalPages} total)`,
+      );
+    }
   }
 
   // ── Gate 4: segmentationConfidence below threshold ───────────────────────

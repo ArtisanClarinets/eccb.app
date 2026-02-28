@@ -152,6 +152,63 @@ export const DEFAULT_HEADER_LABEL_PROMPT = DEFAULT_HEADER_LABEL_USER_PROMPT_TEMP
 export const DEFAULT_ADJUDICATOR_PROMPT = DEFAULT_ADJUDICATOR_USER_PROMPT_TEMPLATE;
 
 // =============================================================================
+// PDF-to-LLM Prompt Template (Enterprise)
+// =============================================================================
+
+/**
+ * When sending the full PDF natively to the LLM (Gemini / Anthropic),
+ * we can skip the per-page sampling verbiage and ask for full analysis.
+ */
+export const DEFAULT_PDF_VISION_USER_PROMPT_TEMPLATE = `Analyze the attached PDF document of sheet music and return ONE JSON object.
+
+Context:
+- Total pages in the PDF: {{totalPages}}
+
+Rules:
+1. All page ranges MUST be 1-indexed and inclusive on both ends.
+2. cuttingInstructions must cover ALL {{totalPages}} pages exactly once (no gaps, no overlaps).
+3. Each cuttingInstruction MUST include a "pageRange" field as [firstPage, lastPage].
+4. Return valid JSON only (no markdown fences, no prose).
+
+Required object schema:
+{
+  "title": string,
+  "subtitle": string | null,
+  "composer": string | null,
+  "arranger": string | null,
+  "publisher": string | null,
+  "copyrightYear": number | null,
+  "ensembleType": string | null,
+  "keySignature": string | null,
+  "timeSignature": string | null,
+  "tempo": string | null,
+  "fileType": "FULL_SCORE" | "CONDUCTOR_SCORE" | "CONDENSED_SCORE" | "PART",
+  "isMultiPart": boolean,
+  "confidenceScore": number,
+  "parts": [
+    {
+      "instrument": string,
+      "partName": string,
+      "section": "Woodwinds" | "Brass" | "Percussion" | "Strings" | "Keyboard" | "Vocals" | "Score" | "Other",
+      "transposition": "C" | "Bb" | "Eb" | "F" | "G" | "D" | "A",
+      "partNumber": number
+    }
+  ],
+  "cuttingInstructions": [
+    {
+      "partName": string,
+      "instrument": string,
+      "section": "Woodwinds" | "Brass" | "Percussion" | "Strings" | "Keyboard" | "Vocals" | "Score" | "Other",
+      "transposition": "C" | "Bb" | "Eb" | "F" | "G" | "D" | "A",
+      "partNumber": number,
+      "pageRange": [number, number]
+    }
+  ],
+  "totalPageCount": number,
+  "notes": string | null
+}`;
+
+// =============================================================================
 // Prompt Builder Functions
 // =============================================================================
 
@@ -172,6 +229,18 @@ export function buildVisionPrompt(
     .replace(/{{totalPages}}/g, String(context.totalPages))
     .replace(/{{pageList}}/g, pageList)
     .replace(/{{sampledPages}}/g, String(context.sampledPageNumbers.length));
+}
+
+/**
+ * Build the PDF-to-LLM first-pass prompt (enterprise mode).
+ * Used when sending the full PDF document natively to the provider.
+ */
+export function buildPdfVisionPrompt(
+  template: string | undefined,
+  context: { totalPages: number },
+): string {
+  const safeTemplate = template?.trim() || DEFAULT_PDF_VISION_USER_PROMPT_TEMPLATE;
+  return safeTemplate.replace(/{{totalPages}}/g, String(context.totalPages));
 }
 
 /**

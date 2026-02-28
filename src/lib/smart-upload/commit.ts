@@ -20,6 +20,7 @@ import type { MusicDifficulty, FileType } from '@prisma/client';
 import type { ExtractedMetadata, ParsedPartRecord } from '@/types/smart-upload';
 import { normalizeExtractedMetadata, normalizePersonName } from './metadata-normalizer';
 import { getSectionForLabel } from './canonical-instruments';
+import { isForbiddenLabel } from './quality-gates';
 
 // =============================================================================
 // Types
@@ -171,6 +172,18 @@ export async function commitSmartUploadSessionToLibrary(
     uploadSession.fileName;
 
   const finalMusicFileKeys: string[] = [];
+
+  // ── Pre-commit validation: reject forbidden labels ────────────────
+  if (isAutonomousCommit && parsedParts.length > 0) {
+    const badPart = parsedParts.find(
+      (p) => isForbiddenLabel(p.instrument) || isForbiddenLabel(p.partName),
+    );
+    if (badPart) {
+      throw new Error(
+        `Cannot auto-commit: part "${badPart.partName}" has forbidden label (instrument="${badPart.instrument}"). Requires human review.`,
+      );
+    }
+  }
 
   // 2. Transaction
   const txResult = await prisma.$transaction(async (tx) => {

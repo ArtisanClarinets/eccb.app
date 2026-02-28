@@ -524,3 +524,39 @@ export function buildGapInstructions(
     pageRange: [start, end] as [number, number],
   }));
 }
+
+/**
+ * Sanitize cutting instructions before passing to splitPdfByCuttingInstructions.
+ * Filters out any instruction with missing/invalid pageRange to prevent crashes.
+ * Returns the filtered array and logs any removed entries.
+ */
+export function sanitizeCuttingInstructionsForSplit(
+  instructions: CuttingInstruction[],
+): CuttingInstruction[] {
+  const valid: CuttingInstruction[] = [];
+  const invalid: string[] = [];
+
+  for (const ci of instructions) {
+    if (
+      Array.isArray(ci.pageRange) &&
+      ci.pageRange.length >= 2 &&
+      typeof ci.pageRange[0] === 'number' &&
+      typeof ci.pageRange[1] === 'number' &&
+      Number.isFinite(ci.pageRange[0]) &&
+      Number.isFinite(ci.pageRange[1])
+    ) {
+      valid.push(ci);
+    } else {
+      invalid.push(ci.partName || 'unnamed');
+    }
+  }
+
+  if (invalid.length > 0) {
+    logger.warn('Removed cutting instructions with invalid pageRange before split', {
+      removed: invalid,
+      remaining: valid.length,
+    });
+  }
+
+  return valid;
+}

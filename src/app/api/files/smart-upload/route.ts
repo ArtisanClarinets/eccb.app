@@ -187,7 +187,7 @@ export async function POST(request: NextRequest) {
         await prisma.smartUploadSession.update({
           where: { uploadSessionId: sessionId },
           data: {
-            parseStatus: 'FAILED',
+            parseStatus: 'PARSE_FAILED',
             routingDecision: 'QUEUE_ENQUEUE_FAILED',
           },
         });

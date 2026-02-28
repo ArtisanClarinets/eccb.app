@@ -14,11 +14,11 @@ import { callVisionModel } from '@/lib/llm';
 import { loadSmartUploadRuntimeConfig, runtimeToAdapterConfig } from '@/lib/llm/config-loader';
 import type { LLMRuntimeConfig } from '@/lib/llm/config-loader';
 import { splitPdfByCuttingInstructions } from '@/lib/services/pdf-splitter';
-import { buildGapInstructions, validateAndNormalizeInstructions } from '@/lib/services/cutting-instructions';
+import { buildGapInstructions, validateAndNormalizeInstructions, sanitizeCuttingInstructionsForSplit } from '@/lib/services/cutting-instructions';
 import { queueSmartUploadAutoCommit } from '@/lib/jobs/smart-upload';
 import { evaluateQualityGates } from '@/lib/smart-upload/quality-gates';
 import { buildPartStorageSlug, buildPartFilename } from '@/lib/smart-upload/part-naming';
-import { jsonrepair as repairJson } from 'jsonrepair';
+import { parseJsonLenient } from '@/lib/smart-upload/json';
 import { logger } from '@/lib/logger';
 import {
   buildVerificationPrompt,
@@ -232,26 +232,12 @@ async function callAdjudicatorLLM(
 }
 
 function parseVerificationResponse(content: string): ExtractedMetadata {
-  const cleaned = content
-    .replace(/^```(?:json)?\s*/im, '')
-    .replace(/\s*```\s*$/im, '')
-    .trim();
-  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    logger.error('parseVerificationResponse: no JSON found', { preview: content.slice(0, 200) });
+  const result = parseJsonLenient<ExtractedMetadata>(content, 'object');
+  if (!result.ok) {
+    logger.error('parseVerificationResponse: JSON extraction failed', { error: result.error });
     throw new Error('No JSON found in verification LLM response');
   }
-  try {
-    return JSON.parse(jsonMatch[0]) as ExtractedMetadata;
-  } catch {
-    // Fallback: attempt to repair malformed JSON from LLM
-    try {
-      return JSON.parse(repairJson(jsonMatch[0])) as ExtractedMetadata;
-    } catch (repairErr) {
-      logger.error('parseVerificationResponse: JSON.parse and jsonrepair both failed', { repairErr });
-      throw new Error('Invalid JSON in verification LLM response');
-    }
-  }
+  return result.value;
 }
 
 function shuffleArray<T>(array: T[]): T[] {
@@ -378,6 +364,8 @@ async function finalizeSmartUploadSession(
   }
 
   if (correctedCuttingInstructions && correctedCuttingInstructions.length > 0) {
+    // Sanitize instructions before splitting — remove entries with invalid pageRange
+    correctedCuttingInstructions = sanitizeCuttingInstructionsForSplit(correctedCuttingInstructions);
     updateData.cuttingInstructions = correctedCuttingInstructions;
 
     if (smartSession.parseStatus !== 'PARSED') {
@@ -441,8 +429,6 @@ async function finalizeSmartUploadSession(
 
   // Auto-approve if legacy mode
   const routingDecision = smartSession.routingDecision as string;
-  const isHighConfidence = finalConfidence >= llmConfig.autoApproveThreshold;
-  const isAutonomousThreshold = finalConfidence >= llmConfig.autonomousApprovalThreshold;
   const isParsed = updateData.parseStatus === 'PARSED' || smartSession.parseStatus === 'PARSED';
 
   // ── Shared Quality Gates ───────────────────────────────────────────────
@@ -473,6 +459,10 @@ async function finalizeSmartUploadSession(
     }
     finalConfidence = gateResult.finalConfidence;
   }
+
+  // Compute thresholds AFTER quality gates have updated finalConfidence
+  const isHighConfidence = finalConfidence >= llmConfig.autoApproveThreshold;
+  const isAutonomousThreshold = finalConfidence >= llmConfig.autonomousApprovalThreshold;
 
   if (isHighConfidence && routingDecision === 'auto_parse_second_pass' && isParsed && !updateData.requiresHumanReview) {
     updateData.autoApproved = true;

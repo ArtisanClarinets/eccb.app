@@ -46,6 +46,12 @@ export interface LLMRuntimeConfig {
   autonomousApprovalThreshold: number;
   /** Maximum pages allowed for a single non-score PART before auto-commit is blocked. Default 12. */
   maxPagesPerPart: number;
+  /** When true AND provider supports PDF input, send the full PDF instead of rendered images. */
+  sendFullPdfToLlm: boolean;
+  /** Maximum LLM calls allowed per upload session. 0 = unlimited. */
+  budgetMaxLlmCalls: number;
+  /** Maximum input tokens allowed per upload session. 0 = unlimited. */
+  budgetMaxInputTokens: number;
   visionModelParams: Record<string, unknown>;
   verificationModelParams: Record<string, unknown>;
   promptVersion?: string;
@@ -81,6 +87,9 @@ const DB_KEYS = [
   'smart_upload_enable_autonomous_mode',
   'smart_upload_autonomous_approval_threshold',
   'smart_upload_max_pages_per_part',
+  'smart_upload_send_full_pdf_to_llm',
+  'smart_upload_budget_max_llm_calls_per_session',
+  'smart_upload_budget_max_input_tokens_per_session',
   'llm_adjudicator_model',
   'llm_two_pass_enabled',
   'llm_vision_system_prompt',
@@ -255,6 +264,9 @@ export async function loadLLMConfig(): Promise<LLMRuntimeConfig> {
     enableFullyAutonomousMode: (db['smart_upload_enable_autonomous_mode'] ?? 'false') === 'true',
     autonomousApprovalThreshold: Number(db['smart_upload_autonomous_approval_threshold'] ?? 95),
     maxPagesPerPart: Number(db['smart_upload_max_pages_per_part'] ?? 12),
+    sendFullPdfToLlm: (db['smart_upload_send_full_pdf_to_llm'] ?? 'false') === 'true',
+    budgetMaxLlmCalls: Number(db['smart_upload_budget_max_llm_calls_per_session'] ?? 5),
+    budgetMaxInputTokens: Number(db['smart_upload_budget_max_input_tokens_per_session'] ?? 500000),
     visionModelParams,
     verificationModelParams,
     promptVersion: db['llm_prompt_version'] || PROMPT_VERSION,

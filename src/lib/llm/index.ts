@@ -22,6 +22,7 @@ import {
   type LLMAdapter,
   type LLMConfig,
   type LabeledImage,
+  type LabeledDocument,
   type VisionRequest,
   type VisionResponse,
 } from './types';
@@ -97,6 +98,7 @@ export async function callVisionModel(
     system?: string;
     responseFormat?: { type: 'json' | 'text' };
     labeledInputs?: LabeledImage[];
+    documents?: LabeledDocument[];
     modelParams?: Record<string, unknown>;
     maxTokens?: number;
     temperature?: number;
@@ -129,6 +131,7 @@ export async function callVisionModel(
     images,
     prompt,
     labeledInputs: options?.labeledInputs,
+    documents: options?.documents,
     system: options?.system,
     responseFormat: options?.responseFormat,
     maxTokens: boundedMaxTokens,
@@ -247,6 +250,7 @@ export async function getVisionResponse(
     system: request.system,
     responseFormat: request.responseFormat,
     labeledInputs: request.labeledInputs,
+    documents: request.documents,
     modelParams: request.modelParams,
   });
 }

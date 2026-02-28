@@ -31,6 +31,8 @@ export interface ProviderMeta {
   apiKeyLabel: string;
   apiKeyPlaceholder: string;
   docsUrl: string;
+  /** Whether this provider accepts native PDF document input */
+  supportsPdfInput: boolean;
 }
 
 export const LLM_PROVIDERS: ProviderMeta[] = [
@@ -45,6 +47,7 @@ export const LLM_PROVIDERS: ProviderMeta[] = [
     apiKeyLabel: '',
     apiKeyPlaceholder: '',
     docsUrl: 'https://ollama.com',
+    supportsPdfInput: false,
   },
   {
     value: 'ollama-cloud',
@@ -57,6 +60,7 @@ export const LLM_PROVIDERS: ProviderMeta[] = [
     apiKeyLabel: 'Ollama Cloud API Key',
     apiKeyPlaceholder: 'oc_...',
     docsUrl: 'https://ollama.com/cloud',
+    supportsPdfInput: false,
   },
   {
     value: 'openai',
@@ -69,6 +73,7 @@ export const LLM_PROVIDERS: ProviderMeta[] = [
     apiKeyLabel: 'OpenAI API Key',
     apiKeyPlaceholder: 'sk-...',
     docsUrl: 'https://platform.openai.com/api-keys',
+    supportsPdfInput: false,
   },
   {
     value: 'anthropic',
@@ -81,6 +86,7 @@ export const LLM_PROVIDERS: ProviderMeta[] = [
     apiKeyLabel: 'Anthropic API Key',
     apiKeyPlaceholder: 'sk-ant-...',
     docsUrl: 'https://console.anthropic.com/keys',
+    supportsPdfInput: true,
   },
   {
     value: 'gemini',
@@ -93,6 +99,7 @@ export const LLM_PROVIDERS: ProviderMeta[] = [
     apiKeyLabel: 'Gemini API Key',
     apiKeyPlaceholder: 'AIza...',
     docsUrl: 'https://aistudio.google.com/app/apikey',
+    supportsPdfInput: true,
   },
   {
     value: 'openrouter',
@@ -105,6 +112,7 @@ export const LLM_PROVIDERS: ProviderMeta[] = [
     apiKeyLabel: 'OpenRouter API Key',
     apiKeyPlaceholder: 'sk-or-...',
     docsUrl: 'https://openrouter.ai/keys',
+    supportsPdfInput: false,
   },
   {
     value: 'mistral',
@@ -118,6 +126,7 @@ export const LLM_PROVIDERS: ProviderMeta[] = [
     apiKeyLabel: 'Mistral API Key',
     apiKeyPlaceholder: 'm_...',
     docsUrl: 'https://console.mistral.ai/api-keys/',
+    supportsPdfInput: false,
   },
   {
     value: 'groq',
@@ -131,6 +140,7 @@ export const LLM_PROVIDERS: ProviderMeta[] = [
     apiKeyLabel: 'Groq API Key',
     apiKeyPlaceholder: 'gsk_...',
     docsUrl: 'https://console.groq.com/keys',
+    supportsPdfInput: false,
   },
   {
     value: 'custom',
@@ -143,6 +153,7 @@ export const LLM_PROVIDERS: ProviderMeta[] = [
     apiKeyLabel: 'Custom API Key',
     apiKeyPlaceholder: 'Bearer token or API key',
     docsUrl: '',
+    supportsPdfInput: false,
   },
 ];
 

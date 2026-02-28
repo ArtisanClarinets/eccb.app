@@ -335,6 +335,20 @@ export async function splitPdfByCuttingInstructions(
     for (const instruction of instructions) {
       const partStart = nowMs();
 
+      // Guard: pageRange must be a valid two-element array
+      if (
+        !Array.isArray(instruction.pageRange) ||
+        instruction.pageRange.length < 2 ||
+        typeof instruction.pageRange[0] !== 'number' ||
+        typeof instruction.pageRange[1] !== 'number'
+      ) {
+        logger.warn('Skipping instruction with missing or invalid pageRange', {
+          partName: instruction.partName,
+          pageRange: instruction.pageRange,
+        });
+        continue;
+      }
+
       let [startPage, endPage] = instruction.pageRange;
 
       if (indexing === 'one') {

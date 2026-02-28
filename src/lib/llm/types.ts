@@ -31,6 +31,16 @@ export interface LabeledImage {
   label?: string;
 }
 
+/** A document (e.g. PDF) sent directly to the LLM instead of rendered images. */
+export interface LabeledDocument {
+  /** MIME type (typically 'application/pdf') */
+  mimeType: string;
+  /** Base64-encoded document data */
+  base64Data: string;
+  /** Human-readable label for logging */
+  label?: string;
+}
+
 export interface ResponseFormat {
   type: 'json' | 'text';
 }
@@ -39,6 +49,9 @@ export interface VisionRequest {
   images: Array<{ mimeType: string; base64Data: string; label?: string }>;
   /** Labeled inputs for multi-source verification (images with context labels) */
   labeledInputs?: LabeledImage[];
+  /** Documents (PDFs) to send directly to the LLM instead of images.
+   *  When provided + supported by the provider, images are ignored.  */
+  documents?: LabeledDocument[];
   prompt: string;
   /** Optional system-level instruction (passed as system message or role-based) */
   system?: string;

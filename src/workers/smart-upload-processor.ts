@@ -32,14 +32,20 @@ import {
   SmartUploadJobProgress,
 } from '@/lib/jobs/smart-upload';
 import { buildPartFilename, buildPartStorageSlug, normalizeInstrumentLabel } from '@/lib/smart-upload/part-naming';
-import { evaluateQualityGates } from '@/lib/smart-upload/quality-gates';
-import { jsonrepair as repairJson } from 'jsonrepair';
+import { evaluateQualityGates, isForbiddenLabel } from '@/lib/smart-upload/quality-gates';
+import { parseJsonLenient, safePreview } from '@/lib/smart-upload/json';
+import { createSessionBudget } from '@/lib/smart-upload/budgets';
+import { getProviderMeta } from '@/lib/llm/providers';
+import type { LabeledDocument } from '@/lib/llm/types';
+import { sanitizeCuttingInstructionsForSplit } from '@/lib/services/cutting-instructions';
 import { logger } from '@/lib/logger';
 import { deepCloneJSON } from '@/lib/json';
 import {
   buildHeaderLabelPrompt,
+  buildPdfVisionPrompt,
   buildVisionPrompt,
   DEFAULT_HEADER_LABEL_SYSTEM_PROMPT,
+  DEFAULT_PDF_VISION_USER_PROMPT_TEMPLATE,
   DEFAULT_VISION_SYSTEM_PROMPT,
   DEFAULT_VISION_USER_PROMPT_TEMPLATE,
   PROMPT_VERSION,
@@ -124,15 +130,7 @@ async function samplePdfPages(
   return { images, totalPages, sampledIndices: indices };
 }
 
-// Labels returned by the LLM that must be treated as "no label" rather than a real
-// instrument name.  The model is sometimes asked to return null JSON but instead
-// returns one of these sentinel strings.
-const FORBIDDEN_LABEL_STRINGS = new Set(['null', 'none', 'n/a', 'na', 'unknown', 'undefined']);
-
-/** Returns true when a string value should be treated as an absent/unknown label. */
-function isForbiddenLabel(s: string): boolean {
-  return FORBIDDEN_LABEL_STRINGS.has(s.trim().toLowerCase());
-}
+// isForbiddenLabel is now imported from '@/lib/smart-upload/quality-gates'
 
 interface HeaderLabelEntry {
   page: number;
@@ -141,54 +139,41 @@ interface HeaderLabelEntry {
 }
 
 function parseHeaderLabelResponse(content: string): HeaderLabelEntry[] {
-  const cleaned = content
-    .replace(/^```(?:json)?\s*/im, '')
-    .replace(/\s*```\s*$/im, '')
-    .trim();
-
-  const arrayMatch = cleaned.match(/\[[\s\S]*\]/);
-  if (!arrayMatch) {
-    logger.warn('parseHeaderLabelResponse: no JSON array found', {
-      contentPreview: content.slice(0, 200),
+  const result = parseJsonLenient<unknown[]>(content, 'array');
+  if (!result.ok) {
+    logger.warn('parseHeaderLabelResponse: JSON extraction failed', {
+      error: result.error,
     });
     return [];
   }
 
-  try {
-    const parsed = JSON.parse(arrayMatch[0]) as unknown[];
-    return parsed
-      .map((entry) => {
-        if (!entry || typeof entry !== 'object') return null;
-        const value = entry as Record<string, unknown>;
-        const page = Number(value.page);
-        const confidence = Number(value.confidence);
-        const rawLabel =
-          typeof value.label === 'string' && value.label.trim().length > 0
-            ? value.label.trim()
-            : null;
-        // Treat sentinel strings returned by the LLM as absent labels so they
-        // never propagate into segmentation as fake instrument names.
-        const label = rawLabel && !isForbiddenLabel(rawLabel) ? rawLabel : null;
+  return (result.value as unknown[])
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') return null;
+      const value = entry as Record<string, unknown>;
+      const page = Number(value.page);
+      const confidence = Number(value.confidence);
+      const rawLabel =
+        typeof value.label === 'string' && value.label.trim().length > 0
+          ? value.label.trim()
+          : null;
+      // Treat sentinel strings returned by the LLM as absent labels so they
+      // never propagate into segmentation as fake instrument names.
+      const label = rawLabel && !isForbiddenLabel(rawLabel) ? rawLabel : null;
 
-        if (!Number.isFinite(page) || !Number.isInteger(page) || page < 1) {
-          return null;
-        }
+      if (!Number.isFinite(page) || !Number.isInteger(page) || page < 1) {
+        return null;
+      }
 
-        return {
-          page,
-          label,
-          confidence: Number.isFinite(confidence)
-            ? Math.max(0, Math.min(100, Math.round(confidence)))
-            : 0,
-        };
-      })
-      .filter((entry): entry is HeaderLabelEntry => entry !== null);
-  } catch (error) {
-    logger.warn('parseHeaderLabelResponse: invalid JSON', {
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return [];
-  }
+      return {
+        page,
+        label,
+        confidence: Number.isFinite(confidence)
+          ? Math.max(0, Math.min(100, Math.round(confidence)))
+          : 0,
+      };
+    })
+    .filter((entry): entry is HeaderLabelEntry => entry !== null);
 }
 
 function toOneIndexedInstructions(instructions: CuttingInstruction[]): CuttingInstruction[] {
@@ -201,34 +186,15 @@ function toOneIndexedInstructions(instructions: CuttingInstruction[]): CuttingIn
 
 
 function parseVisionResponse(content: string, totalPages: number): ExtractedMetadata {
-  // 1. Strip markdown code fences
-  const cleaned = content
-    .replace(/^```(?:json)?\s*/im, '')
-    .replace(/\s*```\s*$/im, '')
-    .trim();
-
-  // 2. Extract first top-level JSON object
-  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    logger.error('parseVisionResponse: no JSON object found', {
-      contentPreview: content.slice(0, 200),
+  const result = parseJsonLenient<Record<string, unknown>>(content, 'object');
+  if (!result.ok) {
+    logger.error('parseVisionResponse: JSON extraction failed', {
+      error: result.error,
     });
     return buildFallbackMetadata(totalPages);
   }
 
-  let parsed: Record<string, unknown>;
-  try {
-    parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
-  } catch {
-    // Fallback: attempt to repair malformed JSON from LLM
-    try {
-      parsed = JSON.parse(repairJson(jsonMatch[0])) as Record<string, unknown>;
-      logger.warn('parseVisionResponse: JSON repaired successfully');
-    } catch (repairErr) {
-      logger.error('parseVisionResponse: JSON.parse and jsonrepair both failed', { repairErr });
-      return buildFallbackMetadata(totalPages);
-    }
-  }
+  const parsed = result.value;
 
   const title =
     typeof parsed.title === 'string' && parsed.title.trim()
@@ -371,6 +337,16 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
   const llmConfig = await loadSmartUploadRuntimeConfig();
   const adapterConfig = runtimeToAdapterConfig(llmConfig);
 
+  // ── Budget tracking ────────────────────────────────────────────────────
+  const budget = createSessionBudget(sessionId, {
+    smart_upload_budget_max_llm_calls_per_session: llmConfig.budgetMaxLlmCalls,
+    smart_upload_budget_max_input_tokens_per_session: llmConfig.budgetMaxInputTokens,
+  });
+
+  // ── PDF-to-LLM capability detection ───────────────────────────────────
+  const providerMeta = getProviderMeta(llmConfig.provider);
+  const canSendPdf = llmConfig.sendFullPdfToLlm && (providerMeta?.supportsPdfInput ?? false);
+
   // Step 1: Download and render PDF to images
   await progress('downloading', 5, 'Downloading PDF from storage');
 
@@ -453,6 +429,17 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
       // -----------------------------------------------------------------------
       const allParsedHeaderLabels: HeaderLabelEntry[] = [];
       for (let batchStart = 0; batchStart < headerCropImages.length; batchStart += MAX_HEADER_CROP_BATCH_SIZE) {
+        // Budget check before each header-label batch call
+        const headerBudgetCheck = budget.check();
+        if (!headerBudgetCheck.allowed) {
+          logger.warn('Budget exhausted during header-label pass; using partial results', {
+            sessionId,
+            reason: headerBudgetCheck.reason,
+            labelsCollected: allParsedHeaderLabels.length,
+          });
+          break;
+        }
+
         const batchEnd = Math.min(batchStart + MAX_HEADER_CROP_BATCH_SIZE, headerCropImages.length);
         const batchPageIndices = allPageIndices.slice(batchStart, batchEnd);
         const batchImages = headerCropImages.slice(batchStart, batchEnd);
@@ -477,6 +464,7 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
             modelParams: llmConfig.verificationModelParams,
           }
         );
+        budget.record();
 
         const batchLabels = parseHeaderLabelResponse(batchResult.content);
         allParsedHeaderLabels.push(...batchLabels);
@@ -528,32 +516,79 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
   // Step 2: Vision LLM analysis
   await progress('analyzing', 30, 'Running AI vision analysis on pages');
 
-  const images = pageImages.map((base64Data, index) => ({
-    mimeType: 'image/png' as const,
-    base64Data,
-    label: `Original Page ${sampledIndices[index] + 1}`,
-  }));
+  let visionResult: { content: string };
 
-  const visionPrompt = buildVisionPrompt(
-    DEFAULT_VISION_USER_PROMPT_TEMPLATE,
-    {
-      totalPages,
-      sampledPageNumbers: sampledIndices,
-    }
-  );
+  if (canSendPdf) {
+    // ── PDF-to-LLM mode: send the whole PDF as a native document ──────────
+    logger.info('Using PDF-to-LLM mode', { sessionId, provider: llmConfig.provider });
 
-  const visionResult = await callVisionModel(
-    adapterConfig,
-    images,
-    visionPrompt,
-    {
-      system: llmConfig.visionSystemPrompt || DEFAULT_VISION_SYSTEM_PROMPT,
-      responseFormat: { type: 'json' },
-      modelParams: llmConfig.visionModelParams,
-      maxTokens: 4096,
-      temperature: 0.1,
+    const budgetCheck = budget.check();
+    if (!budgetCheck.allowed) {
+      logger.warn('Budget exhausted before vision call', { sessionId, reason: budgetCheck.reason });
+      throw new Error(`Smart Upload budget exhausted: ${budgetCheck.reason}`);
     }
-  );
+
+    const pdfDocument: LabeledDocument = {
+      mimeType: 'application/pdf',
+      base64Data: pdfBuffer.toString('base64'),
+      label: 'Full Score PDF',
+    };
+
+    const pdfPrompt = buildPdfVisionPrompt(
+      DEFAULT_PDF_VISION_USER_PROMPT_TEMPLATE,
+      { totalPages },
+    );
+
+    visionResult = await callVisionModel(
+      adapterConfig,
+      [], // no images — PDF is the input
+      pdfPrompt,
+      {
+        system: llmConfig.visionSystemPrompt || DEFAULT_VISION_SYSTEM_PROMPT,
+        responseFormat: { type: 'json' },
+        modelParams: llmConfig.visionModelParams,
+        maxTokens: 4096,
+        temperature: 0.1,
+        documents: [pdfDocument],
+      },
+    );
+    budget.record();
+  } else {
+    // ── Standard image-based vision mode ──────────────────────────────────
+    const budgetCheck = budget.check();
+    if (!budgetCheck.allowed) {
+      logger.warn('Budget exhausted before vision call', { sessionId, reason: budgetCheck.reason });
+      throw new Error(`Smart Upload budget exhausted: ${budgetCheck.reason}`);
+    }
+
+    const images = pageImages.map((base64Data, index) => ({
+      mimeType: 'image/png' as const,
+      base64Data,
+      label: `Original Page ${sampledIndices[index] + 1}`,
+    }));
+
+    const visionPrompt = buildVisionPrompt(
+      DEFAULT_VISION_USER_PROMPT_TEMPLATE,
+      {
+        totalPages,
+        sampledPageNumbers: sampledIndices,
+      },
+    );
+
+    visionResult = await callVisionModel(
+      adapterConfig,
+      images,
+      visionPrompt,
+      {
+        system: llmConfig.visionSystemPrompt || DEFAULT_VISION_SYSTEM_PROMPT,
+        responseFormat: { type: 'json' },
+        modelParams: llmConfig.visionModelParams,
+        maxTokens: 4096,
+        temperature: 0.1,
+      },
+    );
+    budget.record();
+  }
 
   const extraction = parseVisionResponse(visionResult.content, totalPages);
 
@@ -655,7 +690,8 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
   // Step 4: Split PDF
   await progress('splitting', 70, `Splitting PDF into ${validation.instructions.length} parts`);
 
-  const validatedInstructions = normalizedInstructionsZero;
+  // Sanitize instructions before splitting — remove entries with invalid pageRange
+  const validatedInstructions = sanitizeCuttingInstructionsForSplit(normalizedInstructionsZero);
 
   const splitResults = await splitPdfByCuttingInstructions(
     pdfBuffer,
@@ -787,6 +823,7 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
     partsCreated: parsedParts.length,
     routingDecision,
     confidence: extraction.confidenceScore,
+    budget: budget.snapshot(),
   });
 
   // Free render cache for this session
