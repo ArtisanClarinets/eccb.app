@@ -86,7 +86,7 @@ describe('SmartUploadSettingsSchema', () => {
 
   describe('provider validation', () => {
     it('should accept all valid provider values', () => {
-      const providers = ['ollama', 'openai', 'anthropic', 'gemini', 'openrouter', 'custom'] as const;
+      const providers = ['ollama', 'ollama-cloud', 'openai', 'anthropic', 'gemini', 'openrouter', 'mistral', 'groq', 'custom'] as const;
       for (const provider of providers) {
         const result = SmartUploadSettingsSchema.safeParse({
           ...validSettings,
@@ -322,7 +322,7 @@ describe('SmartUploadSettingsSchema', () => {
 
 describe('ProviderValueSchema', () => {
   it('should accept all valid provider values', () => {
-    const providers = ['ollama', 'openai', 'anthropic', 'gemini', 'openrouter', 'custom'];
+    const providers = ['ollama', 'ollama-cloud', 'openai', 'anthropic', 'gemini', 'openrouter', 'mistral', 'groq', 'custom'];
     for (const provider of providers) {
       const result = ProviderValueSchema.safeParse(provider);
       expect(result.success).toBe(true);
@@ -346,6 +346,9 @@ describe('getApiKeyFieldForProvider', () => {
     expect(getApiKeyFieldForProvider('anthropic')).toBe('llm_anthropic_api_key');
     expect(getApiKeyFieldForProvider('gemini')).toBe('llm_gemini_api_key');
     expect(getApiKeyFieldForProvider('openrouter')).toBe('llm_openrouter_api_key');
+    expect(getApiKeyFieldForProvider('ollama-cloud')).toBe('llm_ollama_cloud_api_key');
+    expect(getApiKeyFieldForProvider('mistral')).toBe('llm_mistral_api_key');
+    expect(getApiKeyFieldForProvider('groq')).toBe('llm_groq_api_key');
     expect(getApiKeyFieldForProvider('custom')).toBe('llm_custom_api_key');
   });
 
@@ -356,8 +359,9 @@ describe('getApiKeyFieldForProvider', () => {
 });
 
 describe('providerRequiresApiKey', () => {
-  it('should return false for ollama', () => {
+  it('should return false for local-only providers', () => {
     expect(providerRequiresApiKey('ollama')).toBe(false);
+    expect(providerRequiresApiKey('custom')).toBe(false);
   });
 
   it('should return true for all cloud providers', () => {
@@ -365,18 +369,26 @@ describe('providerRequiresApiKey', () => {
     expect(providerRequiresApiKey('anthropic')).toBe(true);
     expect(providerRequiresApiKey('gemini')).toBe(true);
     expect(providerRequiresApiKey('openrouter')).toBe(true);
-    expect(providerRequiresApiKey('custom')).toBe(true);
+    expect(providerRequiresApiKey('ollama-cloud')).toBe(true);
+    expect(providerRequiresApiKey('mistral')).toBe(true);
+    expect(providerRequiresApiKey('groq')).toBe(true);
   });
 });
 
 describe('providerRequiresEndpoint', () => {
-  it('should return true only for custom provider', () => {
+  it('should return true for custom and ollama providers', () => {
     expect(providerRequiresEndpoint('custom')).toBe(true);
-    expect(providerRequiresEndpoint('ollama')).toBe(false);
+    expect(providerRequiresEndpoint('ollama')).toBe(true);
+  });
+
+  it('should return false for cloud providers', () => {
     expect(providerRequiresEndpoint('openai')).toBe(false);
     expect(providerRequiresEndpoint('anthropic')).toBe(false);
     expect(providerRequiresEndpoint('gemini')).toBe(false);
     expect(providerRequiresEndpoint('openrouter')).toBe(false);
+    expect(providerRequiresEndpoint('ollama-cloud')).toBe(false);
+    expect(providerRequiresEndpoint('mistral')).toBe(false);
+    expect(providerRequiresEndpoint('groq')).toBe(false);
   });
 });
 
@@ -611,6 +623,7 @@ describe('validateSmartUploadSettings', () => {
       llm_verification_model: 'qwen2.5:7b',
       llm_vision_system_prompt: 'Test prompt',
       llm_verification_system_prompt: 'Test prompt',
+      llm_endpoint_url: 'http://localhost:11434',
     };
 
     const result = validateSmartUploadSettings(settings);
@@ -806,12 +819,15 @@ describe('SECRET_KEYS', () => {
     expect(SECRET_KEYS).toContain('llm_anthropic_api_key');
     expect(SECRET_KEYS).toContain('llm_openrouter_api_key');
     expect(SECRET_KEYS).toContain('llm_gemini_api_key');
+    expect(SECRET_KEYS).toContain('llm_ollama_cloud_api_key');
+    expect(SECRET_KEYS).toContain('llm_mistral_api_key');
+    expect(SECRET_KEYS).toContain('llm_groq_api_key');
     expect(SECRET_KEYS).toContain('llm_custom_api_key');
   });
 
   it('should be immutable (readonly array)', () => {
     // TypeScript ensures this at compile time
     expect(Array.isArray(SECRET_KEYS)).toBe(true);
-    expect(SECRET_KEYS.length).toBe(5);
+    expect(SECRET_KEYS.length).toBe(8);
   });
 });

@@ -109,6 +109,7 @@ const DEFAULT_SETTINGS = {
   llm_verification_model: 'qwen2.5:7b',
   llm_vision_system_prompt: 'Test vision prompt',
   llm_verification_system_prompt: 'Test verification prompt',
+  llm_endpoint_url: 'http://localhost:11434',
   llm_prompt_version: '1.0.0',
   llm_openai_api_key: 'sk-secret',
   llm_anthropic_api_key: '',
@@ -459,6 +460,7 @@ describe('Smart Upload Settings API', () => {
           llm_verification_model: 'gpt-4o-mini',
           llm_vision_system_prompt: 'Test',
           llm_verification_system_prompt: 'Test',
+          llm_openai_api_key: 'sk-test-key',
         },
         masked: {
           llm_provider: 'openai',
@@ -466,6 +468,7 @@ describe('Smart Upload Settings API', () => {
           llm_verification_model: 'gpt-4o-mini',
           llm_vision_system_prompt: 'Test',
           llm_verification_system_prompt: 'Test',
+          llm_openai_api_key: '__SET__',
         },
       });
 
@@ -475,6 +478,7 @@ describe('Smart Upload Settings API', () => {
           settings: [
             { key: 'llm_provider', value: 'ollama' },
             { key: 'llm_vision_model', value: 'llama3.2-vision' },
+            { key: 'llm_endpoint_url', value: 'http://localhost:11434' },
           ],
         },
       });
@@ -497,6 +501,7 @@ describe('Smart Upload Settings API', () => {
           llm_verification_model: 'qwen2.5:7b',
           llm_vision_system_prompt: 'Test',
           llm_verification_system_prompt: 'Test',
+          llm_endpoint_url: 'http://localhost:11434',
         },
         masked: {
           llm_provider: 'ollama',
@@ -504,6 +509,7 @@ describe('Smart Upload Settings API', () => {
           llm_verification_model: 'qwen2.5:7b',
           llm_vision_system_prompt: 'Test',
           llm_verification_system_prompt: 'Test',
+          llm_endpoint_url: 'http://localhost:11434',
         },
       });
 
@@ -513,6 +519,7 @@ describe('Smart Upload Settings API', () => {
           settings: [
             { key: 'llm_provider', value: 'ollama' },
             { key: 'llm_vision_model', value: 'llama3.2-vision' },
+            { key: 'llm_endpoint_url', value: 'http://localhost:11434' },
           ],
         },
       });
@@ -525,11 +532,29 @@ describe('Smart Upload Settings API', () => {
     });
 
     it('should skip disallowed keys', async () => {
+      mockLoadSmartUploadSettingsFromDB.mockResolvedValue({
+        settings: {
+          llm_provider: 'openai',
+          llm_vision_model: 'gpt-4o',
+          llm_verification_model: 'gpt-4o-mini',
+          llm_vision_system_prompt: 'Test',
+          llm_verification_system_prompt: 'Test',
+          llm_openai_api_key: 'sk-test-key',
+        },
+        masked: {
+          llm_provider: 'openai',
+          llm_vision_model: 'gpt-4o',
+          llm_verification_model: 'gpt-4o-mini',
+          llm_vision_system_prompt: 'Test',
+          llm_verification_system_prompt: 'Test',
+          llm_openai_api_key: '__SET__',
+        },
+      });
       const request = createMockRequest({
         method: 'PUT',
         body: {
           settings: [
-            { key: 'llm_provider', value: 'ollama' },
+            { key: 'llm_provider', value: 'openai' },
             { key: 'disallowed_key', value: 'some-value' },
           ],
         },
@@ -571,6 +596,7 @@ describe('Smart Upload Settings API', () => {
           llm_verification_model: 'gpt-4o-mini',
           llm_vision_system_prompt: 'Test',
           llm_verification_system_prompt: 'Test',
+          llm_openai_api_key: 'sk-test-key',
         },
         masked: {
           llm_provider: 'openai',
@@ -578,6 +604,7 @@ describe('Smart Upload Settings API', () => {
           llm_verification_model: 'gpt-4o-mini',
           llm_vision_system_prompt: 'Test',
           llm_verification_system_prompt: 'Test',
+          llm_openai_api_key: '__SET__',
         },
       });
       mockPrismaTransaction.mockRejectedValue(new Error('Database error'));
@@ -585,7 +612,7 @@ describe('Smart Upload Settings API', () => {
       const request = createMockRequest({
         method: 'PUT',
         body: {
-          settings: [{ key: 'llm_provider', value: 'ollama' }],
+          settings: [{ key: 'llm_vision_model', value: 'gpt-4o-new' }],
         },
       });
 
@@ -902,7 +929,7 @@ describe('Smart Upload Settings API', () => {
 
       expect(response.status).toBe(200);
       expect(data.ok).toBe(false);
-      expect(data.error).toContain('timed out');
+      expect(data.error).toContain('Could not reach Ollama');
     });
 
     it('should be CSRF protected', async () => {

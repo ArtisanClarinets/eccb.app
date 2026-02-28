@@ -89,7 +89,6 @@ function safeErrorDetails(err: unknown) {
 }
 
 function nowMs(): number {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const perf = (globalThis as any)?.performance;
   if (perf?.now) return perf.now();
   return Date.now();
@@ -200,7 +199,6 @@ async function tryOcrBase64ImageToText(base64PngOrJpeg: string): Promise<string>
 
   try {
     // Optional dependency – only works if installed.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const mod: any = await import('tesseract.js').catch(() => null);
     if (!mod?.recognize) {
       logger.warn('OCR engine unavailable (tesseract.js not installed); skipping OCR');
@@ -211,7 +209,6 @@ async function tryOcrBase64ImageToText(base64PngOrJpeg: string): Promise<string>
     // NOTE: we default to image/png; OCR will still run even if the content was jpeg base64.
     const dataUrl = `data:image/png;base64,${base64PngOrJpeg}`;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const result: any = await mod.recognize(dataUrl, 'eng', {
       // Keep logs quiet; do not emit OCR text or internal debug.
       logger: () => undefined,

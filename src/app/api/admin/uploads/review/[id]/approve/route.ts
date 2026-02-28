@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getSession } from '@/lib/auth/guards';
 import { requirePermission } from '@/lib/auth/permissions';
+import { MUSIC_CREATE } from '@/lib/auth/permission-constants';
 import { logger } from '@/lib/logger';
 import { z } from 'zod';
 import { commitSmartUploadSessionToLibrary } from '@/lib/smart-upload/commit';
@@ -14,6 +15,7 @@ import type { CommitOverrides } from '@/lib/smart-upload/commit';
 const approveSchema = z.object({
   title: z.string().min(1, 'Title is required'),
   composer: z.string().optional(),
+  arranger: z.string().optional(),
   publisher: z.string().optional(),
   instrument: z.string().optional(),
   partNumber: z.string().optional(),
@@ -39,8 +41,8 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Check permission
-    await requirePermission('music:create');
+    // Check permission using canonical constant
+    await requirePermission(MUSIC_CREATE);
 
     const { id } = await params;
 
@@ -63,6 +65,7 @@ export async function POST(
     const overrides: CommitOverrides = {
       title: validatedData.title,
       composer: validatedData.composer,
+      arranger: validatedData.arranger,
       publisher: validatedData.publisher,
       instrument: validatedData.instrument,
       partNumber: validatedData.partNumber,
@@ -87,6 +90,7 @@ export async function POST(
       userId: session.user.id,
       pieceId: commitResult.musicPieceId,
       title: commitResult.musicPieceTitle,
+      wasIdempotent: commitResult.wasIdempotent,
     });
 
     return NextResponse.json({
@@ -104,7 +108,10 @@ export async function POST(
         id: commitResult.musicFileId,
       },
       partsCommitted: commitResult.partsCommitted,
-      message: `Successfully approved and imported "${commitResult.musicPieceTitle}" to music library.`,
+      wasIdempotent: commitResult.wasIdempotent,
+      message: commitResult.wasIdempotent
+        ? `Session was already committed. Existing piece: "${commitResult.musicPieceTitle}".`
+        : `Successfully approved and imported "${commitResult.musicPieceTitle}" to music library.`,
     });
   } catch (error) {
     if (error instanceof z.ZodError) {

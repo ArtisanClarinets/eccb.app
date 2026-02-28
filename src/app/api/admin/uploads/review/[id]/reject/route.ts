@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getSession } from '@/lib/auth/guards';
 import { requirePermission } from '@/lib/auth/permissions';
+import { MUSIC_EDIT } from '@/lib/auth/permission-constants';
 import { logger } from '@/lib/logger';
 import { cleanupSmartUploadTempFiles } from '@/lib/services/smart-upload-cleanup';
 import { z } from 'zod';
@@ -29,8 +30,8 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Check permission - require music:edit permission
-    await requirePermission('music:edit');
+    // Check permission using permission constant
+    await requirePermission(MUSIC_EDIT);
 
     const { id } = await params;
 
@@ -41,6 +42,7 @@ export async function POST(
     // Find the session
     const uploadSession = await prisma.smartUploadSession.findUnique({
       where: { uploadSessionId: id },
+      select: { uploadSessionId: true, status: true },
     });
 
     if (!uploadSession) {
@@ -50,30 +52,57 @@ export async function POST(
       );
     }
 
+    // Only allow rejection of sessions that are pending review
     if (uploadSession.status !== 'PENDING_REVIEW') {
       return NextResponse.json(
-        { error: 'Session is not pending review' },
+        {
+          error: 'Session is not pending review',
+          currentStatus: uploadSession.status,
+        },
         { status: 400 }
       );
     }
 
-    // Update the session status to REJECTED
+    // Prevent rejecting already-committed sessions
+    const alreadyCommitted = await prisma.musicFile.findFirst({
+      where: { originalUploadId: id },
+      select: { id: true },
+    });
+    if (alreadyCommitted) {
+      return NextResponse.json(
+        { error: 'Session has already been committed to the library and cannot be rejected' },
+        { status: 400 }
+      );
+    }
+
+    // Update the session status to REJECTED, persisting rejection reason
     const updatedSession = await prisma.smartUploadSession.update({
       where: { uploadSessionId: id },
       data: {
         status: 'REJECTED',
         reviewedBy: session.user.id,
         reviewedAt: new Date(),
+        // Store rejection reason in routingDecision for audit trail
+        routingDecision: validatedData.reason
+          ? `REJECTED: ${validatedData.reason}`
+          : 'REJECTED',
       },
     });
 
-    // Clean up temporary files after rejection
-    await cleanupSmartUploadTempFiles(id);
+    // Clean up temporary files after rejection (best-effort, non-fatal)
+    try {
+      await cleanupSmartUploadTempFiles(id);
+    } catch (cleanupErr) {
+      logger.warn('Failed to clean up temp files after rejection', {
+        sessionId: id,
+        error: cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr),
+      });
+    }
 
     logger.info('Smart upload rejected', {
       sessionId: id,
       userId: session.user.id,
-      reason: validatedData.reason,
+      reason: validatedData.reason ?? 'No reason provided',
     });
 
     return NextResponse.json({

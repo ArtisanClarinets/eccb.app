@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getSession } from '@/lib/auth/guards';
-import { checkUserPermission } from '@/lib/auth/permissions';
+import { requirePermission } from '@/lib/auth/permissions';
+import { MUSIC_VIEW_ALL } from '@/lib/auth/permission-constants';
 import { logger } from '@/lib/logger';
 import type { ParsedPartRecord, CuttingInstruction, ParseStatus, SecondPassStatus } from '@/types/smart-upload';
 
@@ -12,6 +13,7 @@ import type { ParsedPartRecord, CuttingInstruction, ParseStatus, SecondPassStatu
 interface ExtractedMetadata {
   title: string;
   composer?: string;
+  arranger?: string;
   publisher?: string;
   instrument?: string;
   partNumber?: string;
@@ -25,7 +27,7 @@ interface ExtractedMetadata {
 }
 
 // =============================================================================
-// GET /api/admin/uploads/review - List pending sessions
+// GET /api/admin/uploads/review - List sessions for review
 // =============================================================================
 
 export async function GET(request: NextRequest) {
@@ -36,25 +38,31 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Check permission - require music:read or music:edit permission
-    const hasPermission = await checkUserPermission(session.user.id, 'music:read');
-    if (!hasPermission) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
+    // Check permission using canonical constant
+    await requirePermission(MUSIC_VIEW_ALL);
 
     // Get search params
     const searchParams = request.nextUrl.searchParams;
     const status = searchParams.get('status') || 'PENDING_REVIEW';
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '50', 10)));
+    const skip = (page - 1) * limit;
 
-    // Fetch sessions with the specified status
-    const sessions = await prisma.smartUploadSession.findMany({
-      where: {
-        status: status as 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED',
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+    // Build where clause — default to exception sessions (PENDING_REVIEW)
+    const where = {
+      status: status as 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED',
+    };
+
+    // Fetch sessions with pagination
+    const [sessions, totalCount] = await Promise.all([
+      prisma.smartUploadSession.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      prisma.smartUploadSession.count({ where }),
+    ]);
 
     // Transform sessions to include extracted metadata and new fields
     const transformedSessions = sessions.map((s) => ({
@@ -71,12 +79,13 @@ export async function GET(request: NextRequest) {
       createdAt: s.createdAt,
       updatedAt: s.updatedAt,
       extractedMetadata: s.extractedMetadata as ExtractedMetadata | null,
-      // New fields
       parsedParts: s.parsedParts as ParsedPartRecord[] | null,
       parseStatus: s.parseStatus as ParseStatus | null,
       secondPassStatus: s.secondPassStatus as SecondPassStatus | null,
       autoApproved: s.autoApproved,
       cuttingInstructions: s.cuttingInstructions as CuttingInstruction[] | null,
+      requiresHumanReview: s.requiresHumanReview,
+      routingDecision: s.routingDecision,
     }));
 
     // Get counts by status
@@ -88,6 +97,12 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       sessions: transformedSessions,
+      pagination: {
+        page,
+        limit,
+        totalCount,
+        totalPages: Math.ceil(totalCount / limit),
+      },
       stats: {
         pending: pendingCount,
         approved: approvedCount,

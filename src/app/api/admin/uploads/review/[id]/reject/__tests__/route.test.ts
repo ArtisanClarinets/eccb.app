@@ -17,6 +17,9 @@ vi.mock('@/lib/db', () => ({
       findUnique: vi.fn(),
       update: vi.fn(),
     },
+    musicFile: {
+      findFirst: vi.fn(),
+    },
   },
 }));
 
@@ -26,6 +29,10 @@ vi.mock('@/lib/logger', () => ({
     warn: vi.fn(),
     error: vi.fn(),
   },
+}));
+
+vi.mock('@/lib/services/smart-upload-cleanup', () => ({
+  cleanupSmartUploadTempFiles: vi.fn().mockResolvedValue(undefined),
 }));
 
 import { getSession } from '@/lib/auth/guards';
@@ -205,11 +212,13 @@ describe('Reject Upload Session API', () => {
       vi.mocked(prisma.smartUploadSession.findUnique).mockResolvedValue(
         createMockSessionData()
       );
+      vi.mocked(prisma.musicFile.findFirst).mockResolvedValue(null);
       vi.mocked(prisma.smartUploadSession.update).mockResolvedValue({
         ...createMockSessionData(),
         status: 'REJECTED',
         reviewedBy: TEST_USER_ID,
         reviewedAt: new Date(),
+        routingDecision: 'REJECTED: Poor scan quality',
       });
 
       const request = new NextRequest('http://localhost/api/admin/uploads/review/session-1/reject', {
@@ -231,6 +240,7 @@ describe('Reject Upload Session API', () => {
           status: 'REJECTED',
           reviewedBy: TEST_USER_ID,
           reviewedAt: expect.any(Date),
+          routingDecision: 'REJECTED: Poor scan quality',
         },
       });
     });
@@ -240,6 +250,7 @@ describe('Reject Upload Session API', () => {
       vi.mocked(prisma.smartUploadSession.findUnique).mockResolvedValue(
         createMockSessionData()
       );
+      vi.mocked(prisma.musicFile.findFirst).mockResolvedValue(null);
       vi.mocked(prisma.smartUploadSession.update).mockResolvedValue({
         ...createMockSessionData(),
         status: 'REJECTED',
@@ -272,6 +283,7 @@ describe('Reject Upload Session API', () => {
       vi.mocked(prisma.smartUploadSession.findUnique).mockResolvedValue(
         createMockSessionData({ status: 'PENDING_REVIEW' })
       );
+      vi.mocked(prisma.musicFile.findFirst).mockResolvedValue(null);
       vi.mocked(prisma.smartUploadSession.update).mockResolvedValue({
         ...createMockSessionData(),
         status: 'REJECTED',
@@ -323,6 +335,7 @@ describe('Reject Upload Session API', () => {
       vi.mocked(prisma.smartUploadSession.findUnique).mockResolvedValue(
         createMockSessionData()
       );
+      vi.mocked(prisma.musicFile.findFirst).mockResolvedValue(null);
       vi.mocked(prisma.smartUploadSession.update).mockRejectedValue(
         new Error('Database error')
       );

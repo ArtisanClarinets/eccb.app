@@ -11,6 +11,20 @@ import {
   type LLMAdapter,
 } from './types';
 
+/** Fields that must not be overwritten by user-supplied modelParams */
+const BLOCKED_BODY_PARAMS = new Set(['model', 'messages']);
+
+function mergeModelParams(
+  body: Record<string, unknown>,
+  modelParams?: Record<string, unknown>
+): void {
+  if (!modelParams) return;
+  for (const [key, value] of Object.entries(modelParams)) {
+    if (BLOCKED_BODY_PARAMS.has(key)) continue;
+    body[key] = value;
+  }
+}
+
 /**
  * Implements the LLMAdapter for a local Ollama instance.
  *
@@ -59,19 +73,37 @@ export class OllamaAdapter implements LLMAdapter {
       messages.push({ role: 'system', content: system });
     }
 
-    const imageContent = images.map((img) => ({
-      type: 'image_url',
-      image_url: {
-        url: `data:${img.mimeType};base64,${img.base64Data}`,
-      },
-    }));
+    // Build content array supporting both images and labeledInputs
+    const content: Array<{ type: string; image_url?: { url: string }; text?: string }> = [];
 
-    messages.push({
-      role: 'user',
-      content: [{ type: 'text', text: prompt }, ...imageContent],
-    });
+    for (const img of images) {
+      if (img.label?.trim()) {
+        content.push({ type: 'text', text: `[${img.label.trim()}]` });
+      }
+      content.push({
+        type: 'image_url',
+        image_url: { url: `data:${img.mimeType};base64,${img.base64Data}` },
+      });
+    }
 
-    const body = {
+    // Append labeled inputs (used by verification pass)
+    if (request.labeledInputs) {
+      for (const li of request.labeledInputs) {
+        if (li.label?.trim()) {
+          content.push({ type: 'text', text: `[${li.label.trim()}]` });
+        }
+        content.push({
+          type: 'image_url',
+          image_url: { url: `data:${li.mimeType};base64,${li.base64Data}` },
+        });
+      }
+    }
+
+    content.push({ type: 'text', text: prompt });
+
+    messages.push({ role: 'user', content });
+
+    const body: Record<string, unknown> = {
       model: llm_vision_model,
       messages,
       max_tokens: maxTokens,
@@ -79,8 +111,9 @@ export class OllamaAdapter implements LLMAdapter {
       ...(responseFormat?.type === 'json'
         ? { response_format: { type: 'json_object' } }
         : {}),
-      ...modelParams,
     };
+
+    mergeModelParams(body, modelParams);
 
     return { url, headers, body };
   }

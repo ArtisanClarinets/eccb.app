@@ -18,8 +18,8 @@ export const PROMPT_VERSION = DEFAULT_PROMPT_VERSION;
 // Provider-specific validation
 // =============================================================================
 
-// Create provider enum from the existing values array
-const providerTuple = ['ollama', 'openai', 'anthropic', 'gemini', 'openrouter', 'custom'] as const;
+// Create provider enum from the existing values array — must match LLM_PROVIDER_VALUES in providers.ts
+const providerTuple = ['ollama', 'ollama-cloud', 'openai', 'anthropic', 'gemini', 'openrouter', 'mistral', 'groq', 'custom'] as const;
 export const ProviderValueSchema = z.enum(providerTuple);
 export type ProviderValue = z.infer<typeof ProviderValueSchema>;
 
@@ -42,6 +42,9 @@ export const SMART_UPLOAD_SETTING_KEYS = [
   'llm_anthropic_api_key',
   'llm_openrouter_api_key',
   'llm_gemini_api_key',
+  'llm_ollama_cloud_api_key',
+  'llm_mistral_api_key',
+  'llm_groq_api_key',
   'llm_custom_api_key',
   
   // Prompts (source of truth)
@@ -108,6 +111,9 @@ export const SmartUploadSettingsSchema = z.object({
   llm_anthropic_api_key: z.string().optional(),
   llm_openrouter_api_key: z.string().optional(),
   llm_gemini_api_key: z.string().optional(),
+  llm_ollama_cloud_api_key: z.string().optional(),
+  llm_mistral_api_key: z.string().optional(),
+  llm_groq_api_key: z.string().optional(),
   llm_custom_api_key: z.string().optional(),
   
   // Prompts (required, will be populated with defaults if empty)
@@ -216,10 +222,13 @@ export type SmartUploadSettings = z.infer<typeof SmartUploadSettingsSchema>;
 export function getApiKeyFieldForProvider(provider: ProviderValue): string {
   const mapping: Record<ProviderValue, string> = {
     ollama: '',
+    'ollama-cloud': 'llm_ollama_cloud_api_key',
     openai: 'llm_openai_api_key',
     anthropic: 'llm_anthropic_api_key',
     gemini: 'llm_gemini_api_key',
     openrouter: 'llm_openrouter_api_key',
+    mistral: 'llm_mistral_api_key',
+    groq: 'llm_groq_api_key',
     custom: 'llm_custom_api_key',
   };
   return mapping[provider] || '';
@@ -229,16 +238,17 @@ export function getApiKeyFieldForProvider(provider: ProviderValue): string {
  * Check if a provider requires an API key
  */
 export function providerRequiresApiKey(provider: ProviderValue): boolean {
-  // Ollama is the only local provider that does not require a key.
-  // All others, including custom endpoints, need an API key set.
-  return provider !== 'ollama';
+  // Local-only providers (ollama, custom with optional key) don't require keys.
+  // All cloud providers need an API key set.
+  return provider !== 'ollama' && provider !== 'custom';
 }
 
 /**
  * Check if a provider requires an endpoint URL
  */
 export function providerRequiresEndpoint(provider: ProviderValue): boolean {
-  return provider === 'custom';
+  // Custom and local Ollama endpoints need explicit URL
+  return provider === 'custom' || provider === 'ollama';
 }
 
 /**
@@ -339,6 +349,9 @@ export const SECRET_KEYS: readonly string[] = [
   'llm_anthropic_api_key',
   'llm_openrouter_api_key',
   'llm_gemini_api_key',
+  'llm_ollama_cloud_api_key',
+  'llm_mistral_api_key',
+  'llm_groq_api_key',
   'llm_custom_api_key',
 ];
 

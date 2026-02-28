@@ -13,7 +13,6 @@ import { callVisionModel } from '@/lib/llm';
 import { loadSmartUploadRuntimeConfig, runtimeToAdapterConfig } from '@/lib/llm/config-loader';
 import type { LLMRuntimeConfig } from '@/lib/llm/config-loader';
 import { splitPdfByCuttingInstructions } from '@/lib/services/pdf-splitter';
-import { createWorker } from '@/lib/jobs/queue';
 import { queueSmartUploadAutoCommit } from '@/lib/jobs/smart-upload';
 import { logger } from '@/lib/logger';
 import {
@@ -664,57 +663,29 @@ Include a "corrections" field explaining any corrections made from the first pas
 // Worker Management
 // =============================================================================
 
-let smartUploadWorker: ReturnType<typeof createWorker> | null = null;
+// NOTE: The separate BullMQ worker that used to live here has been removed.
+// All Smart Upload jobs are now handled by a single unified worker in
+// smart-upload-processor-worker.ts. This prevents jobs from being silently
+// lost when two workers consume the same queue and "skip" unowned jobs.
+//
+// The following legacy exports are kept for API compatibility in case any
+// module still imports them, but they are intentional no-ops.
 
-/**
- * Start the smart upload worker
- */
+/** @deprecated Use startSmartUploadProcessorWorker() instead */
 export function startSmartUploadWorker(): void {
-  const config = {
-    priority: 10,
-    attempts: 3,
-    backoff: { type: 'exponential' as const, delay: 5000 },
-    removeOnComplete: 100,
-    removeOnFail: 50,
-    concurrency: 2,
-  };
-
-  smartUploadWorker = createWorker({
-    queueName: 'SMART_UPLOAD',
-    concurrency: config.concurrency,
-    processor: async (job: Job) => {
-      if (job.name === 'smartupload.secondPass') {
-        await processSecondPass(job as Job<SmartUploadSecondPassJobData>);
-      } else {
-        // This worker only handles secondPass; other job types are handled by
-        // smart-upload-processor-worker. Skip gracefully instead of throwing
-        // so we don't burn retries on jobs we don't own.
-        logger.debug('smart-upload-worker: skipping unowned job', { name: job.name, jobId: job.id });
-      }
-    },
-  });
-
-  logger.info('Smart upload worker started', { concurrency: config.concurrency });
+  logger.warn(
+    'startSmartUploadWorker() is deprecated — secondPass jobs are now handled by the unified worker in smart-upload-processor-worker.ts'
+  );
 }
 
-/**
- * Stop the smart upload worker
- */
+/** @deprecated Use stopSmartUploadProcessorWorker() instead */
 export async function stopSmartUploadWorker(): Promise<void> {
-  if (smartUploadWorker) {
-    await smartUploadWorker.close();
-    smartUploadWorker = null;
-    logger.info('Smart upload worker stopped');
-  }
+  // no-op: unified worker handles shutdown
 }
 
-/**
- * Check if smart upload worker is running
- */
+/** @deprecated Use isSmartUploadProcessorWorkerRunning() instead */
 export function isSmartUploadWorkerRunning(): boolean {
-  return smartUploadWorker !== null;
+  return false;
 }
-
-
 
 export { processSecondPass };

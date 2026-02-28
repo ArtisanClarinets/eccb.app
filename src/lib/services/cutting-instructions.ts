@@ -450,7 +450,7 @@ export function splitOverlappingRanges(instructions: NormalizedInstruction[]): N
 
     // Helper to strip internal metadata before pushing
     const stripIndex = (obj: NormalizedInstruction & { originalIndex?: number }) => {
-      const { originalIndex, ...rest } = obj;
+      const { originalIndex: _originalIndex, ...rest } = obj;
       return rest;
     };
 

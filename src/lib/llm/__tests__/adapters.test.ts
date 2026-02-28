@@ -4,6 +4,11 @@ import { OpenAIAdapter } from '../openai';
 import { AnthropicAdapter } from '../anthropic';
 import { GeminiAdapter } from '../gemini';
 import { OpenRouterAdapter } from '../openrouter';
+import { OllamaAdapter } from '../ollama';
+import { OllamaCloudAdapter } from '../ollama-cloud';
+import { MistralAdapter } from '../mistral';
+import { GroqAdapter } from '../groq';
+import { CustomAdapter } from '../custom';
 
 describe('LLM Adapters', () => {
   const mockConfig = {
@@ -36,19 +41,33 @@ describe('LLM Adapters', () => {
       expect(adapter).toBeInstanceOf(OpenRouterAdapter);
     });
 
-    it('should return OpenAI adapter for custom provider', async () => {
+    it('should return CustomAdapter for custom provider', async () => {
       const adapter = await getAdapter('custom');
-      expect(adapter).toBeInstanceOf(OpenAIAdapter);
+      expect(adapter).toBeInstanceOf(CustomAdapter);
     });
 
-    it('should return OpenAI adapter for ollama provider', async () => {
+    it('should return OllamaAdapter for ollama provider', async () => {
       const adapter = await getAdapter('ollama');
-      expect(adapter).toBeInstanceOf(OpenAIAdapter);
+      expect(adapter).toBeInstanceOf(OllamaAdapter);
     });
 
-    it('should default to OpenAI adapter for unknown provider', async () => {
-      const adapter = await getAdapter('unknown');
-      expect(adapter).toBeInstanceOf(OpenAIAdapter);
+    it('should return OllamaCloudAdapter for ollama-cloud provider', async () => {
+      const adapter = await getAdapter('ollama-cloud');
+      expect(adapter).toBeInstanceOf(OllamaCloudAdapter);
+    });
+
+    it('should return MistralAdapter for mistral provider', async () => {
+      const adapter = await getAdapter('mistral');
+      expect(adapter).toBeInstanceOf(MistralAdapter);
+    });
+
+    it('should return GroqAdapter for groq provider', async () => {
+      const adapter = await getAdapter('groq');
+      expect(adapter).toBeInstanceOf(GroqAdapter);
+    });
+
+    it('should throw for unknown provider', async () => {
+      await expect(getAdapter('unknown' as any)).rejects.toThrow('Unknown LLM provider');
     });
   });
 
@@ -273,6 +292,367 @@ describe('LLM Adapters', () => {
       );
       // Ollama adapter hard-codes apiKey = undefined for the 'ollama' case
       expect(result.headers).not.toHaveProperty('Authorization');
+    });
+  });
+
+  // ==========================================================================
+  // OllamaAdapter (native) Tests
+  // ==========================================================================
+
+  describe('OllamaAdapter (native)', () => {
+    const adapter = new OllamaAdapter();
+
+    it('should build correct request', () => {
+      const config = {
+        ...mockConfig,
+        llm_provider: 'ollama' as const,
+        llm_endpoint_url: 'http://localhost:11434',
+        llm_vision_model: 'llama3.2-vision',
+      };
+
+      const result = adapter.buildRequest(config, {
+        images: [{ mimeType: 'image/png', base64Data: 'abc' }],
+        prompt: 'Extract metadata',
+        maxTokens: 4000,
+        temperature: 0.1,
+      });
+
+      expect(result.url).toBe('http://localhost:11434/chat/completions');
+      expect(result.headers['Content-Type']).toBe('application/json');
+      expect(result.headers).not.toHaveProperty('Authorization');
+      expect(result.body).toHaveProperty('model', 'llama3.2-vision');
+      expect(result.body).toHaveProperty('max_tokens', 4000);
+      expect(result.body).toHaveProperty('temperature', 0.1);
+    });
+
+    it('should throw when endpoint is missing', () => {
+      expect(() =>
+        adapter.buildRequest(
+          { ...mockConfig, llm_endpoint_url: undefined },
+          { images: [], prompt: 'test' }
+        )
+      ).toThrow('Ollama endpoint URL is not configured');
+    });
+
+    it('should include system message when provided', () => {
+      const result = adapter.buildRequest(
+        { ...mockConfig, llm_endpoint_url: 'http://localhost:11434' },
+        { images: [], prompt: 'test', system: 'You are a music expert' }
+      );
+      const body = result.body as { messages: Array<{ role: string; content: unknown }> };
+      expect(body.messages[0]).toEqual({ role: 'system', content: 'You are a music expert' });
+    });
+
+    it('should support labeled images', () => {
+      const result = adapter.buildRequest(
+        { ...mockConfig, llm_endpoint_url: 'http://localhost:11434' },
+        {
+          images: [{ mimeType: 'image/png', base64Data: 'abc', label: 'Page 1' }],
+          prompt: 'Extract',
+        }
+      );
+      const body = result.body as { messages: Array<{ role: string; content: unknown[] }> };
+      const userContent = body.messages.find((m) => m.role === 'user')?.content as Array<{ type: string; text?: string }>;
+      expect(userContent[0]).toEqual({ type: 'text', text: '[Page 1]' });
+    });
+
+    it('should support labeledInputs for verification pass', () => {
+      const result = adapter.buildRequest(
+        { ...mockConfig, llm_endpoint_url: 'http://localhost:11434' },
+        {
+          images: [],
+          prompt: 'Verify',
+          labeledInputs: [{ mimeType: 'image/jpeg', base64Data: 'xyz', label: 'Ref Image' }],
+        }
+      );
+      const body = result.body as { messages: Array<{ role: string; content: unknown[] }> };
+      const userContent = body.messages.find((m) => m.role === 'user')?.content as Array<{ type: string; text?: string }>;
+      expect(userContent[0]).toEqual({ type: 'text', text: '[Ref Image]' });
+    });
+
+    it('should safely merge modelParams without overwriting model/messages', () => {
+      const result = adapter.buildRequest(
+        { ...mockConfig, llm_endpoint_url: 'http://localhost:11434' },
+        {
+          images: [],
+          prompt: 'test',
+          modelParams: { model: 'EVIL', messages: 'EVIL', top_p: 0.9 },
+        }
+      );
+      const body = result.body as Record<string, unknown>;
+      expect(body.model).toBe('gpt-4-turbo'); // original model, not overwritten
+      expect(body.top_p).toBe(0.9); // allowed param merged
+    });
+
+    it('should add json_object response format', () => {
+      const result = adapter.buildRequest(
+        { ...mockConfig, llm_endpoint_url: 'http://localhost:11434' },
+        { images: [], prompt: 'test', responseFormat: { type: 'json' } }
+      );
+      const body = result.body as Record<string, unknown>;
+      expect(body.response_format).toEqual({ type: 'json_object' });
+    });
+
+    it('should parse OpenAI-compatible response', () => {
+      const result = adapter.parseResponse({
+        choices: [{ message: { content: 'extracted text' } }],
+        usage: { prompt_tokens: 200, completion_tokens: 100 },
+      });
+      expect(result.content).toBe('extracted text');
+      expect(result.usage).toEqual({ promptTokens: 200, completionTokens: 100 });
+    });
+
+    it('should handle missing usage in response', () => {
+      const result = adapter.parseResponse({
+        choices: [{ message: { content: 'text' } }],
+      });
+      expect(result.content).toBe('text');
+      expect(result.usage).toBeUndefined();
+    });
+  });
+
+  // ==========================================================================
+  // OllamaCloudAdapter Tests
+  // ==========================================================================
+
+  describe('OllamaCloudAdapter', () => {
+    const adapter = new OllamaCloudAdapter();
+    const ollamaCloudConfig = {
+      ...mockConfig,
+      llm_endpoint_url: 'https://api.ollama.com/v1',
+      llm_ollama_cloud_api_key: 'oc-test-key',
+      llm_vision_model: 'llama3.2-vision',
+    };
+
+    it('should build correct request with auth header', () => {
+      const result = adapter.buildRequest(ollamaCloudConfig, {
+        images: [{ mimeType: 'image/png', base64Data: 'abc' }],
+        prompt: 'Extract',
+        maxTokens: 2000,
+        temperature: 0.2,
+      });
+
+      expect(result.url).toBe('https://api.ollama.com/v1/chat/completions');
+      expect(result.headers['Authorization']).toBe('Bearer oc-test-key');
+      expect(result.body).toHaveProperty('model', 'llama3.2-vision');
+    });
+
+    it('should throw when endpoint is missing', () => {
+      expect(() =>
+        adapter.buildRequest(
+          { ...ollamaCloudConfig, llm_endpoint_url: undefined },
+          { images: [], prompt: 'test' }
+        )
+      ).toThrow('Ollama Cloud endpoint URL is not configured');
+    });
+
+    it('should throw when API key is missing', () => {
+      expect(() =>
+        adapter.buildRequest(
+          { ...ollamaCloudConfig, llm_ollama_cloud_api_key: undefined },
+          { images: [], prompt: 'test' }
+        )
+      ).toThrow('Ollama Cloud API key is not configured');
+    });
+
+    it('should parse response correctly', () => {
+      const result = adapter.parseResponse({
+        choices: [{ message: { content: 'cloud response' } }],
+        usage: { prompt_tokens: 50, completion_tokens: 25 },
+      });
+      expect(result.content).toBe('cloud response');
+      expect(result.usage).toEqual({ promptTokens: 50, completionTokens: 25 });
+    });
+  });
+
+  // ==========================================================================
+  // MistralAdapter Tests
+  // ==========================================================================
+
+  describe('MistralAdapter', () => {
+    const adapter = new MistralAdapter();
+    const mistralConfig = {
+      ...mockConfig,
+      llm_endpoint_url: 'https://api.mistral.ai/v1',
+      llm_mistral_api_key: 'ms-test-key',
+      llm_vision_model: 'pixtral-large-latest',
+    };
+
+    it('should build correct request with auth header', () => {
+      const result = adapter.buildRequest(mistralConfig, {
+        images: [{ mimeType: 'image/png', base64Data: 'abc' }],
+        prompt: 'Extract',
+        maxTokens: 3000,
+        temperature: 0.15,
+      });
+
+      expect(result.url).toBe('https://api.mistral.ai/v1/chat/completions');
+      expect(result.headers['Authorization']).toBe('Bearer ms-test-key');
+      expect(result.body).toHaveProperty('model', 'pixtral-large-latest');
+      expect(result.body).toHaveProperty('max_tokens', 3000);
+    });
+
+    it('should throw when endpoint is missing', () => {
+      expect(() =>
+        adapter.buildRequest(
+          { ...mistralConfig, llm_endpoint_url: undefined },
+          { images: [], prompt: 'test' }
+        )
+      ).toThrow('Mistral endpoint URL is not configured');
+    });
+
+    it('should throw when API key is missing', () => {
+      expect(() =>
+        adapter.buildRequest(
+          { ...mistralConfig, llm_mistral_api_key: undefined },
+          { images: [], prompt: 'test' }
+        )
+      ).toThrow('Mistral API key is not configured');
+    });
+
+    it('should support labeled images and labeledInputs', () => {
+      const result = adapter.buildRequest(mistralConfig, {
+        images: [{ mimeType: 'image/png', base64Data: 'img1', label: 'Title Page' }],
+        prompt: 'Verify',
+        labeledInputs: [{ mimeType: 'image/jpeg', base64Data: 'ref1', label: 'Reference' }],
+      });
+      const body = result.body as { messages: Array<{ role: string; content: unknown[] }> };
+      const userContent = body.messages.find((m) => m.role === 'user')?.content as Array<{ type: string; text?: string }>;
+      expect(userContent[0]).toEqual({ type: 'text', text: '[Title Page]' });
+      // Find the reference label
+      const refLabel = userContent.find((c) => c.text === '[Reference]');
+      expect(refLabel).toBeDefined();
+    });
+
+    it('should parse response correctly', () => {
+      const result = adapter.parseResponse({
+        choices: [{ message: { content: 'mistral response' } }],
+        usage: { prompt_tokens: 150, completion_tokens: 75 },
+      });
+      expect(result.content).toBe('mistral response');
+      expect(result.usage).toEqual({ promptTokens: 150, completionTokens: 75 });
+    });
+  });
+
+  // ==========================================================================
+  // GroqAdapter Tests
+  // ==========================================================================
+
+  describe('GroqAdapter', () => {
+    const adapter = new GroqAdapter();
+    const groqConfig = {
+      ...mockConfig,
+      llm_endpoint_url: 'https://api.groq.com/openai/v1',
+      llm_groq_api_key: 'gsk-test-key',
+      llm_vision_model: 'llama-3.2-90b-vision-preview',
+    };
+
+    it('should build correct request with auth header', () => {
+      const result = adapter.buildRequest(groqConfig, {
+        images: [{ mimeType: 'image/png', base64Data: 'abc' }],
+        prompt: 'Extract',
+        maxTokens: 2000,
+        temperature: 0.1,
+      });
+
+      expect(result.url).toBe('https://api.groq.com/openai/v1/chat/completions');
+      expect(result.headers['Authorization']).toBe('Bearer gsk-test-key');
+      expect(result.body).toHaveProperty('model', 'llama-3.2-90b-vision-preview');
+    });
+
+    it('should throw when endpoint is missing', () => {
+      expect(() =>
+        adapter.buildRequest(
+          { ...groqConfig, llm_endpoint_url: undefined },
+          { images: [], prompt: 'test' }
+        )
+      ).toThrow('Groq endpoint URL is not configured');
+    });
+
+    it('should throw when API key is missing', () => {
+      expect(() =>
+        adapter.buildRequest(
+          { ...groqConfig, llm_groq_api_key: undefined },
+          { images: [], prompt: 'test' }
+        )
+      ).toThrow('Groq API key is not configured');
+    });
+
+    it('should parse response with usage', () => {
+      const result = adapter.parseResponse({
+        choices: [{ message: { content: 'groq fast response' } }],
+        usage: { prompt_tokens: 100, completion_tokens: 50 },
+      });
+      expect(result.content).toBe('groq fast response');
+      expect(result.usage).toEqual({ promptTokens: 100, completionTokens: 50 });
+    });
+
+    it('should handle empty choices gracefully', () => {
+      const result = adapter.parseResponse({ choices: [] });
+      expect(result.content).toBe('');
+    });
+  });
+
+  // ==========================================================================
+  // CustomAdapter Tests
+  // ==========================================================================
+
+  describe('CustomAdapter', () => {
+    const adapter = new CustomAdapter();
+    const customConfig = {
+      ...mockConfig,
+      llm_endpoint_url: 'https://my-server.local/v1',
+      llm_custom_api_key: 'my-custom-key',
+      llm_vision_model: 'custom-vision',
+    };
+
+    it('should build correct request with auth header', () => {
+      const result = adapter.buildRequest(customConfig, {
+        images: [],
+        prompt: 'Extract',
+      });
+
+      expect(result.url).toBe('https://my-server.local/v1/chat/completions');
+      expect(result.headers['Authorization']).toBe('Bearer my-custom-key');
+      expect(result.body).toHaveProperty('model', 'custom-vision');
+    });
+
+    it('should omit Authorization header when no API key is provided', () => {
+      const noKeyConfig = { ...customConfig, llm_custom_api_key: undefined };
+      const result = adapter.buildRequest(noKeyConfig, {
+        images: [],
+        prompt: 'test',
+      });
+      expect(result.headers).not.toHaveProperty('Authorization');
+    });
+
+    it('should throw when endpoint is missing', () => {
+      expect(() =>
+        adapter.buildRequest(
+          { ...customConfig, llm_endpoint_url: undefined },
+          { images: [], prompt: 'test' }
+        )
+      ).toThrow('Custom LLM endpoint URL is not configured');
+    });
+
+    it('should safely merge modelParams', () => {
+      const result = adapter.buildRequest(customConfig, {
+        images: [],
+        prompt: 'test',
+        modelParams: { model: 'overwrite-attempt', top_k: 40 },
+      });
+      const body = result.body as Record<string, unknown>;
+      expect(body.model).toBe('custom-vision');
+      expect(body.top_k).toBe(40);
+    });
+
+    it('should parse response correctly', () => {
+      const result = adapter.parseResponse({
+        choices: [{ message: { content: 'custom response' } }],
+        usage: { prompt_tokens: 80, completion_tokens: 40 },
+      });
+      expect(result.content).toBe('custom response');
+      expect(result.usage).toEqual({ promptTokens: 80, completionTokens: 40 });
     });
   });
 });

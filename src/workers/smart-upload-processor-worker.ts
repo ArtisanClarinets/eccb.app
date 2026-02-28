@@ -1,16 +1,26 @@
 /**
- * Smart Upload Processor Worker Entry Point
+ * Smart Upload Unified Worker Entry Point
  *
- * This module creates and manages the BullMQ worker for the main smart upload pipeline.
+ * This module creates and manages the BullMQ worker for ALL Smart Upload jobs:
+ *   - smartupload.process   → main pipeline (render → vision → split)
+ *   - smartupload.secondPass → verification / adjudication
+ *   - smartupload.autoCommit → autonomous library commit
+ *
+ * IMPORTANT: This is the ONLY worker that consumes the SMART_UPLOAD queue.
+ * Having multiple workers on the same queue with different job routing caused
+ * jobs to be silently lost (BullMQ marks a job complete when the processor
+ * returns without throwing, even if the job was "skipped").
  */
 
 import { Job } from 'bullmq';
 import { createWorker } from '@/lib/jobs/queue';
 import { processSmartUpload } from './smart-upload-processor';
+import { processSecondPass } from './smart-upload-worker';
 import { commitSmartUploadSessionToLibrary } from '@/lib/smart-upload/commit';
 import { SMART_UPLOAD_JOB_NAMES } from '@/lib/jobs/smart-upload';
 import { loadSmartUploadRuntimeConfig } from '@/lib/llm/config-loader';
 import { logger } from '@/lib/logger';
+import type { SmartUploadSecondPassJobData } from '@/lib/jobs/definitions';
 
 // =============================================================================
 // Worker Instance
@@ -23,7 +33,9 @@ let smartUploadProcessorWorker: ReturnType<typeof createWorker> | null = null;
 // =============================================================================
 
 /**
- * Start the smart upload processor worker
+ * Start the unified smart upload worker.
+ *
+ * This single worker handles process, secondPass, and autoCommit jobs.
  */
 export async function startSmartUploadProcessorWorker(): Promise<void> {
   // Load concurrency from DB config so operators can tune it without redeploying
@@ -43,22 +55,36 @@ export async function startSmartUploadProcessorWorker(): Promise<void> {
     queueName: 'SMART_UPLOAD',
     concurrency: config.concurrency,
     processor: async (job: Job) => {
-      if (job.name === SMART_UPLOAD_JOB_NAMES.PROCESS) {
-        await processSmartUpload(job);
-      } else if (job.name === SMART_UPLOAD_JOB_NAMES.AUTO_COMMIT) {
-        const { sessionId } = job.data as { sessionId: string };
-        logger.info('Running auto-commit for session', { sessionId, jobId: job.id });
-        await commitSmartUploadSessionToLibrary(sessionId, {}, 'system:auto-commit');
-        logger.info('Auto-commit complete', { sessionId });
-      } else {
-        // This worker only handles PROCESS and AUTO_COMMIT; secondPass is
-        // handled by smart-upload-worker. Skip gracefully.
-        logger.debug('smart-upload-processor-worker: skipping unowned job', { name: job.name, jobId: job.id });
+      switch (job.name) {
+        case SMART_UPLOAD_JOB_NAMES.PROCESS:
+          await processSmartUpload(job);
+          break;
+
+        case SMART_UPLOAD_JOB_NAMES.SECOND_PASS:
+          await processSecondPass(job as Job<SmartUploadSecondPassJobData>);
+          break;
+
+        case SMART_UPLOAD_JOB_NAMES.AUTO_COMMIT: {
+          const { sessionId } = job.data as { sessionId: string };
+          logger.info('Running auto-commit for session', { sessionId, jobId: job.id });
+          await commitSmartUploadSessionToLibrary(sessionId, {}, 'system:auto-commit');
+          logger.info('Auto-commit complete', { sessionId });
+          break;
+        }
+
+        default:
+          // Treat unknown job names as programmer errors — throw so BullMQ
+          // retries (and eventually dead-letters) rather than silently losing
+          // the job.
+          throw new Error(
+            `smart-upload-worker: unknown job name "${job.name}" (id=${job.id}). ` +
+            `Expected one of: ${Object.values(SMART_UPLOAD_JOB_NAMES).join(', ')}`
+          );
       }
     },
   });
 
-  logger.info('Smart upload processor worker started', { concurrency: config.concurrency });
+  logger.info('Smart upload unified worker started', { concurrency: config.concurrency });
 }
 
 /**
@@ -68,7 +94,7 @@ export async function stopSmartUploadProcessorWorker(): Promise<void> {
   if (smartUploadProcessorWorker) {
     await smartUploadProcessorWorker.close();
     smartUploadProcessorWorker = null;
-    logger.info('Smart upload processor worker stopped');
+    logger.info('Smart upload unified worker stopped');
   }
 }
 

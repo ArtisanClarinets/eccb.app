@@ -203,7 +203,7 @@ describe('OMR API Route', () => {
 
       // Mock fetch for both file retrieval and OpenAI API.
       // Return a simple PNG image (to avoid pdfjs-dist conversion)
-      vi.mocked(global.fetch).mockImplementation(async (url: RequestInfo, opts?: RequestInit) => {
+      vi.mocked(global.fetch).mockImplementation(async (url: string | URL | Request, _opts?: RequestInit) => {
         const u = typeof url === 'string' ? url : url.toString();
         if (u.includes('/api/files/')) {
           // Return a simple PNG image buffer instead of PDF to skip conversion

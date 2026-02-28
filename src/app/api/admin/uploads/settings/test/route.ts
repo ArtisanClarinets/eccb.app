@@ -85,9 +85,16 @@ export async function POST(request: NextRequest) {
               signal: AbortSignal.timeout(5_000),
             });
             if (res.ok) {
+              const successMessage = `Successfully connected to Ollama (model: ${model}).`;
+              await auditLog({
+                action: 'TEST_LLM_CONNECTION',
+                entityType: 'SETTING',
+                entityId: 'smart_upload',
+                newValues: { provider, model, success: true, message: successMessage },
+              });
               return NextResponse.json({
                 ok: true,
-                message: `Successfully connected to Ollama (model: ${model}).`,
+                message: successMessage,
               });
             }
             lastError = `${url} → HTTP ${res.status}`;

@@ -9,6 +9,7 @@ import { logger } from '@/lib/logger';
 import { MUSIC_UPLOAD } from '@/lib/auth/permission-constants';
 import { queueSmartUploadProcess } from '@/lib/jobs/smart-upload';
 import { loadSmartUploadRuntimeConfig } from '@/lib/llm/config-loader';
+import { computeSha256 } from '@/lib/smart-upload/duplicate-detection';
 import type {
   RoutingDecision,
   ParseStatus,
@@ -126,6 +127,9 @@ export async function POST(request: NextRequest) {
     const extension = getExtension(file.name);
     const storageKey = generateStorageKey(sessionId, extension);
 
+    // Compute source SHA-256 before upload for dedup/idempotency
+    const sourceSha256 = computeSha256(buffer);
+
     // Upload file to storage
     await uploadFile(storageKey, buffer, {
       contentType: 'application/pdf',
@@ -136,8 +140,8 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Create smart upload session in pending state
-    // The worker will update this with actual metadata
+    // Create smart upload session with canonical initial states
+    // The worker will update this with actual metadata after processing
     const smartUploadSession = await prisma.smartUploadSession.create({
       data: {
         uploadSessionId: sessionId,
@@ -148,6 +152,7 @@ export async function POST(request: NextRequest) {
         extractedMetadata: {
           title: file.name.replace(/\.pdf$/i, ''),
           confidenceScore: 0,
+          sourceSha256,
         },
         confidenceScore: 0,
         status: 'PENDING_REVIEW',
@@ -161,13 +166,35 @@ export async function POST(request: NextRequest) {
     logger.info('Smart upload session created, queueing for processing', {
       sessionId: smartUploadSession.uploadSessionId,
       userId: session.user.id,
+      sourceSha256,
     });
 
     // Queue the smart upload for background processing
-    void queueSmartUploadProcess(smartUploadSession.uploadSessionId, smartUploadSession.id)
-      .catch((err: Error) => {
-        logger.error('Failed to queue smart upload', { error: err.message, sessionId });
+    // Handle enqueue failures explicitly instead of fire-and-forget
+    let enqueueSucceeded = true;
+    try {
+      await queueSmartUploadProcess(smartUploadSession.uploadSessionId, smartUploadSession.id);
+    } catch (enqueueErr) {
+      enqueueSucceeded = false;
+      logger.error('Failed to queue smart upload for processing', {
+        error: enqueueErr instanceof Error ? enqueueErr.message : String(enqueueErr),
+        sessionId,
       });
+
+      // Update session to reflect the failed enqueue so it doesn't
+      // appear as a live session that will never be processed
+      try {
+        await prisma.smartUploadSession.update({
+          where: { uploadSessionId: sessionId },
+          data: {
+            parseStatus: 'FAILED',
+            routingDecision: 'QUEUE_ENQUEUE_FAILED',
+          },
+        });
+      } catch {
+        // Best-effort; do not mask original error
+      }
+    }
 
     return NextResponse.json({
       success: true,
@@ -183,7 +210,10 @@ export async function POST(request: NextRequest) {
         // routingDecision is determined by the worker; null until processing completes
         routingDecision: null as RoutingDecision | null,
       },
-      message: 'Upload successful. Processing in background — check status endpoint for progress.',
+      enqueued: enqueueSucceeded,
+      message: enqueueSucceeded
+        ? 'Upload successful. Processing in background — check status endpoint for progress.'
+        : 'Upload saved but background processing failed to start. Please retry or contact support.',
       note: 'File is being processed in the background. Check status endpoint for progress.',
     });
   } catch (error) {

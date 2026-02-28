@@ -20,7 +20,8 @@ export type JobType =
   | 'cleanup.files'
   | 'reminder.event'
   | 'smartupload.process'
-  | 'smartupload.secondPass';
+  | 'smartupload.secondPass'
+  | 'smartupload.autoCommit';
 
 export interface JobTypeNameMap {
   'email.send': EmailSendJobData;
@@ -32,6 +33,7 @@ export interface JobTypeNameMap {
   'reminder.event': EventReminderJobData;
   'smartupload.process': SmartUploadProcessJobData;
   'smartupload.secondPass': SmartUploadSecondPassJobData;
+  'smartupload.autoCommit': SmartUploadAutoCommitJobData;
 }
 
 // ============================================================================
@@ -139,6 +141,11 @@ export interface SmartUploadProcessJobData {
 }
 
 export interface SmartUploadSecondPassJobData {
+  /** Smart upload session ID */
+  sessionId: string;
+}
+
+export interface SmartUploadAutoCommitJobData {
   /** Smart upload session ID */
   sessionId: string;
 }
@@ -268,6 +275,17 @@ export const JOB_CONFIGS: Record<JobType, JobConfig> = {
     removeOnFail: 50,
     concurrency: 2,
   },
+  'smartupload.autoCommit': {
+    priority: 3,
+    attempts: 3,
+    backoff: {
+      type: 'exponential',
+      delay: 5000,
+    },
+    removeOnComplete: 100,
+    removeOnFail: 50,
+    concurrency: 1,
+  },
 };
 
 // ============================================================================
@@ -321,6 +339,7 @@ export function getQueueNameForJob(jobType: JobType): QueueName {
       return QUEUE_NAMES.CLEANUP;
     case 'smartupload.process':
     case 'smartupload.secondPass':
+    case 'smartupload.autoCommit':
       return QUEUE_NAMES.SMART_UPLOAD;
     default:
       return QUEUE_NAMES.EMAIL;

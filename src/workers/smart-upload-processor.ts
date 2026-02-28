@@ -650,7 +650,7 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
       cuttingInstructions: JSON.parse(JSON.stringify(normalizedInstructionsOne)),
       tempFiles: JSON.parse(JSON.stringify(tempFiles)),
       autoApproved: shouldAutoCommit,
-      secondPassStatus: secondPassStatus === 'NOT_NEEDED' ? null : secondPassStatus,
+      secondPassStatus: secondPassStatus === 'NOT_NEEDED' ? 'NOT_NEEDED' : secondPassStatus,
       llmProvider: llmConfig.provider,
       llmVisionModel: llmConfig.visionModel,
       llmVerifyModel: llmConfig.verificationModel,

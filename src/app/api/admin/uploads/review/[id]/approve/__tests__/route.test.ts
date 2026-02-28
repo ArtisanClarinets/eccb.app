@@ -10,6 +10,7 @@ const mockGetSession = vi.hoisted(() => vi.fn());
 const mockRequirePermission = vi.hoisted(() => vi.fn());
 const mockFindUnique = vi.hoisted(() => vi.fn());
 const mockTransaction = vi.hoisted(() => vi.fn());
+const mockCommitSmartUploadSession = vi.hoisted(() => vi.fn());
 
 // Transaction mock functions
 const mockTxPersonFindFirst = vi.hoisted(() => vi.fn().mockResolvedValue(null));
@@ -73,6 +74,10 @@ vi.mock('@/lib/db', () => ({
     },
     $transaction: mockTransaction,
   },
+}));
+
+vi.mock('@/lib/smart-upload/commit', () => ({
+  commitSmartUploadSessionToLibrary: mockCommitSmartUploadSession,
 }));
 
 vi.mock('@/lib/logger', () => ({
@@ -153,6 +158,13 @@ describe('Approve Upload Session API', () => {
     // Reset transaction mock to default behavior
     mockTransaction.mockImplementation(async (callback: (tx: typeof mockTx) => Promise<unknown>) => callback(mockTx));
     mockRequirePermission.mockResolvedValue(true);
+    // Default commit mock returns a successful result
+    mockCommitSmartUploadSession.mockResolvedValue({
+      musicPieceId: 'piece-1',
+      musicPieceTitle: 'Stars and Stripes Forever',
+      musicFileId: 'file-1',
+      partsCommitted: 1,
+    });
   });
 
   // ===========================================================================
@@ -306,11 +318,11 @@ describe('Approve Upload Session API', () => {
   describe('Successful Approval', () => {
     it('should successfully approve a pending session', async () => {
       mockGetSession.mockResolvedValue(createMockSession());
-      mockFindUnique.mockResolvedValue(createMockSessionData());
-      mockTxSmartUploadSessionUpdate.mockResolvedValue({
-        ...createMockSessionData(),
+      // First call: status check (must be PENDING_REVIEW)
+      mockFindUnique.mockResolvedValueOnce(createMockSessionData());
+      // Second call: post-commit fetch for response
+      mockFindUnique.mockResolvedValueOnce({
         status: 'APPROVED',
-        reviewedBy: TEST_USER_ID,
         reviewedAt: new Date(),
       });
 
@@ -330,23 +342,20 @@ describe('Approve Upload Session API', () => {
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
       expect(data.session.status).toBe('APPROVED');
-      expect(mockTxSmartUploadSessionUpdate).toHaveBeenCalledWith({
-        where: { uploadSessionId: SESSION_ID },
-        data: {
-          status: 'APPROVED',
-          reviewedBy: TEST_USER_ID,
-          reviewedAt: expect.any(Date),
-        },
-      });
+      expect(mockCommitSmartUploadSession).toHaveBeenCalledWith(
+        SESSION_ID,
+        expect.objectContaining({ title: 'Stars and Stripes Forever', composer: 'John Philip Sousa' }),
+        TEST_USER_ID,
+      );
     });
 
     it('should approve session with all optional fields', async () => {
       mockGetSession.mockResolvedValue(createMockSession());
-      mockFindUnique.mockResolvedValue(createMockSessionData());
-      mockTxSmartUploadSessionUpdate.mockResolvedValue({
-        ...createMockSessionData(),
+      // First call: status check (must be PENDING_REVIEW)
+      mockFindUnique.mockResolvedValueOnce(createMockSessionData());
+      // Second call: post-commit fetch for response
+      mockFindUnique.mockResolvedValueOnce({
         status: 'APPROVED',
-        reviewedBy: TEST_USER_ID,
         reviewedAt: new Date(),
       });
 
@@ -380,7 +389,7 @@ describe('Approve Upload Session API', () => {
     it('should return 500 when database update fails', async () => {
       mockGetSession.mockResolvedValue(createMockSession());
       mockFindUnique.mockResolvedValue(createMockSessionData());
-      mockTransaction.mockRejectedValue(new Error('Database error'));
+      mockCommitSmartUploadSession.mockRejectedValue(new Error('Database error'));
 
       const request = new NextRequest('http://localhost/api/admin/uploads/review/session-1/approve', {
         method: 'POST',
