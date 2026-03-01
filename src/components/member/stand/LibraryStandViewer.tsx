@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -9,15 +9,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ChevronLeft, ChevronRight, Moon, Sun } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import dynamic from 'next/dynamic';
-
-// Lazy-load the PDF viewer to avoid SSR issues
-const PDFViewer = dynamic(
-  () => import('./LibraryPDFViewer').then((m) => m.LibraryPDFViewer),
-  { ssr: false, loading: () => <div className="flex-1 flex items-center justify-center text-muted-foreground">Loading PDF…</div> }
-);
+import { useStandStore } from '@/store/standStore';
+import { StandCanvas } from './StandCanvas';
+import { Toolbar } from './Toolbar';
+import { GestureHandler } from './GestureHandler';
+import { KeyboardHandler } from './KeyboardHandler';
+import { MidiHandler } from './MidiHandler';
+import { Metronome } from './Metronome';
+import { Tuner } from './Tuner';
+import { AudioPlayer } from './AudioPlayer';
+import { PitchPipe } from './PitchPipe';
 
 interface LibraryFile {
   id: string;
@@ -51,12 +54,30 @@ interface LibraryStandViewerProps {
 }
 
 /**
- * Simplified stand viewer for library / practice mode.
- * Shows a single piece with part selection and basic page navigation.
+ * Full-featured stand viewer for library / practice mode.
+ * Hydrates the Zustand stand store with the library piece so that all
+ * annotation tools, rehearsal utilities, keyboard/gesture/MIDI handlers,
+ * and PDF rendering work identically to the event-mode stand.
+ *
+ * Fix: PDF URL now includes the required ?pieceId= scope parameter so the
+ * authenticated file proxy does not return 404.
  */
-export function LibraryStandViewer({ piece }: LibraryStandViewerProps) {
-  const [nightMode, setNightMode] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
+export function LibraryStandViewer({ piece, userId }: LibraryStandViewerProps) {
+  const {
+    setPieces,
+    setEventInfo,
+    setUserContext,
+    setAnnotations,
+    nightMode,
+    gigMode,
+    isFullscreen,
+    showControls,
+    _currentPage: currentPage,
+    nextPage,
+    prevPage,
+    setCurrentPage,
+  } = useStandStore();
+
   const [selectedPartId, setSelectedPartId] = useState<string>('__full__');
 
   // Build the list of available views
@@ -86,17 +107,65 @@ export function LibraryStandViewer({ piece }: LibraryStandViewerProps) {
   const selectedPart = partOptions.find((p) => p.id === selectedPartId) ?? partOptions[0];
   const totalPages = selectedPart?.pageCount ?? 1;
 
-  const pdfUrl = selectedPart
-    ? `/api/stand/files/${encodeURIComponent(selectedPart.storageKey)}`
-    : null;
+  // Hydrate stand store whenever the selected part changes.
+  // IMPORTANT: ?pieceId=<id> is required by the file proxy access-control check.
+  useEffect(() => {
+    if (!selectedPart) return;
+    const pdfUrl =
+      `/api/stand/files/${encodeURIComponent(selectedPart.storageKey)}` +
+      `?pieceId=${encodeURIComponent(piece.id)}`;
 
-  function prevPage() {
-    setCurrentPage((p) => Math.max(1, p - 1));
-  }
+    setPieces([
+      {
+        id: piece.id,
+        title: piece.title,
+        composer: piece.composer ?? '',
+        pdfUrl,
+        totalPages: selectedPart.pageCount,
+      },
+    ]);
+    setEventInfo(`library-${piece.id}`, piece.title);
+    // Reset to page 1 when part changes
+    setCurrentPage(1);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPart?.storageKey, piece.id]);
 
-  function nextPage() {
-    setCurrentPage((p) => Math.min(totalPages, p + 1));
-  }
+  // Set user context and load annotations once on mount.
+  useEffect(() => {
+    setUserContext({
+      userId,
+      roles: [],
+      isDirector: false,
+      isSectionLeader: false,
+      userSectionIds: [],
+    });
+
+    // Fetch all personal/section/director annotations for this piece
+    fetch(`/api/stand/annotations?musicId=${encodeURIComponent(piece.id)}`)
+      .then((r) => (r.ok ? r.json() : { annotations: [] }))
+      .then((data) => {
+        if (Array.isArray(data.annotations) && data.annotations.length > 0) {
+          setAnnotations(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            data.annotations.map((a: any) => ({
+              id: a.id,
+              pieceId: a.musicId,
+              pageNumber: a.page,
+              layer: a.layer,
+              strokeData: a.strokeData ?? {},
+              userId: a.userId,
+              sectionId: a.sectionId ?? null,
+              createdAt: a.createdAt,
+              updatedAt: a.updatedAt,
+            }))
+          );
+        }
+      })
+      .catch(() => {
+        // Annotations are non-critical; silently ignore fetch failures
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [piece.id, userId]);
 
   return (
     <div
@@ -105,19 +174,20 @@ export function LibraryStandViewer({ piece }: LibraryStandViewerProps) {
         nightMode && 'bg-zinc-900 text-zinc-100'
       )}
     >
-      {/* Controls */}
+      {/* Controls bar – hidden in gig mode or fullscreen-without-controls */}
       <div
         className={cn(
           'flex items-center gap-3 px-4 py-2 border-b shrink-0',
-          nightMode ? 'bg-zinc-800 border-zinc-700' : 'bg-card'
+          nightMode ? 'bg-zinc-800 border-zinc-700' : 'bg-card',
+          gigMode || (!showControls && isFullscreen) ? 'hidden' : ''
         )}
       >
+        {/* Part / score selector */}
         {partOptions.length > 1 && (
           <Select
             value={selectedPartId}
             onValueChange={(v) => {
               setSelectedPartId(v);
-              setCurrentPage(1);
             }}
           >
             <SelectTrigger className="w-48 h-8 text-xs">
@@ -133,7 +203,8 @@ export function LibraryStandViewer({ piece }: LibraryStandViewerProps) {
           </Select>
         )}
 
-        <div className="flex items-center gap-2 ml-auto">
+        {/* Page navigation */}
+        <div className="flex items-center gap-2">
           <Button
             variant="outline"
             size="icon"
@@ -159,33 +230,34 @@ export function LibraryStandViewer({ piece }: LibraryStandViewerProps) {
           >
             <ChevronRight className="h-4 w-4" />
           </Button>
+        </div>
 
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={() => setNightMode((n) => !n)}
-            aria-label={nightMode ? 'Light mode' : 'Night mode'}
-          >
-            {nightMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          </Button>
+        {/* Full annotation + utility toolbar (includes night-mode, tools, metronome, tuner…) */}
+        <div className="ml-auto">
+          <Toolbar />
         </div>
       </div>
 
-      {/* PDF area */}
+      {/* Input handlers (renderless) */}
+      <KeyboardHandler />
+      <MidiHandler />
+
+      {/* Viewer area */}
       <div
         className={cn(
-          'flex-1 overflow-hidden',
-          nightMode ? 'bg-zinc-900' : 'bg-muted/30'
+          'flex-1 relative overflow-hidden',
+          nightMode ? 'bg-zinc-900' : 'bg-muted/20'
         )}
       >
-        {pdfUrl ? (
-          <PDFViewer
-            url={pdfUrl}
-            page={currentPage}
-            onPageChange={setCurrentPage}
-            nightMode={nightMode}
-          />
+        {selectedPart ? (
+          <>
+            <GestureHandler />
+            <StandCanvas />
+            <Metronome />
+            <Tuner />
+            <AudioPlayer />
+            <PitchPipe />
+          </>
         ) : (
           <div className="flex items-center justify-center h-full text-muted-foreground">
             No PDF available for this piece.

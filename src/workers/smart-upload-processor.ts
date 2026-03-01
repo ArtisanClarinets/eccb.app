@@ -30,9 +30,10 @@ import {
   buildGapInstructions,
 } from '@/lib/services/cutting-instructions';
 import { splitPdfByCuttingInstructions } from '@/lib/services/pdf-splitter';
-import { extractPdfPageHeaders, type PageHeader } from '@/lib/services/pdf-text-extractor';
+import { extractPdfPageHeaders } from '@/lib/services/pdf-text-extractor';
 import { detectPartBoundaries } from '@/lib/services/part-boundary-detector';
 import { extractOcrFallbackMetadata } from '@/lib/services/ocr-fallback';
+import { segmentByHeaderImages, preprocessForOcr } from '@/lib/services/header-image-segmentation';
 import {
   queueSmartUploadSecondPass,
   queueSmartUploadAutoCommit,
@@ -363,6 +364,16 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
     smart_upload_budget_max_input_tokens_per_session: llmConfig.budgetMaxInputTokens,
   });
 
+  // ── Strategy history for diagnostics + autonomous retry ──────────────────
+  interface StrategyAttempt {
+    strategy: string;
+    confidence: number;
+    failureReasons: string[];
+    durationMs: number;
+    timestamp: string;
+  }
+  const strategyHistory: StrategyAttempt[] = [];
+
   // ── PDF-to-LLM capability detection ───────────────────────────────────
   const providerMeta = getProviderMeta(llmConfig.provider);
   const canSendPdf = llmConfig.sendFullPdfToLlm && (providerMeta?.supportsPdfInput ?? false);
@@ -557,107 +568,161 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
       pageImagesRef = pageImages;
       sampledIndices = sampleResult.sampledIndices;
 
-      // For scanned/image PDFs without text layer, try header-crop labeling
+      // For scanned/image PDFs without text layer, try local header-image segmentation
+      // first (no LLM, no cost) before falling back to the LLM header-label pass.
       if (!deterministicInstructions || deterministicConfidence < llmConfig.skipParseThreshold) {
-        await progress('analyzing', 25, 'Running header-label pass for scanned pages');
 
-        try {
-          const allPageIndices = Array.from({ length: totalPages }, (_, i) => i);
-          const headerCropImages = await renderPdfHeaderCropBatch(pdfBuffer, allPageIndices, {
-            scale: 2,
-            maxWidth: 1024,
-            quality: 85,
-            format: 'png',
-            cropHeightFraction: 0.2,
-            cacheTag: sessionId,
-          });
-
-          const headerAdapterConfig = {
-            ...adapterConfig,
-            llm_vision_model: llmConfig.verificationModel,
-          };
-
-          const allParsedHeaderLabels: HeaderLabelEntry[] = [];
-          for (let batchStart = 0; batchStart < headerCropImages.length; batchStart += MAX_HEADER_CROP_BATCH_SIZE) {
-            const headerBudgetCheck = budget.check();
-            if (!headerBudgetCheck.allowed) {
-              logger.warn('Budget exhausted during header-label pass; using partial results', {
-                sessionId,
-                reason: headerBudgetCheck.reason,
-                labelsCollected: allParsedHeaderLabels.length,
-              });
-              break;
-            }
-
-            const batchEnd = Math.min(batchStart + MAX_HEADER_CROP_BATCH_SIZE, headerCropImages.length);
-            const batchPageIndices = allPageIndices.slice(batchStart, batchEnd);
-            const batchImages = headerCropImages.slice(batchStart, batchEnd);
-
-            const batchPrompt = buildHeaderLabelPrompt(llmConfig.headerLabelUserPrompt || llmConfig.headerLabelPrompt || '', {
-              pageNumbers: batchPageIndices.map((index) => index + 1),
+        // ── Strategy 1: local perceptual-hash segmentation + OCR-per-segment ──
+        // This replaces the LLM header-label pass for the majority of scanned PDFs
+        // where header images change clearly at part boundaries.
+        if (llmConfig.localOcrEnabled) {
+          await progress('analyzing', 22, 'Running local header-image segmentation (no LLM)');
+          try {
+            const localSeg = await segmentByHeaderImages(pdfBuffer, totalPages, {
+              cropHeightFraction: 0.20,
+              hashDistanceThreshold: 10,
+              enableOcr: true,
+              cacheTag: sessionId,
             });
 
-            const batchResult = await callVisionModel(
-              headerAdapterConfig,
-              batchImages.map((base64Data, i) => ({
-                mimeType: 'image/png' as const,
-                base64Data,
-                label: `Page ${batchPageIndices[i] + 1}`,
-              })),
-              batchPrompt,
-              {
-                system: llmConfig.headerLabelPrompt || DEFAULT_HEADER_LABEL_SYSTEM_PROMPT,
-                responseFormat: { type: 'json' },
-                maxTokens: 2048,
-                temperature: 0.1,
-                modelParams: llmConfig.verificationModelParams,
-              }
-            );
-            budget.record();
-
-            const batchLabels = parseHeaderLabelResponse(batchResult.content);
-            allParsedHeaderLabels.push(...batchLabels);
-
-            logger.info('Header-label batch complete', {
-              sessionId,
-              batchStart: batchStart + 1,
-              batchEnd,
-              labelsFound: batchLabels.length,
-            });
-          }
-
-          const pageHeaders: PageHeader[] = allParsedHeaderLabels.map((entry) => ({
-            pageIndex: entry.page - 1,
-            headerText: entry.label ?? '',
-            fullText: entry.label ?? '',
-            hasText: Boolean(entry.label),
-          }));
-
-          if (pageHeaders.length > 0) {
-            const segResult = detectPartBoundaries(pageHeaders, totalPages, false);
-            if (segResult.segments.length > 1 || segResult.segmentationConfidence >= 55) {
-              deterministicInstructions = segResult.cuttingInstructions;
-              deterministicConfidence = Math.max(
-                deterministicConfidence,
-                segResult.segmentationConfidence
-              );
-              for (const h of pageHeaders) {
-                if (h.hasText && h.headerText) {
-                  pageLabels[h.pageIndex + 1] = h.headerText;
+            if (localSeg && localSeg.segmentCount > 1 && localSeg.confidence >= 55) {
+              deterministicInstructions = localSeg.cuttingInstructions;
+              deterministicConfidence = Math.max(deterministicConfidence, localSeg.confidence);
+              // Populate per-page labels for the Review UI (1-indexed)
+              for (const ci of localSeg.cuttingInstructions) {
+                for (let pg = ci.pageRange[0]; pg <= ci.pageRange[1]; pg++) {
+                  pageLabels[pg + 1] = ci.instrument; // pageRange is 0-indexed
                 }
               }
-              logger.info('Header-label segmentation succeeded', {
+              logger.info('Local header-image segmentation succeeded — skipping LLM header-label pass', {
                 sessionId,
-                segments: segResult.segments.length,
-                confidence: segResult.segmentationConfidence,
+                segmentCount: localSeg.segmentCount,
+                confidence: localSeg.confidence,
+                hasOcrLabels: localSeg.hasOcrLabels,
+              });
+            } else {
+              logger.info('Local header-image segmentation inconclusive — falling back to LLM header-label pass', {
+                sessionId,
+                segmentCount: localSeg?.segmentCount ?? 0,
+                confidence: localSeg?.confidence ?? 0,
               });
             }
+          } catch (localSegErr) {
+            logger.warn('Local header-image segmentation failed; will fall back to LLM', {
+              sessionId,
+              error: localSegErr instanceof Error ? localSegErr.message : String(localSegErr),
+            });
           }
-        } catch (error) {
-          logger.warn('Header-label segmentation failed; continuing with first-pass vision', {
-            sessionId,
-            error: error instanceof Error ? error.message : String(error),
-          });
+        }
+
+        // ── Strategy 2: LLM header-label pass (fallback: used only when local seg fails) ──
+        // Skip if local segmentation already produced sufficient results.
+        const needsLlmHeaderPass =
+          !deterministicInstructions ||
+          deterministicInstructions.length <= 1 ||
+          deterministicConfidence < llmConfig.skipParseThreshold;
+
+        if (needsLlmHeaderPass) {
+          await progress('analyzing', 25, 'Running LLM header-label pass for scanned pages');
+
+          try {
+            const allPageIndices = Array.from({ length: totalPages }, (_, i) => i);
+            const headerCropImages = await renderPdfHeaderCropBatch(pdfBuffer, allPageIndices, {
+              scale: 2,
+              maxWidth: 1024,
+              quality: 85,
+              format: 'png',
+              cropHeightFraction: 0.2,
+              cacheTag: sessionId,
+            });
+
+            const headerAdapterConfig = {
+              ...adapterConfig,
+              llm_vision_model: llmConfig.verificationModel,
+            };
+
+            const allParsedHeaderLabels: HeaderLabelEntry[] = [];
+            for (let batchStart = 0; batchStart < headerCropImages.length; batchStart += MAX_HEADER_CROP_BATCH_SIZE) {
+              const headerBudgetCheck = budget.check();
+              if (!headerBudgetCheck.allowed) {
+                logger.warn('Budget exhausted during header-label pass; using partial results', {
+                  sessionId,
+                  reason: headerBudgetCheck.reason,
+                  labelsCollected: allParsedHeaderLabels.length,
+                });
+                break;
+              }
+
+              const batchEnd = Math.min(batchStart + MAX_HEADER_CROP_BATCH_SIZE, headerCropImages.length);
+              const batchPageIndices = allPageIndices.slice(batchStart, batchEnd);
+              const batchImages = headerCropImages.slice(batchStart, batchEnd);
+
+              const batchPrompt = buildHeaderLabelPrompt(llmConfig.headerLabelUserPrompt || llmConfig.headerLabelPrompt || '', {
+                pageNumbers: batchPageIndices.map((index) => index + 1),
+              });
+
+              const batchResult = await callVisionModel(
+                headerAdapterConfig,
+                batchImages.map((base64Data, i) => ({
+                  mimeType: 'image/png' as const,
+                  base64Data,
+                  label: `Page ${batchPageIndices[i] + 1}`,
+                })),
+                batchPrompt,
+                {
+                  system: llmConfig.headerLabelPrompt || DEFAULT_HEADER_LABEL_SYSTEM_PROMPT,
+                  responseFormat: { type: 'json' },
+                  maxTokens: 2048,
+                  temperature: 0.1,
+                  modelParams: llmConfig.verificationModelParams,
+                }
+              );
+              budget.record();
+
+              const batchLabels = parseHeaderLabelResponse(batchResult.content);
+              allParsedHeaderLabels.push(...batchLabels);
+
+              logger.info('Header-label batch complete', {
+                sessionId,
+                batchStart: batchStart + 1,
+                batchEnd,
+                labelsFound: batchLabels.length,
+              });
+            }
+
+            const pageHeaders = allParsedHeaderLabels.map((entry) => ({
+              pageIndex: entry.page - 1,
+              headerText: entry.label ?? '',
+              fullText: entry.label ?? '',
+              hasText: Boolean(entry.label),
+            }));
+
+            if (pageHeaders.length > 0) {
+              const segResult = detectPartBoundaries(pageHeaders, totalPages, false);
+              if (segResult.segments.length > 1 || segResult.segmentationConfidence >= 55) {
+                deterministicInstructions = segResult.cuttingInstructions;
+                deterministicConfidence = Math.max(
+                  deterministicConfidence,
+                  segResult.segmentationConfidence
+                );
+                for (const h of pageHeaders) {
+                  if (h.hasText && h.headerText) {
+                    pageLabels[h.pageIndex + 1] = h.headerText;
+                  }
+                }
+                logger.info('LLM header-label segmentation succeeded', {
+                  sessionId,
+                  segments: segResult.segments.length,
+                  confidence: segResult.segmentationConfidence,
+                });
+              }
+            }
+          } catch (error) {
+            logger.warn('Header-label segmentation failed; continuing with first-pass vision', {
+              sessionId,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
         }
       }
 
@@ -995,13 +1060,177 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
   // ---------------------------------------------------------------------------
   // DoD §1.5 — Autonomous Mode Quality Gates (shared module)
   // ---------------------------------------------------------------------------
-  const gateResult = evaluateQualityGates({
+  let gateResult = evaluateQualityGates({
     parsedParts,
     metadata: extraction,
     totalPages,
     maxPagesPerPart: llmConfig.maxPagesPerPart ?? 12,
     segmentationConfidence: extraction.segmentationConfidence,
   });
+
+  // Record the primary strategy attempt
+  strategyHistory.push({
+    strategy: ocrFirstEligible ? 'ocr-first-deterministic' : canSendPdf ? 'llm-pdf-native' : 'llm-image-vision',
+    confidence: gateResult.finalConfidence,
+    failureReasons: gateResult.reasons,
+    durationMs: 0, // filled below
+    timestamp: new Date().toISOString(),
+  });
+
+  // ── Self-heal loop (autonomous mode only) ─────────────────────────────────
+  // If quality gates fail and we're in autonomous mode, try alternate local
+  // segmentation strategies before giving up. Each iteration tries a different
+  // hash-distance threshold and crop fraction combination. We always pick the
+  // attempt with the highest finalConfidence that passes all gates.
+  //
+  // We only attempt this for the image path (not PDF-to-LLM) because the LLM
+  // already saw the full document. For scanned PDFs the segmentation is the
+  // main variable we can tune locally without spending more LLM calls.
+  if (
+    gateResult.failed &&
+    llmConfig.enableFullyAutonomousMode &&
+    !canSendPdf &&
+    !ocrFirstEligible &&
+    llmConfig.localOcrEnabled
+  ) {
+    logger.info('Self-heal: quality gates failed — trying alternate local segmentation strategies', {
+      sessionId,
+      failureReasons: gateResult.reasons,
+    });
+
+    // Strategy variants: [hashDistanceThreshold, cropHeightFraction]
+    const STRATEGY_VARIANTS: Array<[number, number]> = [
+      [5,  0.15],
+      [8,  0.20],
+      [15, 0.25],
+      [8,  0.30],
+      [20, 0.20],
+    ];
+
+    for (const [hashThreshold, cropFraction] of STRATEGY_VARIANTS) {
+      const healStart = Date.now();
+      try {
+        const altSeg = await segmentByHeaderImages(pdfBuffer, totalPages, {
+          cropHeightFraction: cropFraction,
+          hashDistanceThreshold: hashThreshold,
+          enableOcr: true,
+          cacheTag: sessionId,
+        });
+
+        if (!altSeg || altSeg.segmentCount <= 1) continue;
+
+        // Build a trial extraction from the alternate segmentation
+        const altInstructions = toOneIndexedInstructions(altSeg.cuttingInstructions);
+        const altValidation = validateAndNormalizeInstructions(altInstructions, totalPages, { oneIndexed: true, detectGaps: true });
+        const altGapInstructions = buildGapInstructions(altValidation.instructions, totalPages);
+        if (altGapInstructions.length > 0) {
+          altValidation.instructions.push(...altGapInstructions);
+        }
+
+        // Split the PDF with the alternate instructions
+        const altValidatedInstructions = sanitizeCuttingInstructionsForSplit(
+          altValidation.instructions.map((i) => ({ ...i, pageRange: [i.pageRange[0] - 1, i.pageRange[1] - 1] as [number, number] }))
+        );
+        const altSplitResults = await splitPdfByCuttingInstructions(
+          pdfBuffer,
+          smartSession.fileName.replace(/\.pdf$/i, ''),
+          altValidatedInstructions,
+          { indexing: 'zero' }
+        );
+
+        const altParsedParts: ParsedPartRecord[] = altSplitResults.map((r) => {
+          const ni = normalizeInstrumentLabel(r.instruction.instrument);
+          return {
+            partName: r.instruction.partName,
+            instrument: r.instruction.instrument,
+            section: r.instruction.section,
+            transposition: r.instruction.transposition,
+            partNumber: r.instruction.partNumber,
+            storageKey: '', // placeholder — not uploaded yet
+            fileName: buildPartFilename(`${smartSession.fileName.replace(/\.pdf$/i, '')} ${ni.instrument}`),
+            fileSize: r.buffer.length,
+            pageCount: r.pageCount,
+            pageRange: toOneIndexed(r.instruction.pageRange),
+          };
+        });
+
+        const altGateResult = evaluateQualityGates({
+          parsedParts: altParsedParts,
+          metadata: { ...extraction, cuttingInstructions: altValidation.instructions, segmentationConfidence: altSeg.confidence },
+          totalPages,
+          maxPagesPerPart: llmConfig.maxPagesPerPart ?? 12,
+          segmentationConfidence: altSeg.confidence,
+        });
+
+        const healDuration = Date.now() - healStart;
+        strategyHistory.push({
+          strategy: `local-segment:hash=${hashThreshold}:crop=${cropFraction}`,
+          confidence: altGateResult.finalConfidence,
+          failureReasons: altGateResult.reasons,
+          durationMs: healDuration,
+          timestamp: new Date().toISOString(),
+        });
+
+        if (!altGateResult.failed || altGateResult.finalConfidence > gateResult.finalConfidence) {
+          logger.info('Self-heal: alternate segmentation improved result', {
+            sessionId,
+            hashThreshold,
+            cropFraction,
+            confidence: altGateResult.finalConfidence,
+            gatesPassed: !altGateResult.failed,
+          });
+
+          // Upload the alternate parts and replace parsedParts/tempFiles/extraction
+          // Old parts remain in tempFiles and will be cleaned up at commit time
+          // (they won't be in finalMusicFileKeys, so deleteFile will handle them).
+          parsedParts.length = 0; // clear in place — the const binding stays valid
+
+          for (const result of altSplitResults) {
+            const normalised = normalizeInstrumentLabel(result.instruction.instrument);
+            const displayName = `${smartSession.fileName.replace(/\.pdf$/i, '')} ${normalised.instrument}`;
+            const slug = buildPartStorageSlug(displayName);
+            const partStorageKey = `smart-upload/${sessionId}/parts/heal/${slug}.pdf`;
+            const partFileName = buildPartFilename(displayName);
+            await uploadFile(partStorageKey, result.buffer, {
+              contentType: 'application/pdf',
+              metadata: { sessionId, instrument: result.instruction.instrument, partName: result.instruction.partName, originalUploadId: sessionId },
+            });
+            tempFiles.push(partStorageKey); // old keys remain (cleaned up at commit)
+            parsedParts.push({
+              partName: result.instruction.partName,
+              instrument: result.instruction.instrument,
+              section: result.instruction.section,
+              transposition: result.instruction.transposition,
+              partNumber: result.instruction.partNumber,
+              storageKey: partStorageKey,
+              fileName: partFileName,
+              fileSize: result.buffer.length,
+              pageCount: result.pageCount,
+              pageRange: toOneIndexed(result.instruction.pageRange),
+            });
+          }
+
+          // Update extraction with alternate segmentation
+          extraction.cuttingInstructions = altValidation.instructions;
+          extraction.confidenceScore = altSeg.confidence;
+          extraction.segmentationConfidence = altSeg.confidence;
+          gateResult = altGateResult;
+
+          if (!altGateResult.failed) {
+            logger.info('Self-heal succeeded: all quality gates pass with alternate segmentation', { sessionId });
+            break; // Stop trying more variants
+          }
+        }
+      } catch (healErr) {
+        logger.warn('Self-heal variant failed', {
+          sessionId,
+          hashThreshold,
+          cropFraction,
+          error: healErr instanceof Error ? healErr.message : String(healErr),
+        });
+      }
+    }
+  }
 
   const qualityGateFailed = gateResult.failed;
   const qualityGateReasons = gateResult.reasons;
@@ -1024,6 +1253,17 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
     logger.info('Auto-commit blocked by quality gate(s)', { sessionId, reasons: qualityGateReasons });
   }
 
+  // Persist final llmCallCount and strategyHistory (best-effort, non-fatal)
+  try {
+    await prisma.smartUploadSession.update({
+      where: { uploadSessionId: sessionId },
+      data: {
+        llmCallCount: budget.snapshot().llmCallCount,
+        strategyHistory: deepCloneJSON(strategyHistory) as any,
+      },
+    });
+  } catch { /* non-fatal — the main result update follows immediately */ }
+
   // Update session with results
   await prisma.smartUploadSession.update({
     where: { uploadSessionId: sessionId },
@@ -1034,7 +1274,8 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
       routingDecision,
       parseStatus: 'PARSED',
       parsedParts: deepCloneJSON(parsedParts) as any,
-      cuttingInstructions: deepCloneJSON(normalizedInstructionsOne) as any,
+      // Use extraction.cuttingInstructions — self-heal may have updated it from normalizedInstructionsOne
+      cuttingInstructions: deepCloneJSON(extraction.cuttingInstructions ?? normalizedInstructionsOne) as any,
       tempFiles: deepCloneJSON(tempFiles) as any,
       autoApproved: shouldAutoCommit,
       requiresHumanReview: qualityGateFailed || undefined,

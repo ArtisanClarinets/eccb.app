@@ -28,6 +28,7 @@ import path from 'path';
 import { logger } from '@/lib/logger';
 import { extractPdfPageHeaders } from '@/lib/services/pdf-text-extractor';
 import { renderPdfToImage, renderPdfHeaderCropBatch } from '@/lib/services/pdf-renderer';
+import { preprocessForOcr } from '@/lib/services/header-image-segmentation';
 
 export interface OCRMetadata {
   title: string;
@@ -270,6 +271,42 @@ export async function extractOcrFallbackMetadata(params: {
     return filenameFallback;
   }
 
+  // 0.5) PDF document-info metadata (pdf-lib — no rendering, no LLM)
+  // Embedded PDF metadata set by the original publishing/scanning tool is the
+  // highest-fidelity local source available for title/composer.
+  try {
+    const pdfLib = await import('pdf-lib').catch(() => null);
+    if (pdfLib?.PDFDocument) {
+      const doc = await pdfLib.PDFDocument.load(pdfBuffer, {
+        ignoreEncryption: true,
+        updateMetadata: false,
+      } as any);
+      const rawTitle = doc.getTitle?.()?.trim();
+      const rawAuthor = doc.getAuthor?.()?.trim();
+      const rawSubject = doc.getSubject?.()?.trim();
+
+      if (rawTitle && rawTitle.length >= 2) {
+        const composerCandidate = rawAuthor || rawSubject || undefined;
+        const confidence = composerCandidate ? 80 : 70;
+        const infoResult: OCRMetadata = {
+          title: normalizeWhitespace(rawTitle),
+          composer: composerCandidate ? normalizeWhitespace(composerCandidate) : undefined,
+          confidence,
+          isImageScanned: false, // optimistic; text-layer check below would refine this
+          needsManualReview: confidence < autoAcceptConfidenceThreshold,
+        };
+        logger.info('OCR fallback: using PDF document-info metadata (highest confidence)', {
+          filename: fileSafe,
+          confidence,
+          durationMs: Math.round(nowMs() - start),
+        });
+        return infoResult;
+      }
+    }
+  } catch {
+    // Non-fatal — continue to text-layer extraction
+  }
+
   // 1) Attempt text-layer extraction first (fast and deterministic)
   try {
     const extraction = await extractPdfPageHeaders(pdfBuffer, maxTextProbePages);
@@ -346,17 +383,36 @@ export async function extractOcrFallbackMetadata(params: {
       let ocrText = '';
 
       if (ocrMode === 'header' || ocrMode === 'both') {
-        const crops = await renderPdfHeaderCropBatch(pdfBuffer, [0], {
-          scale: renderScale,
-          maxWidth: renderMaxWidth,
-          quality: renderQuality,
-          format: renderFormat,
-          cropHeightFraction: 0.25,
-        });
+        // Try multiple crop heights and pick the result with the most content.
+        // Larger crops (40%) capture more of the title block on tall covers;
+        // smaller crops (20%) are better for part-label detection.
+        const CROP_FRACTIONS = [0.20, 0.25, 0.40];
+        let bestHeaderText = '';
 
-        if (crops?.[0]) {
-          ocrText = await tryOcrBase64ImageToText(crops[0]);
+        for (const cropFraction of CROP_FRACTIONS) {
+          const crops = await renderPdfHeaderCropBatch(pdfBuffer, [0], {
+            scale: renderScale,
+            maxWidth: renderMaxWidth,
+            quality: renderQuality,
+            format: renderFormat,
+            cropHeightFraction: cropFraction,
+          });
+
+          if (crops?.[0]) {
+            // Preprocess for better OCR performance (grayscale + normalise + sharpen)
+            let cropBase64 = crops[0];
+            try {
+              cropBase64 = await preprocessForOcr(cropBase64);
+            } catch { /* preprocessing optional; fall back to raw crop */ }
+
+            const cropText = await tryOcrBase64ImageToText(cropBase64);
+            if (cropText && cropText.trim().length > bestHeaderText.length) {
+              bestHeaderText = cropText;
+            }
+          }
         }
+
+        ocrText = bestHeaderText;
       }
 
       if (
@@ -372,7 +428,12 @@ export async function extractOcrFallbackMetadata(params: {
         });
 
         if (page0) {
-          const fullText = await tryOcrBase64ImageToText(page0);
+          let processed = page0;
+          try {
+            processed = await preprocessForOcr(page0);
+          } catch { /* preprocessing optional */ }
+
+          const fullText = await tryOcrBase64ImageToText(processed);
           // Prefer longer of header vs full
           if (fullText && fullText.length > ocrText.length) ocrText = fullText;
         }

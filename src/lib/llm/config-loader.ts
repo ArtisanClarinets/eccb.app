@@ -51,6 +51,10 @@ export interface LLMRuntimeConfig {
   /** When true AND provider supports PDF input, send the full PDF instead of rendered images.
    *  Defaults to true — native PDF input is faster and more accurate than image rendering. */
   sendFullPdfToLlm: boolean;
+  /** Enable local OCR-first pipeline (tesseract.js). When true, OCR is attempted before LLM. */
+  localOcrEnabled: boolean;
+  /** Minimum OCR confidence (0-100) to accept OCR-derived metadata without LLM fallback. */
+  ocrConfidenceThreshold: number;
   /** Maximum LLM calls allowed per upload session. 0 = unlimited. */
   budgetMaxLlmCalls: number;
   /** Maximum input tokens allowed per upload session. 0 = unlimited. */
@@ -101,6 +105,8 @@ const DB_KEYS = [
   'smart_upload_autonomous_approval_threshold',
   'smart_upload_max_pages_per_part',
   'smart_upload_send_full_pdf_to_llm',
+  'smart_upload_local_ocr_enabled',
+  'smart_upload_ocr_confidence_threshold',
   'smart_upload_budget_max_llm_calls_per_session',
   'smart_upload_budget_max_input_tokens_per_session',
   'llm_adjudicator_model',
@@ -286,6 +292,8 @@ export async function loadLLMConfig(): Promise<LLMRuntimeConfig> {
     autonomousApprovalThreshold: Number(db['smart_upload_autonomous_approval_threshold'] ?? 95),
     maxPagesPerPart: Number(db['smart_upload_max_pages_per_part'] ?? 12),
     sendFullPdfToLlm: (db['smart_upload_send_full_pdf_to_llm'] ?? 'true') === 'true',
+    localOcrEnabled: (db['smart_upload_local_ocr_enabled'] ?? 'true') === 'true',
+    ocrConfidenceThreshold: Number(db['smart_upload_ocr_confidence_threshold'] ?? 60),
     budgetMaxLlmCalls: Number(db['smart_upload_budget_max_llm_calls_per_session'] ?? 5),
     budgetMaxInputTokens: Number(db['smart_upload_budget_max_input_tokens_per_session'] ?? 500000),
     visionModelParams,

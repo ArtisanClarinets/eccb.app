@@ -51,6 +51,12 @@ export const SMART_UPLOAD_SETTING_KEYS = [
   'llm_vision_system_prompt',
   'llm_verification_system_prompt',
   'llm_prompt_version',
+  // User prompt templates (editable via Admin UI / settings API)
+  'llm_vision_user_prompt',
+  'llm_pdf_vision_user_prompt',
+  'llm_verification_user_prompt',
+  'llm_header_label_user_prompt',
+  'llm_adjudicator_user_prompt',
   
   // Behavior settings
   'smart_upload_confidence_threshold',
@@ -132,6 +138,13 @@ export const SmartUploadSettingsSchema = z.object({
   llm_vision_system_prompt: z.string().min(1, 'Vision system prompt is required'),
   llm_verification_system_prompt: z.string().min(1, 'Verification system prompt is required'),
   llm_prompt_version: z.string().default(PROMPT_VERSION),
+
+  // User prompt templates (optional — fall back to hardcoded defaults when absent)
+  llm_vision_user_prompt: z.string().optional(),
+  llm_pdf_vision_user_prompt: z.string().optional(),
+  llm_verification_user_prompt: z.string().optional(),
+  llm_header_label_user_prompt: z.string().optional(),
+  llm_adjudicator_user_prompt: z.string().optional(),
   
   // Behavior settings with defaults
   smart_upload_confidence_threshold: z

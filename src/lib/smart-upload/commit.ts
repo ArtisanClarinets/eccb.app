@@ -116,8 +116,14 @@ export async function commitSmartUploadSessionToLibrary(
 
   // ── Idempotency check ────────────────────────────────────────────
   // If this session was already committed, return existing data instead of failing.
+  // IMPORTANT: filter to the *original* MusicFile only (fileType != 'PART').
+  // Part files also share originalUploadId=sessionId, so a plain findFirst
+  // would non-deterministically return a part file and give back wrong IDs.
   const existingImportedFile = await prisma.musicFile.findFirst({
-    where: { originalUploadId: sessionId },
+    where: {
+      originalUploadId: sessionId,
+      fileType: { not: 'PART' },
+    },
     select: { id: true, pieceId: true, piece: { select: { id: true, title: true } } },
   });
 

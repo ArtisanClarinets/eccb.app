@@ -411,10 +411,17 @@ model SmartUploadSession {
   finalConfidence    Int?
   requiresHumanReview Boolean          @default(false)
   llmAdjudicatorModel String?
+  /// SHA-256 of the original uploaded PDF bytes (hex). Used for fast exact-duplicate detection.
+  sourceSha256       String?          @db.Char(64)
+  /// JSON array of strategy attempts: [{strategy, confidence, failureReasons, durationMs, timestamp}]
+  strategyHistory    Json?
+  /// Total LLM calls consumed by this session (persisted so retries don't reset the budget).
+  llmCallCount       Int              @default(0)
 
   @@index([uploadSessionId])
   @@index([status])
   @@index([uploadedBy])
+  @@index([sourceSha256])
 }
 
 model MusicPart {

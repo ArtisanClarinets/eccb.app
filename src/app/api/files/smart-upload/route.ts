@@ -130,6 +130,78 @@ export async function POST(request: NextRequest) {
     // Compute source SHA-256 before upload for dedup/idempotency
     const sourceSha256 = computeSha256(buffer);
 
+    // ── Duplicate detection ──────────────────────────────────────────────────
+    // Check for an existing session or committed MusicFile with the same hash.
+    // This prevents library spam when the same PDF is uploaded multiple times.
+    const [existingSession, existingMusicFile] = await Promise.all([
+      prisma.smartUploadSession.findFirst({
+        where: { sourceSha256 },
+        select: { uploadSessionId: true, status: true, createdAt: true, fileName: true },
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.musicFile.findFirst({
+        where: {
+          // originalUploadId is set on committed files; we look for contentHash match
+          // via the sourceSha256 stored in the session's extractedMetadata.
+          // More reliable: join through SmartUploadSession via originalUploadId.
+          originalUploadId: {
+            in: await prisma.smartUploadSession
+              .findMany({ where: { sourceSha256 }, select: { uploadSessionId: true } })
+              .then((sessions) => sessions.map((s) => s.uploadSessionId)),
+          },
+          fileType: { not: 'PART' },
+        },
+        select: { id: true, pieceId: true, piece: { select: { title: true } } },
+      }),
+    ]);
+
+    if (existingMusicFile) {
+      logger.info('Smart upload duplicate detected (already committed)', {
+        userId: session.user.id,
+        filename: file.name,
+        sourceSha256,
+        existingPieceId: existingMusicFile.pieceId,
+      });
+      return NextResponse.json(
+        {
+          success: false,
+          duplicate: true,
+          reason: 'exact_duplicate',
+          existingPiece: {
+            id: existingMusicFile.pieceId,
+            title: existingMusicFile.piece?.title,
+          },
+          message: `This file has already been imported as "${existingMusicFile.piece?.title ?? 'Unknown'}". Importing it again would create a duplicate.`,
+        },
+        { status: 409 }
+      );
+    }
+
+    if (existingSession && existingSession.status !== 'REJECTED') {
+      logger.info('Smart upload duplicate detected (existing session)', {
+        userId: session.user.id,
+        filename: file.name,
+        sourceSha256,
+        existingSessionId: existingSession.uploadSessionId,
+        existingStatus: existingSession.status,
+      });
+      return NextResponse.json(
+        {
+          success: false,
+          duplicate: true,
+          reason: 'pending_session',
+          existingSession: {
+            id: existingSession.uploadSessionId,
+            status: existingSession.status,
+            fileName: existingSession.fileName,
+            createdAt: existingSession.createdAt,
+          },
+          message: `This exact file was already uploaded on ${existingSession.createdAt.toISOString().slice(0, 10)} and is ${existingSession.status === 'PENDING_REVIEW' ? 'pending review' : 'already approved'}. Re-use the existing session rather than uploading again.`,
+        },
+        { status: 409 }
+      );
+    }
+
     // Upload file to storage
     await uploadFile(storageKey, buffer, {
       contentType: 'application/pdf',
@@ -149,6 +221,7 @@ export async function POST(request: NextRequest) {
         fileSize: file.size,
         mimeType: 'application/pdf',
         storageKey,
+        sourceSha256,
         extractedMetadata: {
           title: file.name.replace(/\.pdf$/i, ''),
           confidenceScore: 0,
@@ -160,6 +233,7 @@ export async function POST(request: NextRequest) {
         parseStatus: 'NOT_PARSED' as ParseStatus,
         secondPassStatus: 'NOT_NEEDED' as SecondPassStatus,
         autoApproved: false,
+        llmCallCount: 0,
       },
     });
 
