@@ -102,7 +102,7 @@ async function samplePdfPages(
   pdfBuffer: Buffer,
   cacheTag?: string,
 ): Promise<{ images: string[]; totalPages: number; sampledIndices: number[] }> {
-  const pdfDoc = await PDFDocument.load(pdfBuffer);
+  const pdfDoc = await PDFDocument.load(pdfBuffer, { ignoreEncryption: true });
   const totalPages = pdfDoc.getPageCount();
 
   let indices: number[];
@@ -378,7 +378,7 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
   const pdfBuffer = await streamToBuffer(downloadResult.stream);
 
   // Get total page count (lightweight — no rendering)
-  const pdfDoc = await PDFDocument.load(pdfBuffer);
+  const pdfDoc = await PDFDocument.load(pdfBuffer, { ignoreEncryption: true });
   const totalPages = pdfDoc.getPageCount();
 
   // -----------------------------------------------------------------

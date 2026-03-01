@@ -63,7 +63,7 @@ async function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
 
 async function convertAllPdfPagesToImages(pdfBuffer: Buffer): Promise<string[]> {
   const { PDFDocument } = await import('pdf-lib');
-  const pdfDoc = await PDFDocument.load(pdfBuffer);
+  const pdfDoc = await PDFDocument.load(pdfBuffer, { ignoreEncryption: true });
   const totalPages = pdfDoc.getPageCount();
   const pagesToProcess = Math.min(totalPages, MAX_PDF_PAGES_FOR_LLM);
 

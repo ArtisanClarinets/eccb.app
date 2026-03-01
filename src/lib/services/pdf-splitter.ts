@@ -103,7 +103,7 @@ export async function splitPdfByPageRanges(
   try {
     // Convert Buffer to Uint8Array for pdf-lib compatibility
     const pdfData = new Uint8Array(pdfBuffer);
-    sourcePdf = await PDFDocument.load(pdfData);
+    sourcePdf = await PDFDocument.load(pdfData, { ignoreEncryption: true });
 
     const totalPages = sourcePdf.getPageCount();
     const results: SplitPart[] = [];
@@ -223,7 +223,7 @@ export async function validatePdfBuffer(pdfBuffer: Buffer): Promise<{
   let pdfDoc: any | undefined;
   try {
     const pdfData = new Uint8Array(pdfBuffer);
-    pdfDoc = await PDFDocument.load(pdfData);
+    pdfDoc = await PDFDocument.load(pdfData, { ignoreEncryption: true });
     return {
       valid: true,
       pageCount: pdfDoc.getPageCount(),
@@ -254,7 +254,7 @@ export async function getPdfMetadata(
   let pdfDoc: any | undefined;
   try {
     const pdfData = new Uint8Array(pdfBuffer);
-    pdfDoc = await PDFDocument.load(pdfData);
+    pdfDoc = await PDFDocument.load(pdfData, { ignoreEncryption: true });
 
     return {
       pageCount: pdfDoc.getPageCount(),
@@ -314,7 +314,7 @@ export async function splitPdfByCuttingInstructions(
 
     // Convert Buffer to Uint8Array for pdf-lib compatibility
     const pdfData = new Uint8Array(pdfBuffer);
-    sourcePdf = await PDFDocument.load(pdfData);
+    sourcePdf = await PDFDocument.load(pdfData, { ignoreEncryption: true });
 
     const totalPages = sourcePdf.getPageCount();
     const results: Array<{

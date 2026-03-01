@@ -118,7 +118,7 @@ export async function GET(
     }
 
     // Get total page count using pdf-lib
-    const pdfDoc = await PDFDocument.load(pdfBuffer);
+    const pdfDoc = await PDFDocument.load(pdfBuffer, { ignoreEncryption: true });
     const totalPages = pdfDoc.getPageCount();
 
     // Validate requested page index
