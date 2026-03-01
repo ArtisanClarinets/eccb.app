@@ -272,20 +272,27 @@ describe('Auto-commit Quality Gates (DoD §1.5)', () => {
   });
 
   it('Gate 1 – ALLOWS auto-commit when all parts have valid labels', async () => {
+    // Override maxPagesPerPart to allow a 20-page single-part PDF (pdf-lib mock returns 20 pages).
+    // Gate 2 checks pageCount > maxPagesPerPart — set to 25 so a 20-page part passes.
+    vi.mocked(loadSmartUploadRuntimeConfig).mockResolvedValue(
+      makeAutonomousConfig({ maxPagesPerPart: 25 }) as any,
+    );
+
     vi.mocked(callVisionModel).mockResolvedValue({
       content: JSON.stringify({
         title: 'American Patrol',
         composer: 'F.W. Meacham',
         confidenceScore: 95,
         isMultiPart: false,
+        // Cover all 20 pages (pdf-lib mock returns 20) so Gate 5 (coverage) does not fire
         cuttingInstructions: [
-          { instrument: 'Bb Clarinet', partName: 'Bb Clarinet', section: 'Woodwinds', transposition: 'Bb', partNumber: 1, pageRange: [1, 3] },
+          { instrument: 'Bb Clarinet', partName: 'Bb Clarinet', section: 'Woodwinds', transposition: 'Bb', partNumber: 1, pageRange: [1, 20] },
         ],
       }),
     });
 
     vi.mocked(splitPdfByCuttingInstructions).mockResolvedValue([
-      makePartResult('Bb Clarinet', 'Bb Clarinet', 3),
+      makePartResult('Bb Clarinet', 'Bb Clarinet', 20),
     ] as any);
 
     await processSmartUpload(makeJob());

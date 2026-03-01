@@ -86,8 +86,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const validated = rosterCreateSchema.parse(body);
 
-    const userId = validated.userId || session.user.id;
-
     const hasAccess = await canAccessEvent(session.user.id, validated.eventId);
     if (!hasAccess) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });

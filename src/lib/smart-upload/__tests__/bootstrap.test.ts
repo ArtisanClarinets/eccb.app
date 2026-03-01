@@ -320,6 +320,16 @@ describe('Smart Upload Bootstrap', () => {
         { key: 'vision_model_params', value: '{}' },
         { key: 'verification_model_params', value: '{}' },
         { key: 'smart_upload_schema_version', value: '1.0.0' },
+        // Enterprise: OCR-first pipeline
+        { key: 'smart_upload_local_ocr_enabled', value: 'true' },
+        { key: 'smart_upload_ocr_confidence_threshold', value: '60' },
+        // Enterprise: PDF-to-LLM
+        { key: 'smart_upload_send_full_pdf_to_llm', value: 'true' },
+        // Enterprise: Budget system
+        { key: 'smart_upload_budget_max_llm_calls_per_session', value: '5' },
+        { key: 'smart_upload_budget_max_input_tokens_per_session', value: '500000' },
+        // Additional numeric settings
+        { key: 'smart_upload_max_pages_per_part', value: '12' },
       ]);
 
       const result = await bootstrapSmartUploadSettings();

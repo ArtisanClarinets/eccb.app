@@ -27,7 +27,6 @@ import { prisma } from '@/lib/db';
 import { initializeQueues, getQueue } from '@/lib/jobs/queue';
 import { SMART_UPLOAD_JOB_NAMES } from '@/lib/jobs/smart-upload';
 import { startSmartUploadProcessorWorker, stopSmartUploadProcessorWorker } from '@/workers/smart-upload-processor-worker';
-import { logger } from '@/lib/logger';
 import { bootstrapSmartUploadSettings } from '@/lib/smart-upload/bootstrap';
 
 // =============================================================================

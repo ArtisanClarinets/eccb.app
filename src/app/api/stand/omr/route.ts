@@ -4,6 +4,7 @@ import { headers } from 'next/headers';
 import { prisma } from '@/lib/db';
 import { getUserRoles } from '@/lib/auth/permissions';
 import { applyRateLimit } from '@/lib/rate-limit';
+import { loadSmartUploadRuntimeConfig } from '@/lib/llm/config-loader';
 import { z } from 'zod';
 
 // Zod schema for OMR request validation
@@ -29,11 +30,11 @@ interface OMRMetadata {
 
 /**
  * POST /api/stand/omr
- * Performs Optical Music Recognition on a PDF file using user's personal LLM/vision API key
+ * Performs Optical Music Recognition on a PDF file using database-configured AI keys.
  *
  * This endpoint:
- * 1. Validates user authentication
- * 2. Retrieves user's personal API key from preferences
+ * 1. Validates user authentication and role (DIRECTOR / SUPER_ADMIN / LIBRARIAN)
+ * 2. Loads provider + API key from the SystemSetting table (DB-driven, never env)
  * 3. Fetches the PDF file from storage
  * 4. Calls the configured AI/vision provider for OMR analysis
  * 5. Stores extracted metadata in MusicFile.extractedMetadata
@@ -71,19 +72,38 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const validated = omrRequestSchema.parse(body);
 
-    // Use server-configured API keys (never store in user preferences)
-    const omrProvider = process.env.OMR_PROVIDER || 'openai';
+    // ── Load provider + API key from the database (single source of truth) ─
+    const llmConfig = await loadSmartUploadRuntimeConfig();
+    const omrProvider = llmConfig.provider;
     let omrApiKey: string | undefined;
 
     switch (omrProvider.toLowerCase()) {
       case 'openai':
-        omrApiKey = process.env.LLM_OPENAI_API_KEY;
+        omrApiKey = llmConfig.openaiApiKey || undefined;
         break;
       case 'anthropic':
-        omrApiKey = process.env.LLM_ANTHROPIC_API_KEY;
+        omrApiKey = llmConfig.anthropicApiKey || undefined;
         break;
       case 'google':
-        omrApiKey = process.env.LLM_GEMINI_API_KEY;
+      case 'gemini':
+        omrApiKey = llmConfig.geminiApiKey || undefined;
+        break;
+      case 'openrouter':
+        omrApiKey = llmConfig.openrouterApiKey || undefined;
+        break;
+      case 'mistral':
+        omrApiKey = llmConfig.mistralApiKey || undefined;
+        break;
+      case 'groq':
+        omrApiKey = llmConfig.groqApiKey || undefined;
+        break;
+      case 'custom':
+        omrApiKey = llmConfig.customApiKey || undefined;
+        break;
+      // ollama / ollama-cloud: local, no API key required
+      case 'ollama':
+      case 'ollama-cloud':
+        omrApiKey = 'local';
         break;
     }
 
@@ -92,7 +112,7 @@ export async function POST(request: NextRequest) {
         {
           error: 'OMR not configured',
           code: 'SERVER_KEY_REQUIRED',
-          message: 'Server-side AI API key is not configured. Contact an administrator.',
+          message: 'No AI API key is configured. Set your provider API key in Admin → Smart Upload Settings.',
         },
         { status: 503 }
       );
@@ -125,11 +145,17 @@ export async function POST(request: NextRequest) {
     // Get file URL for processing
     const fileUrl = `/api/files/${musicFile.storageKey}`;
 
-    // Call the appropriate AI provider for OMR
+    // Call the appropriate AI provider for OMR (using DB-configured model)
     let metadata: OMRMetadata;
 
     try {
-      metadata = await performOMRAnalysis(fileUrl, omrApiKey, omrProvider);
+      metadata = await performOMRAnalysis(
+        fileUrl,
+        omrApiKey,
+        omrProvider,
+        llmConfig.visionModel,
+        llmConfig.endpointUrl,
+      );
     } catch (omrError) {
       console.error('OMR analysis failed:', omrError);
       return NextResponse.json(
@@ -317,48 +343,73 @@ async function resolveToBase64Image(
 }
 
 /**
- * Perform OMR analysis using the configured AI provider
+ * Perform OMR analysis using the database-configured AI provider.
+ * Supports: openai, anthropic, google/gemini, openrouter (OpenAI-compatible),
+ * mistral, groq, custom (OpenAI-compatible).
  */
 async function performOMRAnalysis(
   fileUrl: string,
   apiKey: string,
-  provider: string
+  provider: string,
+  visionModel?: string,
+  endpointUrl?: string,
 ): Promise<OMRMetadata> {
   // Resolve the file to a base64-encoded PNG/JPEG, converting PDFs automatically
   const { base64, mimeType } = await resolveToBase64Image(fileUrl);
 
-  // Provider-specific analysis using base64 image data
-  switch (provider.toLowerCase()) {
-    case 'openai':
-      return analyzeWithOpenAI(base64, mimeType, apiKey);
-    case 'anthropic':
-      return analyzeWithAnthropic(base64, mimeType, apiKey);
-    case 'google':
-      return analyzeWithGoogle(base64, mimeType, apiKey);
-    default:
-      throw new Error(`Unsupported OMR provider: ${provider}`);
+  const p = provider.toLowerCase();
+
+  // OpenAI-compatible providers (openai, openrouter, mistral, groq, custom)
+  if (p === 'openai' || p === 'openrouter' || p === 'mistral' || p === 'groq' || p === 'custom') {
+    const endpoint =
+      endpointUrl ||
+      (p === 'openrouter' ? 'https://openrouter.ai/api/v1' :
+       p === 'mistral'    ? 'https://api.mistral.ai/v1' :
+       p === 'groq'       ? 'https://api.groq.com/openai/v1' :
+       'https://api.openai.com/v1');
+    const model =
+      visionModel ||
+      (p === 'openrouter' ? 'google/gemini-2.0-flash-exp:free' :
+       p === 'mistral'    ? 'pixtral-12b-2409' :
+       p === 'groq'       ? 'llama-3.2-11b-vision-preview' :
+       'gpt-4o');
+    return analyzeWithOpenAI(base64, mimeType, apiKey, endpoint, model);
   }
+
+  if (p === 'anthropic') {
+    const model = visionModel || 'claude-opus-4-5';
+    return analyzeWithAnthropic(base64, mimeType, apiKey, model);
+  }
+
+  if (p === 'google' || p === 'gemini') {
+    const model = visionModel || 'gemini-1.5-flash';
+    return analyzeWithGoogle(base64, mimeType, apiKey, model);
+  }
+
+  throw new Error(`Unsupported OMR provider: ${provider}`);
 }
 
 /**
- * Analyze sheet music using OpenAI Vision API
+ * Analyze sheet music using the OpenAI Vision API (or any OpenAI-compatible endpoint).
  * Accepts pre-converted base64 image data for reliable PDF support.
  */
 async function analyzeWithOpenAI(
   base64Image: string,
   mimeType: string,
-  apiKey: string
+  apiKey: string,
+  endpointUrl = 'https://api.openai.com/v1',
+  model = 'gpt-4o',
 ): Promise<OMRMetadata> {
   const dataUrl = `data:${mimeType};base64,${base64Image}`;
 
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+  const response = await fetch(`${endpointUrl.replace(/\/$/, '')}/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: 'gpt-4o',
+      model,
       messages: [
         {
           role: 'system',
@@ -421,7 +472,8 @@ Be conservative - only include fields you can determine with high confidence.`,
 async function analyzeWithAnthropic(
   base64Image: string,
   mimeType: string,
-  apiKey: string
+  apiKey: string,
+  model = 'claude-opus-4-5',
 ): Promise<OMRMetadata> {
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -431,7 +483,7 @@ async function analyzeWithAnthropic(
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-opus-4-5',
+      model,
       max_tokens: 1000,
       messages: [
         {
@@ -498,10 +550,11 @@ Return only valid JSON.`,
 async function analyzeWithGoogle(
   base64Image: string,
   mimeType: string,
-  apiKey: string
+  apiKey: string,
+  model = 'gemini-1.5-flash',
 ): Promise<OMRMetadata> {
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
     {
       method: 'POST',
       headers: {

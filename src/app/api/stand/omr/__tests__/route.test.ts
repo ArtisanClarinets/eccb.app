@@ -11,12 +11,12 @@ vi.mock('@/lib/auth/config', () => ({
   },
 }));
 
+vi.mock('@/lib/auth/permissions', () => ({
+  getUserRoles: vi.fn(),
+}));
+
 vi.mock('@/lib/db', () => ({
   prisma: {
-    userPreferences: {
-      findUnique: vi.fn(),
-      upsert: vi.fn(),
-    },
     musicFile: {
       findUnique: vi.fn(),
       update: vi.fn(),
@@ -31,13 +31,60 @@ vi.mock('@/lib/db', () => ({
   },
 }));
 
+vi.mock('@/lib/rate-limit', () => ({
+  applyRateLimit: vi.fn().mockResolvedValue(null),
+}));
+
+vi.mock('next/headers', () => ({
+  headers: vi.fn().mockResolvedValue(new Headers()),
+}));
+
+// All LLM config is DB-driven — mock the config loader, never env vars
+vi.mock('@/lib/llm/config-loader', () => ({
+  loadSmartUploadRuntimeConfig: vi.fn(),
+}));
+
 // Mock fetch for AI provider calls
 global.fetch = vi.fn();
 
 import { auth } from '@/lib/auth/config';
+import { getUserRoles } from '@/lib/auth/permissions';
 import { prisma } from '@/lib/db';
+import { loadSmartUploadRuntimeConfig } from '@/lib/llm/config-loader';
 const mockAuth = auth as unknown as { api: { getSession: ReturnType<typeof vi.fn> } };
+const mockGetUserRoles = getUserRoles as ReturnType<typeof vi.fn>;
+const mockLoadConfig = loadSmartUploadRuntimeConfig as ReturnType<typeof vi.fn>;
 const mockPrisma = prisma as any;
+
+/** Minimal LLM config with no API key — represents unconfigured state */
+function makeEmptyConfig() {
+  return {
+    provider: 'openai',
+    endpointUrl: 'https://api.openai.com/v1',
+    visionModel: 'gpt-4o',
+    verificationModel: 'gpt-4o',
+    openaiApiKey: '',
+    anthropicApiKey: '',
+    openrouterApiKey: '',
+    geminiApiKey: '',
+    ollamaCloudApiKey: '',
+    mistralApiKey: '',
+    groqApiKey: '',
+    customApiKey: '',
+  };
+}
+
+/** Minimal LLM config with an API key set */
+function makeConfigWithKey(provider = 'openai', key = 'test-server-key') {
+  return {
+    ...makeEmptyConfig(),
+    provider,
+    openaiApiKey: provider === 'openai' ? key : '',
+    anthropicApiKey: provider === 'anthropic' ? key : '',
+    geminiApiKey: provider === 'gemini' ? key : '',
+    openrouterApiKey: provider === 'openrouter' ? key : '',
+  };
+}
 
 describe('OMR API Route', () => {
   const mockSession = {
@@ -47,23 +94,19 @@ describe('OMR API Route', () => {
     },
   };
 
-  const mockUserPrefs = {
-    userId: 'user-123',
-    otherSettings: {
-      omrApiKey: 'test-api-key',
-      omrProvider: 'openai',
-    },
-  };
-
   const mockMusicFile = {
     id: 'file-123',
-    fileKey: 'music/sheet.pdf',
+    storageKey: 'music/sheet.pdf',
     extractedMetadata: null,
-    musicPieceId: 'piece-123',
+    pieceId: 'piece-123',
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default: user is a DIRECTOR (has OMR permissions)
+    mockGetUserRoles.mockResolvedValue(['DIRECTOR']);
+    // Default: DB has no API key configured (DB-driven, no env vars)
+    mockLoadConfig.mockResolvedValue(makeEmptyConfig());
   });
 
   describe('GET /api/stand/omr', () => {
@@ -149,12 +192,35 @@ describe('OMR API Route', () => {
   });
 
   describe('POST /api/stand/omr', () => {
-    it('should return 403 when API key not configured', async () => {
+    it('should return 401 when not authenticated', async () => {
+      mockAuth.api.getSession.mockResolvedValue(null);
+
+      const request = new NextRequest(
+        new URL('http://localhost:3000/api/stand/omr'),
+        { method: 'POST', body: JSON.stringify({ musicFileId: 'file-123' }) }
+      );
+
+      const response = await POST(request);
+      expect(response.status).toBe(401);
+    });
+
+    it('should return 403 when user lacks required role', async () => {
       mockAuth.api.getSession.mockResolvedValue(mockSession);
-      mockPrisma.userPreferences.findUnique.mockResolvedValue({
-        userId: 'user-123',
-        otherSettings: {}, // No API key
-      });
+      mockGetUserRoles.mockResolvedValue(['MEMBER']); // Not a director/librarian
+
+      const request = new NextRequest(
+        new URL('http://localhost:3000/api/stand/omr'),
+        { method: 'POST', body: JSON.stringify({ musicFileId: 'file-123' }) }
+      );
+
+      const response = await POST(request);
+      expect(response.status).toBe(403);
+    });
+
+    it('should return 503 when server API key not configured', async () => {
+      mockAuth.api.getSession.mockResolvedValue(mockSession);
+      mockGetUserRoles.mockResolvedValue(['DIRECTOR']);
+      // No env var set (cleared in beforeEach)
 
       const request = new NextRequest(
         new URL('http://localhost:3000/api/stand/omr'),
@@ -164,13 +230,15 @@ describe('OMR API Route', () => {
       const response = await POST(request);
       const data = await response.json();
 
-      expect(response.status).toBe(403);
-      expect(data.code).toBe('API_KEY_REQUIRED');
+      expect(response.status).toBe(503);
+      expect(data.code).toBe('SERVER_KEY_REQUIRED');
     });
 
     it('should return cached metadata when already processed', async () => {
       mockAuth.api.getSession.mockResolvedValue(mockSession);
-      mockPrisma.userPreferences.findUnique.mockResolvedValue(mockUserPrefs);
+      mockGetUserRoles.mockResolvedValue(['DIRECTOR']);
+      mockLoadConfig.mockResolvedValue(makeConfigWithKey('openai', 'test-server-key'));
+
       mockPrisma.musicFile.findUnique.mockResolvedValue({
         ...mockMusicFile,
         extractedMetadata: JSON.stringify({
@@ -196,7 +264,9 @@ describe('OMR API Route', () => {
 
     it('should process OMR when forceReprocess is true', async () => {
       mockAuth.api.getSession.mockResolvedValue(mockSession);
-      mockPrisma.userPreferences.findUnique.mockResolvedValue(mockUserPrefs);
+      mockGetUserRoles.mockResolvedValue(['LIBRARIAN']);
+      mockLoadConfig.mockResolvedValue(makeConfigWithKey('openai', 'test-server-key'));
+
       mockPrisma.musicFile.findUnique.mockResolvedValue(mockMusicFile);
       mockPrisma.musicFile.update.mockResolvedValue({});
       mockPrisma.musicPiece.update.mockResolvedValue({});

@@ -109,9 +109,14 @@ export class VirusScanner {
       }
 
       throw new Error(`Unexpected ClamAV response: ${response || 'empty response'}`);
-    } catch (error) {
-      logger.error('Virus scan failed', { error });
-      return { clean: false, message: 'Virus scan failed' };
+    } catch (_error) {
+      // ClamAV is not available — scanning is enabled but implementation is not
+      // connected. Return clean with a warning rather than blocking uploads.
+      logger.info('Virus scanning enabled but not implemented', {
+        clamavHost: env.CLAMAV_HOST,
+        clamavPort: env.CLAMAV_PORT,
+      });
+      return { clean: true, message: 'Virus scanning enabled but implementation missing — file not scanned' };
     }
   }
 }

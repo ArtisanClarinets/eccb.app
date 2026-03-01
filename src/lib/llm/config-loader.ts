@@ -1,9 +1,11 @@
 // src/lib/llm/config-loader.ts
 // ============================================================
 // Canonical LLM configuration loader.
-// Reads the authoritative `llm_endpoint_url` key from the DB,
-// falls back to provider-specific defaults when not set.
-// SECURITY: Provider keys are strictly isolated.
+// ALL API keys are stored exclusively in the database.
+// Env vars may be used ONCE at first startup to seed the DB
+// (via bootstrapLLMApiKeysFromEnv), then should be removed.
+// SECURITY: Provider keys are strictly isolated; no env
+// fallbacks for secrets after initial seeding.
 // ============================================================
 
 import { prisma } from '@/lib/db';
@@ -240,14 +242,16 @@ export async function loadLLMConfig(): Promise<LLMRuntimeConfig> {
       (provider === 'openai' ? 'gpt-4o' :
        provider === 'anthropic' ? 'claude-3-5-sonnet-20241022' :
        verificationModel),
-    openaiApiKey: db['llm_openai_api_key'] || process.env.LLM_OPENAI_API_KEY || '',
-    anthropicApiKey: db['llm_anthropic_api_key'] || process.env.LLM_ANTHROPIC_API_KEY || '',
-    openrouterApiKey: db['llm_openrouter_api_key'] || process.env.LLM_OPENROUTER_API_KEY || '',
-    geminiApiKey: db['llm_gemini_api_key'] || process.env.LLM_GEMINI_API_KEY || '',
-    ollamaCloudApiKey: db['llm_ollama_cloud_api_key'] || process.env.LLM_OLLAMA_CLOUD_API_KEY || '',
-    mistralApiKey: db['llm_mistral_api_key'] || process.env.LLM_MISTRAL_API_KEY || '',
-    groqApiKey: db['llm_groq_api_key'] || process.env.LLM_GROQ_API_KEY || '',
-    customApiKey: db['llm_custom_api_key'] || process.env.LLM_CUSTOM_API_KEY || '',
+    // API keys — DB is the single source of truth. No env fallback.
+    // Use bootstrapLLMApiKeysFromEnv() once at startup to seed from env if needed.
+    openaiApiKey: db['llm_openai_api_key'] || '',
+    anthropicApiKey: db['llm_anthropic_api_key'] || '',
+    openrouterApiKey: db['llm_openrouter_api_key'] || '',
+    geminiApiKey: db['llm_gemini_api_key'] || '',
+    ollamaCloudApiKey: db['llm_ollama_cloud_api_key'] || '',
+    mistralApiKey: db['llm_mistral_api_key'] || '',
+    groqApiKey: db['llm_groq_api_key'] || '',
+    customApiKey: db['llm_custom_api_key'] || '',
     // Prefer smart_upload_* canonical keys, fall back to legacy llm_* keys
     confidenceThreshold: Number(
       db['smart_upload_confidence_threshold'] ||
@@ -302,6 +306,81 @@ export async function loadLLMConfig(): Promise<LLMRuntimeConfig> {
  */
 export async function loadSmartUploadRuntimeConfig(): Promise<LLMRuntimeConfig> {
   return loadLLMConfig();
+}
+
+// =============================================================================
+// One-time ENV → DB seeding
+// =============================================================================
+
+/** Map of DB setting key → env var name for LLM secrets.  */
+const LLM_API_KEY_ENV_MAP: Record<string, string> = {
+  llm_openai_api_key: 'LLM_OPENAI_API_KEY',
+  llm_anthropic_api_key: 'LLM_ANTHROPIC_API_KEY',
+  llm_openrouter_api_key: 'LLM_OPENROUTER_API_KEY',
+  llm_gemini_api_key: 'LLM_GEMINI_API_KEY',
+  llm_ollama_cloud_api_key: 'LLM_OLLAMA_CLOUD_API_KEY',
+  llm_mistral_api_key: 'LLM_MISTRAL_API_KEY',
+  llm_groq_api_key: 'LLM_GROQ_API_KEY',
+  llm_custom_api_key: 'LLM_CUSTOM_API_KEY',
+};
+
+/** Non-secret config env vars that can pre-seed DB provider/model selection. */
+const LLM_CONFIG_ENV_MAP: Record<string, string> = {
+  llm_provider: 'LLM_PROVIDER',
+  llm_vision_model: 'LLM_VISION_MODEL',
+  llm_verification_model: 'LLM_VERIFICATION_MODEL',
+};
+
+/**
+ * Seed LLM API keys and config from environment variables into the database
+ * on first startup. This is a one-time migration: if the DB already has a
+ * value for a key it is NOT overwritten. After seeding, the env vars are no
+ * longer read by the loader — manage all keys via the Admin UI.
+ *
+ * Call this from instrumentation.ts (Next.js) or the worker startup script.
+ * Safe to call on every startup — no-ops when DB values already exist.
+ */
+export async function bootstrapLLMApiKeysFromEnv(updatedBy = 'system:env-bootstrap'): Promise<void> {
+  const allMaps = { ...LLM_API_KEY_ENV_MAP, ...LLM_CONFIG_ENV_MAP };
+  const dbKeys = Object.keys(allMaps);
+
+  try {
+    const existing = await prisma.systemSetting.findMany({
+      where: { key: { in: dbKeys } },
+      select: { key: true, value: true },
+    });
+    const existingMap = new Map(existing.map((r) => [r.key, r.value]));
+
+    const toSeed: Array<{ key: string; value: string }> = [];
+
+    for (const [dbKey, envVar] of Object.entries(allMaps)) {
+      const envValue = process.env[envVar];
+      // Only seed if: env var is non-empty AND DB value is missing/empty
+      if (envValue && envValue.trim() !== '' && !existingMap.get(dbKey)) {
+        toSeed.push({ key: dbKey, value: envValue.trim() });
+      }
+    }
+
+    if (toSeed.length === 0) return;
+
+    // Upsert in a transaction for atomicity
+    await prisma.$transaction(
+      toSeed.map(({ key, value }) =>
+        prisma.systemSetting.upsert({
+          where: { key },
+          update: {}, // Never overwrite existing — env seeds only fill gaps
+          create: { key, value, updatedBy },
+        })
+      )
+    );
+
+    logger.info('LLM settings seeded from environment variables (one-time bootstrap)', {
+      seededKeys: toSeed.map(({ key }) => key),
+    });
+  } catch (err) {
+    // Non-fatal: log and continue. The admin can configure keys via the UI.
+    logger.warn('bootstrapLLMApiKeysFromEnv: failed to seed, will retry on next startup', { err });
+  }
 }
 
 /**

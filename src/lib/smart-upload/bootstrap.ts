@@ -57,6 +57,8 @@ const DEFAULT_NUMERIC_SETTINGS: Record<string, string> = {
   // Enterprise: Budget system
   smart_upload_budget_max_llm_calls_per_session: '5',
   smart_upload_budget_max_input_tokens_per_session: '500000',
+  // Enterprise: Part size limits
+  smart_upload_max_pages_per_part: '12',
 };
 
 const DEFAULT_JSON_SETTINGS: Record<string, string> = {
