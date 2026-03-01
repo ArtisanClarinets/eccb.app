@@ -288,7 +288,7 @@
         "opencode-tools",
         "mcp"
       ],
-      "enabled": true
+      "enabled": false
     },
     "Memory": {
       "type": "local",
@@ -297,7 +297,7 @@
         "-y",
         "@modelcontextprotocol/server-memory@latest"
       ],
-      "enabled": true,
+      "enabled": false,
       "timeout": 5000
     },
     "critical-thinking": {
@@ -329,7 +329,7 @@
         "-y",
         "@modelcontextprotocol/server-sequential-thinking"
       ],
-      "enabled": true
+      "enabled": false
     },
     "shadcn": {
       "type": "local",
@@ -338,7 +338,7 @@
         "shadcn@latest",
         "mcp"
       ],
-      "enabled": true
+      "enabled": false
     },
     "Desktop-Commander": {
       "type": "local",
@@ -347,7 +347,7 @@
         "-y",
         "@wonderwhy-er/desktop-commander"
       ],
-      "enabled": true
+      "enabled": false
     },
     "next-devtools": {
       "type": "local",
@@ -366,7 +366,7 @@
         "prisma",
         "mcp"
       ],
-      "enabled": true
+      "enabled": false
     },
     "Better Auth": {
       "type": "local",
@@ -376,7 +376,7 @@
         "mcp-remote",
         "https://mcp.inkeep.com/better-auth/mcp"
       ],
-      "enabled": true
+      "enabled": false
     },
     "Stripe": {
       "type": "local",
@@ -386,7 +386,7 @@
         "mcp-remote",
         "https://mcp.stripe.com"
       ],
-      "enabled": true
+      "enabled": false
     }
   },
   "permission": {
@@ -403,10 +403,7 @@
     "read": "allow"
   },
   "plugin": [
-    "@mohak34/opencode-notifier@latest",
-    "opencode-scheduler",
     "octto",
-    "@nick-vi/opencode-type-inject",
     "code-yeongyu/oh-my-opencode"
   ]
 }

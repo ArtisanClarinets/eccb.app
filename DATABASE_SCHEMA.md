@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document provides the complete database schema for the Community Band Management Platform using PostgreSQL with Prisma ORM. The schema is designed for:
+This document provides the complete database schema for the Community Band Management Platform using MariaDB with Prisma ORM. The schema is designed for:
 
 - Data integrity and consistency (ACID compliance)
 - Performance (appropriate indexes)
@@ -1056,7 +1056,7 @@ const events = await prisma.event.findMany({
 ### 6.2 Connection Pooling
 
 ```env
-DATABASE_URL="postgresql://user:pass@host:5432/db?connection_limit=20&pool_timeout=10"
+DATABASE_URL="MariaDB://user:pass@host:5432/db?connection_limit=20&pool_timeout=10"
 ```
 
 ### 6.3 Read Replicas (Future)

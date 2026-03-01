@@ -16,7 +16,7 @@ This guide covers setting up the Emerald Coast Community Band platform for local
 | Software | Version | Purpose |
 |----------|---------|---------|
 | Node.js | 20.x LTS | JavaScript runtime |
-| PostgreSQL | 14+ | Primary database |
+| MariaDB | 14+ | Primary database |
 | Redis | 6.0+ | Caching and job queues |
 | Git | 2.34+ | Version control |
 
@@ -51,27 +51,27 @@ node --version  # Should show v20.x.x
 npm --version   # Should show 10.x.x
 ```
 
-## PostgreSQL Setup
+## MariaDB Setup
 
 ### Installation
 
 ```bash
-# Install PostgreSQL 14
-sudo apt install -y postgresql postgresql-contrib
+# Install MariaDB 14
+sudo apt install -y MariaDB MariaDB-contrib
 
 # Start and enable service
-sudo systemctl start postgresql
-sudo systemctl enable postgresql
+sudo systemctl start MariaDB
+sudo systemctl enable MariaDB
 
 # Verify status
-sudo systemctl status postgresql
+sudo systemctl status MariaDB
 ```
 
 ### Database Configuration
 
 ```bash
-# Switch to postgres user
-sudo -u postgres psql
+# Switch to MariaDB user
+sudo -u MariaDB psql
 
 # Create database and user
 CREATE DATABASE eccb_platform;
@@ -88,11 +88,11 @@ GRANT ALL ON SCHEMA public TO eccb_user;
 
 ### Configure Authentication
 
-Edit PostgreSQL configuration to allow password authentication:
+Edit MariaDB configuration to allow password authentication:
 
 ```bash
 # Edit pg_hba.conf
-sudo nano /etc/postgresql/14/main/pg_hba.conf
+sudo nano /etc/MariaDB/14/main/pg_hba.conf
 ```
 
 Change the line for local connections from `peer` to `md5`:
@@ -105,10 +105,10 @@ local   all             all                                     peer
 local   all             all                                     md5
 ```
 
-Restart PostgreSQL:
+Restart MariaDB:
 
 ```bash
-sudo systemctl restart postgresql
+sudo systemctl restart MariaDB
 ```
 
 ### Test Connection
@@ -196,7 +196,7 @@ Configure the following required variables:
 
 ```env
 # Database - use the password you set earlier
-DATABASE_URL="postgresql://eccb_user:your_secure_password@localhost:5432/eccb_platform"
+DATABASE_URL="MariaDB://eccb_user:your_secure_password@localhost:5432/eccb_platform"
 
 # Redis
 REDIS_URL="redis://localhost:6379"
@@ -309,14 +309,14 @@ After seeding, the seeder ensures a `SUPER_ADMIN` account exists. Behavior is id
 ### Database Connection Issues
 
 ```bash
-# Check PostgreSQL status
-sudo systemctl status postgresql
+# Check MariaDB status
+sudo systemctl status MariaDB
 
 # Test connection
 psql -h localhost -U eccb_user -d eccb_platform
 
 # Check logs
-sudo tail -f /var/log/postgresql/postgresql-14-main.log
+sudo tail -f /var/log/MariaDB/MariaDB-14-main.log
 ```
 
 ### Redis Connection Issues
@@ -386,7 +386,7 @@ curl http://localhost:3000/api/health
 | Service | Log Path |
 |---------|----------|
 | Application | Console output / `logs/` directory |
-| PostgreSQL | `/var/log/postgresql/postgresql-14-main.log` |
+| MariaDB | `/var/log/MariaDB/MariaDB-14-main.log` |
 | Redis | `/var/log/redis/redis-server.log` |
 
 ## Development Tips

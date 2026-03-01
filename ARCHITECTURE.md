@@ -14,7 +14,7 @@ This document outlines the production-grade architecture for a Community Band Ma
 - Next.js 16 (App Router)
 - React 19
 - TypeScript
-- PostgreSQL with Prisma ORM
+- MariaDB/MySQL with Prisma ORM
 - Better Auth for authentication
 - Local Disk or S3-Compatible (Free Tier) for file storage
 - Redis for caching and sessions
@@ -33,46 +33,46 @@ This document outlines the production-grade architecture for a Community Band Ma
 └─────────────────────────────────────────────────────────────────┘
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                    NEXT.JS APPLICATION LAYER                     │
+│                    NEXT.JS APPLICATION LAYER                    │
 ├─────────────────────────────────────────────────────────────────┤
-│                                                                   │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐         │
-│  │   App Router  │  │ Server       │  │  API Routes   │         │
-│  │   (RSC)       │  │ Actions      │  │  (REST)       │         │
-│  └──────────────┘  └──────────────┘  └──────────────┘         │
-│                                                                   │
-│  ┌────────────────────────────────────────────────────┐         │
-│  │           Middleware Layer                          │         │
-│  │  - Authentication                                   │         │
-│  │  - Authorization (RBAC)                             │         │
-│  │  - Rate Limiting                                    │         │
-│  │  - Audit Logging                                    │         │
-│  └────────────────────────────────────────────────────┘         │
+│                                                                 │
+│   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
+│   │   App Router │  │ Server       │  │  API Routes  │          │
+│   │   (RSC)      │  │ Actions      │  │  (REST)      │          │
+│   └──────────────┘  └──────────────┘  └──────────────┘          │
+│                                                                 │
+│   ┌────────────────────────────────────────────────────┐        │
+│   │           Middleware Layer                         │        │
+│   │  - Authentication                                  │        │
+│   │  - Authorization (RBAC)                            │        │
+│   │  - Rate Limiting                                   │        │
+│   │  - Audit Logging                                   │        │
+│   └────────────────────────────────────────────────────┘        │
 └─────────────────────────────────────────────────────────────────┘
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                      SERVICE LAYER                               │
+│                      SERVICE LAYER                              │
 ├─────────────────────────────────────────────────────────────────┤
-│                                                                   │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐          │
-│  │   CMS    │ │  Music   │ │  Member  │ │  Event   │          │
-│  │ Service  │ │ Library  │ │ Service  │ │ Service  │          │
-│  └──────────┘ └──────────┘ └──────────┘ └──────────┘          │
-│                                                                   │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐          │
-│  │   Auth   │ │  Notif.  │ │  Search  │ │  Report  │          │
-│  │ Service  │ │ Service  │ │ Service  │ │ Service  │          │
-│  └──────────┘ └──────────┘ └──────────┘ └──────────┘          │
+│                                                                 │
+│    ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐          │
+│    │   CMS    │ │  Music   │ │  Member  │ │  Event   │          │
+│    │ Service  │ │ Library  │ │ Service  │ │ Service  │          │
+│    └──────────┘ └──────────┘ └──────────┘ └──────────┘          │
+│                                                                 │
+│    ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐          │
+│    │   Auth   │ │  Notif.  │ │  Search  │ │  Report  │          │
+│    │ Service  │ │ Service  │ │ Service  │ │ Service  │          │
+│    └──────────┘ └──────────┘ └──────────┘ └──────────┘          │
 └─────────────────────────────────────────────────────────────────┘
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                      DATA LAYER                                  │
+│                      DATA LAYER                                 │
 ├─────────────────────────────────────────────────────────────────┤
-│                                                                   │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐         │
-│  │  PostgreSQL  │  │    Redis     │  │ Free Storage  │         │
-│  │  (Primary)   │  │  (Cache)     │  │ (Local/S3-Comp)│         │
-│  └──────────────┘  └──────────────┘  └──────────────┘         │
+│                                                                 │
+│    ┌──────────────┐  ┌──────────────┐  ┌──────────────┐         │
+│    │  MariaDB     │  │    Redis     │  │ Free Storage │         │
+│    │  (Primary)   │  │  (Cache)     │  │(Local/S3Comp)│         │
+│    └──────────────┘  └──────────────┘  └──────────────┘         │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -181,7 +181,7 @@ This document outlines the production-grade architecture for a Community Band Ma
 
 ### 3.2 Backend
 
-**PostgreSQL**
+**MariaDB/MySQL**
 - ACID compliance for financial/attendance records
 - Complex queries for reporting
 - JSON support for flexible metadata
@@ -228,8 +228,8 @@ This document outlines the production-grade architecture for a Community Band Ma
 - Automated testing
 - Deployment automation
 
-**PostgreSQL Hosting**
-- Vercel Postgres, Supabase, or Railway
+**MariaDB/MySQL Hosting**
+- Vercel MariaDB, Supabase, or Railway
 - Automated backups
 - Point-in-time recovery
 
@@ -372,7 +372,7 @@ Logs queryable via admin dashboard, exportable for compliance.
 ### 6.1 Database Scaling
 
 **Current Scale (Years 1-3)**
-- Single PostgreSQL instance
+- Single MariaDB/MySQL instance
 - 10-100 GB storage
 - Vertical scaling as needed
 
@@ -463,7 +463,7 @@ Logs queryable via admin dashboard, exportable for compliance.
 
 ### 9.1 Environments
 
-- **Local**: Docker Compose (Postgres + Redis)
+- **Local**: Docker Compose (MariaDB + Redis)
 - **Development**: Vercel preview deployments
 - **Staging**: Production-like environment
 - **Production**: Main branch deployments
@@ -636,14 +636,14 @@ src/
 
 **Hosting (Annual)**
 - Vercel Pro: $240/year
-- PostgreSQL (Supabase): $300/year
+- MariaDB/MySQL (Supabase): $300/year
 - Redis (Upstash): $120/year
 - S3 Storage (Free Tier): $0/year
 - CDN: Included with Vercel
 - **Total: ~$660/year**
 
 **Self-Hosted Alternative:**
-- Managed PostgreSQL: $300/year
+- Managed MariaDB/MySQL: $300/year
 - Redis: Included in VPS
 - Storage (Local Disk): $0/year
 - **Total: ~$540/year**

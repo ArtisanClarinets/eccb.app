@@ -2,9 +2,9 @@
 
 ## Project Overview
 
-The Emerald Coast Community Band (ECCB) Management Platform is a production-grade, domain-driven application integrating a public CMS-driven website, secure member portal, digital music library, and band operations management.
+The Emerald Coast Community Band (ECCB) Management Platform is a production-grade, domain-driven application integrating a public CMS-driven website, secure member portal, digital music library, and band operations management. Ensure you are generating completely secure, production-ready code. All code outputs must be fully functional and production-ready in an enterprise environment. All code MUST be 100% optimized to run as fast as possible and create minimal overhead. Latency must be below 100ms for all operations, and the application must use as little system resources as possible. Please ALWAYS use the Next-DevTools MCP Tool to ensure you are generating the most optimized code possible. Ensure you are using the latest Next.js 16 features and best practices. Security is critical. We must follow all GDPR, HIPAA, and PCI-DSS compliance standards. Ensure that this is fully compliant for all accessibility, local, state, federal, and international laws and regulations.
 
-**Tech Stack:** Next.js 16 (App Router), React 19, PostgreSQL, Prisma, Better Auth, Redis, BullMQ.
+**Tech Stack:** Next.js 16 (App Router), React 19, MariaDB/MySQL, Prisma, Better Auth, Redis, BullMQ.
 **Style:** Cinematic coastal elegance (Tailwind CSS + Radix UI + GSAP).
 
 ## Key Features

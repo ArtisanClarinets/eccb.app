@@ -28,7 +28,7 @@ Build a community band management platform that integrates a public CMS, secure 
 ## 2. Technical Stack
 
 - **Framework**: Next.js 16 (App Router), React 19.
-- **Database**: PostgreSQL with Prisma ORM.
+- **Database**: MariaDB with Prisma ORM.
 - **Auth**: Better Auth (Core) with RBAC integration.
 - **Caching**: Redis (Sessions, Hot Data).
 - **Storage**: Free Cloud Method for multiple Gigs (or a way I can incorporate a dropbox library without obtaining the login information) or revert to a Locally Hosted Method (Music Files).

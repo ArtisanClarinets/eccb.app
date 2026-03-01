@@ -3,7 +3,7 @@
 ## 1. Project Identity
 **Name:** Emerald Coast Community Band (ECCB) Management Platform
 **Purpose:** A production-grade, domain-driven platform integrating a public CMS-driven website, secure member portal, digital music library, and band operations management.
-**Tech Stack:** Next.js 16 (App Router), React 19, PostgreSQL, Prisma, Better Auth, Redis, Local Disk or S3-Compatible (Free Tier).
+**Tech Stack:** Next.js 16 (App Router), React 19, MariaDB, Prisma, Better Auth, Redis, Local Disk or S3-Compatible (Free Tier).
 **Lifecycle:** Designed for 5-10 years of operation.
 
 ---
@@ -131,7 +131,7 @@ src/
 
 ### Immediate Next Steps (Phase 1-3)
 1.  **Foundation:** Init Next.js 16, TS, Tailwind.
-2.  **Database:** Setup Postgres, Prisma, apply schema.
+2.  **Database:** Setup MariaDB, Prisma, apply schema.
 3.  **Auth:** Install Better Auth, implement RBAC middleware.
 
 ### Core Feature Priority

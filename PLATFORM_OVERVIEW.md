@@ -93,7 +93,7 @@ Practical development roadmap:
 ✅ **Progressive Enhancement** - Works without JavaScript  
 
 ### Technology Stack
-✅ **PostgreSQL + Prisma** - Type-safe, battle-tested, ACID compliant  
+✅ **MariaDB + Prisma** - Type-safe, battle-tested, ACID compliant  
 ✅ **Better Auth** - Modern, flexible auth (email/password, OAuth, MFA)  
 ✅ **Redis** - Caching, sessions, rate limiting  
 ✅ **AWS S3 / Cloudflare R2** - Scalable file storage with signed URLs  
@@ -258,7 +258,7 @@ PUBLIC (Website visitors)
 - Configure development environment
 
 **Phase 2: Database**
-- Set up PostgreSQL and Prisma
+- Set up MariaDB and Prisma
 - Create schema and migrations
 - Seed initial data
 
@@ -327,14 +327,14 @@ PUBLIC (Website visitors)
 
 **Vercel Deployment:**
 - Vercel Pro: $240/year
-- PostgreSQL (Supabase): $300/year
+- MariaDB (Supabase): $300/year
 - Redis (Upstash): $120/year
 - S3 Storage (500GB): $150/year
 - **Total: ~$810/year**
 
 **Self-Hosted Alternative:**
 - VPS (4GB RAM): $240/year
-- Managed PostgreSQL: $300/year
+- Managed MariaDB: $300/year
 - Redis: Included
 - S3 Storage: $150/year
 - **Total: ~$690/year**
@@ -410,7 +410,7 @@ The platform succeeds if:
    - `IMPLEMENTATION_GUIDE.md` - Follow the build plan
 
 2. **Set up development environment**:
-   - PostgreSQL database
+   - MariaDB database
    - Redis instance
    - AWS S3 or Cloudflare R2 bucket
    - Better Auth credentials

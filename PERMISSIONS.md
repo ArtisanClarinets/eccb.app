@@ -725,7 +725,7 @@ export async function auditLog(data: {
 
 ## 9. Future Enhancements
 
-### 9.1 Row-Level Security (PostgreSQL)
+### 9.1 Row-Level Security (MariaDB)
 
 ```sql
 -- Enable RLS on members table

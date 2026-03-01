@@ -27,7 +27,7 @@ This platform provides:
 | Framework | Next.js 16.1.6 (App Router) |
 | Frontend | React 19, TypeScript |
 | Styling | Tailwind CSS 4.x, Radix UI |
-| Database | PostgreSQL 14+ (Prisma ORM) |
+| Database | MariaDB 14+ (Prisma ORM) |
 | Cache/Queue | Redis 6.0+ (BullMQ) |
 | Auth | Better Auth |
 | Storage | Local filesystem or S3-compatible |
@@ -39,7 +39,7 @@ This platform provides:
 ### Prerequisites
 
 - Node.js 20.x LTS
-- PostgreSQL 14+ (or SQLite for development)
+- MariaDB 14+ (or SQLite for development)
 - Redis 6.0+ (optional)
 
 ### Installation

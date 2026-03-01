@@ -197,7 +197,7 @@ All production readiness tasks have been completed. The platform is ready for de
 
 ### Infrastructure Requirements
 - ✅ Ubuntu 22.04 LTS compatible
-- ✅ PostgreSQL 14+ support
+- ✅ MariaDB 14+ support
 - ✅ Redis 6.0+ support
 - ✅ Node.js 20.x LTS support
 - ✅ No Docker required

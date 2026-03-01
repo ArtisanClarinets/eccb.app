@@ -98,8 +98,8 @@ Create `.env` file:
 
 ```env
 # Database
-DATABASE_URL="postgresql://user:password@localhost:5432/eccb_dev"
-DIRECT_URL="postgresql://user:password@localhost:5432/eccb_dev"
+DATABASE_URL="MariaDB://user:password@localhost:5432/eccb_dev"
+DIRECT_URL="MariaDB://user:password@localhost:5432/eccb_dev"
 
 # Redis
 REDIS_URL="redis://localhost:6379"
@@ -230,7 +230,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "MariaDB"
   url      = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
@@ -589,7 +589,7 @@ import { prisma } from '@/lib/db';
 
 export const auth = betterAuth({
   database: prismaAdapter(prisma, {
-    provider: 'postgresql',
+    provider: 'MariaDB',
   }),
   emailAndPassword: {
     enabled: true,

@@ -150,7 +150,7 @@ This release marks the completion of a comprehensive production readiness overha
 ### Infrastructure
 
 - Configured for local Ubuntu 22.04 LTS hosting
-- PostgreSQL 14+ as primary database
+- MariaDB 14+ as primary database
 - Redis 6.0+ for caching and job queues
 - Local filesystem or S3-compatible storage
 - Nginx reverse proxy with SSL termination
@@ -216,7 +216,7 @@ For existing deployments:
 
 ### Version 0.1.0 - Production Ready
 
-This release represents the completion of the production readiness overhaul. The platform is now suitable for deployment on Ubuntu 22.04 LTS servers with local PostgreSQL and Redis.
+This release represents the completion of the production readiness overhaul. The platform is now suitable for deployment on Ubuntu 22.04 LTS servers with local MariaDB and Redis.
 
 **Key Achievements:**
 - ✅ Permission system with dot notation

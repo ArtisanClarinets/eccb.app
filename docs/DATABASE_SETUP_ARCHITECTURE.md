@@ -39,7 +39,7 @@ graph TB
 
     subgraph "External Systems"
         MA[MariaDB Server]
-        PG[PostgreSQL Fallback]
+        PG[MariaDB Fallback]
         SL[SQLite Dev]
     end
 
@@ -314,17 +314,17 @@ There is a pre-existing Prisma configuration error in the codebase that manifest
 Error: prisma:error received invalid response: 6a
 ```
 
-**Root Cause**: Database adapter mismatch - the application uses a PostgreSQL adapter (`PrismaPg`) with a MySQL/MariaDB connection string.
+**Root Cause**: Database adapter mismatch - the application uses a MariaDB adapter (`PrismaPg`) with a MySQL/MariaDB connection string.
 
 | Component | Current Value | Expected |
 |-----------|--------------|----------|
 | `prisma/schema.prisma` | `provider = "mysql"` | ✅ Correct |
 | `.env DATABASE_URL` | `mysql://root:password@localhost:3306/eccb_dev` | ✅ Correct |
-| `src/lib/db/index.ts` | Uses `PrismaPg` adapter + `pg` package | ❌ **Wrong - PostgreSQL adapter!** |
+| `src/lib/db/index.ts` | Uses `PrismaPg` adapter + `pg` package | ❌ **Wrong - MariaDB adapter!** |
 
 **This issue is unrelated to the setup and repair workflow implementation** and should be addressed separately by updating `src/lib/db/index.ts` to use the standard Prisma client without a custom adapter.
 
-**Recommended Fix**: Replace the PostgreSQL adapter with the standard Prisma client:
+**Recommended Fix**: Replace the MariaDB adapter with the standard Prisma client:
 
 ```typescript
 import { PrismaClient } from '@prisma/client';

@@ -2,7 +2,7 @@
 
 This document tracks the implementation progress of the Emerald Coast Community Band (ECCB) Management Platform. It is derived from the `IMPLEMENTATION_GUIDE.md` and the Master Feature List.
 
-**Target Stack:** Next.js 16, React 19, PostgreSQL, Prisma, Better Auth, Redis, Local Disk or S3-Compatible (Free Tier).
+**Target Stack:** Next.js 16, React 19, MariaDB, Prisma, Better Auth, Redis, Local Disk or S3-Compatible (Free Tier).
 
 ---
 
@@ -15,7 +15,7 @@ This document tracks the implementation progress of the Emerald Coast Community 
   - [ ] Setup directory structure (`/app`, `/components`, `/lib`, `/types`)
 
   - [ ] **Database & Caching**
-  - [ ] Provision PostgreSQL database (Local/Supabase/Neon)
+  - [ ] Provision MariaDB database (Local/Supabase/Neon)
   - [ ] Initialize Prisma ORM
   - [ ] Apply complete schema from `DATABASE_SCHEMA.md`
   - [ ] Run initial migration

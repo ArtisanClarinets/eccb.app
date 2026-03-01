@@ -49,18 +49,18 @@ sudo apt install -y nodejs
 node --version  # Should show v20.x.x
 ```
 
-### 2. PostgreSQL Setup
+### 2. MariaDB Setup
 
 ```bash
-# Install PostgreSQL 14
-sudo apt install -y postgresql postgresql-contrib
+# Install MariaDB 14
+sudo apt install -y MariaDB MariaDB-contrib
 
-# Start and enable PostgreSQL
-sudo systemctl start postgresql
-sudo systemctl enable postgresql
+# Start and enable MariaDB
+sudo systemctl start MariaDB
+sudo systemctl enable MariaDB
 
 # Create database and user
-sudo -u postgres psql << 'EOF'
+sudo -u MariaDB psql << 'EOF'
 CREATE DATABASE eccb_production;
 CREATE USER eccb_user WITH ENCRYPTED PASSWORD 'YOUR_SECURE_PASSWORD';
 GRANT ALL PRIVILEGES ON DATABASE eccb_production TO eccb_user;
@@ -69,8 +69,8 @@ GRANT ALL ON SCHEMA public TO eccb_user;
 EOF
 
 # Configure authentication
-sudo sed -i 's/local\s*all\s*all\s*peer/local all all md5/' /etc/postgresql/14/main/pg_hba.conf
-sudo systemctl restart postgresql
+sudo sed -i 's/local\s*all\s*all\s*peer/local all all md5/' /etc/MariaDB/14/main/pg_hba.conf
+sudo systemctl restart MariaDB
 ```
 
 ### 3. Redis Setup
@@ -135,7 +135,7 @@ nano .env
 
 ```env
 # Database
-DATABASE_URL="postgresql://eccb_user:YOUR_SECURE_PASSWORD@localhost:5432/eccb_production"
+DATABASE_URL="MariaDB://eccb_user:YOUR_SECURE_PASSWORD@localhost:5432/eccb_production"
 
 # Redis
 REDIS_URL="redis://localhost:6379"
@@ -203,7 +203,7 @@ sudo nano /etc/systemd/system/eccb.service
 [Unit]
 Description=ECCB Platform - Next.js Application
 Documentation=https://github.com/your-org/eccb.app
-After=network.target postgresql.service redis-server.service
+After=network.target MariaDB.service redis-server.service
 
 [Service]
 Type=simple
@@ -638,14 +638,14 @@ psql -U eccb_user -d eccb_production -c "SELECT 1"
 ### Database Connection Errors
 
 ```bash
-# Check PostgreSQL status
-sudo systemctl status postgresql
+# Check MariaDB status
+sudo systemctl status MariaDB
 
 # Test connection
 psql -U eccb_user -d eccb_production
 
 # Check logs
-sudo tail -f /var/log/postgresql/postgresql-14-main.log
+sudo tail -f /var/log/MariaDB/MariaDB-14-main.log
 ```
 
 ### Redis Connection Errors
@@ -706,7 +706,7 @@ sudo systemctl restart nginx
 └───────┬─────────────────┬─────────────────┬─────────┘
         │                 │                 │
 ┌───────▼───────┐ ┌───────▼───────┐ ┌───────▼───────┐
-│  PostgreSQL   │ │     Redis     │ │    Storage    │
+│  MariaDB   │ │     Redis     │ │    Storage    │
 │   Port 5432   │ │   Port 6379   │ │   (Local FS)  │
 └───────────────┘ └───────────────┘ └───────────────┘
 ```

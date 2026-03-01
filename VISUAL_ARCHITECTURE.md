@@ -71,7 +71,7 @@
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                           │
 │  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────────┐ │
-│  │   PostgreSQL     │  │      Redis       │  │ Free Blob Storage    │ │
+│  │   MariaDB     │  │      Redis       │  │ Free Blob Storage    │ │
 │  │                  │  │                  │  │                      │ │
 │  │  • Users/Auth    │  │  • Sessions      │  │  • Music PDFs        │ │
 │  │  • Members       │  │  • Permissions   │  │  • Images            │ │
@@ -400,7 +400,7 @@
             │ Cache MISS
             ▼
   ┌────────────────────┐
-  │   PostgreSQL       │  Query database ─────────► Return from DB
+  │   MariaDB       │  Query database ─────────► Return from DB
   │   (Source of truth)│                              (slower)
   └────────────────────┘
             │
@@ -509,7 +509,7 @@ Production Environment:
         │                │                │
         ▼                ▼                ▼
 ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
-│  PostgreSQL  │ │    Redis     │ │ Free Storage │
+│  MariaDB  │ │    Redis     │ │ Free Storage │
 │  (Supabase)  │ │   (Upstash)  │ │(Local/S3-Comp)│
 │              │ │              │ │              │
 │ • Primary DB │ │ • Cache      │ │ • Music PDFs │
