@@ -85,6 +85,12 @@ export interface RoutingSignals {
   commitStatus: CommitStatus;
   /** Current workflow status. */
   workflowStatus: WorkflowStatus;
+  /**
+   * Whether cutting instructions were produced by deterministic (text-layer)
+   * segmentation rather than the LLM. When true, a second pass is wasteful
+   * because the instructions come from hard evidence, not model inference.
+   */
+  deterministicSegmentation?: boolean;
 }
 
 // =============================================================================
@@ -176,6 +182,20 @@ function shouldRunSecondPass(
   reasons: string[]
 ): boolean {
   if (signals.secondPassStatus !== 'NOT_NEEDED') return false;
+
+  // When cutting instructions come from deterministic text-layer segmentation
+  // and the part count passes, skip the second pass — the LLM can only make
+  // things worse by guessing or returning empty instructions.
+  if (
+    signals.deterministicSegmentation &&
+    signals.validPartCount >= thresholds.minPartsForAutoCommit
+  ) {
+    reasons.push(
+      'Skipping second pass — cutting instructions are deterministic with ' +
+      `${signals.validPartCount} valid part(s)`
+    );
+    return false;
+  }
 
   let needed = false;
 

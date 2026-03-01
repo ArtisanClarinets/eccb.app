@@ -392,7 +392,7 @@ export async function retryDeadLetterJob(dlqJobId: string): Promise<boolean> {
 // Worker Creation Helper
 // ============================================================================
 
-export type JobProcessor<T = unknown> = (job: Job<T>) => Promise<void>;
+export type JobProcessor<T = unknown> = (job: Job<T>) => Promise<unknown>;
 
 interface WorkerOptions {
   queueName: keyof typeof QUEUE_NAMES;

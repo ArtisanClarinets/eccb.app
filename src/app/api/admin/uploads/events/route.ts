@@ -85,10 +85,12 @@ export async function GET(request: NextRequest) {
       // Handler for completed events
       const completedHandler = (args: { jobId: string; returnvalue: unknown }) => {
         const { jobId, returnvalue } = args;
-        const result = returnvalue as { sessionId?: string; status?: string; partsCreated?: number };
+        const result = (returnvalue ?? {}) as { sessionId?: string; status?: string; partsCreated?: number };
 
+        // BullMQ may emit returnvalue=undefined when the processor doesn't
+        // return. Treat these as unfiltered so we never silently drop events.
         // If sessionId is specified, only send events for that session
-        if (sessionId && result?.sessionId !== sessionId) {
+        if (sessionId && result.sessionId && result.sessionId !== sessionId) {
           return;
         }
 

@@ -260,7 +260,6 @@ async function processUpload(
   // Subscribe to SSE for real-time processing progress
   await new Promise<void>((resolve) => {
     // safety timeout will be cleared when either completion or failure occurs
-    // eslint-disable-next-line prefer-const
     let timeout: ReturnType<typeof setTimeout>;
 
     const cleanup = subscribeToUploadProgress(
@@ -286,6 +285,26 @@ async function processUpload(
           parseStatus?: string;
           secondPassStatus?: string;
         };
+
+        // If pass-1 queued a second pass, don't close the SSE — keep listening.
+        // The UI will stay in "verifying" state until the second pass completes.
+        if (
+          result.status === 'queued_for_second_pass' ||
+          result.secondPassStatus === 'QUEUED'
+        ) {
+          onProgress(id, {
+            phase: 'verifying',
+            progress: 60,
+          });
+          // Reset the safety timeout for the second pass (another 5 min)
+          timeout = setTimeout(() => {
+            cleanup();
+            onProgress(id, { phase: 'error', progress: 0, error: 'Processing timed out after 5 minutes.' });
+            resolve();
+          }, 5 * 60 * 1000);
+          return; // keep SSE open
+        }
+
         onProgress(id, {
           phase: 'done',
           progress: 100,

@@ -14,7 +14,9 @@ export const DEFAULT_VISION_SYSTEM_PROMPT =
   'You are an expert music librarian and sheet-music metadata extractor. Be precise, deterministic, and schema-compliant.';
 
 export const DEFAULT_VERIFICATION_SYSTEM_PROMPT =
-  'You are a strict verification assistant. Reconcile metadata against provided pages and return corrected JSON only.';
+  'You are a strict verification assistant. Reconcile metadata against provided pages and return corrected JSON only. '
+  + 'NEVER return an empty cuttingInstructions array — if you cannot improve the originals, copy them unchanged. '
+  + 'NEVER guess titles or composers from instrument pages — if the title page is not visible, preserve the original values.';
 
 export const DEFAULT_HEADER_LABEL_SYSTEM_PROMPT =
   'You identify instrument-part labels from sheet-music page header crops with high precision. '
@@ -91,7 +93,9 @@ Rules:
 1. Page labels are authoritative and 1-indexed.
 2. Keep correct values unchanged; only correct incorrect values.
 3. cuttingInstructions must cover all pages exactly once (no gaps, no overlaps).
-4. Return JSON only.
+4. NEVER return an empty cuttingInstructions array. If you cannot improve the original cutting instructions, copy them exactly as-is from the original metadata.
+5. If you are unsure about any field, prefer the original value over guessing.
+6. Return JSON only.
 
 Return a JSON object containing corrected metadata fields plus:
 - "verificationConfidence": integer 0-100

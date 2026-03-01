@@ -529,12 +529,15 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
         llmConfig.pdfVisionUserPrompt || DEFAULT_PDF_VISION_USER_PROMPT_TEMPLATE,
         { totalPages },
       );
-      visionPromptRef = pdfPrompt;
+      // Include original filename as context — helps title/composer extraction
+      // when the PDF is scanned (no text layer) and the LLM must guess.
+      const filenameHint = `\nOriginal filename: "${smartSession.fileName}"\nUse this filename as a strong hint for the title if the title page is unclear or missing. Do NOT guess a title from instrument pages.`;
+      visionPromptRef = pdfPrompt + filenameHint;
 
       visionResult = await callVisionModel(
         adapterConfig,
         [], // no images — PDF is the input
-        pdfPrompt,
+        visionPromptRef,
         {
           system: llmConfig.visionSystemPrompt || DEFAULT_VISION_SYSTEM_PROMPT,
           responseFormat: { type: 'json' },
@@ -680,12 +683,15 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
           sampledPageNumbers: sampledIndices,
         },
       );
-      visionPromptRef = visionPrompt;
+      // Include original filename as context — helps title/composer extraction
+      // when the PDF is scanned (no text layer) and the LLM must guess.
+      const filenameHint = `\nOriginal filename: "${smartSession.fileName}"\nUse this filename as a strong hint for the title if the title page is unclear or missing. Do NOT guess a title from instrument pages.`;
+      visionPromptRef = visionPrompt + filenameHint;
 
       visionResult = await callVisionModel(
         adapterConfig,
         images,
-        visionPrompt,
+        visionPromptRef,
         {
           system: llmConfig.visionSystemPrompt || DEFAULT_VISION_SYSTEM_PROMPT,
           responseFormat: { type: 'json' },

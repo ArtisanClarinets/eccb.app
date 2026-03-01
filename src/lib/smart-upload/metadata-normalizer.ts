@@ -236,13 +236,34 @@ export function generatePartFingerprint(
 /**
  * Normalize an entire ExtractedMetadata object into a NormalizedMetadata record.
  * Preserves raw values alongside normalized ones.
+ *
+ * @param sessionId  Used for fingerprinting
+ * @param raw        The extracted metadata from LLM/OCR
+ * @param cuttingInstructions  Optional override for cutting instructions
+ * @param filename   Original upload filename — used as title fallback when LLM returns "Unknown Title"
  */
 export function normalizeExtractedMetadata(
   sessionId: string,
   raw: ExtractedMetadata,
-  cuttingInstructions?: CuttingInstruction[]
+  cuttingInstructions?: CuttingInstruction[],
+  filename?: string,
 ): NormalizedMetadata {
   const instructions = cuttingInstructions ?? raw.cuttingInstructions ?? [];
+
+  // When the LLM couldn't identify a title, derive one from the filename
+  // rather than leaving "Unknown Title" in the library.
+  let effectiveTitle = raw.title;
+  if (
+    (!effectiveTitle || effectiveTitle === 'Unknown Title') &&
+    filename
+  ) {
+    effectiveTitle = filename
+      .replace(/\.pdf$/i, '')
+      .replace(/_/g, ' ')
+      .replace(/\s+/g, ' ')
+      .replace(/^\d+[\s._-]+/, '')
+      .trim() || effectiveTitle;
+  }
 
   const parts: NormalizedPart[] = instructions.map((ci) => {
     const { canonicalName, section, transposition } = normalizeInstrument(ci.instrument);
@@ -274,7 +295,7 @@ export function normalizeExtractedMetadata(
   return {
     title: {
       raw: raw.title,
-      normalized: normalizeTitle(raw.title),
+      normalized: normalizeTitle(effectiveTitle),
     },
     subtitle: {
       raw: raw.subtitle,

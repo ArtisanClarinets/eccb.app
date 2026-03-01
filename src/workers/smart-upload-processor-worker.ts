@@ -58,20 +58,24 @@ export async function startSmartUploadProcessorWorker(): Promise<void> {
     processor: async (job: Job) => {
       const sessionId = (job.data as { sessionId?: string })?.sessionId;
       try {
+        // IMPORTANT: Each branch MUST return a value so BullMQ stores it as
+        // job.returnvalue. The SSE endpoint filters completed events by
+        // returnvalue.sessionId — if returnvalue is undefined the browser
+        // never receives the terminal event and the UI stays stuck.
         switch (job.name) {
           case SMART_UPLOAD_JOB_NAMES.PROCESS:
-            await processSmartUpload(job);
-            break;
+            return await processSmartUpload(job);
 
-          case SMART_UPLOAD_JOB_NAMES.SECOND_PASS:
+          case SMART_UPLOAD_JOB_NAMES.SECOND_PASS: {
             await processSecondPass(job as Job<SmartUploadSecondPassJobData>);
-            break;
+            return { status: 'second_pass_complete', sessionId };
+          }
 
           case SMART_UPLOAD_JOB_NAMES.AUTO_COMMIT: {
             logger.info('Running auto-commit for session', { sessionId, jobId: job.id });
             await commitSmartUploadSessionToLibrary(sessionId!, {}, 'system:auto-commit');
             logger.info('Auto-commit complete', { sessionId });
-            break;
+            return { status: 'auto_commit_complete', sessionId };
           }
 
           default:

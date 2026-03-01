@@ -780,14 +780,37 @@ async function processSecondPass(job: Job<SmartUploadSecondPassJobData>): Promis
 
       await progress('verification', 70, 'Verification complete with parts');
 
-      // --- ADJUDICATION LOGIC ---
-      const disagreements = detectDisagreements(metadata, secondPassResult);
-      const lowConfidence = (verificationConfidence < 85) || (metadata.confidenceScore < 80);
-      // Detect garbage cutting instructions (missing, empty, or all forbidden labels)
+      // --- CUTTING INSTRUCTIONS FALLBACK ---
+      // When the verifier returns empty or all-garbage cutting instructions,
+      // carry forward the first-pass instructions instead of clobbering them.
       const spCuts = secondPassResult.cuttingInstructions || [];
       const garbageInstructions = spCuts.length === 0 ||
         spCuts.every(ci => isForbiddenLabel(ci.instrument) || isForbiddenLabel(ci.partName));
-      const needsAdjudication = disagreements.length > 0 || lowConfidence || garbageInstructions;
+
+      if (garbageInstructions && cuttingInstructions && cuttingInstructions.length > 0) {
+        logger.warn('Second pass returned empty/garbage cutting instructions — preserving first-pass instructions', {
+          sessionId,
+          secondPassCuts: spCuts.length,
+          firstPassCuts: cuttingInstructions.length,
+        });
+        secondPassResult.cuttingInstructions = cuttingInstructions;
+        // Also carry forward parts from first pass if verifier lost them
+        if (
+          (!secondPassResult.parts || secondPassResult.parts.length === 0) &&
+          metadata.parts && metadata.parts.length > 0
+        ) {
+          secondPassResult.parts = metadata.parts;
+        }
+      }
+
+      // --- ADJUDICATION LOGIC ---
+      const disagreements = detectDisagreements(metadata, secondPassResult);
+      const lowConfidence = (verificationConfidence < 85) || (metadata.confidenceScore < 80);
+      // Re-evaluate garbage state after fallback
+      const finalSpCuts = secondPassResult.cuttingInstructions || [];
+      const stillGarbage = finalSpCuts.length === 0 ||
+        finalSpCuts.every(ci => isForbiddenLabel(ci.instrument) || isForbiddenLabel(ci.partName));
+      const needsAdjudication = disagreements.length > 0 || lowConfidence || stillGarbage;
 
       let finalMetadata = secondPassResult;
       let finalConfidence = verificationConfidence;
@@ -866,13 +889,33 @@ Include a "corrections" field explaining any corrections made from the first pas
 
       await progress('verification', 70, 'Fallback verification complete');
 
-      // --- ADJUDICATION LOGIC (Fallback path) ---
-      const disagreements = detectDisagreements(metadata, secondPassResult);
-      // Detect garbage cutting instructions (missing, empty, or all forbidden labels)
+      // --- CUTTING INSTRUCTIONS FALLBACK (Fallback path) ---
       const spCuts = secondPassResult.cuttingInstructions || [];
       const garbageInstructions = spCuts.length === 0 ||
         spCuts.every(ci => isForbiddenLabel(ci.instrument) || isForbiddenLabel(ci.partName));
-      const needsAdjudication = disagreements.length > 0 || verificationConfidence < 85 || garbageInstructions;
+
+      if (garbageInstructions && cuttingInstructions && cuttingInstructions.length > 0) {
+        logger.warn('Second pass (fallback) returned empty/garbage cutting instructions — preserving first-pass instructions', {
+          sessionId,
+          secondPassCuts: spCuts.length,
+          firstPassCuts: cuttingInstructions.length,
+        });
+        secondPassResult.cuttingInstructions = cuttingInstructions;
+        if (
+          (!secondPassResult.parts || secondPassResult.parts.length === 0) &&
+          metadata.parts && metadata.parts.length > 0
+        ) {
+          secondPassResult.parts = metadata.parts;
+        }
+      }
+
+      // --- ADJUDICATION LOGIC (Fallback path) ---
+      const disagreements = detectDisagreements(metadata, secondPassResult);
+      // Re-evaluate garbage state after fallback
+      const finalSpCuts = secondPassResult.cuttingInstructions || [];
+      const stillGarbage = finalSpCuts.length === 0 ||
+        finalSpCuts.every(ci => isForbiddenLabel(ci.instrument) || isForbiddenLabel(ci.partName));
+      const needsAdjudication = disagreements.length > 0 || verificationConfidence < 85 || stillGarbage;
 
       let finalMetadata = secondPassResult;
       let finalConfidence = verificationConfidence;

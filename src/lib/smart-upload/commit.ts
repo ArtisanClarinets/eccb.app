@@ -161,7 +161,7 @@ export async function commitSmartUploadSessionToLibrary(
 
   // Normalize metadata using the normalizer pipeline when we have extracted data
   const normalized = extractedMetadata
-    ? normalizeExtractedMetadata(sessionId, extractedMetadata, cuttingInstructions ?? undefined)
+    ? normalizeExtractedMetadata(sessionId, extractedMetadata, cuttingInstructions ?? undefined, uploadSession.fileName)
     : null;
 
   // Resolve final values: overrides → normalized → raw → fallback

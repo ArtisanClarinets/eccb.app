@@ -739,8 +739,8 @@ function UploadReviewClient({
 
       {/* Edit/Approve Dialog */}
       <Dialog open={!!editingSession} onOpenChange={(open) => !open && closeEditDialog()}>
-        <DialogContent className={cn('max-w-4xl', isFullscreen && 'max-w-none h-screen m-0 rounded-none')}>
-          <DialogHeader>
+        <DialogContent className={cn('max-w-4xl max-h-[90vh] flex flex-col', isFullscreen && 'max-w-none h-screen m-0 rounded-none')}>
+          <DialogHeader className="shrink-0">
             <DialogTitle>Review Extracted Metadata</DialogTitle>
             <DialogDescription>
               Verify and edit the extracted metadata before approving.
@@ -748,7 +748,7 @@ function UploadReviewClient({
           </DialogHeader>
 
           {editingSession && (
-            <div className="space-y-6">
+            <div className="space-y-6 flex-1 overflow-y-auto pr-1">
               {/* File Info */}
               <div className="bg-muted p-4 rounded-lg">
                 <div className="flex items-center gap-2 mb-2">
@@ -1142,7 +1142,7 @@ function UploadReviewClient({
                 editingSession.extractedMetadata.parts && (
                   <div className="space-y-2">
                     <Label>Parts Detected</Label>
-                    <div className="bg-muted p-3 rounded-lg">
+                    <div className="bg-muted p-3 rounded-lg max-h-56 overflow-y-auto">
                       {editingSession.extractedMetadata.parts.map((part, index) => (
                         <div key={index} className="text-sm">
                           <span className="font-medium">{part.instrument}</span>
@@ -1203,61 +1203,63 @@ function UploadReviewClient({
                   </div>
                 )}
 
-              {/* ParsedParts Section */}
-              <div className="space-y-2">
-                <Label>Parsed Parts</Label>
-                {editingSession.parsedParts && editingSession.parsedParts.length > 0 ? (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Part Name</TableHead>
-                          <TableHead>Instrument</TableHead>
-                          <TableHead>Section</TableHead>
-                          <TableHead>Transposition</TableHead>
-                          <TableHead>Pages</TableHead>
-                          <TableHead>Page Range</TableHead>
-                          <TableHead>Size</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {editingSession.parsedParts.map((part, index) => (
-                          <TableRow key={index}>
-                            <TableCell>{part.partName}</TableCell>
-                            <TableCell>{part.instrument}</TableCell>
-                            <TableCell>{part.section}</TableCell>
-                            <TableCell>{part.transposition || '-'}</TableCell>
-                            <TableCell>{part.pageCount}</TableCell>
-                            <TableCell>
-                              {part.pageRange[0]} - {part.pageRange[1]}
-                            </TableCell>
-                            <TableCell>{formatFileSize(part.fileSize)}</TableCell>
+              {/* Parsed Parts Section — only shown when NOT inside the isMultiPart block above */}
+              {!(editingSession.extractedMetadata?.isMultiPart && editingSession.extractedMetadata.parts) && (
+                <div className="space-y-2">
+                  <Label>Parsed Parts</Label>
+                  {editingSession.parsedParts && editingSession.parsedParts.length > 0 ? (
+                    <div className="overflow-x-auto max-h-64 overflow-y-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Part Name</TableHead>
+                            <TableHead>Instrument</TableHead>
+                            <TableHead>Section</TableHead>
+                            <TableHead>Transposition</TableHead>
+                            <TableHead>Pages</TableHead>
+                            <TableHead>Page Range</TableHead>
+                            <TableHead>Size</TableHead>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                ) : (
-                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                    <div className="flex items-start gap-2">
-                      <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5" />
-                      <div>
-                        <p className="text-sm font-medium text-yellow-800">
-                          No parts were automatically split from this PDF.
-                        </p>
-                        <p className="text-sm text-yellow-700 mt-1">
-                          On approval, the original PDF will be stored as a single file. You can
-                          manually trigger splitting after running the second-pass analysis.
-                        </p>
+                        </TableHeader>
+                        <TableBody>
+                          {editingSession.parsedParts.map((part, index) => (
+                            <TableRow key={index}>
+                              <TableCell>{part.partName}</TableCell>
+                              <TableCell>{part.instrument}</TableCell>
+                              <TableCell>{part.section}</TableCell>
+                              <TableCell>{part.transposition || '-'}</TableCell>
+                              <TableCell>{part.pageCount}</TableCell>
+                              <TableCell>
+                                {part.pageRange[0]} - {part.pageRange[1]}
+                              </TableCell>
+                              <TableCell>{formatFileSize(part.fileSize)}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  ) : (
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                      <div className="flex items-start gap-2">
+                        <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5" />
+                        <div>
+                          <p className="text-sm font-medium text-yellow-800">
+                            No parts were automatically split from this PDF.
+                          </p>
+                          <p className="text-sm text-yellow-700 mt-1">
+                            On approval, the original PDF will be stored as a single file. You can
+                            manually trigger splitting after running the second-pass analysis.
+                          </p>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
-          <DialogFooter>
+          <DialogFooter className="shrink-0">
             <Button variant="outline" onClick={closeEditDialog}>
               Cancel
             </Button>
