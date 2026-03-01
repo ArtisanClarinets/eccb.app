@@ -144,6 +144,12 @@ async function openPdfDocument(pdfBuffer: Buffer) {
     isEvalSupported: false,
   } as unknown as PdfGetDocumentParams);
 
+  // Handle encrypted PDFs by providing an empty password.
+  // pdfjs will emit a 'password' event if the PDF is encrypted and requires a password.
+  // By providing an empty string password callback, we allow pdfjs to attempt rendering
+  // with restricted permissions (e.g., printing/copying disabled but content visible).
+  loadingTask.onPassword = () => '';
+
   const pdfDocument = await loadingTask.promise;
 
   return { loadingTask, pdfDocument };

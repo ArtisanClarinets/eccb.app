@@ -1,5 +1,6 @@
 import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
+import { Socket } from 'node:net';
 
 export interface VirusScanResult {
   clean: boolean;
@@ -8,9 +9,73 @@ export interface VirusScanResult {
 }
 
 export class VirusScanner {
+  private static readonly CLAMAV_CHUNK_SIZE = 64 * 1024;
+  private static readonly CLAMAV_TIMEOUT_MS = 10_000;
+
+  private scanWithClamAv(buffer: Buffer): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const socket = new Socket();
+      let response = '';
+      let settled = false;
+
+      const resolveOnce = (value: string): void => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        socket.destroy();
+        resolve(value);
+      };
+
+      const rejectOnce = (error: Error): void => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        socket.destroy();
+        reject(error);
+      };
+
+      socket.setTimeout(VirusScanner.CLAMAV_TIMEOUT_MS);
+
+      socket.once('connect', () => {
+        socket.write('nINSTREAM\n');
+
+        for (let offset = 0; offset < buffer.length; offset += VirusScanner.CLAMAV_CHUNK_SIZE) {
+          const chunk = buffer.subarray(offset, offset + VirusScanner.CLAMAV_CHUNK_SIZE);
+          const chunkLength = Buffer.allocUnsafe(4);
+          chunkLength.writeUInt32BE(chunk.length, 0);
+          socket.write(chunkLength);
+          socket.write(chunk);
+        }
+
+        const endMarker = Buffer.allocUnsafe(4);
+        endMarker.writeUInt32BE(0, 0);
+        socket.end(endMarker);
+      });
+
+      socket.on('data', (data: Buffer) => {
+        response += data.toString('utf8');
+      });
+
+      socket.once('end', () => {
+        resolveOnce(response.trim());
+      });
+
+      socket.once('timeout', () => {
+        rejectOnce(new Error('ClamAV scan timed out'));
+      });
+
+      socket.once('error', (error) => {
+        rejectOnce(error);
+      });
+
+      socket.connect(env.CLAMAV_PORT, env.CLAMAV_HOST);
+    });
+  }
+
   /**
    * Scan a buffer for viruses.
-   * Currently a placeholder that returns clean if scanning is not implemented.
    * 
    * @param buffer - The file buffer to scan
    * @returns A promise resolving to the scan result
@@ -21,18 +86,29 @@ export class VirusScanner {
     }
 
     try {
-      // ClamAV scanning implementation would go here.
-      // For now, we log that scanning is enabled but not implemented.
-      // TODO: Implement actual ClamAV scanning using a library like 'clamscan' or a TCP client.
-      
-      logger.info('Virus scanning enabled but not implemented', { 
+      const response = await this.scanWithClamAv(buffer);
+
+      logger.info('Virus scanned with ClamAV', {
         clamavHost: env.CLAMAV_HOST,
         clamavPort: env.CLAMAV_PORT,
-        fileSize: buffer.length
+        fileSize: buffer.length,
+        response,
       });
-      
-      // We return clean: true to allow uploads to proceed until implementation is complete.
-      return { clean: true, message: 'Scan skipped: implementation missing' };
+
+      if (response.includes('FOUND')) {
+        const threat = response.replace(/^stream:\s*/i, '').replace(/\s*FOUND$/i, '').trim();
+        return {
+          clean: false,
+          message: threat || 'Virus detected',
+          scanner: 'clamav',
+        };
+      }
+
+      if (response.includes('OK')) {
+        return { clean: true, scanner: 'clamav' };
+      }
+
+      throw new Error(`Unexpected ClamAV response: ${response || 'empty response'}`);
     } catch (error) {
       logger.error('Virus scan failed', { error });
       return { clean: false, message: 'Virus scan failed' };
