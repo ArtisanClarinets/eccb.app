@@ -473,20 +473,10 @@ Done means: create logs from stand, view your history, aggregate/visibility poli
 
 ---
 
-## Recommended milestone breakdown (so “done” isn’t a cliff)
-
-If you want a sane delivery path:
-
-### Milestone 1 — “Production usable stand”
+## Definition of Done (so “done” isn’t a cliff)
 
 UI entry points + program admin + security + PDF render + annotations + nav links + audio CRUD.
-
-### Milestone 2 — “PiaScore-level”
-
-Per-member parts, setlist manager, pedal mapping, offline caching, undo/redo, follow-director.
-
-### Milestone 3 — “Synced playback + practice”
-
+Per-member parts, setlist manager, pedal mapping, offline caching, undo/redo, follow-director + director edits*.
 Synced score baseline (mapping highlight) + practice logs + reporting.
 
 ---
