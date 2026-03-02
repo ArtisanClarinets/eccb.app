@@ -5,8 +5,9 @@ import { auth } from '@/lib/auth/config';
 import { headers } from 'next/headers';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, AlertTriangle } from 'lucide-react';
 import { LibraryStandViewer } from '@/components/member/stand/LibraryStandViewer';
+import { fileExists } from '@/lib/services/storage';
 
 export const metadata: Metadata = {
   title: 'Music Stand – Library',
@@ -62,6 +63,26 @@ export default async function LibraryStandPage({ params }: PageProps) {
 
   if (!piece) notFound();
 
+  // Check which storage keys exist so the viewer can flag unavailable files
+  // without the user seeing a confusing raw 404 error.
+  const allKeys = [
+    ...piece.files.map((f) => f.storageKey),
+    ...piece.parts
+      .map((p) => p.storageKey ?? p.file?.storageKey)
+      .filter((k): k is string => Boolean(k)),
+  ];
+
+  const existenceResults = await Promise.all(
+    allKeys.map(async (key) => ({ key, exists: await fileExists(key) }))
+  );
+  const missingStorageKeys = existenceResults
+    .filter((r) => !r.exists)
+    .map((r) => r.key);
+
+  const allFilesUnavailable =
+    piece.files.length === 0 ||
+    piece.files.every((f) => missingStorageKeys.includes(f.storageKey));
+
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)]">
       {/* Minimal top bar */}
@@ -80,30 +101,47 @@ export default async function LibraryStandPage({ params }: PageProps) {
         <div className="ml-auto text-xs text-muted-foreground">Library Mode</div>
       </div>
 
-      <LibraryStandViewer
-        piece={{
-          id: piece.id,
-          title: piece.title,
-          composer: piece.composer?.fullName ?? null,
-          files: piece.files.map((f) => ({
-            id: f.id,
-            storageKey: f.storageKey,
-            storageUrl: f.storageUrl ?? null,
-            pageCount: f.pageCount ?? 1,
-            partLabel: f.partLabel ?? null,
-            instrumentName: f.instrumentName ?? null,
-          })),
-          parts: piece.parts.map((p) => ({
-            id: p.id,
-            partName: p.partName,
-            instrumentId: p.instrumentId,
-            instrumentName: p.instrument.name,
-            storageKey: p.storageKey ?? p.file?.storageKey ?? null,
-            pageCount: p.pageCount ?? p.file?.pageCount ?? null,
-          })),
-        }}
-        userId={session.user.id}
-      />
+      {allFilesUnavailable ? (
+        <div className="flex flex-col items-center justify-center flex-1 gap-4 text-center px-6">
+          <AlertTriangle className="h-12 w-12 text-amber-500" />
+          <div>
+            <p className="font-semibold text-lg">Sheet music files are unavailable</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              The PDF for <span className="font-medium">{piece.title}</span> could not be found in
+              storage. Please ask a director to re-upload this piece via Smart Upload.
+            </p>
+          </div>
+          <Button variant="outline" asChild>
+            <Link href="/member/stand">Back to Library</Link>
+          </Button>
+        </div>
+      ) : (
+        <LibraryStandViewer
+          piece={{
+            id: piece.id,
+            title: piece.title,
+            composer: piece.composer?.fullName ?? null,
+            files: piece.files.map((f) => ({
+              id: f.id,
+              storageKey: f.storageKey,
+              storageUrl: f.storageUrl ?? null,
+              pageCount: f.pageCount ?? 1,
+              partLabel: f.partLabel ?? null,
+              instrumentName: f.instrumentName ?? null,
+            })),
+            parts: piece.parts.map((p) => ({
+              id: p.id,
+              partName: p.partName,
+              instrumentId: p.instrumentId,
+              instrumentName: p.instrument.name,
+              storageKey: p.storageKey ?? p.file?.storageKey ?? null,
+              pageCount: p.pageCount ?? p.file?.pageCount ?? null,
+            })),
+          }}
+          missingStorageKeys={missingStorageKeys}
+          userId={session.user.id}
+        />
+      )}
     </div>
   );
 }

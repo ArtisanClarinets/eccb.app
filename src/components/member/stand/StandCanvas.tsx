@@ -230,6 +230,10 @@ export const StandCanvas = forwardRef<StandCanvasRef, StandCanvasProps>(
     }
 
     if (error) {
+      const is404 =
+        error.message.includes('404') ||
+        error.message.toLowerCase().includes('server response') ||
+        error.message.toLowerCase().includes('not found');
       return (
         <div
           className={cn(
@@ -241,7 +245,11 @@ export const StandCanvas = forwardRef<StandCanvasRef, StandCanvasProps>(
         >
           <div className="text-center">
             <p className="font-semibold">Error loading PDF</p>
-            <p className="text-sm text-muted-foreground">{error.message}</p>
+            <p className="text-sm text-muted-foreground">
+              {is404
+                ? 'Sheet music file is unavailable. Please ask a director to re-upload this piece.'
+                : error.message}
+            </p>
           </div>
         </div>
       );

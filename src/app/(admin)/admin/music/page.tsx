@@ -22,26 +22,15 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
   Music,
   Plus,
   Search,
-  MoreHorizontal,
-  Edit,
-  Trash2,
   Download,
-  Eye,
-  FileText,
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
 } from 'lucide-react';
+import { MusicLibraryTable, type MusicPieceWithRelations } from '@/components/admin/MusicLibraryTable';
 
 
 export const metadata: Metadata = {
@@ -61,24 +50,6 @@ interface SearchParams {
 type SortField = 'title' | 'composer' | 'createdAt' | 'difficulty';
 type SortOrder = 'asc' | 'desc';
 
-const difficultyColors: Record<string, string> = {
-  GRADE_1: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
-  GRADE_2: 'bg-lime-100 text-lime-700 dark:bg-lime-900/30 dark:text-lime-300',
-  GRADE_3: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300',
-  GRADE_4: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300',
-  GRADE_5: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
-  GRADE_6: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300',
-};
-
-const difficultyLabels: Record<string, string> = {
-  GRADE_1: 'Grade 1',
-  GRADE_2: 'Grade 2',
-  GRADE_3: 'Grade 3',
-  GRADE_4: 'Grade 4',
-  GRADE_5: 'Grade 5',
-  GRADE_6: 'Grade 6',
-};
-
 export default async function AdminMusicPage({
   searchParams,
 }: {
@@ -97,15 +68,17 @@ export default async function AdminMusicPage({
   const limit = 20;
 
   // Build where clause
-  const where: Record<string, unknown> = {
-    deletedAt: null,
-  };
+  const where: Record<string, unknown> = {};
 
-  // Filter by archived status
-  if (status === 'archived') {
+  // Filter by deleted/archived status
+  if (status === 'trash') {
+    where.deletedAt = { not: null };
+  } else if (status === 'archived') {
     where.isArchived = true;
+    where.deletedAt = null;
   } else if (status === 'active' || !status) {
     where.isArchived = false;
+    where.deletedAt = null;
   }
   // 'all' shows everything (no filter)
 
@@ -184,8 +157,8 @@ export default async function AdminMusicPage({
     }),
     prisma.musicPiece.count({ where }),
     prisma.musicPiece.groupBy({
-      by: ['isArchived'],
-      where: { deletedAt: null },
+      by: ['isArchived', 'deletedAt'],
+      where: {},
       _count: true,
     }),
   ]);
@@ -193,8 +166,10 @@ export default async function AdminMusicPage({
   const totalPages = Math.ceil(total / limit);
 
   // Calculate stats
-  const archivedCount = stats.find((s) => s.isArchived)?._count || 0;
-  const activeCount = stats.find((s) => !s.isArchived)?._count || 0;
+  const archivedCount = stats.find((s) => s.isArchived && !s.deletedAt)?._count || 0;
+  const activeCount = stats.find((s) => !s.isArchived && !s.deletedAt)?._count || 0;
+  const trashCount =
+    stats.reduce((sum, s) => (s.deletedAt ? sum + s._count : sum), 0) || 0;
 
   // Helper to build filter URL
   const buildFilterUrl = (overrides: Partial<SearchParams> = {}) => {
@@ -246,6 +221,25 @@ export default async function AdminMusicPage({
     );
   };
 
+  // Define difficulty colors and labels
+  const difficultyColors: Record<string, string> = {
+    GRADE_1: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
+    GRADE_2: 'bg-lime-100 text-lime-700 dark:bg-lime-900/30 dark:text-lime-300',
+    GRADE_3: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300',
+    GRADE_4: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300',
+    GRADE_5: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
+    GRADE_6: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300',
+  };
+
+  const difficultyLabels: Record<string, string> = {
+    GRADE_1: 'Grade 1',
+    GRADE_2: 'Grade 2',
+    GRADE_3: 'Grade 3',
+    GRADE_4: 'Grade 4',
+    GRADE_5: 'Grade 5',
+    GRADE_6: 'Grade 6',
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -271,13 +265,13 @@ export default async function AdminMusicPage({
       </div>
 
       {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-5">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Total Pieces</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{activeCount + archivedCount}</div>
+            <div className="text-2xl font-bold">{activeCount + archivedCount + trashCount}</div>
           </CardContent>
         </Card>
         <Card>
@@ -304,6 +298,14 @@ export default async function AdminMusicPage({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{archivedCount}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Trash</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{trashCount}</div>
           </CardContent>
         </Card>
       </div>
@@ -351,14 +353,15 @@ export default async function AdminMusicPage({
                 ))}
               </SelectContent>
             </Select>
-            <Select name="status" defaultValue={status || 'active'}>
+            <Select name="status" defaultValue={status || ''}>
               <SelectTrigger id="status" name="status" className="w-[150px]">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="">All Status</SelectItem>
                 <SelectItem value="active">Active</SelectItem>
                 <SelectItem value="archived">Archived</SelectItem>
-                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="trash">Trash</SelectItem>
               </SelectContent>
             </Select>
             <Button type="submit">Filter</Button>
@@ -383,158 +386,36 @@ export default async function AdminMusicPage({
               )}
             </div>
           ) : (
-            <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>
-                      <Link
-                        href={buildFilterUrl({
-                          sort: 'title',
-                          order: sortField === 'title' && sortOrder === 'asc' ? 'desc' : 'asc',
-                        })}
-                        className="flex items-center hover:text-foreground"
-                      >
-                        Title {getSortIcon('title')}
-                      </Link>
-                    </TableHead>
-                    <TableHead>
-                      <Link
-                        href={buildFilterUrl({
-                          sort: 'composer',
-                          order: sortField === 'composer' && sortOrder === 'asc' ? 'desc' : 'asc',
-                        })}
-                        className="flex items-center hover:text-foreground"
-                      >
-                        Composer / Arranger {getSortIcon('composer')}
-                      </Link>
-                    </TableHead>
-                    <TableHead>
-                      <Link
-                        href={buildFilterUrl({
-                          sort: 'difficulty',
-                          order:
-                            sortField === 'difficulty' && sortOrder === 'asc' ? 'desc' : 'asc',
-                        })}
-                        className="flex items-center hover:text-foreground"
-                      >
-                        Difficulty {getSortIcon('difficulty')}
-                      </Link>
-                    </TableHead>
-                    <TableHead>Files</TableHead>
-                    <TableHead>Assignments</TableHead>
-                    <TableHead className="w-[80px]"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {pieces.map((piece) => (
-                    <TableRow key={piece.id}>
-                      <TableCell>
-                        <div>
-                          <Link
-                            href={`/admin/music/${piece.id}`}
-                            className="font-medium hover:text-primary"
-                          >
-                            {piece.title}
-                          </Link>
-                          {piece.subtitle && (
-                            <p className="text-sm text-muted-foreground">{piece.subtitle}</p>
-                          )}
-                          {piece.catalogNumber && (
-                            <p className="text-xs text-muted-foreground">
-                              #{piece.catalogNumber}
-                            </p>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm">
-                          {piece.composer && <div>{piece.composer.fullName}</div>}
-                          {piece.arranger && (
-                            <div className="text-muted-foreground">
-                              arr. {piece.arranger.fullName}
-                            </div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {piece.difficulty && (
-                          <Badge className={difficultyColors[piece.difficulty]}>
-                            {difficultyLabels[piece.difficulty]}
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <FileText className="h-4 w-4 text-muted-foreground" />
-                          <span>{piece.files.length}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>{piece._count.assignments}</TableCell>
-                      <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem asChild>
-                              <Link href={`/admin/music/${piece.id}`}>
-                                <Eye className="mr-2 h-4 w-4" />
-                                View Details
-                              </Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem asChild>
-                              <Link href={`/admin/music/${piece.id}/edit`}>
-                                <Edit className="mr-2 h-4 w-4" />
-                                Edit
-                              </Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem asChild>
-                              <Link href={`/admin/music/${piece.id}/assign`}>
-                                <Download className="mr-2 h-4 w-4" />
-                                Assign to Members
-                              </Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem className="text-destructive">
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Archive
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+            <MusicLibraryTable
+              pieces={pieces as MusicPieceWithRelations[]}
+              difficultyColors={difficultyColors}
+              difficultyLabels={difficultyLabels}
+            />
+          )}
 
-              {/* Pagination */}
-              {totalPages > 1 && (
-                <div className="flex items-center justify-between mt-4">
-                  <p className="text-sm text-muted-foreground">
-                    Showing {(page - 1) * limit + 1} to {Math.min(page * limit, total)} of {total}{' '}
-                    pieces
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <Link href={buildFilterUrl({ page: page - 1 })}>
-                      <Button variant="outline" size="sm" disabled={page <= 1}>
-                        Previous
-                      </Button>
-                    </Link>
-                    <span className="text-sm">
-                      Page {page} of {totalPages}
-                    </span>
-                    <Link href={buildFilterUrl({ page: page + 1 })}>
-                      <Button variant="outline" size="sm" disabled={page >= totalPages}>
-                        Next
-                      </Button>
-                    </Link>
-                  </div>
-                </div>
-              )}
-            </>
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between mt-4">
+              <p className="text-sm text-muted-foreground">
+                Showing {(page - 1) * limit + 1} to {Math.min(page * limit, total)} of {total}{' '}
+                pieces
+              </p>
+              <div className="flex items-center gap-2">
+                <Link href={buildFilterUrl({ page: page - 1 })}>
+                  <Button variant="outline" size="sm" disabled={page <= 1}>
+                    Previous
+                  </Button>
+                </Link>
+                <span className="text-sm">
+                  Page {page} of {totalPages}
+                </span>
+                <Link href={buildFilterUrl({ page: page + 1 })}>
+                  <Button variant="outline" size="sm" disabled={page >= totalPages}>
+                    Next
+                  </Button>
+                </Link>
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>

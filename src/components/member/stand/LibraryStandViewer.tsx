@@ -51,6 +51,8 @@ interface LibraryPiece {
 interface LibraryStandViewerProps {
   piece: LibraryPiece;
   userId: string;
+  /** Storage keys whose backing files could not be found in storage. */
+  missingStorageKeys?: string[];
 }
 
 /**
@@ -62,7 +64,8 @@ interface LibraryStandViewerProps {
  * Fix: PDF URL now includes the required ?pieceId= scope parameter so the
  * authenticated file proxy does not return 404.
  */
-export function LibraryStandViewer({ piece, userId }: LibraryStandViewerProps) {
+export function LibraryStandViewer({ piece, userId, missingStorageKeys = [] }: LibraryStandViewerProps) {
+  const missingKeys = new Set(missingStorageKeys);
   const {
     setPieces,
     setEventInfo,
@@ -78,9 +81,8 @@ export function LibraryStandViewer({ piece, userId }: LibraryStandViewerProps) {
     setCurrentPage,
   } = useStandStore();
 
-  const [selectedPartId, setSelectedPartId] = useState<string>('__full__');
-
-  // Build the list of available views
+  // Build the list of available views (must come before the selectedPartId state
+  // so the initial value calculation can reference partOptions)
   const fullScorePdf = piece.files[0] ?? null;
 
   const partOptions = [
@@ -91,6 +93,7 @@ export function LibraryStandViewer({ piece, userId }: LibraryStandViewerProps) {
             label: fullScorePdf.partLabel ?? fullScorePdf.instrumentName ?? 'Full Score',
             storageKey: fullScorePdf.storageKey,
             pageCount: fullScorePdf.pageCount,
+            unavailable: missingKeys.has(fullScorePdf.storageKey),
           },
         ]
       : []),
@@ -101,8 +104,18 @@ export function LibraryStandViewer({ piece, userId }: LibraryStandViewerProps) {
         label: p.partName || p.instrumentName,
         storageKey: p.storageKey!,
         pageCount: p.pageCount ?? 1,
+        unavailable: missingKeys.has(p.storageKey!),
       })),
   ];
+
+  // First available (non-missing) part to safely initialise the selector
+  const firstAvailable = partOptions.find((p) => !p.unavailable);
+
+  // Default to first available part; if the full score is unavailable, skip to
+  // the first part that exists so we don't immediately show an error on mount.
+  const [selectedPartId, setSelectedPartId] = useState<string>(
+    () => (partOptions[0]?.unavailable ? (firstAvailable?.id ?? '__full__') : '__full__')
+  );
 
   const selectedPart = partOptions.find((p) => p.id === selectedPartId) ?? partOptions[0];
   const totalPages = selectedPart?.pageCount ?? 1;
@@ -195,8 +208,13 @@ export function LibraryStandViewer({ piece, userId }: LibraryStandViewerProps) {
             </SelectTrigger>
             <SelectContent>
               {partOptions.map((p) => (
-                <SelectItem key={p.id} value={p.id} className="text-xs">
-                  {p.label}
+                <SelectItem
+                  key={p.id}
+                  value={p.id}
+                  className="text-xs"
+                  disabled={p.unavailable}
+                >
+                  {p.label}{p.unavailable ? ' (Unavailable)' : ''}
                 </SelectItem>
               ))}
             </SelectContent>

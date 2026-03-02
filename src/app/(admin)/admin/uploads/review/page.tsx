@@ -201,6 +201,8 @@ function UploadReviewClient({
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [rejectSessionId, setRejectSessionId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
+  const [bulkRejectDialogOpen, setBulkRejectDialogOpen] = useState(false);
+  const [bulkRejectReason, setBulkRejectReason] = useState('');
   // State for PDF preview images keyed by session id
   const [previewImages, setPreviewImages] = useState<Record<string, { imageBase64: string; totalPages: number } | null>>({});
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -355,6 +357,34 @@ function UploadReviewClient({
       }
     } catch (error) {
       console.error('Failed to bulk approve:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle bulk reject
+  const handleBulkReject = async () => {
+    if (selectedSessions.size === 0) return;
+
+    setLoading(true);
+    try {
+      const response = await fetch('/api/admin/uploads/review/bulk-reject', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionIds: Array.from(selectedSessions),
+          reason: bulkRejectReason || undefined,
+        }),
+      });
+
+      if (response.ok) {
+        await fetchSessions();
+        setSelectedSessions(new Set());
+        setBulkRejectDialogOpen(false);
+        setBulkRejectReason('');
+      }
+    } catch (error) {
+      console.error('Failed to bulk reject:', error);
     } finally {
       setLoading(false);
     }
@@ -542,15 +572,26 @@ function UploadReviewClient({
             Refresh
           </Button>
           {selectedSessions.size > 0 && (
-            <Button
-              variant="default"
-              onClick={handleBulkApprove}
-              disabled={loading}
-              className="bg-primary hover:bg-primary/90"
-            >
-              <Check className="mr-2 h-4 w-4" />
-              Approve Selected ({selectedSessions.size})
-            </Button>
+            <>
+              <Button
+                variant="default"
+                onClick={handleBulkApprove}
+                disabled={loading}
+                className="bg-primary hover:bg-primary/90"
+              >
+                <Check className="mr-2 h-4 w-4" />
+                Approve Selected ({selectedSessions.size})
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setBulkRejectDialogOpen(true)}
+                disabled={loading}
+                className="text-red-500 hover:text-red-600 hover:bg-red-50"
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Reject Selected ({selectedSessions.size})
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -1312,6 +1353,36 @@ function UploadReviewClient({
             <Button variant="destructive" onClick={handleReject} disabled={loading}>
               <Trash2 className="mr-2 h-4 w-4" />
               Reject Upload
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Reject Confirmation Dialog */}
+      <Dialog open={bulkRejectDialogOpen} onOpenChange={setBulkRejectDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject {selectedSessions.size} Upload(s)</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to reject {selectedSessions.size} selected upload(s)? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="bulkRejectReason">Reason (optional)</Label>
+            <Input
+              id="bulkRejectReason"
+              value={bulkRejectReason}
+              onChange={(e) => setBulkRejectReason(e.target.value)}
+              placeholder="Enter reason for rejection (applies to all selected)"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkRejectDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleBulkReject} disabled={loading}>
+              <Trash2 className="mr-2 h-4 w-4" />
+              Reject {selectedSessions.size} Upload(s)
             </Button>
           </DialogFooter>
         </DialogContent>
