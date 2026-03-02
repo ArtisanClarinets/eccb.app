@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useStandStore, StandPiece } from '@/store/standStore';
 import { useStandSync } from '@/hooks/use-stand-sync';
 import { useAudioTracker } from '@/hooks/useAudioTracker';
@@ -18,6 +18,11 @@ import { PitchPipe } from './PitchPipe';
 import { AudioTrackerSettings } from './AudioTrackerSettings';
 import { SmartNavEditor } from './SmartNavEditor';
 import { SetlistManager } from './SetlistManager';
+import { BookmarksPanel } from './BookmarksPanel';
+import { SetlistsPanel } from './SetlistsPanel';
+import { PracticeTimer } from './PracticeTimer';
+import { AudioLinkEditor } from './AudioLinkEditor';
+import { PartSelector } from './PartSelector';
 
 // ── Serialised types coming from the server page ────────────────
 // All Date fields are pre-serialised to ISO strings on the server.
@@ -89,6 +94,15 @@ interface SerializedAudioLink {
   url: string | null;
   description: string | null;
   createdAt: string;
+}
+
+interface StandConfig {
+  enabled: boolean;
+  realtimeMode: string;
+  websocketEnabled: boolean;
+  pollingIntervalMs: number;
+  practiceTrackingEnabled: boolean;
+  audioSyncEnabled: boolean;
 }
 
 interface SerializedPreferences {
@@ -167,6 +181,9 @@ export function StandViewer({ data }: StandViewerProps) {
     updatePitchPipeSettings,
     updateAudioTrackerSettings,
     setUserContext,
+    updatePiecePdfUrl,
+    pieces,
+    currentPieceIndex,
   } = useStandStore();
 
   const {
@@ -185,8 +202,50 @@ export function StandViewer({ data }: StandViewerProps) {
     roster,
   } = data;
 
+  const isLibrarian = roles.includes('LIBRARIAN');
+
+  // Stand runtime config (fetched from /api/stand/config after hydration)
+  const [standConfig, setStandConfig] = useState<StandConfig | null>(null);
+  // Which side panel is currently open
+  type PanelName = 'bookmarks' | 'setlists' | 'practice' | 'audio';
+  const [activePanel, setActivePanel] = useState<PanelName | null>(null);
+  // Per-piece active part ID (keyed by pieceId)
+  const [activePiecePartId, setActivePiecePartId] = useState<Record<string, string>>({});
+
   // Initialize audio tracker hook
   useAudioTracker();
+
+  // ── Fetch runtime config (stand feature flags) ─────────────
+  useEffect(() => {
+    fetch('/api/stand/config')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((cfg: StandConfig | null) => {
+        if (cfg) setStandConfig(cfg);
+      })
+      .catch(() => {/* config fetch is best-effort */});
+  }, []);
+
+  // ── Part-selection handler ──────────────────────────────────
+  const handlePartSelect = useCallback(
+    (pieceId: string, option: { id: string; url: string; pageCount: number }) => {
+      setActivePiecePartId((prev) => ({ ...prev, [pieceId]: option.id }));
+      updatePiecePdfUrl(pieceId, option.url);
+      // Persist selection to preferences (fire-and-forget)
+      fetch('/api/stand/preferences', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ selectedParts: { [pieceId]: option.id } }),
+      }).catch(() => {});
+    },
+    [updatePiecePdfUrl]
+  );
+
+  // ── Panel toggle callbacks ──────────────────────────────────
+  const togglePanel = useCallback(
+    (name: 'bookmarks' | 'setlists' | 'practice' | 'audio') =>
+      setActivePanel((prev) => (prev === name ? null : name)),
+    []
+  );
 
   // ── Hydrate store with server data (runs once) ──────────────
   useEffect(() => {
@@ -272,6 +331,10 @@ export function StandViewer({ data }: StandViewerProps) {
   useStandSync({
     eventId,
     userId,
+    realtimeEnabled:
+      standConfig?.websocketEnabled === true &&
+      standConfig?.realtimeMode === 'websocket',
+    pollingInterval: standConfig?.pollingIntervalMs ?? 5000,
     onRosterChange: (members) => setRoster(members),
     onPresenceChange: (presence) => {
       if (presence.status === 'joined') {
@@ -286,6 +349,35 @@ export function StandViewer({ data }: StandViewerProps) {
       }
     },
   });
+
+  // Current piece for panel context
+  const currentPiece = pieces[currentPieceIndex] ?? null;
+  const currentMusicEntry = music[currentPieceIndex] ?? null;
+
+  // Build PartSelector options for the current piece
+  const partOptions = (() => {
+    if (!currentMusicEntry) return { fullScore: null, parts: [], activeId: null };
+    const { piece } = currentMusicEntry;
+    const proxyBase = (key: string) =>
+      `/api/stand/audio-files/${encodeURIComponent(key)}?eventId=${encodeURIComponent(eventId)}`;
+
+    const fullScoreFile = piece.files.find((f) => f.mimeType === 'application/pdf' && !f.partLabel);
+    const fullScore = fullScoreFile
+      ? { id: fullScoreFile.id, label: 'Full Score', url: proxyBase(fullScoreFile.storageKey), pageCount: fullScoreFile.pageCount ?? 1 }
+      : null;
+
+    const parts = piece.parts
+      .filter((p) => p.storageKey)
+      .map((p) => ({
+        id: p.id,
+        label: p.partLabel ?? p.partName ?? p.instrumentName,
+        url: proxyBase(p.storageKey!),
+        pageCount: p.pageCount ?? 1,
+      }));
+
+    const activeId = activePiecePartId[piece.id] ?? fullScore?.id ?? parts[0]?.id ?? null;
+    return { fullScore, parts, activeId };
+  })();
 
   // Empty state
   if (!music || music.length === 0) {
@@ -309,7 +401,21 @@ export function StandViewer({ data }: StandViewerProps) {
         }`}
       >
         <NavigationControls />
-        <Toolbar />
+        <div className="flex items-center gap-2">
+          <PartSelector
+            fullScore={partOptions.fullScore}
+            parts={partOptions.parts}
+            activeId={partOptions.activeId}
+            onChange={(opt) => handlePartSelect(currentPiece?.id ?? '', opt)}
+          />
+          <Toolbar
+            onToggleBookmarks={() => togglePanel('bookmarks')}
+            onToggleSetlists={() => togglePanel('setlists')}
+            onTogglePractice={standConfig?.practiceTrackingEnabled ? () => togglePanel('practice') : undefined}
+            onToggleAudio={standConfig?.audioSyncEnabled ? () => togglePanel('audio') : undefined}
+            activePanel={activePanel ?? undefined}
+          />
+        </div>
       </div>
 
       <KeyboardHandler />
@@ -331,6 +437,37 @@ export function StandViewer({ data }: StandViewerProps) {
           <PitchPipe />
           <AudioTrackerSettings />
         </div>
+
+        {/* Side panel — slides in from the right */}
+        {activePanel && (
+          <div className="w-80 border-l bg-card flex-shrink-0 overflow-y-auto">
+            {activePanel === 'bookmarks' && (
+              <BookmarksPanel
+                currentPieceId={currentPiece?.id ?? null}
+                onSelect={(pieceId) => {
+                  const idx = pieces.findIndex((p) => p.id === pieceId);
+                  if (idx >= 0) useStandStore.getState().setCurrentPieceIndex(idx);
+                  setActivePanel(null);
+                }}
+              />
+            )}
+            {activePanel === 'setlists' && (
+              <SetlistsPanel eventId={eventId} canManage={isDirector} />
+            )}
+            {activePanel === 'practice' && currentPiece && (
+              <PracticeTimer
+                pieceId={currentPiece.id}
+                pieceTitle={currentPiece.title}
+              />
+            )}
+            {activePanel === 'audio' && currentPiece && (
+              <AudioLinkEditor
+                pieceId={currentPiece.id}
+                canManage={isDirector || isLibrarian}
+              />
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

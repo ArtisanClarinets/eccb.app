@@ -1,48 +1,33 @@
+/**
+ * /api/stand/audio/[id]
+ *
+ * PUT    — update audio link (director/librarian only)
+ * DELETE — delete audio link (director/librarian only)
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth/config';
-import { headers } from 'next/headers';
 import { prisma } from '@/lib/db';
-import { getUserRoles } from '@/lib/auth/permissions';
+import { requireStandAccess } from '@/lib/stand/access';
 import { z } from 'zod';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 const audioUpdateSchema = z.object({
-  url: z.string().url().optional(),
-  description: z.string().optional(),
-  fileKey: z.string().min(1).optional(),
+  url: z.string().url().max(2000).nullable().optional(),
+  description: z.string().max(500).nullable().optional(),
+  fileKey: z.string().min(1).max(500).optional(),
 });
 
-export type AudioUpdateInput = z.infer<typeof audioUpdateSchema>;
-
-function isPrivilegedRole(roles: string[]): boolean {
-  return (
-    roles.includes('DIRECTOR') ||
-    roles.includes('SUPER_ADMIN') ||
-    roles.includes('LIBRARIAN')
-  );
-}
-
-/**
- * PUT /api/stand/audio/[id]
- * Updates an audio link (director/librarian only)
- */
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const headersList = await headers();
-    const session = await auth.api.getSession({ headers: headersList });
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const roles = await getUserRoles(session.user.id);
-    if (!isPrivilegedRole(roles)) {
-      return NextResponse.json(
-        { error: 'Forbidden: Only directors and librarians can update audio links' },
-        { status: 403 }
-      );
+    const ctx = await requireStandAccess();
+    if (ctx instanceof NextResponse) return ctx;
+    if (!ctx.isLibrarian) {
+      return NextResponse.json({ error: 'Forbidden: directors or librarians only' }, { status: 403 });
     }
 
     const { id } = await params;
@@ -50,9 +35,7 @@ export async function PUT(
     const validated = audioUpdateSchema.parse(body);
 
     const existing = await prisma.audioLink.findUnique({ where: { id } });
-    if (!existing) {
-      return NextResponse.json({ error: 'Audio link not found' }, { status: 404 });
-    }
+    if (!existing) return NextResponse.json({ error: 'Audio link not found' }, { status: 404 });
 
     const audioLink = await prisma.audioLink.update({
       where: { id },
@@ -66,52 +49,33 @@ export async function PUT(
     return NextResponse.json({ audioLink });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: 'Validation error', details: error.issues },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Validation error', details: error.issues }, { status: 400 });
     }
-    console.error('Error updating audio link:', error);
+    console.error('[Audio [id] PUT]', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
-/**
- * DELETE /api/stand/audio/[id]
- * Deletes an audio link (director/librarian only)
- */
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const headersList = await headers();
-    const session = await auth.api.getSession({ headers: headersList });
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const roles = await getUserRoles(session.user.id);
-    if (!isPrivilegedRole(roles)) {
-      return NextResponse.json(
-        { error: 'Forbidden: Only directors and librarians can delete audio links' },
-        { status: 403 }
-      );
+    const ctx = await requireStandAccess();
+    if (ctx instanceof NextResponse) return ctx;
+    if (!ctx.isLibrarian) {
+      return NextResponse.json({ error: 'Forbidden: directors or librarians only' }, { status: 403 });
     }
 
     const { id } = await params;
 
     const existing = await prisma.audioLink.findUnique({ where: { id } });
-    if (!existing) {
-      return NextResponse.json({ error: 'Audio link not found' }, { status: 404 });
-    }
+    if (!existing) return NextResponse.json({ error: 'Audio link not found' }, { status: 404 });
 
     await prisma.audioLink.delete({ where: { id } });
-
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error deleting audio link:', error);
+    console.error('[Audio [id] DELETE]', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

@@ -152,6 +152,8 @@ export interface StandState {
   setUserContext: (ctx: UserContext) => void;
   // Update totalPages after PDF load
   updatePieceTotalPages: (pieceId: string, totalPages: number) => void;
+  // Override the pdfUrl for a piece (e.g., after a part is selected)
+  updatePiecePdfUrl: (pieceId: string, pdfUrl: string | null) => void;
   // roster actions
   setRoster: (entries: StandRosterMember[]) => void;
   addRosterEntry: (entry: StandRosterMember) => void;
@@ -744,6 +746,13 @@ export const useStandStore = create<StandState>((set, get) => ({
     set((state) => ({
       pieces: state.pieces.map((p) =>
         p.id === pieceId ? { ...p, totalPages } : p
+      ),
+    })),
+
+  updatePiecePdfUrl: (pieceId: string, pdfUrl: string | null) =>
+    set((state) => ({
+      pieces: state.pieces.map((p) =>
+        p.id === pieceId ? { ...p, pdfUrl } : p
       ),
     })),
 

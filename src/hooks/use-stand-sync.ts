@@ -91,6 +91,8 @@ export interface UseStandSyncOptions {
   reconnectInterval?: number;
   maxReconnectAttempts?: number;
   pollingInterval?: number;
+  /** Set true only if a Socket.IO server is running. Defaults to false (polling). */
+  realtimeEnabled?: boolean;
 }
 
 export interface UseStandSyncReturn {
@@ -158,6 +160,7 @@ export function useStandSync({
   reconnectInterval = DEFAULT_RECONNECT_INTERVAL,
   maxReconnectAttempts = DEFAULT_MAX_RECONNECT_ATTEMPTS,
   pollingInterval = DEFAULT_POLLING_INTERVAL,
+  realtimeEnabled = false,
 }: UseStandSyncOptions): UseStandSyncReturn {
   const socketRef = useRef<Socket | null>(null);
   const reconnectAttemptsRef = useRef(0);
@@ -525,9 +528,13 @@ export function useStandSync({
     setCurrentState(null);
   }, [userId, maxReconnectAttempts, stopPollingFallback]);
 
-  // Connect on mount
+  // Connect on mount — default to polling; only attempt WebSocket if realtimeEnabled
   useEffect(() => {
-    connect();
+    if (realtimeEnabled) {
+      connect();
+    } else {
+      startPollingFallback();
+    }
 
     return () => {
       // Cleanup on unmount
@@ -551,7 +558,7 @@ export function useStandSync({
 
       setIsConnected(false);
     };
-  }, [eventId, userId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [eventId, userId, realtimeEnabled]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return {
     isConnected,

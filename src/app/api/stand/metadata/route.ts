@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth/config';
-import { headers } from 'next/headers';
 import { prisma } from '@/lib/db';
+import { requireStandAccess, canAccessPiece } from '@/lib/stand/access';
+import { applyRateLimit } from '@/lib/rate-limit';
 
 /**
  * GET /api/stand/metadata
@@ -11,14 +11,16 @@ import { prisma } from '@/lib/db';
  * This endpoint returns the musical metadata stored in the MusicPiece model,
  * including tempo, key signature, time signature, and other relevant info.
  */
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
-    const headersList = await headers();
-    const session = await auth.api.getSession({ headers: headersList });
+    const rateLimited = await applyRateLimit(request, 'stand-file');
+    if (rateLimited) return rateLimited;
 
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const ctx = await requireStandAccess();
+    if (ctx instanceof NextResponse) return ctx;
 
     const { searchParams } = new URL(request.url);
     const pieceId = searchParams.get('pieceId');
@@ -29,6 +31,9 @@ export async function GET(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    const hasAccess = await canAccessPiece(ctx.userId, pieceId);
+    if (!hasAccess) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     const piece = await prisma.musicPiece.findUnique({
       where: { id: pieceId },

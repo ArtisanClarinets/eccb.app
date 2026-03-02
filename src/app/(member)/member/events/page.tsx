@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { requireAuth } from '@/lib/auth/guards';
 import { EventService } from '@/lib/services/event.service';
 import { formatDate, formatTime } from '@/lib/date';
+import { isStandEnabled } from '@/lib/stand/settings';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -16,6 +17,7 @@ import {
 
 export default async function MemberEventsPage() {
   const _session = await requireAuth();
+  const standEnabled = await isStandEnabled();
   // publishedOnly = true (default) so members see only published events
   const events = await EventService.listUpcomingEvents(true);
 
@@ -103,7 +105,7 @@ export default async function MemberEventsPage() {
                     </Link>
 
                     <div className="flex items-center gap-2 shrink-0">
-                      {musicCount > 0 ? (
+                      {standEnabled && musicCount > 0 ? (
                         <Button asChild size="sm" variant="default" className="bg-teal-700 hover:bg-teal-800">
                           <Link href={`/member/stand/${event.id}`}>
                             <BookOpen className="mr-2 h-4 w-4" />

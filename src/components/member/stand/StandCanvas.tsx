@@ -313,8 +313,6 @@ export const StandCanvas = forwardRef<StandCanvasRef, StandCanvasProps>(
           id="stand-canvas-main"
           className="relative"
           style={{
-            transform: `scale(${scale})`,
-            transformOrigin: 'top center',
             marginTop: scrollOffset > 0 ? `-${scrollOffset * 100}%` : undefined,
           }}
           tabIndex={-1}

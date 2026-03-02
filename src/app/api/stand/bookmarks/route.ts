@@ -1,18 +1,28 @@
-import { NextRequest } from 'next/server';
-import { auth } from '@/lib/auth/config';
-import { headers } from 'next/headers';
+/**
+ * /api/stand/bookmarks
+ *
+ * GET    — list bookmarks for the current user (sorted by sortOrder)
+ * POST   — create/upsert a bookmark for a piece
+ * PATCH  — reorder bookmarks
+ * DELETE — remove a bookmark by pieceId query param (or all via ?all=true)
+ */
+
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { applyRateLimit } from '@/lib/rate-limit';
 import { z } from 'zod';
+import { requireStandAccess } from '@/lib/stand/access';
 import {
   jsonOk,
   json400,
-  json401,
   json404,
   json500,
   parseBody,
   cuidSchema,
 } from '@/lib/stand/http';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
 
@@ -22,7 +32,6 @@ const createBookmarkSchema = z.object({
 });
 
 const reorderSchema = z.object({
-  /** Array of bookmark IDs in desired order */
   ids: z.array(cuidSchema).min(1).max(500),
 });
 
@@ -33,12 +42,11 @@ export async function GET(request: NextRequest) {
     const rateLimited = await applyRateLimit(request, 'stand-annotation');
     if (rateLimited) return rateLimited;
 
-    const headersList = await headers();
-    const session = await auth.api.getSession({ headers: headersList });
-    if (!session?.user?.id) return json401();
+    const ctx = await requireStandAccess();
+    if (ctx instanceof NextResponse) return ctx;
 
     const bookmarks = await prisma.standBookmark.findMany({
-      where: { userId: session.user.id },
+      where: { userId: ctx.userId },
       include: {
         piece: {
           select: {
@@ -74,43 +82,26 @@ export async function POST(request: NextRequest) {
     const rateLimited = await applyRateLimit(request, 'stand-annotation');
     if (rateLimited) return rateLimited;
 
-    const headersList = await headers();
-    const session = await auth.api.getSession({ headers: headersList });
-    if (!session?.user?.id) return json401();
+    const ctx = await requireStandAccess();
+    if (ctx instanceof NextResponse) return ctx;
 
     const parsed = await parseBody(request, createBookmarkSchema);
     if (parsed instanceof Response) return parsed;
 
-    // Verify piece exists
     const piece = await prisma.musicPiece.findUnique({
       where: { id: parsed.pieceId },
       select: { id: true },
     });
     if (!piece) return json404('Piece not found');
 
-    // Upsert — if already bookmarked, just return it
     const bookmark = await prisma.standBookmark.upsert({
-      where: {
-        userId_pieceId: {
-          userId: session.user.id,
-          pieceId: parsed.pieceId,
-        },
-      },
+      where: { userId_pieceId: { userId: ctx.userId, pieceId: parsed.pieceId } },
       update: { sortOrder: parsed.sortOrder },
-      create: {
-        userId: session.user.id,
-        pieceId: parsed.pieceId,
-        sortOrder: parsed.sortOrder,
-      },
+      create: { userId: ctx.userId, pieceId: parsed.pieceId, sortOrder: parsed.sortOrder },
     });
 
     return jsonOk(
-      {
-        id: bookmark.id,
-        pieceId: bookmark.pieceId,
-        sortOrder: bookmark.sortOrder,
-        createdAt: bookmark.createdAt.toISOString(),
-      },
+      { id: bookmark.id, pieceId: bookmark.pieceId, sortOrder: bookmark.sortOrder, createdAt: bookmark.createdAt.toISOString() },
       201
     );
   } catch (error) {
@@ -126,18 +117,16 @@ export async function PATCH(request: NextRequest) {
     const rateLimited = await applyRateLimit(request, 'stand-annotation');
     if (rateLimited) return rateLimited;
 
-    const headersList = await headers();
-    const session = await auth.api.getSession({ headers: headersList });
-    if (!session?.user?.id) return json401();
+    const ctx = await requireStandAccess();
+    if (ctx instanceof NextResponse) return ctx;
 
     const parsed = await parseBody(request, reorderSchema);
     if (parsed instanceof Response) return parsed;
 
-    // Batch update sort orders
     await prisma.$transaction(
       parsed.ids.map((id, index) =>
         prisma.standBookmark.updateMany({
-          where: { id, userId: session.user.id },
+          where: { id, userId: ctx.userId },
           data: { sortOrder: index },
         })
       )
@@ -157,17 +146,14 @@ export async function DELETE(request: NextRequest) {
     const rateLimited = await applyRateLimit(request, 'stand-annotation');
     if (rateLimited) return rateLimited;
 
-    const headersList = await headers();
-    const session = await auth.api.getSession({ headers: headersList });
-    if (!session?.user?.id) return json401();
+    const ctx = await requireStandAccess();
+    if (ctx instanceof NextResponse) return ctx;
 
     const { searchParams } = new URL(request.url);
     const pieceId = searchParams.get('pieceId');
     if (!pieceId) return json400('pieceId query parameter required');
 
-    await prisma.standBookmark.deleteMany({
-      where: { userId: session.user.id, pieceId },
-    });
+    await prisma.standBookmark.deleteMany({ where: { userId: ctx.userId, pieceId } });
 
     return jsonOk({ success: true });
   } catch (error) {

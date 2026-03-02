@@ -3,6 +3,7 @@
 import { prisma } from '@/lib/db';
 import { requireAuth } from '@/lib/auth/guards';
 import { auditLog } from '@/lib/services/audit';
+import { saveProfilePhoto, deleteProfilePhoto } from '@/lib/services/file-upload';
 import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
 
@@ -20,6 +21,98 @@ const profileUpdateSchema = z.object({
 });
 
 export type ProfileUpdateData = z.infer<typeof profileUpdateSchema>;
+
+/**
+ * Ensures a member profile exists for the current user
+ */
+export async function ensureMemberExists() {
+  const session = await requireAuth();
+
+  const existingMember = await prisma.member.findUnique({
+    where: { userId: session.user.id },
+  });
+
+  if (existingMember) {
+    return existingMember;
+  }
+
+  // Create new member profile
+  const newMember = await prisma.member.create({
+    data: {
+      userId: session.user.id,
+      firstName: session.user.name?.split(' ')[0] || 'Member',
+      lastName: session.user.name?.split(' ')[1] || '',
+      email: session.user.email,
+    },
+  });
+
+  await auditLog({
+    action: 'CREATE',
+    entityType: 'Member',
+    entityId: newMember.id,
+    newValues: newMember,
+  });
+
+  return newMember;
+}
+
+/**
+ * Get the current user's member profile
+ */
+export async function getMemberProfile() {
+  const session = await requireAuth();
+
+  const member = await prisma.member.findUnique({
+    where: { userId: session.user.id },
+    include: {
+      user: true,
+      instruments: {
+        include: { instrument: true },
+      },
+      sections: {
+        include: { section: true },
+      },
+    },
+  });
+
+  return member;
+}
+
+/**
+ * Delete member profile (with user confirmation)
+ */
+export async function deleteMemberProfile() {
+  const session = await requireAuth();
+
+  const currentMember = await prisma.member.findUnique({
+    where: { userId: session.user.id },
+  });
+
+  if (!currentMember) {
+    throw new Error('Member profile not found');
+  }
+
+  // Delete profile photo file if it exists
+  if (currentMember.profilePhoto) {
+    await deleteProfilePhoto(currentMember.profilePhoto);
+  }
+
+  // Delete member profile
+  await prisma.member.delete({
+    where: { userId: session.user.id },
+  });
+
+  await auditLog({
+    action: 'DELETE',
+    entityType: 'Member',
+    entityId: currentMember.id,
+    oldValues: currentMember,
+  });
+
+  revalidatePath('/member/profile');
+
+  return { success: true };
+}
 
 export async function updateProfile(data: ProfileUpdateData) {
   const session = await requireAuth();
@@ -119,19 +212,7 @@ export async function updateProfileImage(formData: FormData) {
     throw new Error('No image file provided');
   }
 
-  // Validate file type
-  const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-  if (!allowedTypes.includes(imageFile.type)) {
-    throw new Error('Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed.');
-  }
-
-  // Validate file size (max 5MB)
-  const maxSize = 5 * 1024 * 1024;
-  if (imageFile.size > maxSize) {
-    throw new Error('File size too large. Maximum size is 5MB.');
-  }
-
-  // Get current member
+  // Get current member to retrieve old photo
   const currentMember = await prisma.member.findUnique({
     where: { userId: session.user.id },
   });
@@ -140,18 +221,19 @@ export async function updateProfileImage(formData: FormData) {
     throw new Error('Member profile not found');
   }
 
-  // For now, we'll convert to base64 data URL for storage
-  // In production, this should upload to cloud storage
-  const bytes = await imageFile.arrayBuffer();
-  const buffer = Buffer.from(bytes);
-  const base64 = buffer.toString('base64');
-  const dataUrl = `data:${imageFile.type};base64,${base64}`;
+  // Save the new file
+  const photoPath = await saveProfilePhoto(imageFile);
 
-  // Update member with new profile photo
+  // Delete old photo if it exists
+  if (currentMember.profilePhoto) {
+    await deleteProfilePhoto(currentMember.profilePhoto);
+  }
+
+  // Update member with new profile photo path
   const updatedMember = await prisma.member.update({
     where: { userId: session.user.id },
     data: {
-      profilePhoto: dataUrl,
+      profilePhoto: photoPath,
     },
   });
 
@@ -159,7 +241,7 @@ export async function updateProfileImage(formData: FormData) {
   await prisma.user.update({
     where: { id: session.user.id },
     data: {
-      image: dataUrl,
+      image: photoPath,
     },
   });
 
@@ -168,13 +250,13 @@ export async function updateProfileImage(formData: FormData) {
     entityType: 'Member',
     entityId: updatedMember.id,
     oldValues: { profilePhoto: currentMember.profilePhoto },
-    newValues: { profilePhoto: '[UPDATED]' },
+    newValues: { profilePhoto: photoPath },
   });
 
   revalidatePath('/member/profile');
   revalidatePath('/member/profile/edit');
 
-  return { success: true, imageUrl: dataUrl };
+  return { success: true, imageUrl: photoPath };
 }
 
 export async function removeProfileImage() {
@@ -188,7 +270,12 @@ export async function removeProfileImage() {
     throw new Error('Member profile not found');
   }
 
-  // Remove profile photo
+  // Delete the file from storage
+  if (currentMember.profilePhoto) {
+    await deleteProfilePhoto(currentMember.profilePhoto);
+  }
+
+  // Remove profile photo reference from database
   await prisma.member.update({
     where: { userId: session.user.id },
     data: {

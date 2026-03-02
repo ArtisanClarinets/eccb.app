@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth/config';
-import { headers } from 'next/headers';
 import { prisma } from '@/lib/db';
 import { applyRateLimit } from '@/lib/rate-limit';
 import { z } from 'zod';
-import { buildAccessContext, annotationVisibilityFilter, canAccessEvent } from '@/lib/stand/access';
+import { annotationVisibilityFilter, requireEventStandAccess } from '@/lib/stand/access';
 import { recordTelemetry } from '@/lib/stand/telemetry';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 /**
  * Sync endpoint for stand real-time updates
@@ -114,34 +115,18 @@ export async function GET(request: NextRequest) {
     const rateLimited = await applyRateLimit(request, 'stand-sync');
     if (rateLimited) return rateLimited;
 
-    const headersList = await headers();
-    const session = await auth.api.getSession({ headers: headersList });
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
     const { searchParams } = new URL(request.url);
     const eventId = searchParams.get('eventId');
     const musicId = searchParams.get('musicId');
 
     if (!eventId) {
-      return NextResponse.json(
-        { error: 'eventId query parameter is required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'eventId query parameter is required' }, { status: 400 });
     }
 
-    // Verify event access — return 404 (non-enumerating)
-    const hasAccess = await canAccessEvent(session.user.id, eventId);
-    if (!hasAccess) {
-      return NextResponse.json(
-        { error: 'Not found' },
-        { status: 404 }
-      );
-    }
+    const ctx = await requireEventStandAccess(eventId);
+    if (ctx instanceof NextResponse) return ctx;
 
-    recordTelemetry({ event: 'stand.sync.poll', userId: session.user.id, eventId });
+    recordTelemetry({ event: 'stand.sync.poll', userId: ctx.userId, eventId });
 
     // Get sync state for this event
     const state = getStandState(eventId);
@@ -163,7 +148,6 @@ export async function GET(request: NextRequest) {
     // Get recent annotations with privacy filtering (P0 FIX)
     let recentAnnotations: unknown[] = [];
     if (musicId) {
-      const ctx = await buildAccessContext(session.user.id);
       const visibilityFilter = annotationVisibilityFilter(ctx, musicId);
       recentAnnotations = await prisma.annotation.findMany({
           where: {
@@ -208,46 +192,25 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const headersList = await headers();
-    const session = await auth.api.getSession({ headers: headersList });
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
     const body = await request.json();
     const { eventId, ...syncData } = body;
 
     if (!eventId) {
-      return NextResponse.json(
-        { error: 'eventId is required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'eventId is required' }, { status: 400 });
     }
 
-    // Verify event access — return 404 (non-enumerating)
-    const hasAccess = await canAccessEvent(session.user.id, eventId);
-    if (!hasAccess) {
-      return NextResponse.json(
-        { error: 'Not found' },
-        { status: 404 }
-      );
-    }
+    const ctx = await requireEventStandAccess(eventId);
+    if (ctx instanceof NextResponse) return ctx;
 
     // Get user info for presence
     const member = await prisma.member.findFirst({
-      where: { userId: session.user.id },
-      include: {
-        sections: {
-          where: { isLeader: true },
-          include: { section: true },
-        },
-      },
+      where: { userId: ctx.userId },
+      include: { sections: { where: { isLeader: true }, include: { section: true } } },
     });
 
     const userName = member
       ? `${member.firstName} ${member.lastName}`
-      : session.user.email || 'Unknown';
+      : ctx.userId;
     const userSection = member?.sections[0]?.section.name;
 
     // Handle command messages
@@ -280,15 +243,15 @@ export async function POST(request: NextRequest) {
         const { status } = presenceValidation.data;
 
         if (status === 'joined') {
-          presenceMap.set(`${eventId}:${session.user.id}`, {
-            userId: session.user.id,
+          presenceMap.set(`${eventId}:${ctx.userId}`, {
+            userId: ctx.userId,
             name: userName,
             section: userSection,
             eventId,
             lastSeen: new Date(),
           });
         } else {
-          presenceMap.delete(`${eventId}:${session.user.id}`);
+          presenceMap.delete(`${eventId}:${ctx.userId}`);
         }
 
         // Update database presence
@@ -296,12 +259,12 @@ export async function POST(request: NextRequest) {
           where: {
             eventId_userId: {
               eventId,
-              userId: session.user.id,
+              userId: ctx.userId,
             },
           },
           create: {
             eventId,
-            userId: session.user.id,
+            userId: ctx.userId,
             lastSeenAt: new Date(),
           },
           update: {
@@ -330,12 +293,12 @@ export async function POST(request: NextRequest) {
       where: {
         eventId_userId: {
           eventId: validated.eventId,
-          userId: session.user.id,
+          userId: ctx.userId,
         },
       },
       create: {
         eventId: validated.eventId,
-        userId: session.user.id,
+        userId: ctx.userId,
         lastSeenAt: new Date(),
       },
       update: {

@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { prisma } from '@/lib/db';
 import { auth } from '@/lib/auth/config';
-import { isFeatureEnabled, FEATURES } from '@/lib/feature-flags';
+import { isStandEnabled } from '@/lib/stand/settings';
 import { headers } from 'next/headers';
 import { formatDate, formatTime } from '@/lib/date';
 import { Card, CardContent } from '@/components/ui/card';
@@ -24,7 +24,7 @@ export const metadata: Metadata = {
 
 export default async function StandHubPage() {
   // Kill-switch: if the stand feature is disabled, show 404
-  if (!isFeatureEnabled(FEATURES.MUSIC_STAND)) {
+  if (!(await isStandEnabled())) {
     notFound();
   }
 

@@ -40,6 +40,7 @@ export function AnnotationLayer() {
     strokeWidth,
     pressureScale,
     addAnnotation,
+    deleteAnnotation,
     selectedStampId,
     setSelectedStampId,
     setCurrentTool,
@@ -76,6 +77,13 @@ export function AnnotationLayer() {
   }>({ visible: false, x: 0, y: 0, value: '' });
 
   const textInputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Device pixel ratio for crisp canvas rendering on HiDPI displays
+  const dprRef = useRef<number>(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1);
+
+  // Undo/redo stacks (session-local; clear on piece/page change)
+  const undoStackRef = useRef<Annotation[]>([]);
+  const redoStackRef = useRef<Annotation[]>([]);
 
   // helper to key map - memoized
   const key = useMemo(() => `${pieceId}-${currentPage}`, [pieceId, currentPage]);
@@ -202,8 +210,11 @@ export function AnnotationLayer() {
         const ctx = ref.current?.getContext('2d');
         if (!ctx || !ref.current) return;
 
-        // Clear canvas before redrawing to prevent artifacts
+        // Clear canvas before redrawing (reset transform first to clear device pixels)
+        const dpr = dprRef.current;
+        ctx.resetTransform();
         ctx.clearRect(0, 0, ref.current.width, ref.current.height);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
         // Get annotations for current piece and page
         const anns =
@@ -235,16 +246,24 @@ export function AnnotationLayer() {
     };
   }, [annotations, pieceId, currentPage, scheduleCanvasRender]);
 
-  // Sync canvas size with container
+  // Sync canvas size with container — DPR-aware
   useEffect(() => {
     const resize = () => {
+      const dpr = window.devicePixelRatio || 1;
+      dprRef.current = dpr;
       [personalRef, sectionRef, directorRef].forEach((ref) => {
         if (ref.current && ref.current.parentElement) {
-          ref.current.width = ref.current.parentElement.clientWidth;
-          ref.current.height = ref.current.parentElement.clientHeight;
+          const logicalW = ref.current.parentElement.clientWidth;
+          const logicalH = ref.current.parentElement.clientHeight;
+          ref.current.width = logicalW * dpr;
+          ref.current.height = logicalH * dpr;
+          ref.current.style.width = `${logicalW}px`;
+          ref.current.style.height = `${logicalH}px`;
+          // Apply DPR transform so all draw calls use logical (CSS) coordinates
+          const ctx = ref.current.getContext('2d');
+          if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         }
       });
-      // Trigger re-render after resize
       needsRenderRef.current = true;
       scheduleCanvasRender();
     };
@@ -252,6 +271,40 @@ export function AnnotationLayer() {
     window.addEventListener('resize', resize, { passive: true });
     return () => window.removeEventListener('resize', resize);
   }, [scheduleCanvasRender]);
+
+  // Clear undo/redo stacks when page or piece changes
+  useEffect(() => {
+    undoStackRef.current = [];
+    redoStackRef.current = [];
+  }, [key]);
+
+  // Keyboard undo (Ctrl+Z) / redo (Ctrl+Y or Ctrl+Shift+Z)
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (!editMode) return;
+      const isUndo = (e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey;
+      const isRedo =
+        ((e.ctrlKey || e.metaKey) && e.key === 'y') ||
+        ((e.ctrlKey || e.metaKey) && e.key === 'z' && e.shiftKey);
+      if (isUndo) {
+        e.preventDefault();
+        const ann = undoStackRef.current.pop();
+        if (ann) {
+          redoStackRef.current.push(ann);
+          deleteAnnotation?.(ann.id).catch(console.error);
+        }
+      } else if (isRedo) {
+        e.preventDefault();
+        const ann = redoStackRef.current.pop();
+        if (ann) {
+          undoStackRef.current.push(ann);
+          addAnnotation?.(ann).catch(console.error);
+        }
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [editMode, deleteAnnotation, addAnnotation]);
 
   // Handle pointer down - start drawing
   const handlePointerDown = useCallback(
@@ -357,8 +410,11 @@ export function AnnotationLayer() {
       }
 
       renderCancelRef.current = scheduleRender(() => {
-        // Clear and redraw with new point
+        // Clear and redraw with new point (DPR-aware)
+        const dpr = dprRef.current;
+        ctx.resetTransform();
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
         // Redraw all existing strokes
         const anns =
@@ -407,6 +463,10 @@ export function AnnotationLayer() {
       };
 
       await addAnnotation(annotation);
+
+      // Push to undo stack so Ctrl+Z can remove it
+      undoStackRef.current.push(annotation);
+      redoStackRef.current = [];
 
       // Reset drawing state
       isDrawingRef.current = false;

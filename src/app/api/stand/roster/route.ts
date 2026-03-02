@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth/config';
-import { headers } from 'next/headers';
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
-import { canAccessEvent } from '@/lib/stand/access';
+import { requireStandAccess, requireEventStandAccess } from '@/lib/stand/access';
+import { applyRateLimit } from '@/lib/rate-limit';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 // Zod schemas for validation
 const rosterCreateSchema = z.object({
@@ -27,27 +29,15 @@ export type RosterUpdateInput = z.infer<typeof rosterUpdateSchema>;
  */
 export async function GET(request: NextRequest) {
   try {
-    const headersList = await headers();
-    const session = await auth.api.getSession({ headers: headersList });
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const rateLimited = await applyRateLimit(request, 'stand-file');
+    if (rateLimited) return rateLimited;
 
     const { searchParams } = new URL(request.url);
     const eventId = searchParams.get('eventId');
+    if (!eventId) return NextResponse.json({ error: 'eventId required' }, { status: 400 });
 
-    if (!eventId) {
-      return NextResponse.json(
-        { error: 'eventId query parameter is required' },
-        { status: 400 }
-      );
-    }
-
-    const hasAccess = await canAccessEvent(session.user.id, eventId);
-    if (!hasAccess) {
-      return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    }
+    const ctx = await requireEventStandAccess(eventId);
+    if (ctx instanceof NextResponse) return ctx;
 
     const roster = await prisma.standSession.findMany({
       where: {
@@ -76,39 +66,20 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const headersList = await headers();
-    const session = await auth.api.getSession({ headers: headersList });
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const rateLimited = await applyRateLimit(request, 'stand-file');
+    if (rateLimited) return rateLimited;
 
     const body = await request.json();
     const validated = rosterCreateSchema.parse(body);
 
-    const hasAccess = await canAccessEvent(session.user.id, validated.eventId);
-    if (!hasAccess) {
-      return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    }
+    const ctx = await requireEventStandAccess(validated.eventId);
+    if (ctx instanceof NextResponse) return ctx;
 
-    // Always use session userId — never trust client-provided userId for presence
+    // Always use server-derived userId, never trust client
     const standSession = await prisma.standSession.upsert({
-      where: {
-        eventId_userId: {
-          eventId: validated.eventId,
-          userId: session.user.id,
-        },
-      },
-      create: {
-        eventId: validated.eventId,
-        userId: session.user.id,
-        section: validated.section,
-        lastSeenAt: new Date(),
-      },
-      update: {
-        section: validated.section,
-        lastSeenAt: new Date(),
-      },
+      where: { eventId_userId: { eventId: validated.eventId, userId: ctx.userId } },
+      create: { eventId: validated.eventId, userId: ctx.userId, section: validated.section, lastSeenAt: new Date() },
+      update: { section: validated.section, lastSeenAt: new Date() },
     });
 
     return NextResponse.json({ standSession }, { status: 201 });
@@ -133,33 +104,21 @@ export async function POST(request: NextRequest) {
  */
 export async function PUT(request: NextRequest) {
   try {
-    const headersList = await headers();
-    const session = await auth.api.getSession({ headers: headersList });
+    const rateLimited = await applyRateLimit(request, 'stand-file');
+    if (rateLimited) return rateLimited;
 
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const { searchParams } = new URL(request.url);
+    const eventId = searchParams.get('eventId');
+    if (!eventId) return NextResponse.json({ error: 'eventId required' }, { status: 400 });
+
+    const ctx = await requireStandAccess();
+    if (ctx instanceof NextResponse) return ctx;
 
     const body = await request.json();
     const validated = rosterUpdateSchema.parse(body);
 
-    const { searchParams } = new URL(request.url);
-    const eventId = searchParams.get('eventId');
-
-    if (!eventId) {
-      return NextResponse.json(
-        { error: 'eventId query parameter is required' },
-        { status: 400 }
-      );
-    }
-
     const standSession = await prisma.standSession.update({
-      where: {
-        eventId_userId: {
-          eventId,
-          userId: session.user.id,
-        },
-      },
+      where: { eventId_userId: { eventId, userId: ctx.userId } },
       data: {
         ...(validated.lastSeenAt && { lastSeenAt: new Date(validated.lastSeenAt) }),
         ...(validated.section && { section: validated.section }),

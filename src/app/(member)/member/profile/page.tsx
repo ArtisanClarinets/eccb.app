@@ -118,7 +118,7 @@ export default async function MemberProfilePage() {
           <CardContent className="pt-6">
             <div className="flex flex-col items-center text-center">
               <Avatar className="h-24 w-24">
-                <AvatarImage src={member.user?.image || undefined} />
+                <AvatarImage src={member.profilePhoto || member.user?.image || undefined} />
                 <AvatarFallback className="text-2xl">
                   {getInitials(member.user?.name || `${member.firstName} ${member.lastName}`)}
                 </AvatarFallback>

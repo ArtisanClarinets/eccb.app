@@ -31,6 +31,9 @@ const nextConfig: NextConfig = {
     // route handler, causing "Failed to parse body as FormData" errors for
     // large music PDFs.
     proxyClientMaxBodySize: '50mb',
+    taint: true,
+    viewTransition: true,
+    webVitalsAttribution: ['CLS', 'LCP']
   },
 
   // Security headers configuration

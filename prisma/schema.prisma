@@ -163,7 +163,7 @@ model Member {
   lastName         String
   email            String?
   phone            String?
-  profilePhoto     String?
+  profilePhoto     String?            @db.Text
   status           MemberStatus       @default(PENDING)
   joinDate         DateTime?
   leaveDate        DateTime?

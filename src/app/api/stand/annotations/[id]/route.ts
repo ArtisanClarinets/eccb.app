@@ -1,175 +1,117 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth/config';
-import { headers } from 'next/headers';
+/**
+ * /api/stand/annotations/[id]
+ *
+ * PUT    — update annotation (owner or director only)
+ * DELETE — delete annotation (owner or director only)
+ */
+
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
-import { getUserRoles } from '@/lib/auth/permissions';
 import { applyRateLimit } from '@/lib/rate-limit';
 import { z } from 'zod';
-import type { Prisma } from '@prisma/client';
+import { requireStandAccess, assertCanWriteLayer } from '@/lib/stand/access';
+import { getStandSettings } from '@/lib/stand/settings';
+import {
+  jsonOk,
+  json400,
+  json404,
+  json403,
+  json500,
+  parseBody,
+  layerSchema,
+} from '@/lib/stand/http';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 const annotationUpdateSchema = z.object({
-  strokeData: z.record(z.string(), z.any()).optional(),
-  layer: z.enum(['PERSONAL', 'SECTION', 'DIRECTOR']).optional(),
+  strokeData: z.record(z.string(), z.unknown()).optional(),
+  layer: layerSchema.optional(),
+  sectionId: z.string().nullable().optional(),
 });
 
-export type AnnotationUpdateInput = z.infer<typeof annotationUpdateSchema>;
-
-/**
- * PUT /api/stand/annotations/[id]
- * Updates an annotation (only by owner or director)
- */
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Rate limit annotation writes
     const rateLimited = await applyRateLimit(request, 'stand-annotation');
     if (rateLimited) return rateLimited;
 
-    const headersList = await headers();
-    const session = await auth.api.getSession({ headers: headersList });
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const ctx = await requireStandAccess();
+    if (ctx instanceof Response) return ctx;
 
     const { id } = await params;
-    const body = await request.json();
-    const validated = annotationUpdateSchema.parse(body);
 
-    // Get existing annotation
-    const existing = await prisma.annotation.findUnique({
-      where: { id },
-    });
+    const existing = await prisma.annotation.findUnique({ where: { id } });
+    if (!existing) return json404('Annotation not found');
 
-    if (!existing) {
-      return NextResponse.json({ error: 'Annotation not found' }, { status: 404 });
-    }
+    const isOwner = existing.userId === ctx.userId;
+    if (!isOwner && !ctx.isDirector) return json403('Only owner or director can update');
 
-    // Check permission: owner or director can update
-    const roles = await getUserRoles(session.user.id);
-    const isOwner = existing.userId === session.user.id;
-    const isDirector = roles.includes('DIRECTOR') || roles.includes('SUPER_ADMIN');
+    const parsed = await parseBody(request, annotationUpdateSchema);
+    if (parsed instanceof Response) return parsed;
 
-    if (!isOwner && !isDirector) {
-      return NextResponse.json(
-        { error: 'Forbidden: Only owner or director can update annotations' },
-        { status: 403 }
-      );
-    }
+    const { strokeData, layer, sectionId } = parsed;
 
-    // Non-directors cannot change to DIRECTOR layer
-    if (validated.layer === 'DIRECTOR' && !isDirector) {
-      return NextResponse.json(
-        { error: 'Forbidden: Only directors can set DIRECTOR layer' },
-        { status: 403 }
-      );
-    }
+    // Layer change enforcement
+    const targetLayer = layer ?? (existing.layer as 'PERSONAL' | 'SECTION' | 'DIRECTOR');
+    const layerErr = assertCanWriteLayer(ctx, targetLayer, sectionId ?? existing.sectionId);
+    if (layerErr) return layerErr;
 
-    // SECTION layer requires section membership
-    let serverSectionId: string | null | undefined = undefined;
-    if (validated.layer === 'SECTION') {
-      const member = await prisma.member.findFirst({
-        where: { userId: session.user.id },
-        select: { sections: { select: { sectionId: true }, take: 1 } },
-      });
-      serverSectionId = member?.sections[0]?.sectionId ?? null;
-
-      if (!serverSectionId) {
-        return NextResponse.json(
-          { error: 'Forbidden: you must belong to a section to write SECTION annotations' },
-          { status: 403 }
-        );
+    // Stroke data size check
+    if (strokeData) {
+      const settings = await getStandSettings();
+      const strokeJson = JSON.stringify(strokeData);
+      if (strokeJson.length > settings.maxStrokeDataBytes) {
+        return json400(`Stroke data exceeds limit (${settings.maxStrokeDataBytes} bytes)`);
       }
     }
 
-    const annotation = await prisma.annotation.update({
+    // Build update data explicitly to satisfy Prisma v7 strict union types
+    const updateData: {
+      strokeData?: unknown;
+      layer?: 'PERSONAL' | 'SECTION' | 'DIRECTOR';
+      sectionId?: string | null;
+    } = {};
+    if (strokeData !== undefined) updateData.strokeData = strokeData;
+    if (layer !== undefined) {
+      updateData.layer = layer;
+      updateData.sectionId = layer === 'SECTION' ? (sectionId ?? ctx.userSectionIds[0] ?? null) : null;
+    }
+
+    const updated = await prisma.annotation.update({
       where: { id },
-      data: {
-        ...(validated.strokeData !== undefined && {
-          strokeData: validated.strokeData as Prisma.InputJsonValue,
-        }),
-        ...(validated.layer && { layer: validated.layer }),
-        // Always use server-computed sectionId — never trust client
-        ...(serverSectionId !== undefined && { sectionId: serverSectionId }),
-      },
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
-      },
+      data: updateData as any,
     });
 
-    return NextResponse.json({ annotation });
+    return jsonOk({ annotation: updated });
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: 'Validation error', details: error.issues },
-        { status: 400 }
-      );
-    }
-    console.error('Error updating annotation:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    console.error('[Annotation PUT]', error);
+    return json500();
   }
 }
 
-/**
- * DELETE /api/stand/annotations/[id]
- * Deletes an annotation (only by owner or director)
- */
 export async function DELETE(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const headersList = await headers();
-    const session = await auth.api.getSession({ headers: headersList });
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const ctx = await requireStandAccess();
+    if (ctx instanceof Response) return ctx;
 
     const { id } = await params;
 
-    // Get existing annotation
-    const existing = await prisma.annotation.findUnique({
-      where: { id },
-    });
+    const existing = await prisma.annotation.findUnique({ where: { id } });
+    if (!existing) return json404('Annotation not found');
 
-    if (!existing) {
-      return NextResponse.json({ error: 'Annotation not found' }, { status: 404 });
-    }
+    const isOwner = existing.userId === ctx.userId;
+    if (!isOwner && !ctx.isDirector) return json403('Only owner or director can delete');
 
-    // Check permission: owner or director can delete
-    const roles = await getUserRoles(session.user.id);
-    const isOwner = existing.userId === session.user.id;
-    const isDirector = roles.includes('DIRECTOR') || roles.includes('SUPER_ADMIN');
-
-    if (!isOwner && !isDirector) {
-      return NextResponse.json(
-        { error: 'Forbidden: Only owner or director can delete annotations' },
-        { status: 403 }
-      );
-    }
-
-    await prisma.annotation.delete({
-      where: { id },
-    });
-
-    return NextResponse.json({ success: true });
+    await prisma.annotation.delete({ where: { id } });
+    return jsonOk({ success: true });
   } catch (error) {
-    console.error('Error deleting annotation:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    console.error('[Annotation DELETE]', error);
+    return json500();
   }
 }

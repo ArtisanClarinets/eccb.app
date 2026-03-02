@@ -15,6 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CarpoolBoard } from '@/components/member/events/CarpoolBoard';
 import { GigChecklist } from '@/components/member/events/GigChecklist';
+import { isStandEnabled } from '@/lib/stand/settings';
 
 export const metadata: Metadata = {
   title: 'Event Details',
@@ -30,6 +31,8 @@ export default async function EventPage({ params }: PageProps) {
   });
 
   if (!session?.user) return null;
+
+  const standEnabled = await isStandEnabled();
 
   const { id } = await params;
 
@@ -205,10 +208,17 @@ export default async function EventPage({ params }: PageProps) {
                             </CardDescription>
                           </div>
                           <Button size="sm" asChild>
-                            <Link href={`/member/stand/${event.id}`}>
-                              <FileMusic className="h-4 w-4 mr-2" />
-                              Open Music Stand
-                            </Link>
+                            {standEnabled ? (
+                              <Link href={`/member/stand/${event.id}`}>
+                                <FileMusic className="h-4 w-4 mr-2" />
+                                Open Music Stand
+                              </Link>
+                            ) : (
+                              <span className="opacity-50 cursor-not-allowed">
+                                <FileMusic className="h-4 w-4 mr-2 inline" />
+                                Stand Unavailable
+                              </span>
+                            )}
                           </Button>
                         </div>
                       </CardHeader>
@@ -347,7 +357,7 @@ export default async function EventPage({ params }: PageProps) {
                 </Button>
               )}
               
-              {event.music.length > 0 && (
+              {standEnabled && event.music.length > 0 && (
                 <Button variant="outline" className="w-full justify-start" asChild>
                   <Link href={`/member/stand/${event.id}`}>
                     <FileMusic className="mr-2 h-4 w-4" />

@@ -4,7 +4,7 @@ import { prisma } from '@/lib/db';
 import { StandViewer, StandLoaderData } from '@/components/member/stand/StandViewer';
 import { auth } from '@/lib/auth/config';
 import { getUserRoles } from '@/lib/auth/permissions';
-import { isFeatureEnabled, FEATURES } from '@/lib/feature-flags';
+import { isStandEnabled } from '@/lib/stand/settings';
 import { canAccessEvent } from '@/lib/stand/access';
 import { headers } from 'next/headers';
 
@@ -21,7 +21,7 @@ const PRIVILEGED_ROLE_TYPES = ['DIRECTOR', 'SUPER_ADMIN', 'ADMIN', 'STAFF'];
 
 export default async function StandPage({ params }: PageProps) {
   // Kill-switch: if the stand feature is disabled, show 404
-  if (!isFeatureEnabled(FEATURES.MUSIC_STAND)) {
+  if (!(await isStandEnabled())) {
     notFound();
   }
 

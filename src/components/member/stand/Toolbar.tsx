@@ -2,12 +2,26 @@
 
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Maximize2, Minimize2, Moon, Sun, Pencil, Highlighter, Eraser, Square, Type, Stamp } from 'lucide-react';
+import {
+  Maximize2, Minimize2, Moon, Sun, Pencil, Highlighter, Eraser, Square, Type, Stamp,
+  ChevronLeft, ChevronRight, ZoomIn, ZoomOut, BookmarkIcon, ListMusicIcon, TimerIcon,
+  MusicIcon,
+} from 'lucide-react';
 import { useStandStore, Tool } from '@/store/standStore';
 import { useFullscreen } from './useFullscreen';
 import { PerformanceModeToggle } from './PerformanceModeToggle';
 import { Toggle } from '@/components/ui/toggle';
 import { cn } from '@/lib/utils';
+
+export interface ToolbarProps {
+  /** Optional panel toggle callbacks — if omitted, panel buttons are hidden */
+  onToggleBookmarks?: () => void;
+  onToggleSetlists?: () => void;
+  onTogglePractice?: () => void;
+  onToggleAudio?: () => void;
+  /** Active panel state for button highlight */
+  activePanel?: 'bookmarks' | 'setlists' | 'practice' | 'audio' | null;
+}
 
 const TOOL_ICONS: Record<Tool, React.ReactNode> = {
   [Tool.PENCIL]: <Pencil className="h-4 w-4" />,
@@ -38,7 +52,13 @@ const COLORS = [
   { value: '#ffffff', label: 'White' },
 ];
 
-export function Toolbar() {
+export function Toolbar({
+  onToggleBookmarks,
+  onToggleSetlists,
+  onTogglePractice,
+  onToggleAudio,
+  activePanel = null,
+}: ToolbarProps = {}) {
   const {
     setIsFullscreen,
     isFullscreen,
@@ -54,7 +74,19 @@ export function Toolbar() {
     setToolColor,
     strokeWidth,
     setStrokeWidth,
+    _currentPage: currentPage,
+    zoom,
+    setZoom,
+    nextPage,
+    prevPage,
+    setCurrentPage,
   } = useStandStore();
+
+  // Derive totalPages from current piece
+  const totalPages =
+    useStandStore(
+      (s) => s.pieces[s.currentPieceIndex]?.totalPages ?? 1
+    ) || 1;
   const [isUpdating, setIsUpdating] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
 
@@ -230,6 +262,139 @@ export function Toolbar() {
       )}
 
       <PerformanceModeToggle />
+
+      {/* Page navigation */}
+      <div className="flex items-center gap-1 border-l pl-2 ml-1" role="group" aria-label="Page navigation">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={prevPage}
+          disabled={currentPage <= 1}
+          title="Previous page"
+          aria-label="Previous page"
+          className="min-w-[44px] min-h-[44px]"
+        >
+          <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+        </Button>
+        <div className="flex items-center gap-1">
+          <label htmlFor="tb-page-input" className="sr-only">Go to page</label>
+          <input
+            id="tb-page-input"
+            type="number"
+            min={1}
+            max={totalPages}
+            value={currentPage}
+            onChange={(e) => {
+              const v = parseInt(e.target.value, 10);
+              if (!isNaN(v)) setCurrentPage(v);
+            }}
+            className="w-12 h-8 text-center text-sm border rounded bg-background"
+            aria-label={`Page ${currentPage} of ${totalPages}`}
+          />
+          <span className="text-xs text-muted-foreground" aria-hidden="true">/ {totalPages}</span>
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={nextPage}
+          disabled={currentPage >= totalPages}
+          title="Next page"
+          aria-label="Next page"
+          className="min-w-[44px] min-h-[44px]"
+        >
+          <ChevronRight className="h-4 w-4" aria-hidden="true" />
+        </Button>
+      </div>
+
+      {/* Zoom controls */}
+      <div className="flex items-center gap-1 border-l pl-2 ml-1" role="group" aria-label="Zoom controls">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setZoom(Math.max(50, zoom - 10))}
+          title="Zoom out"
+          aria-label="Zoom out"
+          className="min-w-[44px] min-h-[44px]"
+        >
+          <ZoomOut className="h-4 w-4" aria-hidden="true" />
+        </Button>
+        <button
+          className="text-xs tabular-nums w-12 text-center bg-muted rounded px-1 py-1 hover:bg-muted/80"
+          onClick={() => setZoom(100)}
+          title="Reset zoom to 100%"
+          aria-label={`Zoom ${zoom}%, click to reset`}
+        >
+          {zoom}%
+        </button>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setZoom(Math.min(200, zoom + 10))}
+          title="Zoom in"
+          aria-label="Zoom in"
+          className="min-w-[44px] min-h-[44px]"
+        >
+          <ZoomIn className="h-4 w-4" aria-hidden="true" />
+        </Button>
+      </div>
+
+      {/* Panel toggle buttons */}
+      {(onToggleBookmarks || onToggleSetlists || onTogglePractice || onToggleAudio) && (
+        <div className="flex items-center gap-1 border-l pl-2 ml-1" role="group" aria-label="Panels">
+          {onToggleBookmarks && (
+            <Button
+              variant={activePanel === 'bookmarks' ? 'secondary' : 'ghost'}
+              size="icon"
+              onClick={onToggleBookmarks}
+              title="Bookmarks"
+              aria-label="Toggle bookmarks panel"
+              aria-pressed={activePanel === 'bookmarks'}
+              className="min-w-[44px] min-h-[44px]"
+            >
+              <BookmarkIcon className="h-4 w-4" aria-hidden="true" />
+            </Button>
+          )}
+          {onToggleSetlists && (
+            <Button
+              variant={activePanel === 'setlists' ? 'secondary' : 'ghost'}
+              size="icon"
+              onClick={onToggleSetlists}
+              title="Setlists"
+              aria-label="Toggle setlists panel"
+              aria-pressed={activePanel === 'setlists'}
+              className="min-w-[44px] min-h-[44px]"
+            >
+              <ListMusicIcon className="h-4 w-4" aria-hidden="true" />
+            </Button>
+          )}
+          {onTogglePractice && (
+            <Button
+              variant={activePanel === 'practice' ? 'secondary' : 'ghost'}
+              size="icon"
+              onClick={onTogglePractice}
+              title="Practice timer"
+              aria-label="Toggle practice timer panel"
+              aria-pressed={activePanel === 'practice'}
+              className="min-w-[44px] min-h-[44px]"
+            >
+              <TimerIcon className="h-4 w-4" aria-hidden="true" />
+            </Button>
+          )}
+          {onToggleAudio && (
+            <Button
+              variant={activePanel === 'audio' ? 'secondary' : 'ghost'}
+              size="icon"
+              onClick={onToggleAudio}
+              title="Audio"
+              aria-label="Toggle audio panel"
+              aria-pressed={activePanel === 'audio'}
+              className="min-w-[44px] min-h-[44px]"
+            >
+              <MusicIcon className="h-4 w-4" aria-hidden="true" />
+            </Button>
+          )}
+        </div>
+      )}
       
       {/* Utility toggles */}
       <div className="flex items-center space-x-1" role="group" aria-label="Rehearsal utilities">

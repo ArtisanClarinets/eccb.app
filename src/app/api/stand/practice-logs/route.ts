@@ -1,56 +1,50 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth/config';
-import { headers } from 'next/headers';
+/**
+ * /api/stand/practice-logs
+ *
+ * GET  — list practice logs (own logs only; directors can view any user's logs)
+ * POST — create a practice log entry (active members only)
+ *
+ * Gated behind practiceTrackingEnabled setting.
+ */
+
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
-import { getUserRoles } from '@/lib/auth/permissions';
 import { applyRateLimit } from '@/lib/rate-limit';
-import { isFeatureEnabled, FEATURES } from '@/lib/feature-flags';
 import { z } from 'zod';
+import { requireStandAccess, canAccessPiece } from '@/lib/stand/access';
+import { getStandSettings } from '@/lib/stand/settings';
+import { jsonOk, json400, json404, json500, parseBody, cuidSchema } from '@/lib/stand/http';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 const practiceLogCreateSchema = z.object({
-  pieceId: z.string().min(1),
-  assignmentId: z.string().optional(),
-  durationSeconds: z.number().int().positive().max(86400), // max 24h
+  pieceId: cuidSchema,
+  assignmentId: cuidSchema.optional(),
+  durationSeconds: z.number().int().positive().max(86_400),
   notes: z.string().max(2000).optional(),
   practicedAt: z.string().datetime().optional(),
 });
 
-/**
- * GET /api/stand/practice-logs
- * Returns practice logs for the current user (or all users for directors)
- * Query params: pieceId, userId (director-only), limit, offset
- */
 export async function GET(request: NextRequest) {
   try {
-    if (!isFeatureEnabled(FEATURES.PRACTICE_TRACKING)) {
-      return NextResponse.json(
-        { error: 'Practice tracking is not enabled' },
-        { status: 404 }
-      );
-    }
+    const rateLimited = await applyRateLimit(request, 'stand-annotation');
+    if (rateLimited) return rateLimited;
 
-    const headersList = await headers();
-    const session = await auth.api.getSession({ headers: headersList });
+    const ctx = await requireStandAccess();
+    if (ctx instanceof Response) return ctx;
 
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const settings = await getStandSettings();
+    if (!settings.practiceTrackingEnabled) return json404('Practice tracking is disabled');
 
     const { searchParams } = new URL(request.url);
     const pieceId = searchParams.get('pieceId');
-    const userId = searchParams.get('userId');
+    const requestedUserId = searchParams.get('userId');
     const limit = Math.min(parseInt(searchParams.get('limit') ?? '50', 10), 200);
-    const offset = parseInt(searchParams.get('offset') ?? '0', 10);
-
-    const roles = await getUserRoles(session.user.id);
-    const isDirector =
-      roles.includes('DIRECTOR') ||
-      roles.includes('SUPER_ADMIN') ||
-      roles.includes('ADMIN');
+    const offset = Math.max(parseInt(searchParams.get('offset') ?? '0', 10), 0);
 
     // Non-directors can only see their own logs
-    const targetUserId =
-      isDirector && userId ? userId : session.user.id;
+    const targetUserId = ctx.isDirector && requestedUserId ? requestedUserId : ctx.userId;
 
     const where: Record<string, unknown> = { userId: targetUserId };
     if (pieceId) where.pieceId = pieceId;
@@ -68,84 +62,50 @@ export async function GET(request: NextRequest) {
       prisma.practiceLog.count({ where }),
     ]);
 
-    return NextResponse.json({ logs, total, limit, offset });
+    return jsonOk({ logs, total, limit, offset });
   } catch (error) {
-    console.error('Error fetching practice logs:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    console.error('[PracticeLogs GET]', error);
+    return json500();
   }
 }
 
-/**
- * POST /api/stand/practice-logs
- * Creates a new practice log entry
- */
 export async function POST(request: NextRequest) {
   try {
-    if (!isFeatureEnabled(FEATURES.PRACTICE_TRACKING)) {
-      return NextResponse.json(
-        { error: 'Practice tracking is not enabled' },
-        { status: 404 }
-      );
-    }
-
-    // Rate limit practice log writes
-    const rateLimited = await applyRateLimit(request, 'stand-practice');
+    const rateLimited = await applyRateLimit(request, 'stand-annotation');
     if (rateLimited) return rateLimited;
 
-    const headersList = await headers();
-    const session = await auth.api.getSession({ headers: headersList });
+    const ctx = await requireStandAccess();
+    if (ctx instanceof Response) return ctx;
 
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const settings = await getStandSettings();
+    if (!settings.practiceTrackingEnabled) return json404('Practice tracking is disabled');
 
-    const body = await request.json();
-    const validated = practiceLogCreateSchema.parse(body);
+    const parsed = await parseBody(request, practiceLogCreateSchema);
+    if (parsed instanceof Response) return parsed;
 
-    // Verify the piece exists
-    const piece = await prisma.musicPiece.findUnique({
-      where: { id: validated.pieceId },
-      select: { id: true },
-    });
+    const { pieceId, assignmentId, durationSeconds, notes, practicedAt } = parsed;
 
-    if (!piece) {
-      return NextResponse.json(
-        { error: 'Music piece not found' },
-        { status: 404 }
-      );
-    }
+    // Verify piece access
+    const hasAccess = await canAccessPiece(ctx.userId, pieceId);
+    if (!hasAccess) return json400('Piece not found or not accessible');
 
     const log = await prisma.practiceLog.create({
       data: {
-        userId: session.user.id,
-        pieceId: validated.pieceId,
-        assignmentId: validated.assignmentId ?? null,
-        durationSeconds: validated.durationSeconds,
-        notes: validated.notes ?? null,
-        practicedAt: validated.practicedAt
-          ? new Date(validated.practicedAt)
-          : new Date(),
+        userId: ctx.userId,
+        pieceId,
+        assignmentId: assignmentId ?? null,
+        durationSeconds,
+        notes: notes ?? null,
+        practicedAt: practicedAt ? new Date(practicedAt) : new Date(),
       },
       include: {
-        piece: { select: { id: true, title: true } },
+        piece: { select: { id: true, title: true, composer: { select: { fullName: true } } } },
       },
     });
 
-    return NextResponse.json({ log }, { status: 201 });
+    return jsonOk({ log }, 201);
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: 'Validation error', details: error.issues },
-        { status: 400 }
-      );
-    }
-    console.error('Error creating practice log:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    console.error('[PracticeLogs POST]', error);
+    return json500();
   }
 }

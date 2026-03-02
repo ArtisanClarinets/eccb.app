@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth/config';
-import { headers } from 'next/headers';
 import { prisma } from '@/lib/db';
 import { applyRateLimit } from '@/lib/rate-limit';
+import { requireStandAccess } from '@/lib/stand/access';
 import { z } from 'zod';
 import type { Prisma } from '@prisma/client';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 // Zod schemas for validation
 const preferencesUpdateSchema = z.object({
@@ -32,34 +34,21 @@ export type PreferencesUpdateInput = z.infer<typeof preferencesUpdateSchema>;
  */
 export async function GET(request: NextRequest) {
   try {
-    const headersList = await headers();
-    const session = await auth.api.getSession({ headers: headersList });
+    const rateLimited = await applyRateLimit(request, 'stand-preferences');
+    if (rateLimited) return rateLimited;
 
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId');
-
-    // Users can only view their own preferences
-    const targetUserId = userId || session.user.id;
-    if (targetUserId !== session.user.id) {
-      return NextResponse.json(
-        { error: 'Forbidden: Cannot view other users preferences' },
-        { status: 403 }
-      );
-    }
+    const ctx = await requireStandAccess();
+    if (ctx instanceof NextResponse) return ctx;
 
     let preferences = await prisma.userPreferences.findUnique({
-      where: { userId: targetUserId },
+      where: { userId: ctx.userId },
     });
 
     // Create default preferences if they don't exist
     if (!preferences) {
       preferences = await prisma.userPreferences.create({
         data: {
-          userId: targetUserId,
+          userId: ctx.userId,
           nightMode: false,
         },
       });
@@ -87,19 +76,15 @@ export async function POST(request: NextRequest) {
     const rateLimited = await applyRateLimit(request, 'stand-preferences');
     if (rateLimited) return rateLimited;
 
-    const headersList = await headers();
-    const session = await auth.api.getSession({ headers: headersList });
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const ctx = await requireStandAccess();
+    if (ctx instanceof NextResponse) return ctx;
 
     const body = await request.json();
     const validated = preferencesUpdateSchema.parse(body);
 
     // Read existing preferences so we can deep-merge otherSettings
     const existing = await prisma.userPreferences.findUnique({
-      where: { userId: session.user.id },
+      where: { userId: ctx.userId },
     });
 
     const existingOther =
@@ -117,9 +102,9 @@ export async function POST(request: NextRequest) {
     };
 
     const preferences = await prisma.userPreferences.upsert({
-      where: { userId: session.user.id },
+      where: { userId: ctx.userId },
       create: {
-        userId: session.user.id,
+        userId: ctx.userId,
         nightMode: validated.nightMode ?? false,
         metronomeSettings: validated.metronomeSettings ?? {},
         midiMappings: validated.midiMappings ?? {},

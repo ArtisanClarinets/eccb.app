@@ -1,183 +1,143 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth/config';
-import { headers } from 'next/headers';
+/**
+ * /api/stand/annotations
+ *
+ * GET  — fetch annotations (scoped by session + layer permissions)
+ * POST — create annotation (enforces layer + stroke size limits)
+ */
+
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
-import { getUserRoles } from '@/lib/auth/permissions';
 import { applyRateLimit } from '@/lib/rate-limit';
 import { z } from 'zod';
+import {
+  requireStandAccess,
+  annotationVisibilityFilter,
+  assertCanWriteLayer,
+} from '@/lib/stand/access';
+import { getStandSettings } from '@/lib/stand/settings';
+import {
+  jsonOk,
+  json400,
+  json500,
+  parseBody,
+  cuidSchema,
+  layerSchema,
+} from '@/lib/stand/http';
 
-// Zod schemas for validation
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 const annotationCreateSchema = z.object({
-  musicId: z.string().min(1),
-  page: z.number().int().positive(),
-  layer: z.enum(['PERSONAL', 'SECTION', 'DIRECTOR']),
-  strokeData: z.record(z.string(), z.any()),
-  // userId and sectionId are intentionally excluded from the client schema;
-  // they are computed server-side to prevent spoofing.
+  musicId: cuidSchema,
+  page: z.number().int().positive().max(5000),
+  layer: layerSchema,
+  strokeData: z.record(z.string(), z.unknown()),
+  sectionId: cuidSchema.nullable().optional(),
 });
 
-const _annotationUpdateSchema = z.object({
-  strokeData: z.record(z.string(), z.any()).optional(),
-  layer: z.enum(['PERSONAL', 'SECTION', 'DIRECTOR']).optional(),
-});
-
-export type AnnotationCreateInput = z.infer<typeof annotationCreateSchema>;
-export type AnnotationUpdateInput = z.infer<typeof _annotationUpdateSchema>;
-
-/**
- * GET /api/stand/annotations
- * Returns annotations matching the query parameters
- * Query params: musicId, page, layer, userId
- */
 export async function GET(request: NextRequest) {
   try {
-    const headersList = await headers();
-    const session = await auth.api.getSession({ headers: headersList });
+    const rateLimited = await applyRateLimit(request, 'stand-annotation');
+    if (rateLimited) return rateLimited;
 
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const ctx = await requireStandAccess();
+    if (ctx instanceof Response) return ctx;
 
     const { searchParams } = new URL(request.url);
     const musicId = searchParams.get('musicId');
     const page = searchParams.get('page');
     const layer = searchParams.get('layer');
-    const userId = searchParams.get('userId');
 
-    const where: Record<string, unknown> = {};
+    if (!musicId) return json400('musicId query param required');
 
-    if (musicId) where.musicId = musicId;
+    // Build visibility filter using centralized helper
+    const visibilityFilter = annotationVisibilityFilter(ctx, musicId);
+    const where: Record<string, unknown> = { ...visibilityFilter };
     if (page) where.page = parseInt(page, 10);
-    if (layer) where.layer = layer;
-    if (userId) where.userId = userId;
-
-    // If not a director, scope annotations properly
-    const roles = await getUserRoles(session.user.id);
-    const isDirector = roles.includes('DIRECTOR') || roles.includes('SUPER_ADMIN') || roles.includes('ADMIN');
-
-    if (!isDirector) {
-      // Look up user's section memberships via Member → MemberSection → sectionId
-      const member = await prisma.member.findFirst({
-        where: { userId: session.user.id },
-        select: {
-          sections: { select: { sectionId: true } },
-        },
-      });
-      const userSectionIds = member?.sections.map((s: { sectionId: string }) => s.sectionId) ?? [];
-
-      // Show: own PERSONAL, matching SECTION by sectionId, all DIRECTOR
-      where.OR = [
-        { userId: session.user.id, layer: 'PERSONAL' },
-        { layer: 'SECTION', sectionId: { in: userSectionIds } },
-        { layer: 'DIRECTOR' },
-      ];
+    if (layer && ['PERSONAL', 'SECTION', 'DIRECTOR'].includes(layer)) {
+      where.layer = layer;
     }
 
     const annotations = await prisma.annotation.findMany({
       where,
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
+      select: {
+        id: true,
+        musicId: true,
+        page: true,
+        layer: true,
+        strokeData: true,
+        userId: true,
+        sectionId: true,
+        createdAt: true,
+        updatedAt: true,
+        user: { select: { id: true, name: true } },
       },
-      orderBy: { page: 'asc' },
+      orderBy: [{ page: 'asc' }, { createdAt: 'asc' }],
     });
 
-    return NextResponse.json({ annotations });
+    return jsonOk({ annotations });
   } catch (error) {
-    console.error('Error fetching annotations:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    console.error('[Annotations GET]', error);
+    return json500();
   }
 }
 
-/**
- * POST /api/stand/annotations
- * Creates a new annotation
- */
 export async function POST(request: NextRequest) {
   try {
-    // Rate limit annotation writes
     const rateLimited = await applyRateLimit(request, 'stand-annotation');
     if (rateLimited) return rateLimited;
 
-    const headersList = await headers();
-    const session = await auth.api.getSession({ headers: headersList });
+    const ctx = await requireStandAccess();
+    if (ctx instanceof Response) return ctx;
 
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const parsed = await parseBody(request, annotationCreateSchema);
+    if (parsed instanceof Response) return parsed;
+
+    const { musicId, page, layer, strokeData, sectionId } = parsed;
+
+    // Enforce layer write permissions
+    const layerErr = assertCanWriteLayer(ctx, layer, sectionId);
+    if (layerErr) return layerErr;
+
+    // Enforce stroke data size limit
+    const settings = await getStandSettings();
+    const strokeJson = JSON.stringify(strokeData);
+    if (strokeJson.length > settings.maxStrokeDataBytes) {
+      return json400(
+        `Stroke data exceeds limit (${settings.maxStrokeDataBytes} bytes)`
+      );
     }
 
-    const body = await request.json();
-    const validated = annotationCreateSchema.parse(body);
+    // Enforce per-page annotation count limit
+    const [count, piece] = await Promise.all([
+      prisma.annotation.count({
+        where: { musicId, page, userId: ctx.userId, layer: 'PERSONAL' },
+      }),
+      prisma.musicPiece.findUnique({ where: { id: musicId }, select: { id: true } }),
+    ]);
 
-    // Only directors / super-admins may write to the DIRECTOR layer
-    if (validated.layer === 'DIRECTOR') {
-      const roles = await getUserRoles(session.user.id);
-      if (!roles.includes('DIRECTOR') && !roles.includes('SUPER_ADMIN')) {
-        return NextResponse.json(
-          { error: 'Forbidden: only directors may write to the DIRECTOR annotation layer' },
-          { status: 403 }
-        );
-      }
-    }
+    if (!piece) return json400('Invalid musicId');
 
-    // Compute sectionId server-side for SECTION layer (prevents client spoofing)
-    let serverSectionId: string | null = null;
-    if (validated.layer === 'SECTION') {
-      const member = await prisma.member.findFirst({
-        where: { userId: session.user.id },
-        select: { sections: { select: { sectionId: true }, take: 1 } },
-      });
-      serverSectionId = member?.sections[0]?.sectionId ?? null;
-
-      // Reject SECTION writes for users who do not belong to any section
-      if (!serverSectionId) {
-        return NextResponse.json(
-          { error: 'Forbidden: you must belong to a section to write SECTION annotations' },
-          { status: 403 }
-        );
-      }
+    if (layer === 'PERSONAL' && count >= settings.maxAnnotationsPerPage) {
+      return json400(
+        `Annotation limit reached for this page (max ${settings.maxAnnotationsPerPage})`
+      );
     }
 
     const annotation = await prisma.annotation.create({
       data: {
-        musicId: validated.musicId,
-        page: validated.page,
-        layer: validated.layer,
-        strokeData: validated.strokeData,
-        userId: session.user.id,          // always from session, never client
-        sectionId: serverSectionId,
-      },
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
+        musicId,
+        page,
+        layer,
+        strokeData: strokeData as unknown as object,
+        userId: ctx.userId,
+        sectionId: layer === 'SECTION' ? (sectionId ?? ctx.userSectionIds[0] ?? null) : null,
       },
     });
 
-    return NextResponse.json({ annotation }, { status: 201 });
+    return jsonOk({ annotation }, 201);
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: 'Validation error', details: error.issues },
-        { status: 400 }
-      );
-    }
-    console.error('Error creating annotation:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    console.error('[Annotations POST]', error);
+    return json500();
   }
 }

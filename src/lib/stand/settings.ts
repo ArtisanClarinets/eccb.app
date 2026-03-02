@@ -1,8 +1,13 @@
 /**
- * Stand Settings — DB-backed kill switch + admin configuration.
+ * Stand Settings — DB-backed global settings via SystemSetting table.
  *
- * Settings are cached in Redis with a short TTL. Admin changes flush the cache.
- * Falls back to feature-flag defaults when no DB row exists.
+ * Persisted using namespaced keys ("stand.*") with Redis caching.
+ * This is the single source of truth for:
+ *   - Kill switch (stand.enabled)
+ *   - Realtime mode, offline, practice tracking, etc.
+ *   - Admin settings UI (/api/stand/settings)
+ *   - Member config endpoint (/api/stand/config)
+ *   - All stand pages and API routes
  */
 
 import { prisma } from '@/lib/db';
@@ -12,146 +17,145 @@ import { isFeatureEnabled, FEATURES } from '@/lib/feature-flags';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface StandGlobalSettings {
-  /** Master kill switch — disables the entire stand */
   enabled: boolean;
-  /** Real-time mode: 'polling' | 'websocket' | 'off' */
   realtimeMode: 'polling' | 'websocket' | 'off';
-  /** Max annotation stroke data size in bytes */
   maxStrokeDataBytes: number;
-  /** Max annotations per page per user */
   maxAnnotationsPerPage: number;
-  /** Offline PWA caching enabled */
   offlineEnabled: boolean;
-  /** Practice tracking enabled */
   practiceTrackingEnabled: boolean;
-  /** Audio sync enabled */
   audioSyncEnabled: boolean;
-  /** Default auto-page-turn delay (ms) */
   defaultAutoTurnDelay: number;
-  /** Max file size for stand PDF proxy (bytes) */
   maxPdfSizeBytes: number;
+  maxFileSizeMb: number;
+  allowOfflineSync: boolean;
+  accessPolicy: 'any_member' | 'rsvp_only';
+  maintenanceMessage: string | null;
+  pollingIntervalMs: number;
+  websocketEnabled: boolean;
 }
 
-// ─── Defaults ─────────────────────────────────────────────────────────────────
+/** Allowlist — only these keys can be written by the admin form */
+export const STAND_SETTING_KEYS: Array<keyof StandGlobalSettings> = [
+  'enabled', 'realtimeMode', 'maxStrokeDataBytes', 'maxAnnotationsPerPage',
+  'offlineEnabled', 'practiceTrackingEnabled', 'audioSyncEnabled',
+  'defaultAutoTurnDelay', 'maxPdfSizeBytes', 'maxFileSizeMb',
+  'allowOfflineSync', 'accessPolicy', 'maintenanceMessage', 'pollingIntervalMs',
+];
 
 const DEFAULT_SETTINGS: StandGlobalSettings = {
   enabled: true,
   realtimeMode: 'polling',
-  maxStrokeDataBytes: 512_000, // 500KB
+  maxStrokeDataBytes: 512_000,
   maxAnnotationsPerPage: 100,
   offlineEnabled: false,
   practiceTrackingEnabled: true,
   audioSyncEnabled: false,
-  defaultAutoTurnDelay: 3000,
-  maxPdfSizeBytes: 50_000_000, // 50MB
+  defaultAutoTurnDelay: 3_000,
+  maxPdfSizeBytes: 50_000_000,
+  maxFileSizeMb: 50,
+  allowOfflineSync: false,
+  accessPolicy: 'any_member',
+  maintenanceMessage: null,
+  pollingIntervalMs: 5_000,
+  websocketEnabled: false,
 };
 
-const CACHE_KEY = 'stand:global-settings';
-const CACHE_TTL = 300; // 5 minutes
+const KEY_PREFIX = 'stand.';
+const CACHE_KEY = 'stand:global-settings:v2';
+const CACHE_TTL = 300;
+
+function toSystemKey(field: string): string {
+  return `${KEY_PREFIX}${field}`;
+}
+
+function parseSettingValue(field: keyof StandGlobalSettings, raw: string): unknown {
+  const def = DEFAULT_SETTINGS[field];
+  if (typeof def === 'boolean') return raw === 'true';
+  if (typeof def === 'number') { const n = Number(raw); return Number.isFinite(n) ? n : def; }
+  if (def === null) return raw === '' ? null : raw;
+  return raw;
+}
 
 // ─── Getters ──────────────────────────────────────────────────────────────────
 
-/**
- * Get the global stand settings with Redis caching.
- * Falls back to defaults if no DB row or Redis is unavailable.
- */
 export async function getStandSettings(): Promise<StandGlobalSettings> {
-  // Check Redis cache first
   try {
     const cached = await redis.get(CACHE_KEY);
-    if (cached) {
-      return { ...DEFAULT_SETTINGS, ...JSON.parse(cached as string) };
-    }
-  } catch {
-    // Redis unavailable, continue to DB
-  }
+    if (cached) return { ...DEFAULT_SETTINGS, ...(JSON.parse(cached as string) as Partial<StandGlobalSettings>) };
+  } catch { /* Redis unavailable */ }
 
-  // Check DB — stored in a system settings table or UserPreferences for admin
   try {
-    // Use a system-level preferences row (userId = 'system')
-    const row = await prisma.userPreferences.findUnique({
-      where: { userId: 'system' },
-      select: { otherSettings: true },
+    const rows = await prisma.systemSetting.findMany({
+      where: { key: { startsWith: KEY_PREFIX } },
+      select: { key: true, value: true },
     });
-
-    if (row?.otherSettings) {
-      const settings = (row.otherSettings as Record<string, unknown>)
-        ?.standSettings as Partial<StandGlobalSettings> | undefined;
-      if (settings) {
-        const merged = { ...DEFAULT_SETTINGS, ...settings };
-        // Cache in Redis
-        try {
-          await redis.set(CACHE_KEY, JSON.stringify(merged), 'EX', CACHE_TTL);
-        } catch {
-          // Ignore cache write failure
+    if (rows.length > 0) {
+      const partial: Partial<StandGlobalSettings> = {};
+      for (const row of rows) {
+        const field = row.key.slice(KEY_PREFIX.length) as keyof StandGlobalSettings;
+        if (field in DEFAULT_SETTINGS) {
+          (partial as Record<string, unknown>)[field] = parseSettingValue(field, row.value);
         }
-        return merged;
       }
+      if (partial.offlineEnabled !== undefined) partial.allowOfflineSync = partial.offlineEnabled;
+      if (partial.maxPdfSizeBytes !== undefined) partial.maxFileSizeMb = Math.round((partial.maxPdfSizeBytes as number) / 1_000_000);
+      if (partial.realtimeMode !== undefined) partial.websocketEnabled = partial.realtimeMode === 'websocket';
+      const merged = { ...DEFAULT_SETTINGS, ...partial };
+      try { await redis.set(CACHE_KEY, JSON.stringify(merged), 'EX', CACHE_TTL); } catch { /* ignore */ }
+      return merged;
     }
-  } catch {
-    // DB unavailable, use defaults
-  }
+  } catch { /* DB unavailable */ }
 
-  // Merge with feature flags
   return {
     ...DEFAULT_SETTINGS,
     enabled: isFeatureEnabled(FEATURES.MUSIC_STAND),
     practiceTrackingEnabled: isFeatureEnabled(FEATURES.PRACTICE_TRACKING),
     offlineEnabled: isFeatureEnabled(FEATURES.STAND_OFFLINE),
+    allowOfflineSync: isFeatureEnabled(FEATURES.STAND_OFFLINE),
     audioSyncEnabled: isFeatureEnabled(FEATURES.STAND_AUDIO_SYNC),
-    realtimeMode: isFeatureEnabled(FEATURES.STAND_WEBSOCKET_SYNC)
-      ? 'websocket'
-      : 'polling',
+    realtimeMode: isFeatureEnabled(FEATURES.STAND_WEBSOCKET_SYNC) ? 'websocket' : 'polling',
+    websocketEnabled: isFeatureEnabled(FEATURES.STAND_WEBSOCKET_SYNC),
   };
+}
+
+export async function isStandEnabled(): Promise<boolean> {
+  const s = await getStandSettings();
+  return s.enabled;
 }
 
 // ─── Setters (Admin) ──────────────────────────────────────────────────────────
 
-/**
- * Update global stand settings. Admin-only operation.
- * Flushes the Redis cache.
- */
 export async function updateStandSettings(
-  updates: Partial<StandGlobalSettings>
+  updates: Partial<StandGlobalSettings>,
+  updatedBy?: string
 ): Promise<StandGlobalSettings> {
-  const current = await getStandSettings();
-  const merged = { ...current, ...updates };
+  const allowed = new Set(STAND_SETTING_KEYS as string[]);
+  const filtered = Object.fromEntries(
+    Object.entries(updates).filter(([k]) => allowed.has(k))
+  ) as Partial<StandGlobalSettings>;
 
-  // Upsert into DB
-  await prisma.userPreferences.upsert({
-    where: { userId: 'system' },
-    create: {
-      userId: 'system',
-      nightMode: false,
-      otherSettings: { standSettings: merged },
-    },
-    update: {
-      otherSettings: {
-        ...((
-          await prisma.userPreferences.findUnique({
-            where: { userId: 'system' },
-            select: { otherSettings: true },
-          })
-        )?.otherSettings as Record<string, unknown> ?? {}),
-        standSettings: merged,
-      },
-    },
-  });
+  // Sync aliases
+  if (filtered.maxFileSizeMb !== undefined && filtered.maxPdfSizeBytes === undefined)
+    filtered.maxPdfSizeBytes = filtered.maxFileSizeMb * 1_000_000;
+  if (filtered.maxPdfSizeBytes !== undefined && filtered.maxFileSizeMb === undefined)
+    filtered.maxFileSizeMb = Math.round(filtered.maxPdfSizeBytes / 1_000_000);
+  if (filtered.allowOfflineSync !== undefined && filtered.offlineEnabled === undefined)
+    filtered.offlineEnabled = filtered.allowOfflineSync;
+  if (filtered.offlineEnabled !== undefined && filtered.allowOfflineSync === undefined)
+    filtered.allowOfflineSync = filtered.offlineEnabled;
+  if (filtered.realtimeMode !== undefined)
+    filtered.websocketEnabled = filtered.realtimeMode === 'websocket';
 
-  // Flush cache
-  try {
-    await redis.del(CACHE_KEY);
-  } catch {
-    // Ignore
-  }
+  await Promise.all(
+    Object.entries(filtered).map(([field, value]) =>
+      prisma.systemSetting.upsert({
+        where: { key: toSystemKey(field) },
+        create: { key: toSystemKey(field), value: value === null ? '' : String(value), description: `Music Stand — ${field}`, updatedBy: updatedBy ?? null },
+        update: { value: value === null ? '' : String(value), updatedBy: updatedBy ?? null },
+      })
+    )
+  );
 
-  return merged;
-}
-
-/**
- * Check if the stand is enabled (quick check with caching).
- */
-export async function isStandEnabled(): Promise<boolean> {
-  const settings = await getStandSettings();
-  return settings.enabled;
+  try { await redis.del(CACHE_KEY); } catch { /* ignore */ }
+  return getStandSettings();
 }

@@ -1,129 +1,85 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth/config';
-import { headers } from 'next/headers';
+/**
+ * /api/stand/navigation-links
+ *
+ * GET  — list navigation links for a piece (any stand member)
+ * POST — create navigation link (director/librarian only)
+ */
+
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
-import { getUserRoles } from '@/lib/auth/permissions';
 import { applyRateLimit } from '@/lib/rate-limit';
 import { z } from 'zod';
+import { requireStandAccess, canAccessPiece } from '@/lib/stand/access';
+import { jsonOk, json400, json403, json404, json500, parseBody, cuidSchema } from '@/lib/stand/http';
 
-// Zod schemas for validation
-const navigationLinkCreateSchema = z.object({
-  musicId: z.string().min(1),
-  fromPage: z.number().int().positive().default(1),
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+const navLinkCreateSchema = z.object({
+  musicId: cuidSchema,
+  fromPage: z.number().int().positive().max(5000).default(1),
   fromX: z.number().min(0).max(1),
   fromY: z.number().min(0).max(1),
-  toPage: z.number().int().positive().default(1),
-  toMusicId: z.string().nullable().optional(),
+  toPage: z.number().int().positive().max(5000).default(1),
+  toMusicId: cuidSchema.nullable().optional(),
   toX: z.number().min(0).max(1),
   toY: z.number().min(0).max(1),
-  label: z.string().optional(),
+  label: z.string().max(200).optional(),
 });
 
-const _navigationLinkUpdateSchema = z.object({
-  fromX: z.number().optional(),
-  fromY: z.number().optional(),
-  toX: z.number().optional(),
-  toY: z.number().optional(),
-  label: z.string().optional(),
-});
-
-export type NavigationLinkCreateInput = z.infer<typeof navigationLinkCreateSchema>;
-export type NavigationLinkUpdateInput = z.infer<typeof _navigationLinkUpdateSchema>;
-
-/**
- * GET /api/stand/navigation-links
- * Returns navigation links for a music piece
- * Query params: musicId
- */
 export async function GET(request: NextRequest) {
   try {
-    const headersList = await headers();
-    const session = await auth.api.getSession({ headers: headersList });
+    const rateLimited = await applyRateLimit(request, 'stand-annotation');
+    if (rateLimited) return rateLimited;
 
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const ctx = await requireStandAccess();
+    if (ctx instanceof Response) return ctx;
 
     const { searchParams } = new URL(request.url);
     const musicId = searchParams.get('musicId');
+    if (!musicId) return json400('musicId query param required');
 
-    if (!musicId) {
-      return NextResponse.json(
-        { error: 'musicId query parameter is required' },
-        { status: 400 }
-      );
-    }
+    const hasAccess = await canAccessPiece(ctx.userId, musicId);
+    if (!hasAccess) return json404('Piece not found');
 
     const navigationLinks = await prisma.navigationLink.findMany({
       where: { musicId },
       orderBy: { createdAt: 'asc' },
     });
 
-    return NextResponse.json({ navigationLinks });
+    return jsonOk({ navigationLinks });
   } catch (error) {
-    console.error('Error fetching navigation links:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    console.error('[NavLinks GET]', error);
+    return json500();
   }
 }
 
-/**
- * POST /api/stand/navigation-links
- * Creates a new navigation link (director only)
- */
 export async function POST(request: NextRequest) {
   try {
-    // Rate limit navigation link writes
     const rateLimited = await applyRateLimit(request, 'stand-annotation');
     if (rateLimited) return rateLimited;
 
-    const headersList = await headers();
-    const session = await auth.api.getSession({ headers: headersList });
+    const ctx = await requireStandAccess();
+    if (ctx instanceof Response) return ctx;
 
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    // Navigation links are director/librarian-only (they guide the whole ensemble)
+    if (!ctx.isLibrarian) return json403('Only directors or librarians can create navigation links');
 
-    // Only directors can create navigation links
-    const roles = await getUserRoles(session.user.id);
-    if (!roles.includes('DIRECTOR') && !roles.includes('SUPER_ADMIN')) {
-      return NextResponse.json(
-        { error: 'Forbidden: Only directors can create navigation links' },
-        { status: 403 }
-      );
-    }
+    const parsed = await parseBody(request, navLinkCreateSchema);
+    if (parsed instanceof Response) return parsed;
 
-    const body = await request.json();
-    const validated = navigationLinkCreateSchema.parse(body);
+    const { musicId, fromPage, fromX, fromY, toPage, toMusicId, toX, toY, label } = parsed;
 
-    const navigationLink = await prisma.navigationLink.create({
-      data: {
-        musicId: validated.musicId,
-        fromPage: validated.fromPage,
-        fromX: validated.fromX,
-        fromY: validated.fromY,
-        toPage: validated.toPage,
-        toMusicId: validated.toMusicId ?? null,
-        toX: validated.toX,
-        toY: validated.toY,
-        label: validated.label,
-      },
+    const piece = await prisma.musicPiece.findUnique({ where: { id: musicId }, select: { id: true } });
+    if (!piece) return json400('Piece not found');
+
+    const link = await prisma.navigationLink.create({
+      data: { musicId, fromPage, fromX, fromY, toPage, toMusicId: toMusicId ?? null, toX, toY, label: label ?? null },
     });
 
-    return NextResponse.json({ navigationLink }, { status: 201 });
+    return jsonOk({ link }, 201);
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: 'Validation error', details: error.issues },
-        { status: 400 }
-      );
-    }
-    console.error('Error creating navigation link:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    console.error('[NavLinks POST]', error);
+    return json500();
   }
 }
