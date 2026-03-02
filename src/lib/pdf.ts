@@ -29,6 +29,7 @@ export interface PdfViewport {
   scale: number;
   offsetX: number;
   offsetY: number;
+  transform: number[];
   clone: (options?: Partial<PdfViewportOptions>) => PdfViewport;
 }
 
@@ -99,6 +100,7 @@ export async function loadPdfDocument(url: string): Promise<PdfDocument> {
             scale: viewport.scale,
             offsetX: viewport.offsetX,
             offsetY: viewport.offsetY,
+            transform: viewport.transform,
             clone: (cloneOptions?: Partial<PdfViewportOptions>) => {
               return viewport.clone(cloneOptions) as unknown as PdfViewport;
             },

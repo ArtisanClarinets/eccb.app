@@ -291,7 +291,7 @@ async function pdfBufferToPngBase64(pdfBuffer: Buffer): Promise<string> {
   // NodeCanvasFactory bridge for pdfjs-dist
   const renderContext = {
     canvasContext: ctx,
-    canvas: canvas as unknown as HTMLCanvasElement, // required in pdfjs-dist v5
+    canvas: canvas as unknown as HTMLCanvasElement,
     viewport,
   };
 
