@@ -70,6 +70,7 @@ vi.mock('@/lib/services/part-boundary-detector', () => ({
 
 vi.mock('@/lib/services/pdf-splitter', () => ({
   splitPdfByCuttingInstructions: vi.fn().mockResolvedValue([]),
+  validatePdfBuffer: vi.fn().mockResolvedValue({ valid: true, pageCount: 3 }),
 }));
 
 vi.mock('@/lib/jobs/smart-upload', () => ({
@@ -100,7 +101,7 @@ import { deepCloneJSON } from '@/lib/json';
 import { downloadFile, uploadFile } from '@/lib/services/storage';
 import { callVisionModel } from '@/lib/llm';
 import { loadSmartUploadRuntimeConfig } from '@/lib/llm/config-loader';
-import { splitPdfByCuttingInstructions } from '@/lib/services/pdf-splitter';
+import { splitPdfByCuttingInstructions, validatePdfBuffer } from '@/lib/services/pdf-splitter';
 import {
   queueSmartUploadSecondPass,
 } from '@/lib/jobs/smart-upload';
@@ -370,5 +371,61 @@ describe('processSmartUpload — integration', () => {
     await processSmartUpload(job);
 
     expect(clearRenderCache).toHaveBeenCalledWith(SESSION_ID);
+  });
+
+  it('marks session PARSE_FAILED when PDF validation fails', async () => {
+    // simulate corrupted PDF during validation
+    vi.mocked(validatePdfBuffer).mockResolvedValue({ valid: false, error: 'corrupt file' });
+
+    const job = makeJob(SESSION_ID);
+    const result = await processSmartUpload(job);
+
+    expect(result.status).toBe('parse_failed');
+    expect(prisma.smartUploadSession.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { uploadSessionId: SESSION_ID },
+        data: expect.objectContaining({ parseStatus: 'PARSE_FAILED' }),
+      })
+    );
+  });
+
+  it('marks session PARSE_FAILED when samplePdfPages throws', async () => {
+    // validation succeeds but rendering fails during second PDF load
+    vi.mocked(validatePdfBuffer).mockResolvedValue({ valid: true, pageCount: 3 });
+
+    const { PDFDocument } = await import('pdf-lib');
+    // first call (page count) ok, second call used by samplePdfPages throws
+    vi.mocked(PDFDocument.load)
+      .mockResolvedValueOnce({ getPageCount: () => 3 })
+      .mockRejectedValueOnce(new Error('render error'));
+
+    const job = makeJob(SESSION_ID);
+    const result = await processSmartUpload(job);
+
+    expect(result.status).toBe('parse_failed');
+    expect(prisma.smartUploadSession.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { uploadSessionId: SESSION_ID },
+        data: expect.objectContaining({ parseStatus: 'PARSE_FAILED' }),
+      })
+    );
+  });
+
+  it('marks session PARSE_FAILED when splitting fails', async () => {
+    // validation succeeds, samplePdfPages works, but splitting throws
+    vi.mocked(validatePdfBuffer).mockResolvedValue({ valid: true, pageCount: 3 });
+    vi.mocked(callVisionModel).mockResolvedValue({ content: HIGH_CONFIDENCE_RESPONSE });
+    vi.mocked(splitPdfByCuttingInstructions).mockRejectedValue(new Error('split error'));
+
+    const job = makeJob(SESSION_ID);
+    const result = await processSmartUpload(job);
+
+    expect(result.status).toBe('parse_failed');
+    expect(prisma.smartUploadSession.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { uploadSessionId: SESSION_ID },
+        data: expect.objectContaining({ parseStatus: 'PARSE_FAILED' }),
+      })
+    );
   });
 });

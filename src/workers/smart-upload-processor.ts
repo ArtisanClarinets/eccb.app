@@ -29,7 +29,7 @@ import {
   validateAndNormalizeInstructions,
   buildGapInstructions,
 } from '@/lib/services/cutting-instructions';
-import { splitPdfByCuttingInstructions } from '@/lib/services/pdf-splitter';
+import { splitPdfByCuttingInstructions, validatePdfBuffer } from '@/lib/services/pdf-splitter';
 import { extractPdfPageHeaders } from '@/lib/services/pdf-text-extractor';
 import { detectPartBoundaries } from '@/lib/services/part-boundary-detector';
 import { extractOcrFallbackMetadata } from '@/lib/services/ocr-fallback';
@@ -91,6 +91,20 @@ async function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
     chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
   }
   return Buffer.concat(chunks);
+}
+
+// Duplicate helper used elsewhere; keeps logging safe without leaking stack or data.
+function asError(err: unknown): Error {
+  return err instanceof Error ? err : new Error(String(err));
+}
+
+function safeErrorDetails(err: unknown) {
+  const e = asError(err);
+  return {
+    errorMessage: e.message,
+    errorName: e.name,
+    errorStack: e.stack,
+  };
 }
 
 /**
@@ -388,9 +402,29 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
 
   const pdfBuffer = await streamToBuffer(downloadResult.stream);
 
-  // Get total page count (lightweight — no rendering)
-  const pdfDoc = await PDFDocument.load(pdfBuffer, { ignoreEncryption: true });
-  const totalPages = pdfDoc.getPageCount();
+  // Validate the PDF early so we fail gracefully on corrupt files.  The
+  // warning messages seen in the log ("Trying to parse invalid object…")
+  // originate from pdf-lib when the parser encounters malformed data.  If
+  // validation fails we update the session to PARSE_FAILED and return a
+  // non‑throwing result so the job doesn’t dead‑letter.
+  const validation = await validatePdfBuffer(pdfBuffer);
+  if (!validation.valid) {
+    logger.error('PDF validation failed; aborting smart upload', {
+      sessionId,
+      error: validation.error,
+    });
+    await prisma.smartUploadSession.update({
+      where: { uploadSessionId: sessionId },
+      data: {
+        parseStatus: 'PARSE_FAILED',
+      },
+    });
+    // Return structured result so callers know parsing never occurred
+    return { status: 'parse_failed', sessionId };
+  }
+
+  // Get total page count from validated buffer (should exist since valid).
+  const totalPages = validation.pageCount ?? 0;
 
   // -----------------------------------------------------------------
   // Text layer detection (deterministic segmentation when available)
@@ -563,7 +597,23 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
       // ── Standard image-based vision mode (fallback for non-PDF providers) ─
       await progress('rendering', 10, 'Rendering PDF pages to images');
 
-      const sampleResult = await samplePdfPages(pdfBuffer, sessionId);
+      let sampleResult;
+      try {
+        sampleResult = await samplePdfPages(pdfBuffer, sessionId);
+      } catch (err) {
+        // A failure here indicates the PDF is too malformed to render even a
+        // single page.  Treat as parse failure and bail out cleanly rather than
+        // letting the worker crash with a cryptic pdf-lib message.
+        logger.error('samplePdfPages failed during smart upload', {
+          sessionId,
+          ...safeErrorDetails(err),
+        });
+        await prisma.smartUploadSession.update({
+          where: { uploadSessionId: sessionId },
+          data: { parseStatus: 'PARSE_FAILED' },
+        });
+        return { status: 'parse_failed', sessionId };
+      }
       const pageImages = sampleResult.images;
       pageImagesRef = pageImages;
       sampledIndices = sampleResult.sampledIndices;
@@ -997,12 +1047,25 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
   // Sanitize instructions before splitting — remove entries with invalid pageRange
   const validatedInstructions = sanitizeCuttingInstructionsForSplit(normalizedInstructionsZero);
 
-  const splitResults = await splitPdfByCuttingInstructions(
-    pdfBuffer,
-    smartSession.fileName.replace(/\.pdf$/i, ''),
-    validatedInstructions,
-    { indexing: 'zero' }
-  );
+  let splitResults;
+  try {
+    splitResults = await splitPdfByCuttingInstructions(
+      pdfBuffer,
+      smartSession.fileName.replace(/\.pdf$/i, ''),
+      validatedInstructions,
+      { indexing: 'zero' }
+    );
+  } catch (err) {
+    logger.error('Failed to split PDF during smart upload', {
+      sessionId,
+      ...safeErrorDetails(err),
+    });
+    await prisma.smartUploadSession.update({
+      where: { uploadSessionId: sessionId },
+      data: { parseStatus: 'PARSE_FAILED' },
+    });
+    return { status: 'parse_failed', sessionId };
+  }
 
   // Step 5: Create part records
   await progress('saving', 90, 'Uploading split parts to storage');
