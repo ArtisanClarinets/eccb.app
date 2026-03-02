@@ -27,6 +27,8 @@ This project is strictly defined by the following documentation files. **All cod
 | **`docs/SMART_UPLOAD.md`** | Feature | AI-powered music PDF metadata extraction architecture and flow. |
 | **`docs/stand-*.md`** | Feature | Digital Music Stand architecture, rendering, annotations, and user guide. |
 | **`docs/DATABASE_SETUP_ARCHITECTURE.md`** | DB | Database setup wizard and repair system architecture. |
+| **System Settings** | Config | All application settings are database-driven via `/admin/settings` UI; env falls back only if db values missing. |
+| **`SYSTEM_SETTINGS.md`** (implied)| Config | All application settings are database-driven via `/admin/settings` UI; env falls back only if db values missing. |
 
 ---
 
@@ -140,12 +142,79 @@ src/
 
 ---
 
-## 9. Agent Instructions
-When generating code or answering questions:
-1.  **Consult `DATABASE_SCHEMA.md`** before writing any Prisma queries.
-2.  **Consult `PERMISSIONS.md`** before writing any Server Action to ensure proper security checks.
-3.  **Consult `Design.md`** for UI component styling and animation guidelines.
-4.  **Consult `AGENTS.md`** for code style and formatting.
-5.  **Do not hallucinate** new architectural patterns; stick to the defined stack (Next.js/Prisma/Better Auth).
+## 10. System Settings Architecture
+**Reference:** Settings are configured via `/admin/settings` browser UI
 
-This file (`GEMINI.md`) serves as the root anchor for the project context.
+### Database-First Configuration Pattern
+All application settings follow a **database-first** architecture:
+
+1. **Primary Source:** `SystemSetting` table (managed via `/admin/settings` UI)
+2. **Fallback:** `.env` environment variables (for first-startup or missing values only)
+3. **Cache:** Redis with 5-minute TTL for performance
+
+### Implementation Details
+- **Settings Code:** `src/lib/stand/settings.ts` exports `getStandSettings()`, `updateStandSettings()`
+- **Admin Form:** `src/components/admin/settings/music-stand-settings-form.tsx`
+- **Allowlist:** `STAND_SETTING_KEYS` defines which settings can be updated via UI
+- **Alias Handling:** Some settings have aliases (e.g., `maxFileSizeMb` ↔ `maxPdfSizeBytes`)
+
+### Available Music Stand Settings
+- `stand.enabled` — Master kill-switch (disabled = 404 for all stand pages)
+- `stand.realtimeMode` — `"polling"` or `"websocket"`
+- `stand.websocketEnabled` — Allow WebSocket upgrade
+- `stand.websocketPort` — Port for standalone Socket.IO worker (default: 3005)
+- `stand.pollingIntervalMs` — Fallback interval (default: 5000)
+- `stand.offlineEnabled`, `stand.allowOfflineSync` — Offline features
+- `stand.practiceTrackingEnabled`, `stand.audioSyncEnabled` — Feature toggles
+- `stand.accessPolicy` — `"any_member"` or `"rsvp_only"`
+- Limit settings: `maxAnnotationsPerPage`, `maxStrokeDataBytes`, `maxPdfSizeBytes`, `maxFileSizeMb`
+- `stand.maintenanceMessage` — Message shown when stand is disabled
+
+### Adding New Settings
+1. Add field to `StandGlobalSettings` interface in `src/lib/stand/settings.ts`
+2. Add to `STAND_SETTING_KEYS` allowlist (controls what can be updated via UI)
+3. Set default in `DEFAULT_SETTINGS` object (fallback to env if needed)
+4. Add Zod schema field to form schema in `music-stand-settings-form.tsx`
+5. Add form field UI in the component (auto-persisted to database on submit)
+6. Settings are automatically cached and available via `getStandSettings()`
+
+---
+
+## 11. Agent Instructions (Updated)
+---
+
+## 10. System Settings Architecture
+**Reference:** Settings are configured via `/admin/settings` browser UI
+
+### Database-First Configuration Pattern
+All application settings follow a **database-first** architecture:
+
+1. **Primary Source:** `SystemSetting` table (managed via `/admin/settings` UI)
+2. **Fallback:** `.env` environment variables (for first-startup or missing values only)
+3. **Cache:** Redis with 5-minute TTL for performance
+
+### Implementation Details
+- **Settings Code:** `src/lib/stand/settings.ts` exports `getStandSettings()`, `updateStandSettings()`
+- **Admin Form:** `src/components/admin/settings/music-stand-settings-form.tsx`
+- **Allowlist:** `STAND_SETTING_KEYS` defines which settings can be updated via UI
+- **Alias Handling:** Some settings have aliases (e.g., `maxFileSizeMb` ↔ `maxPdfSizeBytes`)
+
+### Available Music Stand Settings
+- `stand.enabled` — Master kill-switch (disabled = 404 for all stand pages)
+- `stand.realtimeMode` — `"polling"` or `"websocket"`
+- `stand.websocketEnabled` — Allow WebSocket upgrade
+- `stand.websocketPort` — Port for standalone Socket.IO worker (default: 3005)
+- `stand.pollingIntervalMs` — Fallback interval (default: 5000)
+- `stand.offlineEnabled`, `stand.allowOfflineSync` — Offline features
+- `stand.practiceTrackingEnabled`, `stand.audioSyncEnabled` — Feature toggles
+- `stand.accessPolicy` — `"any_member"` or `"rsvp_only"`
+- Limit settings: `maxAnnotationsPerPage`, `maxStrokeDataBytes`, `maxPdfSizeBytes`, `maxFileSizeMb`
+- `stand.maintenanceMessage` — Message shown when stand is disabled
+
+### Adding New Settings
+1. Add field to `StandGlobalSettings` interface in `src/lib/stand/settings.ts`
+2. Add to `STAND_SETTING_KEYS` allowlist (controls what can be updated via UI)
+3. Set default in `DEFAULT_SETTINGS` object (fallback to env if needed)
+4. Add Zod schema field to form schema in `music-stand-settings-form.tsx`
+5. Add form field UI in the component (auto-persisted to database on submit)
+6. Settings are automatically cached and available via `getStandSettings()`

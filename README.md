@@ -189,6 +189,37 @@ For complete deployment instructions, see [DEPLOYMENT.md](./DEPLOYMENT.md).
 - **Session Security**: Secure session handling with Better Auth
 - **Environment Validation**: Required variables validated on startup
 
+## System Settings
+
+### Database-Driven Configuration via Admin UI
+
+All application settings are managed through an intuitive browser-based admin panel at `/admin/settings`:
+
+**Settings are read from:**
+1. **Database (`SystemSetting` table)** - Primary source, managed via admin UI
+2. **Environment (`.env`)** - Fallback only for first-startup or when database value is missing
+3. **Redis cache** - 5-minute TTL for performance
+
+**Key Configuration Areas:**
+- **Music Stand**: Real-time sync mode, WebSocket port (3005), polling intervals, feature toggles
+- **Email**: SMTP configuration, sender addresses
+- **Security**: RBAC policies, password rules, audit settings
+- **General**: Band branding, feature flags
+
+**Music Stand Settings:**
+- `stand.enabled` - Master kill-switch for the digital music stand
+- `stand.realtimeMode` - `"polling"` (default) or `"websocket"`
+- `stand.websocketPort` - Port for standalone Socket.IO server (3005)
+- `stand.pollingIntervalMs` - Fallback polling interval (5000ms)
+- And more: offline mode, practice tracking, audio sync, access policies
+
+**To add new settings:**
+1. Add field to `StandGlobalSettings` in `src/lib/stand/settings.ts`
+2. Add to `STAND_SETTING_KEYS` allowlist
+3. Set default in `DEFAULT_SETTINGS` (fallback to env if needed)
+4. Add Zod schema + form field to `music-stand-settings-form.tsx`
+5. Auto-persisted to database and cached
+
 ## Testing
 
 ```bash

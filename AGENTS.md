@@ -117,3 +117,46 @@ npm run db:generate  # Generate Prisma client
 -   Commit messages: imperative mood, max 72 chars
 -   Feature branches: `feat/description`
 -   Bug fixes: `fix/description`
+
+## System Settings Architecture
+
+### All Settings Are Database-Driven via Admin UI
+
+**Location:** `/admin/settings` — Browser-based admin panel
+
+**Data Flow:**
+1. Admin updates settings via browser UI at `/admin/settings`
+2. Settings are persisted to `SystemSetting` table in the database
+3. Application code reads from database first, falls back to `.env` only if database values don't exist
+4. Settings are cached in Redis for 5 minutes to minimize DB queries
+
+**Key Settings Tables:**
+- **Music Stand Settings** — Real-time mode, WebSocket port, polling interval, feature toggles, access policies
+- **Email Settings** — SMTP configuration, sender addresses
+- **Security Settings** — RBAC, password policies, audit logs
+- **General Settings** — Band info, branding, feature flags
+
+**Available Music Stand Settings:**
+- `stand.enabled` — Master kill-switch (disabled = 404)
+- `stand.realtimeMode` — `"polling"` or `"websocket"`
+- `stand.websocketEnabled` — Allow WebSocket upgrade from polling
+- `stand.websocketPort` — Port for standalone Socket.IO worker (default: 3005)
+- `stand.pollingIntervalMs` — Fallback polling interval (default: 5000)
+- `stand.offlineEnabled` — Enable offline caching
+- `stand.allowOfflineSync` — Queue annotations offline
+- `stand.practiceTrackingEnabled` — Show practice timer
+- `stand.audioSyncEnabled` — Audio link editor
+- `stand.accessPolicy` — `"any_member"` or `"rsvp_only"`
+- Various limit and feature toggles
+
+**Implementation:**
+- Settings code: `src/lib/stand/settings.ts` — Exports `getStandSettings()`, `updateStandSettings()`
+- Admin form: `src/components/admin/settings/music-stand-settings-form.tsx`
+- Server helpers: `src/lib/stand/settings.ts` exports `STAND_SETTING_KEYS` allowlist
+
+**For Agents:** When adding new settings:
+1. Add field to `StandGlobalSettings` interface in `src/lib/stand/settings.ts`
+2. Add to `STAND_SETTING_KEYS` allowlist
+3. Set `DEFAULT_SETTINGS` default value (use env as fallback only)
+4. Add Zod schema field + form field to music-stand-settings-form.tsx
+5. Settings are automatically persisted and cached

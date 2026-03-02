@@ -16,6 +16,12 @@ import {
   isSmartUploadProcessorWorkerRunning,
 } from './smart-upload-processor-worker';
 import { logger } from '@/lib/logger';
+import { Redis } from 'ioredis';
+import {
+  initializeStandSocketServer,
+  closeStandSocketServer,
+} from '@/lib/websocket/stand-socket';
+import { getStandSettings } from '@/lib/stand/settings';
 
 /**
  * Worker Entry Point for ECCB Platform
@@ -40,6 +46,8 @@ console.warn = (...args: unknown[]) => {
 const HEALTH_CHECK_PORT = parseInt(process.env.WORKER_HEALTH_PORT || '3001', 10);
 const SCHEDULER_INTERVAL_MS = parseInt(process.env.SCHEDULER_INTERVAL_MS || '60000', 10); // 1 minute
 const CLEANUP_INTERVAL_MS = parseInt(process.env.CLEANUP_INTERVAL_MS || '86400000', 10); // 24 hours
+const SOCKET_PORT = parseInt(process.env.SOCKET_PORT || '3005', 10);
+const ENABLE_WEBSOCKETS = process.env.ENABLE_WEBSOCKETS === 'true';
 
 // ============================================================================
 // State
@@ -49,6 +57,16 @@ let isShuttingDown = false;
 let schedulerInterval: NodeJS.Timeout | null = null;
 let cleanupInterval: NodeJS.Timeout | null = null;
 let healthServer: http.Server | null = null;
+
+// WebSocket state
+let socketPubClient: Redis | null = null;
+let socketSubClient: Redis | null = null;
+let socketHttpServer: http.Server | null = null;
+let socketWorkerEnabled = false;
+
+export function isSocketWorkerRunning(): boolean {
+  return socketWorkerEnabled && socketHttpServer !== null;
+}
 
 // ============================================================================
 // Scheduler Loop
@@ -160,6 +178,7 @@ function startHealthServer(): void {
             email: isEmailWorkerRunning(),
             scheduler: isSchedulerWorkerRunning(),
             smartUpload: isSmartUploadProcessorWorkerRunning(),
+            sockets: isSocketWorkerRunning(),
           },
           queues: stats,
         };
@@ -177,7 +196,7 @@ function startHealthServer(): void {
       // Readiness probe - check if workers are ready to accept jobs
       const ready = isEmailWorkerRunning() && isSchedulerWorkerRunning() && isSmartUploadProcessorWorkerRunning();
       res.writeHead(ready ? 200 : 503, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ready }));
+      res.end(JSON.stringify({ ready, sockets: isSocketWorkerRunning() }));
     } else {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Not found' }));
@@ -245,6 +264,21 @@ async function gracefulShutdown(signal: string): Promise<void> {
     stopSmartUploadProcessorWorker(),
   ]);
 
+  // Stop WebSocket worker if running
+  if (socketWorkerEnabled) {
+    await closeStandSocketServer();
+    if (socketHttpServer) {
+      await new Promise<void>((r) => socketHttpServer!.close(() => r()));
+      socketHttpServer = null;
+    }
+    await Promise.all([
+      socketPubClient?.quit().catch(() => undefined),
+      socketSubClient?.quit().catch(() => undefined),
+    ]);
+    socketWorkerEnabled = false;
+    logger.info('Socket worker stopped');
+  }
+
   // Close queues
   await closeQueues();
 
@@ -272,6 +306,37 @@ async function main(): Promise<void> {
 
   // Start health check server
   startHealthServer();
+
+  // Optionally start embedded WebSocket worker
+  if (ENABLE_WEBSOCKETS) {
+    try {
+      // Load websocket port from database settings, with env as fallback
+      const settings = await getStandSettings();
+      const socketPort = settings.websocketPort || SOCKET_PORT;
+      
+      const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
+      const makeClient = (label: string) => {
+        const c = new Redis(REDIS_URL, { maxRetriesPerRequest: null, lazyConnect: false });
+        c.on('error', (e) => logger.error(`Socket Redis ${label} error`, { error: e.message }));
+        return c;
+      };
+      socketPubClient = makeClient('pub');
+      socketSubClient = makeClient('sub');
+      socketHttpServer = http.createServer();
+      initializeStandSocketServer(
+        socketHttpServer,
+        socketPubClient,
+        socketSubClient,
+        process.env.NEXT_PUBLIC_APP_URL,
+      );
+      socketHttpServer.listen(socketPort, () => {
+        logger.info(`Socket worker listening on port ${socketPort}`);
+      });
+      socketWorkerEnabled = true;
+    } catch (err) {
+      logger.error('Failed to start socket worker', { error: err instanceof Error ? err.message : err });
+    }
+  }
 
   // Setup signal handlers
   process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));

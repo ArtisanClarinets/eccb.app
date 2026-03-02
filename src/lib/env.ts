@@ -6,6 +6,12 @@ const envSchema = z.object({
   
   // Redis
   REDIS_URL: z.string().default('redis://localhost:6379'),
+
+  // WebSocket / Socket.IO worker
+  /** Set to "true" to enable the standalone Socket.IO process (socket-worker). */
+  ENABLE_WEBSOCKETS: z.enum(['true', 'false']).default('false'),
+  /** Port the standalone Socket.IO worker listens on. */
+  SOCKET_PORT: z.coerce.number().int().positive().default(3005),
   
   // Better Auth
   AUTH_SECRET: z.string().min(32, 'AUTH_SECRET must be at least 32 characters'),

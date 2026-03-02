@@ -116,6 +116,10 @@ const DEFAULT_RECONNECT_INTERVAL = 3000;
 const DEFAULT_MAX_RECONNECT_ATTEMPTS = 5;
 const DEFAULT_POLLING_INTERVAL = 5000; // 5 seconds for polling fallback
 const SOCKET_PATH = '/api/stand/socket';
+/** Cap on exponential back-off delay (30 s). */
+const MAX_BACKOFF_MS = 30_000;
+/** Heartbeat interval matching the server expectation (30 s). */
+const CLIENT_HEARTBEAT_INTERVAL_MS = 30_000;
 
 // =============================================================================
 // HELPERS
@@ -166,6 +170,7 @@ export function useStandSync({
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const [isConnected, setIsConnected] = useState(false);
   const [connectionError, setConnectionError] = useState<Error | null>(null);
@@ -255,15 +260,20 @@ export function useStandSync({
   // WEBSOCKET CONNECTION
   // =============================================================================
 
-  // Schedule reconnection attempt
+  // Schedule reconnection attempt with exponential back-off
   const scheduleReconnect = useCallback(() => {
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
     }
 
     reconnectAttemptsRef.current += 1;
+    // Exponential back-off: base * 2^(attempts-1), capped at MAX_BACKOFF_MS
+    const delay = Math.min(
+      reconnectInterval * Math.pow(2, reconnectAttemptsRef.current - 1),
+      MAX_BACKOFF_MS,
+    );
     logger.debug(
-      `[useStandSync] Scheduling reconnect attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts}`
+      `[useStandSync] Scheduling reconnect attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts} in ${delay}ms`
     );
 
     reconnectTimeoutRef.current = setTimeout(() => {
@@ -273,7 +283,7 @@ export function useStandSync({
         setConnectionError(new Error('Max reconnection attempts reached'));
         startPollingFallback();
       }
-    }, reconnectInterval);
+    }, delay);
   }, [reconnectInterval, maxReconnectAttempts, startPollingFallback]);
 
   const connect = useCallback(() => {
@@ -308,11 +318,23 @@ export function useStandSync({
         setConnectionError(null);
         reconnectAttemptsRef.current = 0;
         stopPollingFallback();
+
+        // Start heartbeat to keep presence alive on the server
+        if (heartbeatIntervalRef.current) clearInterval(heartbeatIntervalRef.current);
+        heartbeatIntervalRef.current = setInterval(() => {
+          socketRef.current?.emit('message', { type: 'heartbeat' });
+        }, CLIENT_HEARTBEAT_INTERVAL_MS);
       });
 
       socket.on('disconnect', (reason) => {
         logger.debug(`[useStandSync] Disconnected: ${reason}`);
         setIsConnected(false);
+
+        // Stop heartbeat on disconnect
+        if (heartbeatIntervalRef.current) {
+          clearInterval(heartbeatIntervalRef.current);
+          heartbeatIntervalRef.current = null;
+        }
 
         // Attempt reconnection if not manually disconnected
         if (reason !== 'io client disconnect' && reconnectAttemptsRef.current < maxReconnectAttempts) {
@@ -540,6 +562,10 @@ export function useStandSync({
       // Cleanup on unmount
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
+      }
+      if (heartbeatIntervalRef.current) {
+        clearInterval(heartbeatIntervalRef.current);
+        heartbeatIntervalRef.current = null;
       }
 
       stopPollingFallback();

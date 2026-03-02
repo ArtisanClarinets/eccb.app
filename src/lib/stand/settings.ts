@@ -32,6 +32,7 @@ export interface StandGlobalSettings {
   maintenanceMessage: string | null;
   pollingIntervalMs: number;
   websocketEnabled: boolean;
+  websocketPort: number;
 }
 
 /** Allowlist — only these keys can be written by the admin form */
@@ -40,11 +41,12 @@ export const STAND_SETTING_KEYS: Array<keyof StandGlobalSettings> = [
   'offlineEnabled', 'practiceTrackingEnabled', 'audioSyncEnabled',
   'defaultAutoTurnDelay', 'maxPdfSizeBytes', 'maxFileSizeMb',
   'allowOfflineSync', 'accessPolicy', 'maintenanceMessage', 'pollingIntervalMs',
+  'websocketPort',
 ];
 
 const DEFAULT_SETTINGS: StandGlobalSettings = {
   enabled: true,
-  realtimeMode: 'polling',
+  realtimeMode: process.env.ENABLE_WEBSOCKETS === 'true' ? 'websocket' : 'polling',
   maxStrokeDataBytes: 512_000,
   maxAnnotationsPerPage: 100,
   offlineEnabled: false,
@@ -57,7 +59,8 @@ const DEFAULT_SETTINGS: StandGlobalSettings = {
   accessPolicy: 'any_member',
   maintenanceMessage: null,
   pollingIntervalMs: 5_000,
-  websocketEnabled: false,
+  websocketEnabled: process.env.ENABLE_WEBSOCKETS === 'true',
+  websocketPort: parseInt(process.env.SOCKET_PORT || '3005', 10),
 };
 
 const KEY_PREFIX = 'stand.';

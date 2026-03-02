@@ -39,6 +39,7 @@ const formSchema = z.object({
   // Connectivity
   'stand.realtimeMode': z.enum(['polling', 'websocket']),
   'stand.websocketEnabled': z.boolean(),
+  'stand.websocketPort': z.coerce.number().int().min(1024).max(65535),
   'stand.pollingIntervalMs': z.coerce.number().int().min(1000).max(60_000),
 
   // Offline / sync
@@ -94,6 +95,7 @@ export function MusicStandSettingsForm({ settings }: MusicStandSettingsFormProps
       'stand.enabled': boolVal(settings, 'stand.enabled', true),
       'stand.realtimeMode': (settings['stand.realtimeMode'] as 'polling' | 'websocket') ?? 'polling',
       'stand.websocketEnabled': boolVal(settings, 'stand.websocketEnabled', false),
+      'stand.websocketPort': numVal(settings, 'stand.websocketPort', 3005),
       'stand.pollingIntervalMs': numVal(settings, 'stand.pollingIntervalMs', 5000),
       'stand.offlineEnabled': boolVal(settings, 'stand.offlineEnabled', false),
       'stand.allowOfflineSync': boolVal(settings, 'stand.allowOfflineSync', false),
@@ -203,6 +205,23 @@ export function MusicStandSettingsForm({ settings }: MusicStandSettingsFormProps
                   <FormControl>
                     <Switch checked={field.value} onCheckedChange={field.onChange} />
                   </FormControl>
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="stand.websocketPort"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>WebSocket Port</FormLabel>
+                  <FormControl>
+                    <Input type="number" min={1024} max={65535} {...field} />
+                  </FormControl>
+                  <FormDescription>
+                    Port for the standalone socket server. Default: 3005. Changes require restarting the WebSocket worker.
+                  </FormDescription>
+                  <FormMessage />
                 </FormItem>
               )}
             />

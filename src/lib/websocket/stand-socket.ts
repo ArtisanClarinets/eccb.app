@@ -1,36 +1,62 @@
-import { Server as SocketIOServer } from 'socket.io';
+/**
+ * Stand Socket Server — Enterprise WebSocket implementation
+ *
+ * Features:
+ *  - Redis-backed state & presence (no in-memory Maps)
+ *  - Socket.IO Redis Adapter for multi-node horizontal scaling
+ *  - Better-Auth session token validation on handshake
+ *  - Per-event rooms with heartbeat-based presence TTL
+ *  - Zod-validated incoming messages
+ *  - Graceful shutdown with adapter close
+ */
 
+import { Server as SocketIOServer, type Socket } from 'socket.io';
+import { createAdapter } from '@socket.io/redis-adapter';
+import { Redis } from 'ioredis';
+import http from 'node:http';
 import { prisma } from '@/lib/db';
 import { canAccessEvent } from '@/lib/stand/access';
+import { logger } from '@/lib/logger';
 import { z } from 'zod';
+
+// =============================================================================
+// CONSTANTS
+// =============================================================================
+
+/** TTL for a client's presence entry. Heartbeats must refresh before expiry. */
+const PRESENCE_TTL_SECONDS = 90;
+/** TTL for stand state (kept alive while any client is in the room). */
+const STATE_TTL_SECONDS = 3600; // 1 hour
+/** Heartbeat interval expected from each socket client (ms). */
+export const HEARTBEAT_INTERVAL_MS = 30_000;
 
 // =============================================================================
 // TYPES
 // =============================================================================
 
-interface ConnectedClient {
+export interface ConnectedClient {
   id: string;
   userId: string;
   name: string;
   section?: string;
   socketId: string;
   eventId: string;
-  joinedAt: Date;
+  joinedAt: string; // ISO
 }
 
-interface StandState {
+export interface StandState {
   eventId: string;
   currentPage?: number;
   currentPieceIndex?: number;
   nightMode?: boolean;
-  lastUpdated: Date;
+  lastUpdated: string; // ISO
 }
 
 // =============================================================================
-// ZOD SCHEMAS FOR MESSAGE VALIDATION
+// ZOD SCHEMAS
 // =============================================================================
 
-const presenceMessageSchema = z.object({
+const presenceSchema = z.object({
   type: z.literal('presence'),
   userId: z.string(),
   name: z.string(),
@@ -38,7 +64,7 @@ const presenceMessageSchema = z.object({
   status: z.enum(['joined', 'left']),
 });
 
-const commandMessageSchema = z.object({
+const commandSchema = z.object({
   type: z.literal('command'),
   action: z.enum(['setPage', 'setPiece', 'toggleNightMode']),
   page: z.number().int().positive().optional(),
@@ -46,230 +72,259 @@ const commandMessageSchema = z.object({
   value: z.boolean().optional(),
 });
 
-const modeMessageSchema = z.object({
+const modeSchema = z.object({
   type: z.literal('mode'),
   name: z.string(),
   value: z.unknown(),
 });
 
-const annotationMessageSchema = z.object({
+const annotationSchema = z.object({
   type: z.literal('annotation'),
   data: z.record(z.string(), z.unknown()),
 });
 
+const heartbeatSchema = z.object({
+  type: z.literal('heartbeat'),
+});
+
 const baseMessageSchema = z.discriminatedUnion('type', [
-  presenceMessageSchema,
-  commandMessageSchema,
-  modeMessageSchema,
-  annotationMessageSchema,
+  presenceSchema,
+  commandSchema,
+  modeSchema,
+  annotationSchema,
+  heartbeatSchema,
 ]);
 
-type StandMessage = z.infer<typeof baseMessageSchema>;
+export type StandMessage = z.infer<typeof baseMessageSchema>;
 
 // =============================================================================
-// IN-MEMORY STATE (In production, use Redis)
+// REDIS KEY HELPERS
 // =============================================================================
 
-// Map of eventId -> connected clients
-const eventRooms = new Map<string, Map<string, ConnectedClient>>();
-
-// Map of eventId -> current stand state
-const standStates = new Map<string, StandState>();
-
-// Socket.IO server instance (will be initialized lazily)
-let io: SocketIOServer | null = null;
+const Keys = {
+  /** Hash: socketId → JSON(ConnectedClient) */
+  roomClients: (eventId: string) => `stand:room:${eventId}:clients`,
+  /** String: JSON(StandState) */
+  roomState: (eventId: string) => `stand:room:${eventId}:state`,
+  /** Hash: userId → ISO timestamp of last heartbeat */
+  presence: (eventId: string) => `stand:room:${eventId}:presence`,
+};
 
 // =============================================================================
-// HELPER FUNCTIONS
+// REDIS STATE HELPERS
 // =============================================================================
 
-/**
- * Get or create the Socket.IO server instance
- */
-export function getStandSocketServer(): SocketIOServer {
-  if (!io) {
-    // This is a placeholder - in production, you'd integrate with a custom server
-    // For Next.js API routes, we'll use a different approach
-    throw new Error(
-      'Socket.IO server not initialized. Use standSocketHandler for WebSocket connections.'
-    );
-  }
-  return io;
+async function redisAddClient(redis: Redis, client: ConnectedClient): Promise<void> {
+  const key = Keys.roomClients(client.eventId);
+  await redis.hset(key, client.socketId, JSON.stringify(client));
+  await redis.expire(key, STATE_TTL_SECONDS);
+  await redis.hset(Keys.presence(client.eventId), client.userId, new Date().toISOString());
+  await redis.expire(Keys.presence(client.eventId), STATE_TTL_SECONDS);
 }
 
-/**
- * Get user info for presence
- */
-async function getUserInfo(userId: string): Promise<{ name: string; section?: string }> {
-  const member = await prisma.member.findFirst({
-    where: { userId },
-    include: {
-      sections: {
-        include: { section: true },
-        where: { isLeader: true },
-      },
-    },
-  });
+async function redisRemoveClient(
+  redis: Redis,
+  eventId: string,
+  socketId: string,
+): Promise<ConnectedClient | null> {
+  const key = Keys.roomClients(eventId);
+  const raw = await redis.hget(key, socketId);
+  if (!raw) return null;
+  await redis.hdel(key, socketId);
+  return JSON.parse(raw) as ConnectedClient;
+}
 
-  if (!member) {
+async function redisGetClients(redis: Redis, eventId: string): Promise<ConnectedClient[]> {
+  const hash = await redis.hgetall(Keys.roomClients(eventId));
+  if (!hash) return [];
+  return Object.values(hash).map((v) => JSON.parse(v) as ConnectedClient);
+}
+
+async function redisGetState(redis: Redis, eventId: string): Promise<StandState | null> {
+  const raw = await redis.get(Keys.roomState(eventId));
+  if (!raw) return null;
+  return JSON.parse(raw) as StandState;
+}
+
+async function redisUpdateState(
+  redis: Redis,
+  eventId: string,
+  updates: Partial<StandState>,
+): Promise<StandState> {
+  const existing = await redisGetState(redis, eventId);
+  const next: StandState = {
+    ...(existing ?? { eventId }),
+    ...updates,
+    eventId,
+    lastUpdated: new Date().toISOString(),
+  };
+  await redis.set(Keys.roomState(eventId), JSON.stringify(next), 'EX', STATE_TTL_SECONDS);
+  return next;
+}
+
+async function redisHeartbeat(redis: Redis, eventId: string, userId: string): Promise<void> {
+  await redis.hset(Keys.presence(eventId), userId, new Date().toISOString());
+  await redis.expire(Keys.presence(eventId), STATE_TTL_SECONDS);
+}
+
+async function pruneStalePresence(redis: Redis, eventId: string): Promise<void> {
+  const hash = await redis.hgetall(Keys.presence(eventId));
+  if (!hash) return;
+  const cutoff = Date.now() - PRESENCE_TTL_SECONDS * 1_000;
+  const stale = Object.entries(hash)
+    .filter(([, ts]) => new Date(ts).getTime() < cutoff)
+    .map(([uid]) => uid);
+  if (stale.length > 0) {
+    await redis.hdel(Keys.presence(eventId), ...stale);
+  }
+}
+
+// =============================================================================
+// SESSION VALIDATION
+// =============================================================================
+
+/**
+ * Validate a better-auth session token against the Session table.
+ * Returns userId if valid and not expired, null otherwise.
+ */
+async function validateSession(token: string | undefined): Promise<string | null> {
+  if (!token) return null;
+  try {
+    const session = await prisma.session.findFirst({
+      where: { token, expiresAt: { gt: new Date() } },
+      select: { userId: true },
+    });
+    return session?.userId ?? null;
+  } catch (err) {
+    logger.error('[WS] Session validation error', { error: err });
+    return null;
+  }
+}
+
+// =============================================================================
+// USER INFO
+// =============================================================================
+
+async function getUserInfo(userId: string): Promise<{ name: string; section?: string }> {
+  try {
+    const member = await prisma.member.findFirst({
+      where: { userId },
+      include: {
+        sections: {
+          include: { section: true },
+          where: { isLeader: true },
+          take: 1,
+        },
+      },
+    });
+    if (!member) return { name: 'Unknown User' };
+    return {
+      name: `${member.firstName} ${member.lastName}`.trim() || 'Unknown User',
+      section: member.sections[0]?.section.name,
+    };
+  } catch {
     return { name: 'Unknown User' };
   }
-
-  return {
-    name: `${member.firstName} ${member.lastName}`,
-    section: member.sections[0]?.section.name,
-  };
 }
 
-/**
- * Broadcast message to all clients in an event room (except sender)
- */
-function _broadcastToRoom(
-  eventId: string,
-  message: StandMessage,
-  excludeSocketId?: string
-): void {
-  const room = eventRooms.get(eventId);
-  if (!room) return;
+// =============================================================================
+// MESSAGE PARSING
+// =============================================================================
 
-  const _messageStr = JSON.stringify(message);
-
-  room.forEach((client) => {
-    if (client.socketId !== excludeSocketId) {
-      // In a real implementation, we'd use the actual socket
-      // For now, we store the message for polling clients
-      console.log(`[WS] Broadcast to ${client.userId}:`, message);
-    }
-  });
-}
-
-/**
- * Get all connected clients in an event room
- */
-function getRoomClients(eventId: string): ConnectedClient[] {
-  const room = eventRooms.get(eventId);
-  if (!room) return [];
-  return Array.from(room.values());
-}
-
-/**
- * Update stand state for an event
- */
-function updateStandState(eventId: string, updates: Partial<StandState>): StandState {
-  let state = standStates.get(eventId);
-  if (!state) {
-    state = {
-      eventId,
-      lastUpdated: new Date(),
-    };
-  }
-
-  state = {
-    ...state,
-    ...updates,
-    lastUpdated: new Date(),
-  };
-
-  standStates.set(eventId, state);
-  return state;
-}
-
-/**
- * Get current stand state for an event
- */
-export function getStandState(eventId: string): StandState | undefined {
-  return standStates.get(eventId);
-}
-
-/**
- * Add a client to an event room
- */
-export function addClientToRoom(client: ConnectedClient): void {
-  let room = eventRooms.get(client.eventId);
-  if (!room) {
-    room = new Map();
-    eventRooms.set(client.eventId, room);
-  }
-  room.set(client.socketId, client);
-}
-
-/**
- * Remove a client from an event room
- */
-export function removeClientFromRoom(eventId: string, socketId: string): ConnectedClient | undefined {
-  const room = eventRooms.get(eventId);
-  if (!room) return undefined;
-
-  const client = room.get(socketId);
-  room.delete(socketId);
-
-  if (room.size === 0) {
-    eventRooms.delete(eventId);
-  }
-
-  return client;
-}
-
-/**
- * Validate and parse incoming message
- */
 export function parseMessage(data: unknown): StandMessage | null {
   try {
     return baseMessageSchema.parse(data);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      console.error('[WS] Invalid message format:', error.issues);
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      logger.warn('[WS] Invalid message', { issues: err.issues });
     }
     return null;
   }
 }
 
 // =============================================================================
-// SOCKET.IO HANDLER FOR CUSTOM SERVER
+// SERVER INITIALIZATION
 // =============================================================================
 
+let io: SocketIOServer | null = null;
+
 /**
- * Initialize Socket.IO server with HTTP server
- * This should be called from a custom server.ts or route handler
+ * Return the running Socket.IO instance (throws if not yet started).
  */
-export function initializeStandSocketServer(httpServer: unknown): SocketIOServer {
-   
-  io = new SocketIOServer(httpServer as any, {
+export function getStandSocketServer(): SocketIOServer {
+  if (!io) {
+    throw new Error('Socket.IO server not initialized. Call initializeStandSocketServer first.');
+  }
+  return io;
+}
+
+/**
+ * Initialize the Socket.IO server, attach the Redis adapter, and wire all
+ * connection/message handlers.
+ *
+ * @param httpServer  http.Server to attach Socket.IO to.
+ * @param pubClient   ioredis publish client.
+ * @param subClient   ioredis subscribe client (separate instance).
+ * @param appUrl      Allowed CORS origin.
+ */
+export function initializeStandSocketServer(
+  httpServer: http.Server,
+  pubClient: Redis,
+  subClient: Redis,
+  appUrl?: string,
+): SocketIOServer {
+  const origin = appUrl ?? process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+
+  io = new SocketIOServer(httpServer, {
     path: '/api/stand/socket',
-    cors: {
-      origin: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
-      methods: ['GET', 'POST'],
-    },
-    pingTimeout: 60000,
-    pingInterval: 25000,
+    cors: { origin, methods: ['GET', 'POST'], credentials: true },
+    pingTimeout: 60_000,
+    pingInterval: 25_000,
+    transports: ['websocket', 'polling'],
   });
 
-  io.on('connection', async (socket) => {
-    console.log('[WS] Client connected:', socket.id);
+  // Redis adapter for horizontal scaling
+  io.adapter(createAdapter(pubClient, subClient));
+  logger.info('[WS] Redis adapter attached');
 
-    // Extract eventId from query params (set during connection)
-    const eventId = socket.handshake.query.eventId as string;
-    const userId = socket.handshake.query.userId as string;
+  // ── Auth middleware ───────────────────────────────────────────────────────
+  io.use(async (socket, next) => {
+    const token =
+      (socket.handshake.auth?.token as string | undefined) ??
+      (socket.handshake.query?.token as string | undefined) ??
+      extractCookieValue(socket.handshake.headers?.cookie, 'better-auth.session_token');
 
-    if (!eventId || !userId) {
-      console.log('[WS] Missing eventId or userId, disconnecting');
+    const userId = await validateSession(token);
+    if (!userId) {
+      logger.warn('[WS] Rejected handshake — invalid session', { socketId: socket.id });
+      return next(new Error('Unauthorized'));
+    }
+    socket.data.userId = userId;
+    next();
+  });
+
+  // ── Connection handler ────────────────────────────────────────────────────
+  io.on('connection', async (socket: Socket) => {
+    const eventId = socket.handshake.query.eventId as string | undefined;
+    const userId = socket.data.userId as string;
+
+    if (!eventId) {
+      socket.emit('error', { message: 'eventId is required' });
       socket.disconnect();
       return;
     }
 
-    // Verify permissions
     const hasAccess = await canAccessEvent(userId, eventId);
     if (!hasAccess) {
-      console.log('[WS] User lacks permission for event:', eventId);
-      socket.emit('error', { message: 'Unauthorized access to event' });
+      logger.warn('[WS] Unauthorised event access', { userId, eventId });
+      socket.emit('error', { message: 'Access denied' });
       socket.disconnect();
       return;
     }
 
-    // Get user info
-    const userInfo = await getUserInfo(userId);
+    socket.join(eventId);
 
-    // Add client to room
+    const userInfo = await getUserInfo(userId);
     const client: ConnectedClient = {
       id: socket.id,
       userId,
@@ -277,43 +332,38 @@ export function initializeStandSocketServer(httpServer: unknown): SocketIOServer
       section: userInfo.section,
       socketId: socket.id,
       eventId,
-      joinedAt: new Date(),
+      joinedAt: new Date().toISOString(),
     };
 
-    addClientToRoom(client);
+    await redisAddClient(pubClient, client);
 
-    // Update user's stand session in database
-    await prisma.standSession.upsert({
-      where: {
-        eventId_userId: {
-          eventId,
-          userId,
-        },
-      },
-      create: {
-        eventId,
-        userId,
-        lastSeenAt: new Date(),
-      },
-      update: {
-        lastSeenAt: new Date(),
-      },
+    try {
+      await prisma.standSession.upsert({
+        where: { eventId_userId: { eventId, userId } },
+        create: { eventId, userId, lastSeenAt: new Date() },
+        update: { lastSeenAt: new Date() },
+      });
+    } catch (err) {
+      logger.error('[WS] standSession upsert failed', { error: err });
+    }
+
+    // Hydrate new client with current state + roster
+    const [currentState, clients] = await Promise.all([
+      redisGetState(pubClient, eventId),
+      redisGetClients(pubClient, eventId),
+    ]);
+    socket.emit('state', currentState);
+    socket.emit('roster', {
+      type: 'roster',
+      members: clients.map((c) => ({
+        userId: c.userId,
+        name: c.name,
+        section: c.section,
+        joinedAt: c.joinedAt,
+      })),
     });
 
-    // Send current state to new client
-    const currentState = getStandState(eventId);
-    socket.emit('state', currentState);
-
-    // Send roster to new client
-    const roster = getRoomClients(eventId).map((c) => ({
-      userId: c.userId,
-      name: c.name,
-      section: c.section,
-      joinedAt: c.joinedAt.toISOString(),
-    }));
-    socket.emit('roster', roster);
-
-    // Broadcast presence to other clients
+    // Announce new joiner to peers
     socket.to(eventId).emit('message', {
       type: 'presence',
       userId,
@@ -322,113 +372,149 @@ export function initializeStandSocketServer(httpServer: unknown): SocketIOServer
       status: 'joined',
     } as StandMessage);
 
-    // Handle incoming messages
+    logger.info('[WS] Client joined', { socketId: socket.id, userId, eventId });
+
+    // ── Message handler ───────────────────────────────────────────────────
     socket.on('message', async (data: unknown) => {
-      const message = parseMessage(data);
-      if (!message) {
+      const msg = parseMessage(data);
+      if (!msg) {
         socket.emit('error', { message: 'Invalid message format' });
         return;
       }
 
-      switch (message.type) {
-        case 'command':
-          // Update stand state
-          if (message.action === 'setPage') {
-            updateStandState(eventId, { currentPage: message.page });
-          } else if (message.action === 'setPiece') {
-            updateStandState(eventId, { currentPieceIndex: message.pieceIndex });
-          } else if (message.action === 'toggleNightMode') {
-            const currentState = getStandState(eventId);
-            updateStandState(eventId, { nightMode: message.value ?? !currentState?.nightMode });
-          }
-
-          // Broadcast to other clients
-          socket.to(eventId).emit('message', message);
+      switch (msg.type) {
+        case 'heartbeat':
+          await redisHeartbeat(pubClient, eventId, userId);
           break;
 
-        case 'mode':
-          // Update stand state
-          if (message.name === 'nightMode') {
-            updateStandState(eventId, { nightMode: message.value as boolean });
+        case 'command': {
+          let patch: Partial<StandState> = {};
+          if (msg.action === 'setPage' && msg.page !== undefined)
+            patch = { currentPage: msg.page };
+          else if (msg.action === 'setPiece' && msg.pieceIndex !== undefined)
+            patch = { currentPieceIndex: msg.pieceIndex };
+          else if (msg.action === 'toggleNightMode') {
+            const cur = await redisGetState(pubClient, eventId);
+            patch = { nightMode: msg.value ?? !cur?.nightMode };
           }
+          await redisUpdateState(pubClient, eventId, patch);
+          io!.to(eventId).emit('message', msg);
+          break;
+        }
 
-          // Broadcast to other clients
-          socket.to(eventId).emit('message', message);
+        case 'mode':
+          if (msg.name === 'nightMode') {
+            await redisUpdateState(pubClient, eventId, { nightMode: msg.value as boolean });
+          }
+          io!.to(eventId).emit('message', msg);
           break;
 
         case 'annotation':
-          // Broadcast annotation (could persist to DB here)
-          socket.to(eventId).emit('message', message);
+          io!.to(eventId).emit('message', msg);
           break;
 
         case 'presence':
-          // Already handled, but acknowledge
           break;
       }
     });
 
-    // Handle disconnect
-    socket.on('disconnect', async () => {
-      console.log('[WS] Client disconnected:', socket.id);
-
-      const removedClient = removeClientFromRoom(eventId, socket.id);
-
-      if (removedClient) {
-        // Broadcast left presence
+    // ── Disconnect handler ────────────────────────────────────────────────
+    socket.on('disconnect', async (reason) => {
+      logger.info('[WS] Client disconnected', { socketId: socket.id, userId, eventId, reason });
+      const removed = await redisRemoveClient(pubClient, eventId, socket.id);
+      await pruneStalePresence(pubClient, eventId);
+      if (removed) {
         socket.to(eventId).emit('message', {
           type: 'presence',
-          userId: removedClient.userId,
-          name: removedClient.name,
-          section: removedClient.section,
+          userId: removed.userId,
+          name: removed.name,
+          section: removed.section,
           status: 'left',
         } as StandMessage);
       }
     });
 
-    // Handle errors
-    socket.on('error', (error) => {
-      console.error('[WS] Socket error:', error);
+    socket.on('error', (err) => {
+      logger.error('[WS] Socket error', { socketId: socket.id, error: err });
     });
   });
 
+  logger.info('[WS] Stand socket server initialized', { path: '/api/stand/socket', origin });
   return io;
 }
 
 // =============================================================================
-// API ROUTE HANDLER (For Next.js compatibility)
+// GRACEFUL SHUTDOWN
 // =============================================================================
 
-/**
- * This function handles WebSocket upgrade for the Next.js API route
- * In production, you'd typically use a custom server or external service
- */
-export async function handleWebSocketUpgrade(
-  _req: unknown
-): Promise<{ success: boolean; error?: string }> {
-  // This is a placeholder - in Next.js App Router, WebSocket upgrades
-  // require a custom server. This function documents the approach.
-  //
-  // For production, consider:
-  // 1. Using a custom server.ts with Express + Socket.IO
-  // 2. Using a separate WebSocket microservice
-  // 3. Using Pusher/Ably for managed WebSockets
-  //
-  // The polling-based sync in route.ts provides basic functionality
-  // that works without custom server infrastructure.
-
-  return {
-    success: false,
-    error:
-      'WebSocket upgrade requires custom server. Use polling sync at /api/stand/sync for now.',
-  };
+export async function closeStandSocketServer(): Promise<void> {
+  if (!io) return;
+  return new Promise((resolve) => {
+    io!.close(() => {
+      logger.info('[WS] Socket.IO server closed');
+      io = null;
+      resolve();
+    });
+  });
 }
 
 // =============================================================================
-// EXPORTS
+// ADMIN HELPERS
 // =============================================================================
 
-export type {
-  ConnectedClient,
-  StandState,
-  StandMessage,
-};
+export async function getActiveRooms(
+  redis: Redis,
+): Promise<Array<{ eventId: string; clientCount: number; clients: ConnectedClient[] }>> {
+  try {
+    const keys = await redis.keys('stand:room:*:clients');
+    if (keys.length === 0) return [];
+    const rooms = await Promise.all(
+      keys.map(async (key) => {
+        const parts = key.split(':');
+        const eventId = parts[2];
+        const clients = await redisGetClients(redis, eventId);
+        return { eventId, clientCount: clients.length, clients };
+      }),
+    );
+    return rooms.filter((r) => r.clientCount > 0);
+  } catch (err) {
+    logger.error('[WS] getActiveRooms error', { error: err });
+    return [];
+  }
+}
+
+export async function getEventStandState(
+  redis: Redis,
+  eventId: string,
+): Promise<StandState | null> {
+  return redisGetState(redis, eventId);
+}
+
+// =============================================================================
+// INTERNAL UTILITIES
+// =============================================================================
+
+function extractCookieValue(cookieHeader: string | undefined, name: string): string | undefined {
+  if (!cookieHeader) return undefined;
+  const match = cookieHeader
+    .split(';')
+    .map((c) => c.trim())
+    .find((c) => c.startsWith(`${name}=`));
+  return match ? decodeURIComponent(match.slice(name.length + 1)) : undefined;
+}
+
+// =============================================================================
+// LEGACY / POLLING COMPATIBILITY
+// =============================================================================
+
+export async function handleWebSocketUpgrade(
+  _req: unknown,
+): Promise<{ success: boolean; error?: string }> {
+  return io
+    ? { success: true }
+    : {
+        success: false,
+        error:
+          'Socket.IO server not running on this process. Start socket-worker or set ENABLE_WEBSOCKETS=true.',
+      };
+}
