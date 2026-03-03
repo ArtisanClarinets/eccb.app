@@ -290,6 +290,15 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
       llm_verification_provider: (settings['llm_verification_provider'] as ProviderValue) || '' as ProviderValue,
       llm_header_label_provider: (settings['llm_header_label_provider'] as ProviderValue) || '' as ProviderValue,
       llm_adjudicator_provider: (settings['llm_adjudicator_provider'] as ProviderValue) || '' as ProviderValue,
+      // API keys must be initialized from settings so fetchModelsFor can detect saved keys
+      llm_openai_api_key: (settings['llm_openai_api_key'] as string) || '',
+      llm_anthropic_api_key: (settings['llm_anthropic_api_key'] as string) || '',
+      llm_openrouter_api_key: (settings['llm_openrouter_api_key'] as string) || '',
+      llm_gemini_api_key: (settings['llm_gemini_api_key'] as string) || '',
+      llm_ollama_cloud_api_key: (settings['llm_ollama_cloud_api_key'] as string) || '',
+      llm_mistral_api_key: (settings['llm_mistral_api_key'] as string) || '',
+      llm_groq_api_key: (settings['llm_groq_api_key'] as string) || '',
+      llm_custom_api_key: (settings['llm_custom_api_key'] as string) || '',
       smart_upload_confidence_threshold: parseNum(settings['smart_upload_confidence_threshold']),
       smart_upload_auto_approve_threshold: parseNum(settings['smart_upload_auto_approve_threshold']),
       smart_upload_rate_limit_rpm: parseNum(settings['smart_upload_rate_limit_rpm']),
@@ -458,6 +467,9 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
         'llm_anthropic_api_key',
         'llm_openrouter_api_key',
         'llm_gemini_api_key',
+        'llm_ollama_cloud_api_key',
+        'llm_mistral_api_key',
+        'llm_groq_api_key',
         'llm_custom_api_key',
       ];
       allKeyFields.forEach((field) => {

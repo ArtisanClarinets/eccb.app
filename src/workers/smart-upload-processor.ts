@@ -372,7 +372,6 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
 
   // Load LLM config (uses smart_upload_* settings from DB)
   const llmConfig = await loadSmartUploadRuntimeConfig();
-  const adapterConfig = runtimeToAdapterConfig(llmConfig);
 
   // ── Budget tracking ────────────────────────────────────────────────────
   const budget = createSessionBudget(sessionId, {
@@ -612,11 +611,9 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
   let extraction: ExtractedMetadata;
   let firstPassRaw: string | null = null;
 
-  if (useFullVisionLLM) {
-    // ── Full-vision LLM path (fallback from OCR-first) ─────────────────
-    // When the provider supports native PDF input, send the entire PDF
-    // directly — this is faster and far more accurate than rendering
-    // individual page images or header crops.
+  if (!useFullVisionLLM) {
+    // ── OCR-first path sufficient — use page-labeler results directly ───
+    // No full-vision LLM call needed; OCR confidence was above threshold.
     // -----------------------------------------------------------------
 
     // Extract title/composer from text-layer + filename parsing
@@ -672,8 +669,8 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
       provenance: ocrProvenance,
     });
   } else {
-    // ── LLM fallback: deterministic segmentation insufficient ─────────────
     // ── Full-vision LLM path (fallback from OCR-first) ─────────────────
+    // OCR-first confidence was insufficient — call the full-vision LLM.
     // When the provider supports native PDF input, send the entire PDF
     // directly — this is faster and far more accurate than rendering
     // individual page images or header crops.
@@ -697,9 +694,11 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
     let pageImagesRef: string[] = [];
 
     // Use step-specific config for full-vision extraction
-    const visionStepConfig = buildAdapterConfigForStep(llmConfig, 'vision');
+    const visionStepConfig = await buildAdapterConfigForStep(llmConfig, 'vision');
     const visionAdapterConfig = {
       ...runtimeToAdapterConfig(llmConfig),
+      llm_provider: visionStepConfig.provider,
+      llm_endpoint_url: visionStepConfig.endpointUrl,
       llm_vision_model: visionStepConfig.model,
     };
 
@@ -748,7 +747,7 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
           system: visionStepConfig.systemPrompt || DEFAULT_VISION_SYSTEM_PROMPT,
           responseFormat: { type: 'json' },
           modelParams: visionStepConfig.modelParams,
-          maxTokens: 8192,
+          maxTokens: 65536,
           temperature: 0.1,
           documents: [pdfDocument],
         },
@@ -848,9 +847,11 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
             });
 
       // Use step-specific config for header-label pass
-      const headerLabelStepConfig = buildAdapterConfigForStep(llmConfig, 'header-label');
+      const headerLabelStepConfig = await buildAdapterConfigForStep(llmConfig, 'header-label');
       const headerAdapterConfig = {
         ...runtimeToAdapterConfig(llmConfig),
+        llm_provider: headerLabelStepConfig.provider,
+        llm_endpoint_url: headerLabelStepConfig.endpointUrl,
         llm_vision_model: headerLabelStepConfig.model,
       };
 
@@ -975,7 +976,7 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
           system: visionStepConfig.systemPrompt || DEFAULT_VISION_SYSTEM_PROMPT,
           responseFormat: { type: 'json' },
           modelParams: visionStepConfig.modelParams,
-          maxTokens: 8192,
+          maxTokens: 65536,
           temperature: 0.1,
         },
       );
@@ -1001,11 +1002,11 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
         system: llmConfig.visionSystemPrompt || DEFAULT_VISION_SYSTEM_PROMPT,
         responseFormat: { type: 'json' as const },
         modelParams: llmConfig.visionModelParams,
-        maxTokens: 8192,
+        maxTokens: 65536,
         temperature: 0.1,
       };
       if (pdfDocumentRef) {
-        visionResult = await callVisionModel(adapterConfig, [], visionPromptRef, {
+        visionResult = await callVisionModel(visionAdapterConfig, [], visionPromptRef, {
           ...retryOptions,
           documents: [pdfDocumentRef],
         });
@@ -1015,7 +1016,7 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
           base64Data,
           label: `Original Page ${sampledIndices[index] + 1}`,
         }));
-        visionResult = await callVisionModel(adapterConfig, retryImages, visionPromptRef, retryOptions);
+        visionResult = await callVisionModel(visionAdapterConfig, retryImages, visionPromptRef, retryOptions);
       }
       budget.record();
 

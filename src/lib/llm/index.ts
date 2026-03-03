@@ -30,9 +30,9 @@ import {
 // --- Constants ---
 const MAX_RETRIES = 3;
 const RETRY_BASE_MS = 1000;
-const REQUEST_TIMEOUT_MS = 90000; // 90 seconds
+const REQUEST_TIMEOUT_MS = 300000; // 5 minutes — large PDFs with Gemini 2.5 thinking need time
 const MIN_MAX_TOKENS = 64;
-const MAX_MAX_TOKENS = 16384;
+const MAX_MAX_TOKENS = 65536; // Gemini 2.5 Flash thinking tokens count toward maxOutputTokens
 const MIN_TEMPERATURE = 0;
 const MAX_TEMPERATURE = 2;
 
@@ -202,8 +202,32 @@ export async function callVisionModel(
       logger.info('Vision LLM response received', {
         provider: config.llm_provider,
         model: config.llm_vision_model,
+        finishReason: result.finishReason,
         usage: result.usage,
       });
+
+      // Retry on non-STOP finish reasons (RECITATION, MAX_TOKENS, SAFETY) that
+      // produce truncated output — these are transient and often succeed on retry.
+      if (
+        result.finishReason &&
+        result.finishReason !== 'STOP' &&
+        attempt < MAX_RETRIES
+      ) {
+        const wait = RETRY_BASE_MS * 2 ** (attempt - 1);
+        logger.warn('LLM response truncated due to finishReason, retrying...', {
+          provider: config.llm_provider,
+          model: config.llm_vision_model,
+          finishReason: result.finishReason,
+          contentLength: result.content.length,
+          attempt,
+          wait,
+        });
+        lastError = new Error(
+          `LLM response truncated (finishReason=${result.finishReason}, ${result.content.length} chars)`,
+        );
+        await new Promise((r) => setTimeout(r, wait));
+        continue;
+      }
 
       return result;
     } catch (err) {

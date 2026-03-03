@@ -36,7 +36,7 @@ import { bootstrapSmartUploadSettings } from '@/lib/smart-upload/bootstrap';
 const TEST_MUSIC_DIR = path.resolve(__dirname, '..', 'storage', 'test_music');
 const STORAGE_DIR = path.resolve(__dirname, '..', 'storage', 'smart-upload');
 const POLL_INTERVAL_MS = 2000;
-const MAX_WAIT_MS = 5 * 60 * 1000; // 5 minutes max per file
+const MAX_WAIT_MS = 30 * 60 * 1000; // 30 minutes max for all files
 
 // =============================================================================
 // Helpers
@@ -230,8 +230,7 @@ async function main() {
     allDone = true;
 
     for (const session of sessions) {
-      if (results.has(session.sessionId) && 
-          ['PARSED', 'PARSE_FAILED'].includes(results.get(session.sessionId)!.parseStatus)) {
+      if (results.has(session.sessionId)) {
         continue; // Already done
       }
 
@@ -258,7 +257,12 @@ async function main() {
       const notes = metadata?.notes as string | undefined;
       const ocrFirstUsed = notes?.includes('OCR-first pipeline') ?? false;
 
-      if (parseStatus === 'PARSED' || parseStatus === 'PARSE_FAILED') {
+      // Terminal states: PARSED, PARSE_FAILED, or second pass finished (COMPLETE/FAILED)
+      const secondPassStatus = (dbSession as Record<string, unknown>).secondPassStatus as string | null;
+      const isTerminal = parseStatus === 'PARSED' || parseStatus === 'PARSE_FAILED'
+        || secondPassStatus === 'COMPLETE' || secondPassStatus === 'FAILED';
+
+      if (isTerminal) {
         const ocrFirstUsed = notes?.includes('OCR-first pipeline') ?? false;
         // if requireOcrFirst fails and pipeline used LLM, treat as failure
         if (requireOcrFirst && !ocrFirstUsed) {
@@ -283,8 +287,9 @@ async function main() {
           });
           const icon = parseStatus === 'PARSED' ? '✓' : '✗';
           const pipeline = ocrFirstUsed ? 'OCR-FIRST' : 'LLM';
+          const spInfo = secondPassStatus && parseStatus !== 'PARSED' ? ` (2ndPass=${secondPassStatus})` : '';
           console.log(
-            `  ${icon} ${session.fileName}: ${parseStatus} | ` +
+            `  ${icon} ${session.fileName}: ${parseStatus}${spInfo} | ` +
             `confidence=${dbSession.confidenceScore} | ` +
             `parts=${parsedParts?.length ?? 0} | ` +
             `routing=${dbSession.routingDecision} | ` +

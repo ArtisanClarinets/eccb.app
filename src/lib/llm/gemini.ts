@@ -193,6 +193,13 @@ export class GeminiAdapter implements LLMAdapter {
       generationConfig,
     };
 
+    // 3a. For Gemini 2.5 thinking models (NOT -lite), cap the thinking budget
+    // so the model reserves most of maxOutputTokens for the JSON response.
+    // The -lite variants do NOT use thinking, so this is a no-op for them.
+    if (model.includes('2.5') && !model.includes('lite')) {
+      generationConfig.thinkingConfig = { thinkingBudget: 2048 };
+    }
+
     // 4. Add system instruction if provided.
     if (request.system) {
       bodyObj['systemInstruction'] = { parts: [{ text: request.system }] };
@@ -227,24 +234,37 @@ export class GeminiAdapter implements LLMAdapter {
     const data = response as {
       candidates?: Array<{
         content?: {
-          parts?: Array<{ text?: string }>;
+          parts?: Array<{ text?: string; thought?: boolean }>;
         };
+        finishReason?: string;
       }>;
       usageMetadata?: {
         promptTokenCount?: number;
         candidatesTokenCount?: number;
         totalTokenCount?: number;
+        thoughtsTokenCount?: number;
       };
     };
 
-    // Join ALL parts[].text — Gemini can split a single response across multiple
-    // part objects. Reading only parts[0] truncates the response and causes
-    // downstream JSON parse failures when the closing brace lands in a later part.
-    const parts = data.candidates?.[0]?.content?.parts ?? [];
-    const content = parts.map((p) => p.text ?? '').join('');
+    const candidate = data.candidates?.[0];
+    const finishReason = candidate?.finishReason;
+
+    // Log non-STOP finish reasons — these may indicate truncation from safety
+    // filters (RECITATION, SAFETY) or token limits (MAX_TOKENS).
+    if (finishReason && finishReason !== 'STOP') {
+      console.warn(`[Gemini] Non-STOP finishReason: ${finishReason}`);
+    }
+
+    // Filter out thinking parts (thought: true) — these are internal reasoning
+    // that should not be included in the response content. Only join actual
+    // response text parts.
+    const parts = candidate?.content?.parts ?? [];
+    const contentParts = parts.filter((p) => !p.thought);
+    const content = contentParts.map((p) => p.text ?? '').join('');
 
     return {
       content,
+      finishReason,
       usage: data.usageMetadata
         ? {
             promptTokens: data.usageMetadata.promptTokenCount ?? 0,

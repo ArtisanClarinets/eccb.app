@@ -13,6 +13,7 @@ import { logger } from '@/lib/logger';
 import { getDefaultEndpointForProvider } from './providers';
 import type { LLMProviderValue } from './providers';
 import { PROMPT_VERSION } from '@/lib/smart-upload/prompts';
+import { getPrimaryApiKey, getFallbackApiKey } from './api-key-service';
 
 export interface LLMRuntimeConfig {
   provider: LLMProviderValue;
@@ -289,6 +290,36 @@ export async function loadLLMConfig(): Promise<LLMRuntimeConfig> {
   const llmMaxPages = Number(db['smart_upload_llm_max_pages'] ?? 10);
   const llmMaxHeaderBatches = Number(db['smart_upload_llm_max_header_batches'] ?? 2);
 
+  // ── API keys — prefer encrypted APIKey table, fall back to SystemSetting ──
+  const PROVIDER_SLUGS = [
+    'openai', 'anthropic', 'openrouter', 'gemini',
+    'ollama-cloud', 'mistral', 'groq', 'custom',
+  ] as const;
+  const PROVIDER_DB_KEYS: Record<string, string> = {
+    openai: 'llm_openai_api_key',
+    anthropic: 'llm_anthropic_api_key',
+    openrouter: 'llm_openrouter_api_key',
+    gemini: 'llm_gemini_api_key',
+    'ollama-cloud': 'llm_ollama_cloud_api_key',
+    mistral: 'llm_mistral_api_key',
+    groq: 'llm_groq_api_key',
+    custom: 'llm_custom_api_key',
+  };
+  const apiKeys: Record<string, string> = {};
+  for (const slug of PROVIDER_SLUGS) {
+    try {
+      const encryptedKey = await getPrimaryApiKey(slug as LLMProviderValue);
+      if (encryptedKey) {
+        apiKeys[slug] = encryptedKey;
+        continue;
+      }
+    } catch {
+      // Encrypted table not available or decryption failed — fall back
+    }
+    // Fall back to SystemSetting (legacy plaintext)
+    apiKeys[slug] = db[PROVIDER_DB_KEYS[slug]] || '';
+  }
+
   return {
     // ── Providers ───────────────────────────────────────────────────────────
     // Default provider (backward compat)
@@ -316,15 +347,15 @@ export async function loadLLMConfig(): Promise<LLMRuntimeConfig> {
     headerLabelModelParams,
     adjudicatorModelParams,
     // ── API keys — DB is the single source of truth. No env fallback. ──────
-    // Use bootstrapLLMApiKeysFromEnv() once at startup to seed from env if needed.
-    openaiApiKey: db['llm_openai_api_key'] || '',
-    anthropicApiKey: db['llm_anthropic_api_key'] || '',
-    openrouterApiKey: db['llm_openrouter_api_key'] || '',
-    geminiApiKey: db['llm_gemini_api_key'] || '',
-    ollamaCloudApiKey: db['llm_ollama_cloud_api_key'] || '',
-    mistralApiKey: db['llm_mistral_api_key'] || '',
-    groqApiKey: db['llm_groq_api_key'] || '',
-    customApiKey: db['llm_custom_api_key'] || '',
+    // Prefer encrypted APIKey table, fall back to SystemSetting for migration.
+    openaiApiKey: apiKeys.openai,
+    anthropicApiKey: apiKeys.anthropic,
+    openrouterApiKey: apiKeys.openrouter,
+    geminiApiKey: apiKeys.gemini,
+    ollamaCloudApiKey: apiKeys['ollama-cloud'],
+    mistralApiKey: apiKeys.mistral,
+    groqApiKey: apiKeys.groq,
+    customApiKey: apiKeys.custom,
     // ── Threshold / behavior settings ─────────────────────────────────────
     confidenceThreshold: Number(
       db['smart_upload_confidence_threshold'] ||
@@ -506,15 +537,17 @@ export type LLMStepName = 'vision' | 'verification' | 'header-label' | 'adjudica
  * Build adapter config for a specific pipeline step.
  * Resolves the appropriate provider/model/params for that step,
  * falling back to global defaults only for backward compatibility.
+ * If the primary API key is empty, attempts to use a fallback key
+ * from the encrypted APIKey table.
  *
  * @param cfg - Full runtime config loaded from DB
  * @param stepName - Pipeline step name (vision, verification, header-label, adjudicator)
  * @returns Adapter config object with provider, model, endpoint, and API key
  */
-export function buildAdapterConfigForStep(
+export async function buildAdapterConfigForStep(
   cfg: LLMRuntimeConfig,
   stepName: LLMStepName
-): {
+): Promise<{
   provider: LLMProviderValue;
   model: string;
   modelParams: Record<string, unknown> | undefined;
@@ -522,7 +555,7 @@ export function buildAdapterConfigForStep(
   apiKey: string;
   systemPrompt: string | undefined;
   userPrompt: string | undefined;
-} {
+}> {
   // Resolve provider per step - use explicit provider or fall back to defaultProvider
   let provider: LLMProviderValue;
   let model: string;
@@ -569,8 +602,21 @@ export function buildAdapterConfigForStep(
   // Resolve endpoint (use default endpoint for the provider)
   const endpointUrl = getDefaultEndpointForProvider(provider);
 
-  // Resolve API key for the provider
-  const apiKey = getApiKeyForProvider(cfg, provider);
+  // Resolve API key for the provider (primary from config)
+  let apiKey = getApiKeyForProvider(cfg, provider);
+
+  // If primary key is empty, try fallback from encrypted APIKey table
+  if (!apiKey && provider !== 'ollama') {
+    try {
+      const fallback = await getFallbackApiKey(provider);
+      if (fallback) {
+        apiKey = fallback;
+        logger.info('Using fallback API key for step', { stepName, provider });
+      }
+    } catch {
+      // Fallback lookup failed — proceed without key
+    }
+  }
 
   return {
     provider,

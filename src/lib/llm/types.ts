@@ -65,6 +65,7 @@ export interface VisionRequest {
 
 export interface VisionResponse {
   content: string;
+  finishReason?: string;
   usage?: { promptTokens: number; completionTokens: number };
 }
 

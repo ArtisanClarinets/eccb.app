@@ -125,9 +125,11 @@ async function callVerificationLLM(
   await llmRateLimiter.consume();
 
   // Use step-specific config for verification step
-  const verificationStepConfig = buildAdapterConfigForStep(cfg, 'verification');
+  const verificationStepConfig = await buildAdapterConfigForStep(cfg, 'verification');
   const adapterConfig = {
     ...runtimeToAdapterConfig(cfg),
+    llm_provider: verificationStepConfig.provider,
+    llm_endpoint_url: verificationStepConfig.endpointUrl,
     llm_vision_model: verificationStepConfig.model,
   };
 
@@ -141,7 +143,7 @@ async function callVerificationLLM(
   const response = await callVisionModel(adapterConfig, images, prompt, {
     system: verificationStepConfig.systemPrompt || DEFAULT_VERIFICATION_SYSTEM_PROMPT,
     responseFormat: { type: 'json' as const },
-    maxTokens: 8192,
+    maxTokens: 65536,
     temperature: 0.1,
     modelParams: verificationStepConfig.modelParams,
     ...(pdfDocuments && pdfDocuments.length > 0
@@ -210,9 +212,11 @@ async function callAdjudicatorLLM(
   await llmRateLimiter.consume();
 
   // Use step-specific config for adjudicator step
-  const adjudicatorStepConfig = buildAdapterConfigForStep(cfg, 'adjudicator');
+  const adjudicatorStepConfig = await buildAdapterConfigForStep(cfg, 'adjudicator');
   const adapterConfig = {
     ...runtimeToAdapterConfig(cfg),
+    llm_provider: adjudicatorStepConfig.provider,
+    llm_endpoint_url: adjudicatorStepConfig.endpointUrl,
     llm_vision_model: adjudicatorStepConfig.model,
   };
 
@@ -236,7 +240,7 @@ async function callAdjudicatorLLM(
   const response = await callVisionModel(adapterConfig, images, prompt, {
     system: adjudicatorStepConfig.systemPrompt || DEFAULT_ADJUDICATOR_SYSTEM_PROMPT,
     responseFormat: { type: 'json' as const },
-    maxTokens: 8192,
+    maxTokens: 65536,
     temperature: 0.1,
     modelParams: adjudicatorStepConfig.modelParams,
     ...(documents ? { documents } : {}),
@@ -257,8 +261,16 @@ async function callAdjudicatorLLM(
 function parseVerificationResponse(content: string): ExtractedMetadata {
   const result = parseJsonLenient<ExtractedMetadata>(content, 'object');
   if (!result.ok) {
-    logger.error('parseVerificationResponse: JSON extraction failed', { error: result.error });
-    throw new Error('No JSON found in verification LLM response');
+    logger.warn('parseVerificationResponse: JSON extraction failed, returning low-confidence fallback', { error: result.error });
+    // Return a low-confidence fallback instead of throwing, so the session
+    // can still be finalised (quality-gate will flag it for human review).
+    return {
+      title: '',
+      composer: '',
+      cuttingInstructions: [],
+      confidenceScore: 0,
+      requiresHumanReview: true,
+    } as unknown as ExtractedMetadata;
   }
   return result.value;
 }
@@ -845,6 +857,18 @@ async function processSecondPass(job: Job<SmartUploadSecondPassJobData>): Promis
           status: 'COMPLETE',
           model: llmConfig.adjudicatorModel || llmConfig.verificationModel,
         };
+
+        // If adjudicator failed to parse (returned zero-confidence fallback),
+        // keep the valid verification result instead of the empty adjudicator output.
+        if (finalConfidence === 0 && verificationConfidence > 0) {
+          logger.warn('Adjudicator produced zero-confidence result — falling back to verification result', {
+            sessionId, verificationConfidence,
+          });
+          finalMetadata = secondPassResult;
+          finalConfidence = verificationConfidence;
+          adjudicationData.requiresHumanReview = true;
+        }
+
         await progress('adjudicating', 90, 'Adjudication complete');
       }
 
@@ -950,6 +974,18 @@ Include a "corrections" field explaining any corrections made from the first pas
           status: 'COMPLETE',
           model: llmConfig.adjudicatorModel || llmConfig.verificationModel,
         };
+
+        // If adjudicator failed to parse (returned zero-confidence fallback),
+        // keep the valid verification result instead of the empty adjudicator output.
+        if (finalConfidence === 0 && verificationConfidence > 0) {
+          logger.warn('Adjudicator produced zero-confidence result — falling back to verification result', {
+            sessionId, verificationConfidence,
+          });
+          finalMetadata = secondPassResult;
+          finalConfidence = verificationConfidence;
+          adjudicationData.requiresHumanReview = true;
+        }
+
         await progress('adjudicating', 90, 'Adjudication complete');
       }
 

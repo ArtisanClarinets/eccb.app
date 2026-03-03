@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { SmartUploadSettingsForm } from '@/components/admin/music/smart-upload-settings-form';
+import { ApiKeyManager } from '@/components/admin/music/api-key-manager';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -115,6 +116,8 @@ export default function SmartUploadSettingsPage() {
         </div>
 
         <SmartUploadSettingsForm settings={settings} />
+
+        <ApiKeyManager />
       </div>
     </div>
   );

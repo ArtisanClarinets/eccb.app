@@ -57,6 +57,14 @@ vi.mock('@/lib/llm', () => ({
 vi.mock('@/lib/llm/config-loader', () => ({
   loadSmartUploadRuntimeConfig: vi.fn(),
   runtimeToAdapterConfig: vi.fn().mockReturnValue({}),
+  buildAdapterConfigForStep: vi.fn().mockResolvedValue({
+    provider: 'openai',
+    model: 'gpt-4o',
+    apiKey: 'test-key',
+    baseUrl: 'https://api.openai.com/v1',
+    temperature: 0.1,
+    maxTokens: 4096,
+  }),
 }));
 
 vi.mock('@/lib/services/pdf-renderer', () => ({
@@ -84,6 +92,7 @@ vi.mock('@/lib/services/part-boundary-detector', () => ({
 
 vi.mock('@/lib/services/pdf-splitter', () => ({
   splitPdfByCuttingInstructions: vi.fn(),
+  validatePdfBuffer: vi.fn().mockResolvedValue({ valid: true, pageCount: 3 }),
 }));
 
 vi.mock('@/lib/jobs/smart-upload', () => ({
