@@ -59,11 +59,28 @@ const DEFAULT_NUMERIC_SETTINGS: Record<string, string> = {
   smart_upload_budget_max_input_tokens_per_session: '500000',
   // Enterprise: Part size limits
   smart_upload_max_pages_per_part: '12',
+
+  // ========================================
+  // NEW: OCR-first settings (Phase 1-2)
+  // ========================================
+  smart_upload_enable_ocr_first: 'true',
+  smart_upload_text_layer_threshold_pct: '40',
+  smart_upload_ocr_mode: 'both',
+  smart_upload_ocr_max_pages: '3',
+  smart_upload_text_probe_pages: '10',
+  smart_upload_store_raw_ocr_text: 'false',
+  smart_upload_ocr_engine: 'tesseract',
+  smart_upload_ocr_rate_limit_rpm: '6',
+  smart_upload_llm_max_pages: '10',
+  smart_upload_llm_max_header_batches: '2',
 };
 
 const DEFAULT_JSON_SETTINGS: Record<string, string> = {
   vision_model_params: JSON.stringify({ temperature: 0.1, max_tokens: 4096 }),
   verification_model_params: JSON.stringify({ temperature: 0.1, max_tokens: 4096 }),
+  // NEW: Header label and adjudicator model params
+  llm_header_label_model_params: JSON.stringify({ temperature: 0.1, max_tokens: 1024 }),
+  llm_adjudicator_model_params: JSON.stringify({ temperature: 0.1, max_tokens: 2048 }),
 };
 
 // =============================================================================
@@ -172,7 +189,29 @@ export async function bootstrapSmartUploadSettings(
         actions.push(`migrated ${legacyKey} → ${newKey}`);
       }
     }
-    
+
+    // 10. Migration bridge: per-step provider keys seed from global llm_provider
+    const providerMigrations: Array<[string, string]> = [
+      ['llm_provider', 'llm_default_provider'],
+      ['llm_provider', 'llm_vision_provider'],
+      ['llm_provider', 'llm_verification_provider'],
+      ['llm_provider', 'llm_header_label_provider'],
+      ['llm_provider', 'llm_adjudicator_provider'],
+    ];
+    for (const [sourceKey, targetKey] of providerMigrations) {
+      const sourceValue = existingSettings[sourceKey];
+      if (sourceValue && !existingSettings[targetKey]) {
+        await upsertSetting(targetKey, sourceValue, options.updatedBy);
+        actions.push(`bridged ${sourceKey} → ${targetKey}`);
+      }
+    }
+
+    // 11. Migration bridge: header_label_model seeds from verification_model
+    if (existingSettings.llm_verification_model && !existingSettings.llm_header_label_model) {
+      await upsertSetting('llm_header_label_model', existingSettings.llm_verification_model, options.updatedBy);
+      actions.push('bridged llm_verification_model → llm_header_label_model');
+    }
+
     if (actions.length > 0) {
       logger.info('Smart Upload settings bootstrapped', {
         actions,

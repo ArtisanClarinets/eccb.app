@@ -159,7 +159,7 @@ export function LibraryStandViewer({ piece, userId, missingStorageKeys = [] }: L
       .then((data) => {
         if (Array.isArray(data.annotations) && data.annotations.length > 0) {
           setAnnotations(
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             
             data.annotations.map((a: any) => ({
               id: a.id,
               pieceId: a.musicId,

@@ -2,6 +2,8 @@
 
 This document describes **every file that must be created or updated** in order to implement the stronger, fully‑autonomous OCR pipeline outlined by the user.  Changes are grouped by area but the list is complete – nothing is left to guess.  All smart‑upload configuration is driven from the database and exposed through the browser UI.
 
+> **Status:**  As of Phase 7 the work described below has been implemented in the codebase.  This file now serves as a permanent record of what was changed; future phases may update or prune items as needed.
+
 ---
 
 ## 1. Core services

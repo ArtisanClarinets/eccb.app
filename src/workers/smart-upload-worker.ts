@@ -11,7 +11,7 @@ import { prisma } from '@/lib/db';
 import { downloadFile, uploadFile } from '@/lib/services/storage';
 import { renderPdfPageBatch } from '@/lib/services/pdf-renderer';
 import { callVisionModel } from '@/lib/llm';
-import { loadSmartUploadRuntimeConfig, runtimeToAdapterConfig } from '@/lib/llm/config-loader';
+import { loadSmartUploadRuntimeConfig, runtimeToAdapterConfig, buildAdapterConfigForStep } from '@/lib/llm/config-loader';
 import type { LLMRuntimeConfig } from '@/lib/llm/config-loader';
 import { getProviderMeta } from '@/lib/llm/providers';
 import type { LabeledDocument } from '@/lib/llm/types';
@@ -124,10 +124,11 @@ async function callVerificationLLM(
   llmRateLimiter.setLimit(cfg.rateLimit);
   await llmRateLimiter.consume();
 
-  // Use verification model for second pass — override llm_vision_model field
+  // Use step-specific config for verification step
+  const verificationStepConfig = buildAdapterConfigForStep(cfg, 'verification');
   const adapterConfig = {
     ...runtimeToAdapterConfig(cfg),
-    llm_vision_model: cfg.verificationModel,
+    llm_vision_model: verificationStepConfig.model,
   };
 
   const images = pdfDocuments && pdfDocuments.length > 0
@@ -138,11 +139,11 @@ async function callVerificationLLM(
       }));
 
   const response = await callVisionModel(adapterConfig, images, prompt, {
-    system: cfg.verificationSystemPrompt || DEFAULT_VERIFICATION_SYSTEM_PROMPT,
+    system: verificationStepConfig.systemPrompt || DEFAULT_VERIFICATION_SYSTEM_PROMPT,
     responseFormat: { type: 'json' as const },
     maxTokens: 8192,
     temperature: 0.1,
-    modelParams: cfg.verificationModelParams,
+    modelParams: verificationStepConfig.modelParams,
     ...(pdfDocuments && pdfDocuments.length > 0
       ? { documents: pdfDocuments }
       : labeledImages && labeledImages.length > 0
@@ -208,9 +209,11 @@ async function callAdjudicatorLLM(
   llmRateLimiter.setLimit(cfg.rateLimit);
   await llmRateLimiter.consume();
 
+  // Use step-specific config for adjudicator step
+  const adjudicatorStepConfig = buildAdapterConfigForStep(cfg, 'adjudicator');
   const adapterConfig = {
     ...runtimeToAdapterConfig(cfg),
-    llm_vision_model: cfg.adjudicatorModel || cfg.verificationModel,
+    llm_vision_model: adjudicatorStepConfig.model,
   };
 
   let images: Array<{ mimeType: 'image/png'; base64Data: string }>;
@@ -231,10 +234,11 @@ async function callAdjudicatorLLM(
   }
 
   const response = await callVisionModel(adapterConfig, images, prompt, {
-    system: DEFAULT_ADJUDICATOR_SYSTEM_PROMPT,
+    system: adjudicatorStepConfig.systemPrompt || DEFAULT_ADJUDICATOR_SYSTEM_PROMPT,
     responseFormat: { type: 'json' as const },
     maxTokens: 8192,
     temperature: 0.1,
+    modelParams: adjudicatorStepConfig.modelParams,
     ...(documents ? { documents } : {}),
   });
 

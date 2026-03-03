@@ -82,7 +82,7 @@ export function SetlistsPanel({ className, eventId, canManage = false }: Setlist
     } finally {
       setIsLoading(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, []);
 
   useEffect(() => {

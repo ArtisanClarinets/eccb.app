@@ -176,18 +176,43 @@ describe('Smart Upload Bootstrap', () => {
       );
     });
 
-    it('should not overwrite existing values', async () => {
+    it('should not overwrite existing values but create migration bridges', async () => {
+      // Existing values should be preserved
       mockPrismaSystemSettingFindMany.mockResolvedValue([
         { key: 'llm_provider', value: 'openai' },
         { key: 'llm_vision_model', value: 'custom-vision-model' },
         { key: 'smart_upload_confidence_threshold', value: '80' },
+        // Per-step providers are now seeded from llm_provider via migration bridge
+        { key: 'llm_vision_provider', value: 'openai' },
       ]);
 
       const result = await bootstrapSmartUploadSettings();
 
-      // Should not initialize provider since it exists
-      expect(result.actions.some((a: string) => a.includes('llm_provider'))).toBe(false);
+      // Should NOT re-initialize (overwrite) llm_provider since it already exists
+      // Check for "initialized llm_provider" NOT "bridged" actions
+      const initProviderAction = result.actions.find((a: string) => a.startsWith('initialized llm_provider'));
+      expect(initProviderAction).toBeUndefined();
+      // Existing threshold should not be overwritten
       expect(result.actions.some((a: string) => a.includes('smart_upload_confidence_threshold'))).toBe(false);
+      // But new per-step providers that exist in DB should NOT be re-seeded
+      expect(result.actions.some((a: string) => a.includes('llm_vision_provider'))).toBe(false);
+    });
+
+    it('should create migration bridges when per-step providers missing', async () => {
+      // Only global provider exists, per-step providers should be bridged
+      mockPrismaSystemSettingFindMany.mockResolvedValue([
+        { key: 'llm_provider', value: 'openai' },
+        // Per-step providers NOT in DB → bridge should create them
+      ]);
+
+      const result = await bootstrapSmartUploadSettings();
+
+      // Migration bridge should create llm_vision_provider from llm_provider
+      expect(result.actions.some((a: string) => a.includes('llm_vision_provider'))).toBe(true);
+      // And other per-step providers
+      expect(result.actions.some((a: string) => a.includes('llm_verification_provider'))).toBe(true);
+      expect(result.actions.some((a: string) => a.includes('llm_header_label_provider'))).toBe(true);
+      expect(result.actions.some((a: string) => a.includes('llm_adjudicator_provider'))).toBe(true);
     });
 
     it('should initialize numeric defaults if missing', async () => {
@@ -323,6 +348,26 @@ describe('Smart Upload Bootstrap', () => {
         // Enterprise: OCR-first pipeline
         { key: 'smart_upload_local_ocr_enabled', value: 'true' },
         { key: 'smart_upload_ocr_confidence_threshold', value: '60' },
+        // Enterprise: OCR-first settings (new)
+        { key: 'smart_upload_enable_ocr_first', value: 'true' },
+        { key: 'smart_upload_text_layer_threshold_pct', value: '40' },
+        { key: 'smart_upload_ocr_mode', value: 'both' },
+        { key: 'smart_upload_ocr_max_pages', value: '3' },
+        { key: 'smart_upload_text_probe_pages', value: '10' },
+        { key: 'smart_upload_store_raw_ocr_text', value: 'false' },
+        { key: 'smart_upload_ocr_engine', value: 'tesseract' },
+        { key: 'smart_upload_ocr_rate_limit_rpm', value: '6' },
+        { key: 'smart_upload_llm_max_pages', value: '10' },
+        { key: 'smart_upload_llm_max_header_batches', value: '2' },
+        // Per-step LLM providers
+        { key: 'llm_default_provider', value: 'google' },
+        { key: 'llm_vision_provider', value: 'google' },
+        { key: 'llm_verification_provider', value: 'google' },
+        { key: 'llm_header_label_provider', value: 'google' },
+        { key: 'llm_adjudicator_provider', value: 'google' },
+        { key: 'llm_header_label_model', value: 'gemini-2.0-flash' },
+        { key: 'llm_header_label_model_params', value: '{}' },
+        { key: 'llm_adjudicator_model_params', value: '{}' },
         // Enterprise: PDF-to-LLM
         { key: 'smart_upload_send_full_pdf_to_llm', value: 'true' },
         // Enterprise: Budget system

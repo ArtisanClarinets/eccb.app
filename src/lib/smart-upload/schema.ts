@@ -23,6 +23,16 @@ const providerTuple = ['ollama', 'ollama-cloud', 'openai', 'anthropic', 'gemini'
 export const ProviderValueSchema = z.enum(providerTuple);
 export type ProviderValue = z.infer<typeof ProviderValueSchema>;
 
+// OCR engine options
+const ocrEngineTuple = ['tesseract', 'ocrmypdf', 'vision_api', 'native'] as const;
+export const OcrEngineSchema = z.enum(ocrEngineTuple);
+export type OcrEngineValue = z.infer<typeof OcrEngineSchema>;
+
+// OCR mode options
+const ocrModeTuple = ['header', 'full', 'both'] as const;
+export const OcrModeSchema = z.enum(ocrModeTuple);
+export type OcrModeValue = z.infer<typeof OcrModeSchema>;
+
 // =============================================================================
 // Core Settings Schema
 // =============================================================================
@@ -36,7 +46,7 @@ export const SMART_UPLOAD_SETTING_KEYS = [
   'llm_endpoint_url',
   'llm_vision_model',
   'llm_verification_model',
-  
+
   // API Keys (one per provider)
   'llm_openai_api_key',
   'llm_anthropic_api_key',
@@ -46,7 +56,7 @@ export const SMART_UPLOAD_SETTING_KEYS = [
   'llm_mistral_api_key',
   'llm_groq_api_key',
   'llm_custom_api_key',
-  
+
   // Prompts (source of truth)
   'llm_vision_system_prompt',
   'llm_verification_system_prompt',
@@ -57,7 +67,7 @@ export const SMART_UPLOAD_SETTING_KEYS = [
   'llm_verification_user_prompt',
   'llm_header_label_user_prompt',
   'llm_adjudicator_user_prompt',
-  
+
   // Behavior settings
   'smart_upload_confidence_threshold',
   'smart_upload_auto_approve_threshold',
@@ -74,7 +84,7 @@ export const SMART_UPLOAD_SETTING_KEYS = [
   'smart_upload_max_pages_per_part',
   'llm_adjudicator_model',
   'llm_header_label_prompt',
-  'llm_adjudicator_prompt',  
+  'llm_adjudicator_prompt',
   // Model parameters (JSON)
   'vision_model_params',
   'verification_model_params',
@@ -89,9 +99,53 @@ export const SMART_UPLOAD_SETTING_KEYS = [
   // Enterprise: Budget system
   'smart_upload_budget_max_llm_calls_per_session',
   'smart_upload_budget_max_input_tokens_per_session',
-  
+
   // Metadata
   'smart_upload_schema_version',
+
+  // ========================================
+  // NEW: OCR-first keys (Phase 1-2)
+  // ========================================
+  // Master OCR-first enable switch
+  'smart_upload_enable_ocr_first',
+  // Text layer quality threshold (0-100)
+  'smart_upload_text_layer_threshold_pct',
+  // OCR mode: header, full, or both
+  'smart_upload_ocr_mode',
+  // Max pages to run OCR on
+  'smart_upload_ocr_max_pages',
+  // Pages to probe for text layer
+  'smart_upload_text_probe_pages',
+  // Whether to store raw OCR text
+  'smart_upload_store_raw_ocr_text',
+  // OCR engine selection
+  'smart_upload_ocr_engine',
+  // OCR rate limit (jobs per minute)
+  'smart_upload_ocr_rate_limit_rpm',
+  // LLM max pages
+  'smart_upload_llm_max_pages',
+  // LLM max header batches
+  'smart_upload_llm_max_header_batches',
+
+  // ========================================
+  // NEW: Per-step LLM provider/model keys
+  // ========================================
+  // Default provider (backward compatible with llm_provider)
+  'llm_default_provider',
+  // Vision step provider
+  'llm_vision_provider',
+  // Verification step provider
+  'llm_verification_provider',
+  // Header label step provider
+  'llm_header_label_provider',
+  // Adjudicator step provider
+  'llm_adjudicator_provider',
+  // Header label model (can differ from verification)
+  'llm_header_label_model',
+  // Header label model params (JSON)
+  'llm_header_label_model_params',
+  // Adjudicator model params (JSON)
+  'llm_adjudicator_model_params',
 ] as const;
 
 export type SmartUploadSettingKey = typeof SMART_UPLOAD_SETTING_KEYS[number];
@@ -114,15 +168,15 @@ const MimeTypesSchema = z.string().optional();
  * Used by API, UI, and runtime.
  */
 export const SmartUploadSettingsSchema = z.object({
-  // Provider selection
-  llm_provider: ProviderValueSchema,
+  // Provider selection (optional for incremental updates)
+  llm_provider: ProviderValueSchema.or(z.literal('')).optional(),
   
   // Endpoint (required for custom, optional for others)
   llm_endpoint_url: z.string().url('Must be a valid URL').or(z.literal('')).optional(),
   
-  // Models (required)
-  llm_vision_model: z.string().min(1, 'Vision model is required'),
-  llm_verification_model: z.string().min(1, 'Verification model is required'),
+  // Models (optional for incremental settings updates, required at runtime)
+  llm_vision_model: z.string().optional(),
+  llm_verification_model: z.string().optional(),
   
   // API Keys (provider-specific, at least one must be set for non-local providers)
   llm_openai_api_key: z.string().optional(),
@@ -134,9 +188,9 @@ export const SmartUploadSettingsSchema = z.object({
   llm_groq_api_key: z.string().optional(),
   llm_custom_api_key: z.string().optional(),
   
-  // Prompts (required, will be populated with defaults if empty)
-  llm_vision_system_prompt: z.string().min(1, 'Vision system prompt is required'),
-  llm_verification_system_prompt: z.string().min(1, 'Verification system prompt is required'),
+  // Prompts (optional for updates, defaults provided if missing)
+  llm_vision_system_prompt: z.string().optional(),
+  llm_verification_system_prompt: z.string().optional(),
   llm_prompt_version: z.string().default(PROMPT_VERSION),
 
   // User prompt templates (optional — fall back to hardcoded defaults when absent)
@@ -275,9 +329,111 @@ export const SmartUploadSettingsSchema = z.object({
       return Math.max(0, isNaN(num) ? 500000 : num);
     })
     .default(500000),
-  
+
   // Schema version for migrations
   smart_upload_schema_version: z.string().default(SMART_UPLOAD_SCHEMA_VERSION),
+
+  // ========================================
+  // NEW: OCR-first fields (Phase 1-2)
+  // ========================================
+  // Master OCR-first enable switch
+  smart_upload_enable_ocr_first: z
+    .union([z.boolean(), z.string()])
+    .transform((v) => (typeof v === 'string' ? v === 'true' : v))
+    .default(true),
+
+  // Text layer quality threshold (0-100)
+  smart_upload_text_layer_threshold_pct: z
+    .union([z.string(), z.number()])
+    .transform((v) => {
+      const num = typeof v === 'string' ? Number(v) : v;
+      return Math.max(0, Math.min(100, isNaN(num) ? 40 : num));
+    })
+    .default(40),
+
+  // OCR mode: header, full, or both
+  smart_upload_ocr_mode: OcrModeSchema.default('both'),
+
+  // Max pages to run OCR on
+  smart_upload_ocr_max_pages: z
+    .union([z.string(), z.number()])
+    .transform((v) => {
+      const num = typeof v === 'string' ? Number(v) : v;
+      return Math.max(1, isNaN(num) ? 3 : Math.min(100, num));
+    })
+    .default(3),
+
+  // Pages to probe for text layer
+  smart_upload_text_probe_pages: z
+    .union([z.string(), z.number()])
+    .transform((v) => {
+      const num = typeof v === 'string' ? Number(v) : v;
+      return Math.max(1, isNaN(num) ? 10 : Math.min(100, num));
+    })
+    .default(10),
+
+  // Whether to store raw OCR text
+  smart_upload_store_raw_ocr_text: z
+    .union([z.boolean(), z.string()])
+    .transform((v) => (typeof v === 'string' ? v === 'true' : v))
+    .default(false),
+
+  // OCR engine selection
+  smart_upload_ocr_engine: OcrEngineSchema.default('tesseract'),
+
+  // OCR rate limit (jobs per minute)
+  smart_upload_ocr_rate_limit_rpm: z
+    .union([z.string(), z.number()])
+    .transform((v) => {
+      const num = typeof v === 'string' ? Number(v) : v;
+      return Math.max(1, isNaN(num) ? 6 : Math.min(60, num));
+    })
+    .default(6),
+
+  // LLM max pages
+  smart_upload_llm_max_pages: z
+    .union([z.string(), z.number()])
+    .transform((v) => {
+      const num = typeof v === 'string' ? Number(v) : v;
+      return Math.max(1, isNaN(num) ? 10 : Math.min(100, num));
+    })
+    .default(10),
+
+  // LLM max header batches
+  smart_upload_llm_max_header_batches: z
+    .union([z.string(), z.number()])
+    .transform((v) => {
+      const num = typeof v === 'string' ? Number(v) : v;
+      return Math.max(1, isNaN(num) ? 2 : Math.min(10, num));
+    })
+    .default(2),
+
+  // ========================================
+  // NEW: Per-step LLM provider/model keys
+  // ========================================
+  // Default provider (backward compatible with llm_provider)
+  llm_default_provider: ProviderValueSchema.optional(),
+
+  // Vision step provider
+  llm_vision_provider: ProviderValueSchema.optional(),
+
+  // Verification step provider
+  llm_verification_provider: ProviderValueSchema.optional(),
+
+  // Header label step provider
+  llm_header_label_provider: ProviderValueSchema.optional(),
+
+  // Adjudicator step provider
+  llm_adjudicator_provider: ProviderValueSchema.optional(),
+
+  // Header label model (can differ from verification)
+  llm_header_label_model: z.string().optional(),
+
+  // Header label model params (JSON)
+  llm_header_label_model_params: JsonParamsSchema,
+
+  // Adjudicator model params (JSON)
+  llm_adjudicator_model_params: JsonParamsSchema,
 });
 
 export type SmartUploadSettings = z.infer<typeof SmartUploadSettingsSchema>;
@@ -289,7 +445,10 @@ export type SmartUploadSettings = z.infer<typeof SmartUploadSettingsSchema>;
 /**
  * Get the API key field name for a provider
  */
-export function getApiKeyFieldForProvider(provider: ProviderValue): string {
+export function getApiKeyFieldForProvider(provider?: ProviderValue | string): string {
+  if (!provider || provider === '') {
+    return '';
+  }
   const mapping: Record<ProviderValue, string> = {
     ollama: '',
     'ollama-cloud': 'llm_ollama_cloud_api_key',
@@ -301,13 +460,16 @@ export function getApiKeyFieldForProvider(provider: ProviderValue): string {
     groq: 'llm_groq_api_key',
     custom: 'llm_custom_api_key',
   };
-  return mapping[provider] || '';
+  return mapping[provider as ProviderValue] || '';
 }
 
 /**
  * Check if a provider requires an API key
  */
-export function providerRequiresApiKey(provider: ProviderValue): boolean {
+export function providerRequiresApiKey(provider?: ProviderValue | string): boolean {
+  if (!provider || provider === '') {
+    return false;
+  }
   // Local-only providers (ollama, custom with optional key) don't require keys.
   // All cloud providers need an API key set.
   return provider !== 'ollama' && provider !== 'custom';
@@ -316,7 +478,7 @@ export function providerRequiresApiKey(provider: ProviderValue): boolean {
 /**
  * Check if a provider requires an endpoint URL
  */
-export function providerRequiresEndpoint(provider: ProviderValue): boolean {
+export function providerRequiresEndpoint(provider?: ProviderValue | string): boolean {
   // Custom and local Ollama endpoints need explicit URL
   return provider === 'custom' || provider === 'ollama';
 }
@@ -325,10 +487,10 @@ export function providerRequiresEndpoint(provider: ProviderValue): boolean {
  * Validate that the API key is set for the selected provider
  */
 export function validateProviderApiKey(
-  provider: ProviderValue,
-  settings: Partial<SmartUploadSettings>
+  provider?: ProviderValue | string,
+  settings: Partial<SmartUploadSettings> = {}
 ): { valid: boolean; error?: string } {
-  if (!providerRequiresApiKey(provider)) {
+  if (!provider || !providerRequiresApiKey(provider)) {
     return { valid: true };
   }
 
@@ -346,13 +508,65 @@ export function validateProviderApiKey(
 }
 
 /**
+ * Validate API keys for all providers that may be used across different steps.
+ * This ensures that when per-step providers are configured, all required keys are present.
+ */
+export function validateAllProviderApiKeys(
+  settings: Partial<SmartUploadSettings>
+): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+
+  // Collect all providers that may be used
+  const providersToCheck: ProviderValue[] = [];
+
+  // Global/default provider
+  if (settings.llm_provider) {
+    providersToCheck.push(settings.llm_provider);
+  }
+  if (settings.llm_default_provider) {
+    providersToCheck.push(settings.llm_default_provider);
+  }
+
+  // Per-step providers
+  if (settings.llm_vision_provider) {
+    providersToCheck.push(settings.llm_vision_provider);
+  }
+  if (settings.llm_verification_provider) {
+    providersToCheck.push(settings.llm_verification_provider);
+  }
+  if (settings.llm_header_label_provider) {
+    providersToCheck.push(settings.llm_header_label_provider);
+  }
+  if (settings.llm_adjudicator_provider) {
+    providersToCheck.push(settings.llm_adjudicator_provider);
+  }
+
+  // Check each unique provider
+  const checkedProviders = new Set<ProviderValue>();
+  for (const provider of providersToCheck) {
+    if (checkedProviders.has(provider)) continue;
+    checkedProviders.add(provider);
+
+    const result = validateProviderApiKey(provider, settings);
+    if (!result.valid && result.error) {
+      errors.push(result.error);
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  };
+}
+
+/**
  * Validate that the endpoint URL is set if required
  */
 export function validateProviderEndpoint(
-  provider: ProviderValue,
+  provider?: ProviderValue | string,
   endpointUrl?: string
 ): { valid: boolean; error?: string } {
-  if (!providerRequiresEndpoint(provider)) {
+  if (!provider || !providerRequiresEndpoint(provider)) {
     return { valid: true };
   }
 
@@ -483,13 +697,8 @@ export function validateSmartUploadSettings(
     }
   }
 
-  // Provider-specific validation
+  // Provider-specific validation - validate global provider endpoint
   if (settings.llm_provider) {
-    const apiKeyResult = validateProviderApiKey(settings.llm_provider, settings);
-    if (!apiKeyResult.valid) {
-      errors.push(apiKeyResult.error!);
-    }
-
     const endpointResult = validateProviderEndpoint(
       settings.llm_provider,
       settings.llm_endpoint_url
@@ -497,6 +706,13 @@ export function validateSmartUploadSettings(
     if (!endpointResult.valid) {
       errors.push(endpointResult.error!);
     }
+  }
+
+  // Validate ALL providers (global + per-step) for API keys
+  // This ensures when per-step providers are configured, all required keys are present
+  const allProvidersResult = validateAllProviderApiKeys(settings);
+  if (!allProvidersResult.valid) {
+    errors.push(...allProvidersResult.errors);
   }
 
   return {

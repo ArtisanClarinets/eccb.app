@@ -47,6 +47,16 @@ export interface PdfTextExtractionResult {
   textLayerCoverage: number;
 }
 
+/** Options for PDF text extraction */
+export interface PdfTextExtractionOptions {
+  /** Maximum pages to process (default: all pages) */
+  maxPages?: number;
+  /** Early stop if meaningful text is found on this many consecutive pages (default: 0 = process all) */
+  earlyStopConsecutivePages?: number;
+  /** Minimum chars to consider as "meaningful" for early-stop (default: MIN_TEXT_CHARS = 10) */
+  minMeaningfulChars?: number;
+}
+
 // =============================================================================
 // Constants (unchanged)
 // =============================================================================
@@ -94,16 +104,50 @@ async function destroyLoadingTask(loadingTask: unknown) {
  * @param pdfBuffer - Raw PDF bytes
  * @param maxPages  - Maximum number of pages to process (default: all pages)
  */
+/**
+ * Normalize text extracted from PDF to remove OCR noise and control characters.
+ * Also performs whitespace normalization.
+ */
+export function normalizePdfText(text: string): string {
+  if (!text) return '';
+
+  // The regex intentionally matches control characters; suppress linter warning
+   
+  return text
+    // Remove common OCR noise characters (replace with space)
+    // eslint-disable-next-line no-control-regex 
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ' ')
+    // Replace multiple spaces with single space
+    .replace(/[ \t]+/g, ' ')
+    // Replace multiple newlines with single space
+    .replace(/\n{2,}/g, ' ')
+    // Remove leading/trailing whitespace
+    .trim();
+}
+
+/**
+ * Extract text from the top fraction of each page in a PDF.
+ * For scanned (image) PDFs, headerText will be empty or minimal.
+ *
+ * @param pdfBuffer - Raw PDF bytes
+ * @param options - Extraction options including maxPages and early-stop
+ */
 export async function extractPdfPageHeaders(
   pdfBuffer: Buffer,
-  maxPages?: number
+  options?: PdfTextExtractionOptions
 ): Promise<PdfTextExtractionResult> {
   const start = nowMs();
 
+  const {
+    maxPages,
+    earlyStopConsecutivePages = 0,
+    minMeaningfulChars = MIN_TEXT_CHARS,
+  } = options || {};
+
   const pdfData = new Uint8Array(pdfBuffer);
-   
+
   let loadingTask: any | undefined;
-   
+
   let pdfDocument: any | undefined;
 
   try {
@@ -119,15 +163,29 @@ export async function extractPdfPageHeaders(
 
     const pageHeaders: PageHeader[] = [];
     let pagesWithText = 0;
+    let consecutiveTextPages = 0;
+    let earlyStopped = false;
 
     for (let pageIndex = 0; pageIndex < pagesToProcess; pageIndex++) {
+      // Early stop check: if we have enough consecutive pages with meaningful text
+      if (earlyStopConsecutivePages > 0 && consecutiveTextPages >= earlyStopConsecutivePages) {
+        earlyStopped = true;
+        logger.info('pdf-text-extractor: early stop triggered', {
+          pageIndex,
+          consecutiveTextPages,
+          earlyStopThreshold: earlyStopConsecutivePages,
+          pagesProcessed: pageHeaders.length,
+          totalPages,
+        });
+        break;
+      }
+
       const pageStart = nowMs();
 
       try {
         const page = await pdfDocument.getPage(pageIndex + 1); // pdfjs is 1-indexed
         const viewport = page.getViewport({ scale: 1.0 });
         const pageHeight = viewport.height;
-        const headerCutoff = pageHeight * HEADER_HEIGHT_FRACTION;
 
         // Get text content
         const textContent = await page.getTextContent();
@@ -144,37 +202,39 @@ export async function extractPdfPageHeaders(
           allTextParts.push(text);
 
           // Check if this item is in the header region
-          // pdfjs transform[5] is the y coordinate (bottom of text in PDF coords)
-          // PDF y-axis is inverted — larger y = higher on page
           if (textItem.transform) {
             const yPos = textItem.transform[5];
-            // In PDF coords, top of page = pageHeight, y decreases downward
             const distFromTop = pageHeight - yPos;
             if (distFromTop <= pageHeight * HEADER_HEIGHT_FRACTION + 50) {
-              // Include items within header region + small buffer
               headerText += text + ' ';
             }
           } else {
-            // No transform data — include first text items as likely headers
-            if (headerText.length < headerCutoff) {
+            if (headerText.length < pageHeight * HEADER_HEIGHT_FRACTION) {
               headerText += text + ' ';
             }
           }
         }
 
-        const fullText = allTextParts.join(' ').slice(0, MAX_FULL_TEXT_CHARS);
-        const hasText = fullText.length >= MIN_TEXT_CHARS;
+        // Apply normalization
+        const normalizedFullText = normalizePdfText(allTextParts.join(' ').slice(0, MAX_FULL_TEXT_CHARS));
+        const normalizedHeaderText = normalizePdfText(headerText);
+        const hasText = normalizedFullText.length >= minMeaningfulChars;
 
-        if (hasText) pagesWithText++;
+        if (hasText) {
+          pagesWithText++;
+          consecutiveTextPages++;
+        } else {
+          consecutiveTextPages = 0;
+        }
 
         pageHeaders.push({
           pageIndex,
-          headerText: headerText.trim(),
-          fullText,
+          headerText: normalizedHeaderText,
+          fullText: normalizedFullText,
           hasText,
         });
 
-        // Best-effort cleanup per page (pdfjs may expose cleanup())
+        // Best-effort cleanup per page
         try {
           if (typeof page.cleanup === 'function') page.cleanup();
         } catch {
@@ -184,8 +244,8 @@ export async function extractPdfPageHeaders(
         logger.debug('pdf-text-extractor: extracted page text', {
           pageIndex,
           hasText,
-          headerChars: headerText.trim().length,
-          fullTextChars: fullText.length,
+          headerChars: normalizedHeaderText.length,
+          fullTextChars: normalizedFullText.length,
           durationMs: Math.round(nowMs() - pageStart),
         });
       } catch (err) {
@@ -195,6 +255,9 @@ export async function extractPdfPageHeaders(
           errorMessage: e.message,
           errorName: e.name,
         });
+
+        // Reset consecutive counter on error
+        consecutiveTextPages = 0;
 
         pageHeaders.push({
           pageIndex,
@@ -210,10 +273,12 @@ export async function extractPdfPageHeaders(
 
     logger.info('PDF text extraction complete', {
       totalPages,
-      pagesToProcess,
+      pagesToProcess: pageHeaders.length,
       pagesWithText,
       textLayerCoverage: Math.round(textLayerCoverage * 100) + '%',
       hasTextLayer,
+      earlyStopped,
+      earlyStopConsecutivePages,
       durationMs: Math.round(nowMs() - start),
     });
 

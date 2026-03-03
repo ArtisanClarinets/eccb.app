@@ -417,11 +417,21 @@ model SmartUploadSession {
   strategyHistory    Json?
   /// Total LLM calls consumed by this session (persisted so retries don't reset the budget).
   llmCallCount       Int              @default(0)
+  /// OCR engine used: tesseract, ocrmypdf, vision_api, native
+  ocrEngineUsed     String?
+  /// OCR mode used: header, full, both
+  ocrModeUsed       String?
+  /// Raw OCR text extracted from PDF (for debugging/provenance). Only stored if smart_upload_store_raw_ocr_text is enabled.
+  rawOcrText        String?           @db.LongText
+  /// Character count of raw OCR text (for quick validation)
+  ocrTextChars      Int?
 
   @@index([uploadSessionId])
   @@index([status])
   @@index([uploadedBy])
   @@index([sourceSha256])
+  @@index([ocrEngineUsed])
+  @@index([ocrModeUsed])
 }
 
 model MusicPart {

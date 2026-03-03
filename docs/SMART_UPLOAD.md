@@ -29,6 +29,8 @@ Smart Upload is an AI-powered feature that streamlines the process of adding mus
 
 This reduces manual data entry time and helps maintain consistent metadata across the music library.
 
+The pipeline is now **OCR‑first**: a configurable local/text‑layer/ocr engine attempt runs before any LLM is ever invoked, and LLMs are only used for fallback or verification.  All behavior (which OCR engine, how many pages to probe, budget limits for each LLM pass, etc.) is controlled by **database settings only**; there are no runtime environment fallbacks.  This ensures operators can tune performance and cost via the admin UI without redeploying or exposing secrets in `.env` files.
+
 ---
 
 ## Architecture
@@ -453,6 +455,8 @@ All upload events are logged with user context for audit purposes:
 - Approval/rejection actions
 - LLM processing errors
 - Token usage per LLM call
+
+> **Operational note:** Smart Upload runtime configuration values are stored exclusively in the `SystemSetting` table and exposed via the admin interface. Environment variables are only used during initial bootstrap and do not affect the pipeline once the application is running.
 
 ---
 

@@ -28,6 +28,8 @@ npm run security:check
 
 # Attempt to automatically fix vulnerabilities
 npm run security:fix
+
+> **Note:** configuration for sensitive subsystems such as Smart Upload is stored exclusively in the database and managed via the admin UI; environment variables are consulted only during application bootstrap and never at runtime.  This design prevents accidental leakage of secrets or drift between deployments.
 ```
 
 ### Security Audit Script

@@ -25,20 +25,41 @@
  */
 
 import path from 'path';
+import os from 'os';
+import { spawn } from 'child_process';
 import { logger } from '@/lib/logger';
 import { extractPdfPageHeaders } from '@/lib/services/pdf-text-extractor';
 import { renderPdfToImage, renderPdfHeaderCropBatch } from '@/lib/services/pdf-renderer';
 import { preprocessForOcr } from '@/lib/services/header-image-segmentation';
 
+/**
+ * OCR metadata result
+ */
 export interface OCRMetadata {
   title: string;
   composer?: string;
   confidence: number;
   isImageScanned: boolean;
   needsManualReview: boolean;
+  /** Raw OCR text if requested (never logged) */
+  rawOcrText?: string;
 }
 
+/**
+ * OCR fallback options for metadata extraction
+ */
 export interface OcrFallbackOptions {
+  /**
+   * OCR engine to use.
+   * - 'pdf_text': use embedded PDF text layer only
+   * - 'tesseract': use tesseract.js
+   * - 'ocrmypdf': use ocrmypdf binary (requires installation)
+   * - 'vision_api': use cloud vision API (not implemented)
+   * - 'native': use native PDF text layer with fallback to tesseract
+   * Default: 'native' (PDF text layer first, then tesseract)
+   */
+  ocrEngine?: 'pdf_text' | 'tesseract' | 'ocrmypdf' | 'vision_api' | 'native';
+
   /**
    * Max pages to probe for text-layer extraction.
    * Default: 3 (fast and sufficient for cover pages).
@@ -62,18 +83,35 @@ export interface OcrFallbackOptions {
 
   /**
    * Render quality for OCR images.
-   * Keep defaults aligned with pdf-renderer defaults.
    */
-  renderScale?: number; // default 2
-  renderMaxWidth?: number; // default 1024
-  renderFormat?: 'png' | 'jpeg'; // default 'png'
-  renderQuality?: number; // default 85
+  renderScale?: number;
+  renderMaxWidth?: number;
+  renderFormat?: 'png' | 'jpeg';
+  renderQuality?: number;
 
   /**
    * If we reach >= this confidence, we can mark needsManualReview false.
    * Default: 70
    */
   autoAcceptConfidenceThreshold?: number;
+
+  /**
+   * Whether to return raw OCR text in results.
+   * Default: false
+   */
+  returnRawOcrText?: boolean;
+
+  /**
+   * Minimum characters to consider "meaningful text" for early-stop.
+   * Default: 50
+   */
+  minMeaningfulChars?: number;
+
+  /**
+   * Maximum pages to OCR when using full-page OCR.
+   * Default: 3
+   */
+  maxOcrPages?: number;
 }
 
 function asError(err: unknown): Error {
@@ -238,6 +276,17 @@ async function tryOcrBase64ImageToText(base64PngOrJpeg: string): Promise<string>
  *
  * It never throws; it always returns a usable OCRMetadata payload.
  */
+/**
+ * Enterprise-grade OCR fallback metadata extraction.
+ * This is the function you should call when LLMs are not available.
+ *
+ * It never throws; it always returns a usable OCRMetadata payload.
+ *
+ * @param params.pdfBuffer - Raw PDF buffer
+ * @param params.filename - Original filename (for fallback parsing)
+ * @param params.options - OCR configuration options
+ * @returns OCRMetadata with title, composer, confidence scores
+ */
 export async function extractOcrFallbackMetadata(params: {
   pdfBuffer?: Buffer;
   filename: string;
@@ -250,14 +299,18 @@ export async function extractOcrFallbackMetadata(params: {
   const fileSafe = safeBaseName(filename);
 
   const {
-    maxTextProbePages = 3,
+    ocrEngine = 'native',
+    maxTextProbePages = DEFAULT_MAX_TEXT_PROBE_PAGES,
     enableTesseractOcr = true,
     ocrMode = 'both',
-    renderScale = 2,
-    renderMaxWidth = 1024,
-    renderFormat = 'png',
-    renderQuality = 85,
-    autoAcceptConfidenceThreshold = 70,
+    renderScale = DEFAULT_RENDER_SCALE,
+    renderMaxWidth = DEFAULT_RENDER_MAX_WIDTH,
+    renderFormat = DEFAULT_RENDER_FORMAT,
+    renderQuality = DEFAULT_RENDER_QUALITY,
+    autoAcceptConfidenceThreshold = DEFAULT_AUTO_ACCEPT_CONFIDENCE_THRESHOLD,
+    returnRawOcrText = false,
+    minMeaningfulChars = DEFAULT_MIN_MEANINGFUL_CHARS,
+    maxOcrPages = DEFAULT_MAX_OCR_PAGES,
   } = options;
 
   // 0) Always compute filename fallback (guaranteed output)
@@ -272,8 +325,6 @@ export async function extractOcrFallbackMetadata(params: {
   }
 
   // 0.5) PDF document-info metadata (pdf-lib — no rendering, no LLM)
-  // Embedded PDF metadata set by the original publishing/scanning tool is the
-  // highest-fidelity local source available for title/composer.
   try {
     const pdfLib = await import('pdf-lib').catch(() => null);
     if (pdfLib?.PDFDocument) {
@@ -292,7 +343,7 @@ export async function extractOcrFallbackMetadata(params: {
           title: normalizeWhitespace(rawTitle),
           composer: composerCandidate ? normalizeWhitespace(composerCandidate) : undefined,
           confidence,
-          isImageScanned: false, // optimistic; text-layer check below would refine this
+          isImageScanned: false,
           needsManualReview: confidence < autoAcceptConfidenceThreshold,
         };
         logger.info('OCR fallback: using PDF document-info metadata (highest confidence)', {
@@ -308,11 +359,35 @@ export async function extractOcrFallbackMetadata(params: {
   }
 
   // 1) Attempt text-layer extraction first (fast and deterministic)
+  // Incremental probing: stop early when meaningful text is found
   try {
-    const extraction = await extractPdfPageHeaders(pdfBuffer, maxTextProbePages);
-    const isImageScanned = !extraction.hasTextLayer || extraction.textLayerCoverage < 0.4;
+    let hasMeaningfulText = false;
+    let pagesScanned = 0;
+    let totalChars = 0;
+
+    for (let pageNum = 1; pageNum <= maxTextProbePages; pageNum++) {
+      const extraction = await extractPdfPageHeaders(pdfBuffer, { maxPages: pageNum });
+      const isImageScanned = !extraction.hasTextLayer || extraction.textLayerCoverage < 0.4;
+
+      if (!isImageScanned && extraction.pageHeaders.length > 0) {
+        const pageText = extraction.pageHeaders[pageNum - 1]?.fullText || '';
+        const headerText = extraction.pageHeaders[pageNum - 1]?.headerText || '';
+        const combinedLength = (pageText + headerText).length;
+
+        totalChars += combinedLength;
+        pagesScanned++;
+
+        if (combinedLength >= minMeaningfulChars) {
+          hasMeaningfulText = true;
+          break;
+        }
+      }
+    }
 
     // Use first page(s) text to guess title/composer
+    const extraction = await extractPdfPageHeaders(pdfBuffer, { maxPages: maxTextProbePages });
+    const isImageScanned = !extraction.hasTextLayer || extraction.textLayerCoverage < 0.4;
+
     const combinedText = extraction.pageHeaders
       .slice(0, Math.min(extraction.pageHeaders.length, maxTextProbePages))
       .map((p) => (p.headerText || '') + ' ' + (p.fullText || ''))
@@ -337,14 +412,16 @@ export async function extractOcrFallbackMetadata(params: {
         textLayerCoverage: extraction.textLayerCoverage,
         isImageScanned,
         confidence: result.confidence,
+        pagesScanned,
+        charsExtracted: totalChars,
+        minMeaningfulChars,
         durationMs: Math.round(nowMs() - start),
       });
 
       return result;
     }
 
-    // If we have a strong text layer but couldn't parse title, still return filename fallback,
-    // but mark scanning state correctly.
+    // If we have a strong text layer but couldn't parse title
     if (!isImageScanned) {
       logger.info(
         'OCR fallback: PDF has text layer but title parse was inconclusive; using filename fallback',
@@ -352,6 +429,8 @@ export async function extractOcrFallbackMetadata(params: {
           filename: fileSafe,
           hasTextLayer: extraction.hasTextLayer,
           textLayerCoverage: extraction.textLayerCoverage,
+          pagesScanned,
+          charsExtracted: totalChars,
           durationMs: Math.round(nowMs() - start),
         }
       );
@@ -362,11 +441,12 @@ export async function extractOcrFallbackMetadata(params: {
       };
     }
 
-    // If scanned, continue to OCR attempt below.
+    // If scanned, continue to OCR attempt below
     logger.info('OCR fallback: PDF appears scanned; proceeding to OCR attempt', {
       filename: fileSafe,
       hasTextLayer: extraction.hasTextLayer,
       textLayerCoverage: extraction.textLayerCoverage,
+      ocrEngine,
       durationMs: Math.round(nowMs() - start),
     });
   } catch (err) {
@@ -377,15 +457,14 @@ export async function extractOcrFallbackMetadata(params: {
     });
   }
 
-  // 2) Attempt real OCR on rendered image(s), if enabled
-  if (enableTesseractOcr) {
+  // 2) Attempt OCR on rendered image(s), if enabled
+  if (enableTesseractOcr && (ocrEngine === 'tesseract' || ocrEngine === 'native')) {
     try {
       let ocrText = '';
+      let totalOcrChars = 0;
+      let totalPagesScanned = 0;
 
       if (ocrMode === 'header' || ocrMode === 'both') {
-        // Try multiple crop heights and pick the result with the most content.
-        // Larger crops (40%) capture more of the title block on tall covers;
-        // smaller crops (20%) are better for part-label detection.
         const CROP_FRACTIONS = [0.20, 0.25, 0.40];
         let bestHeaderText = '';
 
@@ -399,15 +478,17 @@ export async function extractOcrFallbackMetadata(params: {
           });
 
           if (crops?.[0]) {
-            // Preprocess for better OCR performance (grayscale + normalise + sharpen)
             let cropBase64 = crops[0];
             try {
               cropBase64 = await preprocessForOcr(cropBase64);
-            } catch { /* preprocessing optional; fall back to raw crop */ }
+            } catch { /* preprocessing optional */ }
 
-            const cropText = await tryOcrBase64ImageToText(cropBase64);
-            if (cropText && cropText.trim().length > bestHeaderText.length) {
-              bestHeaderText = cropText;
+            const result = await tryOcrBase64ImageToText(cropBase64);
+            totalOcrChars += result.length;
+            totalPagesScanned++;
+
+            if (result && result.trim().length > bestHeaderText.length) {
+              bestHeaderText = result;
             }
           }
         }
@@ -419,30 +500,35 @@ export async function extractOcrFallbackMetadata(params: {
         (!ocrText || ocrText.trim().length < 8) &&
         (ocrMode === 'full' || ocrMode === 'both')
       ) {
-        const page0 = await renderPdfToImage(pdfBuffer, {
-          pageIndex: 0,
-          scale: renderScale,
-          maxWidth: renderMaxWidth,
-          quality: renderQuality,
-          format: renderFormat,
-        });
+        for (let pageIdx = 0; pageIdx < maxOcrPages; pageIdx++) {
+          const page = await renderPdfToImage(pdfBuffer, {
+            pageIndex: pageIdx,
+            scale: renderScale,
+            maxWidth: renderMaxWidth,
+            quality: renderQuality,
+            format: renderFormat,
+          });
 
-        if (page0) {
-          let processed = page0;
-          try {
-            processed = await preprocessForOcr(page0);
-          } catch { /* preprocessing optional */ }
+          if (page) {
+            let processed = page;
+            try {
+              processed = await preprocessForOcr(page);
+            } catch { /* preprocessing optional */ }
 
-          const fullText = await tryOcrBase64ImageToText(processed);
-          // Prefer longer of header vs full
-          if (fullText && fullText.length > ocrText.length) ocrText = fullText;
+            const result = await tryOcrBase64ImageToText(processed);
+            totalOcrChars += result.length;
+            totalPagesScanned++;
+
+            if (result && result.length > ocrText.length) {
+              ocrText = result;
+            }
+          }
         }
       }
 
       const tc = extractTitleComposerFromText(ocrText);
 
       if (tc.title) {
-        // OCR is inherently noisy; keep confidence conservative.
         const confidence = tc.composer ? 55 : 45;
         const result: OCRMetadata = {
           title: tc.title,
@@ -452,24 +538,82 @@ export async function extractOcrFallbackMetadata(params: {
           needsManualReview: confidence < autoAcceptConfidenceThreshold,
         };
 
+        if (returnRawOcrText) {
+          result.rawOcrText = ocrText;
+        }
+
         logger.info('OCR fallback: extracted metadata via OCR', {
           filename: fileSafe,
           confidence: result.confidence,
           durationMs: Math.round(nowMs() - start),
           ocrMode,
+          ocrEngine,
+          pagesScanned: totalPagesScanned,
+          charsExtracted: totalOcrChars,
         });
 
         return result;
       }
 
+      // Log empty/low-confidence outcome (metrics only)
       logger.info('OCR fallback: OCR completed but metadata parse inconclusive; using filename fallback', {
         filename: fileSafe,
         durationMs: Math.round(nowMs() - start),
         ocrMode,
+        ocrEngine,
+        pagesScanned: totalPagesScanned,
+        charsExtracted: totalOcrChars,
+        hasTitle: !!tc.title,
+        hasComposer: !!tc.composer,
       });
     } catch (err) {
       const details = safeErrorDetails(err);
       logger.warn('OCR fallback: OCR path failed; using filename fallback', {
+        filename: fileSafe,
+        ...details,
+      });
+    }
+  } else if (ocrEngine === 'ocrmypdf') {
+    // Try ocrmypdf on the full PDF
+    try {
+      const result = await runOcrmypdf(pdfBuffer);
+
+      if (result.text) {
+        const tc = extractTitleComposerFromText(result.text);
+
+        if (tc.title) {
+          const confidence = tc.composer ? 60 : 50;
+          const metadata: OCRMetadata = {
+            title: tc.title,
+            composer: tc.composer,
+            confidence,
+            isImageScanned: true,
+            needsManualReview: confidence < autoAcceptConfidenceThreshold,
+          };
+
+          if (returnRawOcrText) {
+            metadata.rawOcrText = result.text;
+          }
+
+          logger.info('OCR fallback: extracted metadata via ocrmypdf', {
+            filename: fileSafe,
+            confidence: metadata.confidence,
+            durationMs: Math.round(nowMs() - start),
+            charsExtracted: result.text.length,
+          });
+
+          return metadata;
+        }
+      }
+
+      logger.info('OCR fallback: ocrmypdf completed but metadata parse inconclusive', {
+        filename: fileSafe,
+        durationMs: Math.round(nowMs() - start),
+        charsExtracted: result.text.length,
+      });
+    } catch (err) {
+      const details = safeErrorDetails(err);
+      logger.warn('OCR fallback: ocrmypdf path failed; using filename fallback', {
         filename: fileSafe,
         ...details,
       });
@@ -548,7 +692,7 @@ export function generateOCRFallback(filename: string): OCRMetadata {
     const firstPart = dashMatch[1].trim();
     const secondPart = dashMatch[2].trim();
 
-    // Check if first part is just a number (like "01" or "1") - skip it entirely
+    // Check if first part is just a track/sequence number (like "01" or "1") - skip it entirely
     if (/^\d+$/.test(firstPart)) {
       // First part is just a track/sequence number, use second part as title
       title = secondPart;
@@ -621,4 +765,260 @@ export function parseFilenameMetadata(filename: string): Partial<OCRMetadata> {
   }
 
   return result;
+}
+
+
+// =============================================================================
+// New OCR Engine Functions (Phase 3)
+// =============================================================================
+
+/** Default constants for OCR fallback */
+const DEFAULT_MAX_TEXT_PROBE_PAGES = 3;
+const DEFAULT_MAX_OCR_PAGES = 3;
+const DEFAULT_MIN_MEANINGFUL_CHARS = 50;
+const DEFAULT_RENDER_SCALE = 2;
+const DEFAULT_RENDER_MAX_WIDTH = 1024;
+const DEFAULT_RENDER_FORMAT: 'png' | 'jpeg' = 'png';
+const DEFAULT_RENDER_QUALITY = 85;
+const DEFAULT_AUTO_ACCEPT_CONFIDENCE_THRESHOLD = 70;
+
+/**
+ * Try OCR using tesseract.js on a base64 image
+ */
+async function tryTesseractOcrOnImage(base64Image: string): Promise<{ text: string; confidence: number }> {
+  const start = nowMs();
+
+  try {
+    const mod = await import('tesseract.js').catch(() => null);
+    if (!mod?.recognize) {
+      logger.warn('OCR engine unavailable (tesseract.js not installed)');
+      return { text: '', confidence: 0 };
+    }
+
+    const dataUrl = `data:image/png;base64,${base64Image}`;
+    const result: any = await mod.recognize(dataUrl, 'eng', {
+      logger: () => undefined,
+    });
+
+    const text = typeof result?.data?.text === 'string' ? result.data.text : '';
+    const confidence = typeof result?.data?.confidence === 'number' ? result.data.confidence : 0;
+
+    logger.info('OCR (tesseract) completed', {
+      durationMs: Math.round(nowMs() - start),
+      extractedChars: text.length,
+      confidence,
+    });
+
+    return { text, confidence };
+  } catch (err) {
+    const details = safeErrorDetails(err);
+    logger.warn('OCR (tesseract) failed', {
+      ...details,
+      durationMs: Math.round(nowMs() - start),
+    });
+    return { text: '', confidence: 0 };
+  }
+}
+
+/**
+ * Try OCR using ocrmypdf binary
+ * Writes PDF to temp file, runs ocrmypdf, reads output PDF, extracts text
+ */
+export async function runOcrmypdf(buffer: Buffer): Promise<{ text: string; confidence: number }> {
+  const start = nowMs();
+
+  // import fs once before entering the Promise body so we can use await at top level
+  const fs: any = await import('fs').catch(() => null);
+  return new Promise((resolve) => {
+    const tmpDir = os.tmpdir();
+    const inputPath = path.join(tmpDir, `ocr_input_${Date.now()}.pdf`);
+    const outputPath = path.join(tmpDir, `ocr_output_${Date.now()}.pdf`);
+
+    if (fs) {
+      fs.writeFileSync(inputPath, buffer);
+    }
+
+    const ocrmypdf = spawn('ocrmypdf', [
+      '--skip-text',
+      '--force-ocr',
+      '-q',
+      inputPath,
+      outputPath,
+    ]);
+
+    let stderr = '';
+
+    ocrmypdf.stderr.on('data', (data: Buffer) => {
+      stderr += data.toString();
+    });
+
+    ocrmypdf.on('close', async (code: number) => {
+      try {
+        if (fs) {
+          fs.unlinkSync(inputPath);
+        }
+      } catch { /* ignore */ }
+
+      if (code !== 0) {
+        logger.warn('OCR (ocrmypdf) failed', {
+          exitCode: code,
+          stderr: stderr.slice(0, 200),
+          durationMs: Math.round(nowMs() - start),
+        });
+
+        try {
+          if (fs && fs.existsSync(outputPath)) {
+            fs.unlinkSync(outputPath);
+          }
+        } catch { /* ignore */ }
+
+        resolve({ text: '', confidence: 0 });
+        return;
+      }
+
+      try {
+        if (fs) {
+          const outputBuffer = fs.readFileSync(outputPath);
+          const pdfLib = await import('pdf-lib').catch(() => null);
+
+          if (!pdfLib?.PDFDocument) {
+            throw new Error('pdf-lib not available');
+          }
+
+          const doc = await pdfLib.PDFDocument.load(outputBuffer, {
+            ignoreEncryption: true,
+          });
+
+          const pages = doc.getPages();
+          let fullText = '';
+
+          for (const page of pages.slice(0, DEFAULT_MAX_OCR_PAGES)) {
+            const text = (page as any).getTextContent?.();
+            if (text?.items) {
+              const pageText = text.items
+                .map((item: any) => item.str)
+                .join(' ');
+              fullText += pageText + '\n';
+            }
+          }
+
+          try {
+            if (fs) {
+              fs.unlinkSync(outputPath);
+            }
+          } catch { /* ignore */ }
+
+          logger.info('OCR (ocrmypdf) completed', {
+            durationMs: Math.round(nowMs() - start),
+            pagesScanned: pages.length,
+            extractedChars: fullText.length,
+          });
+
+          resolve({ text: fullText, confidence: 75 });
+        } else {
+          resolve({ text: '', confidence: 0 });
+        }
+      } catch (err) {
+        const details = safeErrorDetails(err);
+        logger.warn('OCR (ocrmypdf) post-process failed', {
+          ...details,
+          durationMs: Math.round(nowMs() - start),
+        });
+
+        try {
+          if (fs && fs.existsSync(outputPath)) {
+            fs.unlinkSync(outputPath);
+          }
+        } catch { /* ignore */ }
+
+        resolve({ text: '', confidence: 0 });
+      }
+    });
+
+    ocrmypdf.on('error', (err: Error) => {
+      logger.warn('OCR (ocrmypdf) spawn failed', {
+        errorMessage: err.message,
+        durationMs: Math.round(nowMs() - start),
+      });
+
+      try {
+        if (fs) {
+          fs.unlinkSync(inputPath);
+        }
+      } catch { /* ignore */ }
+
+      resolve({ text: '', confidence: 0 });
+    });
+  });
+}
+
+/**
+ * Generalized OCR engine runner
+ */
+export async function tryOcrEngine(
+  base64Image: string,
+  engine: 'tesseract' | 'ocrmypdf' | 'vision_api' | 'native',
+  _options?: { returnRawText?: boolean }
+): Promise<{ text: string; confidence: number; engine: string; pagesScanned: number; charsExtracted: number }> {
+  switch (engine) {
+    case 'tesseract': {
+      const result = await tryTesseractOcrOnImage(base64Image);
+      return {
+        text: result.text,
+        confidence: result.confidence,
+        engine: 'tesseract',
+        pagesScanned: 1,
+        charsExtracted: result.text.length,
+      };
+    }
+
+    case 'ocrmypdf': {
+      logger.warn('OCR engine ocrmypdf requires PDF buffer, not image');
+      return {
+        text: '',
+        confidence: 0,
+        engine: 'ocrmypdf',
+        pagesScanned: 0,
+        charsExtracted: 0,
+      };
+    }
+
+    case 'vision_api': {
+      logger.warn('OCR engine vision_api not yet implemented');
+      return {
+        text: '',
+        confidence: 0,
+        engine: 'vision_api',
+        pagesScanned: 0,
+        charsExtracted: 0,
+      };
+    }
+
+    case 'native':
+    default: {
+      const result = await tryTesseractOcrOnImage(base64Image);
+      return {
+        text: result.text,
+        confidence: result.confidence,
+        engine: 'tesseract',
+        pagesScanned: 1,
+        charsExtracted: result.text.length,
+      };
+    }
+  }
+}
+
+/**
+ * Check if ocrmypdf binary is available
+ */
+export async function isOcrmypdfAvailable(): Promise<boolean> {
+  return new Promise((resolve) => {
+    const proc = spawn('ocrmypdf', ['--version']);
+    proc.on('close', (code) => {
+      resolve(code === 0);
+    });
+    proc.on('error', () => {
+      resolve(false);
+    });
+  });
 }

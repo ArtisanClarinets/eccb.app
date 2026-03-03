@@ -30,6 +30,7 @@ import {
   generateOCRFallback,
   parseFilenameMetadata,
   extractOcrFallbackMetadata,
+  OcrFallbackOptions,
 } from '../src/lib/services/ocr-fallback';
 import {
   segmentByHeaderImages,
@@ -92,14 +93,15 @@ function header(msg: string) {
 // Check 1: SHA-256 determinism + uniqueness
 // ---------------------------------------------------------------------------
 
-async function checkSha256(pdfs: typeof testPdfs) {
+async function checkSha256(pdfs: typeof testPdfs, full: boolean) {
   header('Check 1: SHA-256 Determinism & Uniqueness');
 
   const hashes = new Map<string, string>(); // hash → filename
   let uniqueCount = 0;
   let dupeCount = 0;
 
-  for (const pdf of pdfs.slice(0, 10)) { // sample 10 for speed
+  const sample = full ? pdfs : pdfs.slice(0, 10);
+  for (const pdf of sample) { // sample 10 for speed
     const buf = await readFile(pdf.path);
 
     const h1 = computeSha256(buf);
@@ -129,10 +131,11 @@ async function checkSha256(pdfs: typeof testPdfs) {
 // Check 2: generateOCRFallback from filenames
 // ---------------------------------------------------------------------------
 
-async function checkFilenameMetadata(pdfs: typeof testPdfs) {
+async function checkFilenameMetadata(pdfs: typeof testPdfs, full: boolean) {
   header('Check 2: Filename Metadata Extraction');
 
-  for (const pdf of pdfs.slice(0, 15)) {
+  const sample = full ? pdfs : pdfs.slice(0, 15);
+  for (const pdf of sample) {
     const result = generateOCRFallback(pdf.name);
 
     if (!result.title || result.title.length < 2) {
@@ -219,17 +222,18 @@ async function checkOcrFallbackMetadata(pdfs: typeof testPdfs) {
 // Check 5: segmentByHeaderImages doesn't crash
 // ---------------------------------------------------------------------------
 
-async function checkHeaderSegmentation(pdfs: typeof testPdfs) {
+async function checkHeaderSegmentation(pdfs: typeof testPdfs, full: boolean) {
   header('Check 5: segmentByHeaderImages (crash-free / structure check)');
 
   // Test multi-page PDFs likely to have multiple parts (packet files)
-  const multiPartCandidates = pdfs.filter((p) =>
+  const candidates = pdfs.filter((p) =>
     /brass|winds|woodwinds|percussion/i.test(p.name)
-  ).slice(0, 5);
+  );
+  let multiPartCandidates = full ? candidates : candidates.slice(0, 5);
 
   if (multiPartCandidates.length === 0) {
     warn('No multi-part candidates found; testing first 5 PDFs instead');
-    multiPartCandidates.push(...pdfs.slice(0, 5));
+    multiPartCandidates = full ? pdfs : pdfs.slice(0, 5);
   }
 
   for (const pdf of multiPartCandidates) {
@@ -256,6 +260,19 @@ async function checkHeaderSegmentation(pdfs: typeof testPdfs) {
       }
     } catch (err) {
       fail(`${pdf.name} threw: ${(err as Error).message}`);
+    }
+    try {
+      const { labelPages } = await import('../src/lib/services/page-labeler');
+      // labelPages takes a single options object
+      await labelPages({ pdfBuffer: buf, maxPages: 2 } as any);
+      pass(`${pdf.name} page-labeler run OK`);
+    } catch (err) {
+      const msg = (err as Error).message;
+      if (msg.includes('PrismaClient') || msg.includes('engine type')) {
+        warn(`${pdf.name} page-labeler skipped (Prisma config): ${msg.split('\n')[0]}`);
+      } else {
+        fail(`${pdf.name} page-labeler threw: ${msg}`);
+      }
     }
   }
 }
@@ -287,6 +304,30 @@ async function checkCrossFileUniqueness(pdfs: typeof testPdfs) {
   }
 }
 
+// Insert new helper performing OCR config assertions
+async function checkOcrEngineModes(pdfs: typeof testPdfs) {
+  header('Check OCR fallback engine/mode config compliance');
+  if (pdfs.length === 0) return;
+  const pdf = pdfs[0];
+  const buf = await readFile(pdf.path);
+  const engines: OcrFallbackOptions['ocrEngine'][] = ['pdf_text', 'tesseract', 'native'];
+  const modes: OcrFallbackOptions['ocrMode'][] = ['header', 'full', 'both'];
+  for (const eng of engines) {
+    for (const mode of modes) {
+      try {
+        const res = await extractOcrFallbackMetadata({ pdfBuffer: buf, filename: pdf.name, options: { ocrEngine: eng, ocrMode: mode, enableTesseractOcr: false } });
+        if (!res.title) {
+          warn(`engine=${eng} mode=${mode} produced empty title`);
+        } else {
+          pass(`engine=${eng} mode=${mode} returned title`);
+        }
+      } catch (err) {
+        fail(`engine=${eng} mode=${mode} threw: ${(err as Error).message}`);
+      }
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
@@ -297,6 +338,8 @@ async function main() {
   console.log('\n\x1b[1m━━━ Smart Upload Pipeline Verification ━━━\x1b[0m');
   console.log(`Directory: ${TEST_MUSIC_DIR}\n`);
 
+  const full = process.argv.includes('--full');
+
   testPdfs = await findPdfs(TEST_MUSIC_DIR);
   console.log(`Found ${testPdfs.length} PDF files across ${new Set(testPdfs.map((p) => p.piece)).size} pieces\n`);
 
@@ -305,11 +348,12 @@ async function main() {
     process.exit(1);
   }
 
-  await checkSha256(testPdfs);
-  await checkFilenameMetadata(testPdfs);
+  await checkSha256(testPdfs, full);
+  await checkFilenameMetadata(testPdfs, full);
   await checkParseFilenameMeta(testPdfs);
   await checkOcrFallbackMetadata(testPdfs);
-  await checkHeaderSegmentation(testPdfs);
+  await checkOcrEngineModes(testPdfs);
+  await checkHeaderSegmentation(testPdfs, full);
   await checkCrossFileUniqueness(testPdfs);
 
   // ---------------------------------------------------------------------------

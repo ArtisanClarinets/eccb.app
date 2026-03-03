@@ -11,12 +11,14 @@ import {
   validateSmartUploadSettings,
   mergeSettingsPreservingSecrets,
   SMART_UPLOAD_SETTING_KEYS,
+  SECRET_KEYS,
 } from '@/lib/smart-upload/schema';
 import { loadSmartUploadSettingsFromDB } from '@/lib/smart-upload/bootstrap';
 import {
   DEFAULT_VISION_SYSTEM_PROMPT,
   DEFAULT_VERIFICATION_SYSTEM_PROMPT,
   PROMPT_VERSION,
+  getDefaultPromptsRecord,
 } from '@/lib/smart-upload/prompts';
 import { maskSecretValue } from '@/lib/smart-upload/secret-settings';
 
@@ -38,6 +40,8 @@ const JSON_KEYS: string[] = [
   'smart_upload_allowed_mime_types',
   'vision_model_params',
   'verification_model_params',
+  'llm_header_label_model_params',
+  'llm_adjudicator_model_params',
 ];
 
 // =============================================================================
@@ -118,50 +122,26 @@ export async function GET() {
 
     // Inject prompt defaults when DB values are missing (pre-bootstrap state)
     const now = new Date();
-    if (!settingsMap['llm_vision_system_prompt'] || !settingsMap['llm_vision_system_prompt'].value) {
-      settingsMap['llm_vision_system_prompt'] = {
-        id: 'default',
-        key: 'llm_vision_system_prompt',
-        value: DEFAULT_VISION_SYSTEM_PROMPT,
-        description: null,
-        updatedAt: now,
-        updatedBy: null,
-      };
-    }
-    if (!settingsMap['llm_verification_system_prompt'] || !settingsMap['llm_verification_system_prompt'].value) {
-      settingsMap['llm_verification_system_prompt'] = {
-        id: 'default',
-        key: 'llm_verification_system_prompt',
-        value: DEFAULT_VERIFICATION_SYSTEM_PROMPT,
-        description: null,
-        updatedAt: now,
-        updatedBy: null,
-      };
-    }
-    if (!settingsMap['llm_prompt_version'] || !settingsMap['llm_prompt_version'].value) {
-      settingsMap['llm_prompt_version'] = {
-        id: 'default',
-        key: 'llm_prompt_version',
-        value: PROMPT_VERSION,
-        description: null,
-        updatedAt: now,
-        updatedBy: null,
-      };
+
+    // use source-of-truth defaults from prompts module
+    const defaultPrompts = getDefaultPromptsRecord();
+    for (const [key, val] of Object.entries(defaultPrompts)) {
+      if (!settingsMap[key] || !settingsMap[key].value) {
+        settingsMap[key] = {
+          id: 'default',
+          key,
+          value: val,
+          description: null,
+          updatedAt: now,
+          updatedBy: null,
+        };
+      }
     }
 
     const settingsArray: SystemSetting[] = Object.values(settingsMap);
 
     // Mask secret values
-    const SECRET_KEY_SET = new Set([
-      'llm_openai_api_key',
-      'llm_anthropic_api_key',
-      'llm_openrouter_api_key',
-      'llm_gemini_api_key',
-      'llm_custom_api_key',
-      'llm_ollama_cloud_api_key',
-      'llm_mistral_api_key',
-      'llm_groq_api_key',
-    ]);
+    const SECRET_KEY_SET = new Set<string>([...SECRET_KEYS]);
 
     const maskedSettings = settingsArray.map((setting) => {
       if (SECRET_KEY_SET.has(setting.key)) {

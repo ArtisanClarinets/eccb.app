@@ -1229,7 +1229,97 @@ it('should assign music to event and track attendance', async () => {
 
 ---
 
-## 10. Conclusion
+## 10. Smart Upload Session Model (OCR-First Pipeline)
+
+### 10.1 SmartUploadSession
+
+The `SmartUploadSession` model tracks PDF uploads and their AI-powered metadata extraction. This model supports the OCR-first pipeline with provenance tracking.
+
+```prisma
+model SmartUploadSession {
+  id                 String           @id @default(cuid())
+  uploadSessionId    String           @unique
+  fileName           String
+  fileSize           Int
+  mimeType           String
+  storageKey         String
+  extractedMetadata  Json?
+  confidenceScore    Int?
+  status             SmartUploadStatus @default(PENDING_REVIEW)
+  uploadedBy         String
+  reviewedBy         String?
+  reviewedAt         DateTime?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  parsedParts        Json?
+  parseStatus        String?
+  secondPassStatus   String?
+  secondPassResult   Json?
+  autoApproved       Boolean          @default(false)
+  routingDecision    String?
+  cuttingInstructions Json?
+  llmProvider        String?
+  llmVisionModel     String?
+  llmVerifyModel     String?
+  llmModelParams     Json?
+  llmPromptVersion   String?
+  tempFiles          Json?
+  firstPassRaw       String?          @db.LongText
+  secondPassRaw      String?          @db.LongText
+  adjudicatorStatus  String?
+  adjudicatorResult  Json?
+  adjudicatorRaw     String?          @db.LongText
+  finalConfidence    Int?
+  requiresHumanReview Boolean          @default(false)
+  llmAdjudicatorModel String?
+  /// SHA-256 of the original uploaded PDF bytes (hex). Used for fast exact-duplicate detection.
+  sourceSha256       String?          @db.Char(64)
+  /// JSON array of strategy attempts: [{strategy, confidence, failureReasons, durationMs, timestamp}]
+  strategyHistory    Json?
+  /// Total LLM calls consumed by this session (persisted so retries don't reset the budget).
+  llmCallCount       Int              @default(0)
+  /// OCR engine used: tesseract, ocrmypdf, vision_api, native
+  ocrEngineUsed     String?
+  /// OCR mode used: header, full, both
+  ocrModeUsed       String?
+  /// Raw OCR text extracted from PDF (for debugging/provenance). Only stored if smart_upload_store_raw_ocr_text is enabled.
+  rawOcrText        String?           @db.LongText
+  /// Character count of raw OCR text (for quick validation)
+  ocrTextChars      Int?
+
+  @@index([uploadSessionId])
+  @@index([status])
+  @@index([uploadedBy])
+  @@index([sourceSha256])
+  @@index([ocrEngineUsed])
+  @@index([ocrModeUsed])
+}
+
+enum SmartUploadStatus {
+  PENDING_REVIEW
+  PROCESSING
+  APPROVED
+  REJECTED
+  NEEDS_REVISION
+}
+```
+
+### 10.2 OCR Provenance Fields
+
+The following fields were added to support the OCR-first pipeline (migration: `20260303000000_smart_upload_ocr_provenance`):
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `ocrEngineUsed` | String? | OCR engine used: `tesseract`, `ocrmypdf`, `vision_api`, `native` |
+| `ocrModeUsed` | String? | OCR mode used: `header`, `full`, `both` |
+| `rawOcrText` | String? (LongText) | Raw OCR text extracted from PDF (for debugging/provenance). Only stored if `smart_upload_store_raw_ocr_text` setting is enabled. |
+| `ocrTextChars` | Int? | Character count of raw OCR text (for quick validation) |
+
+Indexes are created on `ocrEngineUsed` and `ocrModeUsed` for efficient querying.
+
+---
+
+## 11. Conclusion
 
 This database schema provides a robust foundation for the Community Band Management Platform with:
 

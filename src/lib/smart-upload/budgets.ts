@@ -19,6 +19,8 @@ export interface BudgetLimits {
   maxLlmCalls: number;
   /** Maximum total input tokens per session. 0 = unlimited. */
   maxInputTokens: number;
+  /** Maximum total output tokens per session. 0 = unlimited. */
+  maxOutputTokens?: number;
 }
 
 export interface BudgetState {
@@ -103,6 +105,17 @@ export class SessionBudget {
   /** Return a snapshot of the current budget state. */
   snapshot(): BudgetState & BudgetLimits {
     return { ...this.state, ...this.limits };
+  }
+
+  /** Return current remaining calls count */
+  getRemaining(): { remainingCalls: number; remainingTokens: number } {
+    const remainingCalls = this.limits.maxLlmCalls > 0
+      ? Math.max(0, this.limits.maxLlmCalls - this.state.llmCallCount)
+      : Infinity;
+    const remainingTokens = this.limits.maxInputTokens > 0
+      ? Math.max(0, this.limits.maxInputTokens - this.state.inputTokensConsumed)
+      : Infinity;
+    return { remainingCalls, remainingTokens };
   }
 }
 

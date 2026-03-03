@@ -5,6 +5,7 @@ import Redis from 'ioredis';
 
 import { prisma } from '@/lib/db';
 import { logger } from '@/lib/logger';
+import { loadSmartUploadRuntimeConfig } from '@/lib/llm/config-loader';
 import { downloadFile } from '@/lib/services/storage';
 import { extractOcrFallbackMetadata, type OcrFallbackOptions } from '@/lib/services/ocr-fallback';
 
@@ -38,10 +39,9 @@ import { extractOcrFallbackMetadata, type OcrFallbackOptions } from '@/lib/servi
 const OCR_QUEUE_NAME = process.env.OCR_QUEUE_NAME || 'eccb-ocr';
 
 /**
- * Rate limit (jobs per minute) for OCR processing.
- * OCR is CPU heavy; defaults are conservative.
+ * Concurrency setting - infra-only, not related to Smart Upload behavior.
+ * This is kept as env-only since it's a worker infra concern.
  */
-const OCR_WORKER_RPM = parseInt(process.env.OCR_WORKER_RPM || '6', 10); // max jobs per minute
 const OCR_WORKER_CONCURRENCY = parseInt(process.env.OCR_WORKER_CONCURRENCY || '1', 10);
 
 /**
@@ -54,25 +54,40 @@ const OCR_WORKER_LOCK_DURATION_MS = parseInt(
 );
 
 /**
- * If you want OCR to never run tesseract (text-layer only + filename),
- * set OCR_ENABLE_TESSERACT=false
+ * Cached config for OCR worker.
+ * Loaded once at startup via loadOcrConfig().
  */
-const OCR_ENABLE_TESSERACT =
-  (process.env.OCR_ENABLE_TESSERACT || 'true').toLowerCase() === 'true';
+let cachedOcrConfig: Awaited<ReturnType<typeof loadSmartUploadRuntimeConfig>> | null = null;
 
 /**
- * OCR defaults (can be overridden per-job)
+ * Load OCR config from DB (Smart Upload settings).
+ * Uses cached value if available to avoid repeated DB calls.
  */
-const DEFAULT_OCR_OPTIONS: OcrFallbackOptions = {
-  maxTextProbePages: parseInt(process.env.OCR_TEXT_PROBE_PAGES || '3', 10),
-  enableTesseractOcr: OCR_ENABLE_TESSERACT,
-  ocrMode: (process.env.OCR_MODE as 'header' | 'full' | 'both') || 'both',
-  renderScale: parseFloat(process.env.OCR_RENDER_SCALE || '2'),
-  renderMaxWidth: parseInt(process.env.OCR_RENDER_MAX_WIDTH || '1024', 10),
-  renderFormat: (process.env.OCR_RENDER_FORMAT as 'png' | 'jpeg') || 'png',
-  renderQuality: parseInt(process.env.OCR_RENDER_QUALITY || '85', 10),
-  autoAcceptConfidenceThreshold: parseInt(process.env.OCR_AUTO_ACCEPT_THRESHOLD || '70', 10),
-};
+async function loadOcrConfig() {
+  if (!cachedOcrConfig) {
+    cachedOcrConfig = await loadSmartUploadRuntimeConfig();
+  }
+  return cachedOcrConfig;
+}
+
+/**
+ * Build default OCR options from DB config.
+ * This is the DB-driven behavior - no runtime env fallbacks for OCR behavior.
+ */
+async function getDefaultOcrOptions(): Promise<OcrFallbackOptions> {
+  const cfg = await loadOcrConfig();
+
+  return {
+    maxTextProbePages: cfg.textProbePages,
+    enableTesseractOcr: cfg.ocrEngine === 'tesseract' || cfg.ocrEngine === 'ocrmypdf',
+    ocrMode: cfg.ocrMode,
+    renderScale: 2, // Keep render defaults - not exposed as settings
+    renderMaxWidth: 1024,
+    renderFormat: 'png',
+    renderQuality: 85,
+    autoAcceptConfidenceThreshold: cfg.ocrConfidenceThreshold,
+  };
+}
 
 // =============================================================================
 // Types
@@ -248,11 +263,12 @@ async function processOcrJob(job: Job<OcrProcessJobData>): Promise<void> {
   const downloadDurationMs = Math.round(nowMs() - dlStart);
 
   // 3) Run deterministic OCR fallback extraction
+  const defaultOptions = await getDefaultOcrOptions();
   const mergedOptions: OcrFallbackOptions = {
-    ...DEFAULT_OCR_OPTIONS,
+    ...defaultOptions,
     ...(job.data.options || {}),
-    // enforce enableTesseractOcr by env if you want a hard kill-switch:
-    enableTesseractOcr: (job.data.options?.enableTesseractOcr ?? DEFAULT_OCR_OPTIONS.enableTesseractOcr),
+    // enforce enableTesseractOcr by DB config if you want a hard kill-switch:
+    enableTesseractOcr: (job.data.options?.enableTesseractOcr ?? defaultOptions.enableTesseractOcr),
   };
 
   const ocrStart = nowMs();
@@ -315,46 +331,66 @@ export function startOcrWorker(): void {
   // Dedicated Redis connection for this worker.
   // We avoid importing internal helpers to keep this module isolated and production-ready.
   const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
-  redis = new Redis(redisUrl, {
+  const redisConnection = new Redis(redisUrl, {
     maxRetriesPerRequest: null,
     enableReadyCheck: true,
   });
+  redis = redisConnection;
 
-  worker = new Worker<OcrProcessJobData>(OCR_QUEUE_NAME, processOcrJob, {
-    connection: redis,
-    concurrency: Math.max(1, OCR_WORKER_CONCURRENCY),
-    lockDuration: OCR_WORKER_LOCK_DURATION_MS,
-    // Distributed-safe rate limiting
-    limiter: {
-      max: Math.max(1, OCR_WORKER_RPM),
-      duration: 60_000,
-    },
-  });
+  // Load config at startup to get DB-driven rate limit
+  // This uses smart_upload_ocr_rate_limit_rpm from DB settings
+  loadOcrConfig().then((cfg) => {
+    const limiterRpm = cfg.ocrRateLimitRpm;
 
-  worker.on('completed', (job) => {
-    logger.debug('OCR worker: job completed', { jobId: job.id, name: job.name });
-  });
-
-  worker.on('failed', (job, err) => {
-    const details = safeErrorDetails(err);
-    logger.error('OCR worker: job failed', {
-      jobId: job?.id,
-      name: job?.name,
-      attemptsMade: job?.attemptsMade,
-      ...details,
+    worker = new Worker<OcrProcessJobData>(OCR_QUEUE_NAME, processOcrJob, {
+      connection: redisConnection,
+      concurrency: Math.max(1, OCR_WORKER_CONCURRENCY),
+      lockDuration: OCR_WORKER_LOCK_DURATION_MS,
+      // Distributed-safe rate limiting - DB-driven
+      limiter: {
+        max: Math.max(1, limiterRpm),
+        duration: 60_000,
+      },
     });
-  });
 
-  worker.on('error', (err) => {
-    const details = safeErrorDetails(err);
-    logger.error('OCR worker: worker error', details);
-  });
+    worker.on('completed', (job) => {
+      logger.debug('OCR worker: job completed', { jobId: job.id, name: job.name });
+    });
 
-  logger.info('OCR worker started', {
-    queue: OCR_QUEUE_NAME,
-    concurrency: OCR_WORKER_CONCURRENCY,
-    limiterRpm: OCR_WORKER_RPM,
-    enableTesseract: OCR_ENABLE_TESSERACT,
+    worker.on('failed', (job, err) => {
+      const details = safeErrorDetails(err);
+      logger.error('OCR worker: job failed', {
+        jobId: job?.id,
+        name: job?.name,
+        attemptsMade: job?.attemptsMade,
+        ...details,
+      });
+    });
+
+    worker.on('error', (err) => {
+      const details = safeErrorDetails(err);
+      logger.error('OCR worker: worker error', details);
+    });
+
+    logger.info('OCR worker started', {
+      queue: OCR_QUEUE_NAME,
+      concurrency: OCR_WORKER_CONCURRENCY,
+      limiterRpm,
+      ocrEngine: cfg.ocrEngine,
+      ocrMode: cfg.ocrMode,
+    });
+  }).catch((err) => {
+    logger.error('OCR worker: failed to load config, using fallback rate limit', { err });
+    // Fallback to conservative rate limit if config load fails
+    worker = new Worker<OcrProcessJobData>(OCR_QUEUE_NAME, processOcrJob, {
+      connection: redisConnection,
+      concurrency: Math.max(1, OCR_WORKER_CONCURRENCY),
+      lockDuration: OCR_WORKER_LOCK_DURATION_MS,
+      limiter: {
+        max: 6, // Conservative fallback
+        duration: 60_000,
+      },
+    });
   });
 }
 

@@ -62,6 +62,8 @@ import {
   SmartUploadSettingsSchema,
   type SmartUploadSettings,
   type ProviderValue,
+  type OcrEngineValue,
+  type OcrModeValue,
   getApiKeyFieldForProvider,
   providerRequiresApiKey,
   providerRequiresEndpoint,
@@ -70,6 +72,9 @@ import {
 // =============================================================================
 // Types
 // =============================================================================
+
+// step names used for per-step provider selection
+export type StepName = 'vision' | 'verification' | 'headerLabel' | 'adjudicator';
 
 interface ModelInfo {
   id: string;
@@ -214,127 +219,233 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
   // Model fetching state
   const [visionModels, setVisionModels] = useState<ModelInfo[]>([]);
   const [verificationModels, setVerificationModels] = useState<ModelInfo[]>([]);
+  const [headerLabelModels, setHeaderLabelModels] = useState<ModelInfo[]>([]);
+  const [adjudicatorModels, setAdjudicatorModels] = useState<ModelInfo[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [modelError, setModelError] = useState<string | null>(null);
 
+  // Add per-step loading/error maps
+  const [stepLoading, setStepLoading] = useState<{
+    vision: boolean;
+    verification: boolean;
+    header: boolean;
+    adjudicator: boolean;
+  }>({ vision: false, verification: false, header: false, adjudicator: false });
+
+  const [stepError, setStepError] = useState<{
+    vision?: string | null;
+    verification?: string | null;
+    header?: string | null;
+    adjudicator?: string | null;
+  }>({});
+
+  const [visionProvider, setVisionProvider] = useState(
+    (settings['llm_vision_provider'] as ProviderValue) || '',
+  );
+
+  const [verificationProvider, setVerificationProvider] = useState(
+    (settings['llm_verification_provider'] as ProviderValue) || '',
+  );
+
+  const [headerLabelProvider, setHeaderLabelProvider] = useState(
+    (settings['llm_header_label_provider'] as ProviderValue) || '',
+  );
+
+  const [adjudicatorProvider, setAdjudicatorProvider] = useState(
+    (settings['llm_adjudicator_provider'] as ProviderValue) || '',
+  );
+
+  const [visionModel, setVisionModel] = useState(
+    (settings['llm_vision_model'] as string) || '',
+  );
+
+  const [verificationModel, setVerificationModel] = useState(
+    (settings['llm_verification_model'] as string) || '',
+  );
+
+  const [headerLabelModel, setHeaderLabelModel] = useState(
+    (settings['llm_header_label_model'] as string) || '',
+  );
+
+  // form initialization with schema and default parsing of persisted settings
+  const parseBool = (v: unknown) => v === 'true' || v === true;
+  const parseNum = (v: unknown) => {
+    const n = Number(v);
+    return isNaN(n) ? undefined : n;
+  };
+
   const form = useForm<SmartUploadSettings>({
-    resolver: zodResolver(SmartUploadSettingsSchema),
+    resolver: zodResolver(SmartUploadSettingsSchema) as any,
     defaultValues: {
-      llm_provider: (settings['llm_provider'] as ProviderValue) || 'ollama',
-      llm_endpoint_url: settings['llm_endpoint_url'] || '',
-      llm_openai_api_key: settings['llm_openai_api_key'] || '',
-      llm_anthropic_api_key: settings['llm_anthropic_api_key'] || '',
-      llm_openrouter_api_key: settings['llm_openrouter_api_key'] || '',
-      llm_gemini_api_key: settings['llm_gemini_api_key'] || '',
-      llm_custom_api_key: settings['llm_custom_api_key'] || '',
-      llm_vision_model: settings['llm_vision_model'] || '',
-      llm_verification_model: settings['llm_verification_model'] || '',
-      llm_vision_system_prompt: settings['llm_vision_system_prompt'] || '',
-      llm_verification_system_prompt: settings['llm_verification_system_prompt'] || '',
-      llm_prompt_version: settings['llm_prompt_version'] || '1.0.0',
-      smart_upload_confidence_threshold: Number(settings['smart_upload_confidence_threshold'] ?? 70),
-      smart_upload_auto_approve_threshold: Number(settings['smart_upload_auto_approve_threshold'] ?? 90),
-      smart_upload_rate_limit_rpm: Number(settings['smart_upload_rate_limit_rpm'] ?? 15),
-      smart_upload_max_concurrent: Number(settings['smart_upload_max_concurrent'] ?? 3),
-      smart_upload_max_pages: Number(settings['smart_upload_max_pages'] ?? 20),
-      smart_upload_max_file_size_mb: Number(settings['smart_upload_max_file_size_mb'] ?? 50),
-      smart_upload_allowed_mime_types: settings['smart_upload_allowed_mime_types'] || '',
-      vision_model_params: settings['vision_model_params'] || '',
-      verification_model_params: settings['verification_model_params'] || '',
-      llm_two_pass_enabled: (settings['llm_two_pass_enabled'] ?? 'true') === 'true',
-      smart_upload_schema_version: settings['smart_upload_schema_version'] || '1.0.0',
-      // Autonomy settings
-      smart_upload_enable_autonomous_mode: (settings['smart_upload_enable_autonomous_mode'] ?? 'false') === 'true',
-      smart_upload_autonomous_approval_threshold: Number(settings['smart_upload_autonomous_approval_threshold'] ?? 95),
-      llm_adjudicator_model: settings['llm_adjudicator_model'] || '',
+      llm_provider: (settings['llm_provider'] as ProviderValue) || '' as ProviderValue,
+      llm_endpoint_url: (settings['llm_endpoint_url'] as string) || '',
+      llm_default_provider: (settings['llm_default_provider'] as ProviderValue) || '' as ProviderValue,
+      llm_vision_model: (settings['llm_vision_model'] as string) || '',
+      llm_verification_model: (settings['llm_verification_model'] as string) || '',
+      llm_header_label_model: (settings['llm_header_label_model'] as string) || '',
+      llm_vision_system_prompt: (settings['llm_vision_system_prompt'] as string) || '',
+      llm_verification_system_prompt: (settings['llm_verification_system_prompt'] as string) || '',
+      llm_prompt_version: (settings['llm_prompt_version'] as string) || '',
+      llm_vision_provider: (settings['llm_vision_provider'] as ProviderValue) || '' as ProviderValue,
+      llm_verification_provider: (settings['llm_verification_provider'] as ProviderValue) || '' as ProviderValue,
+      llm_header_label_provider: (settings['llm_header_label_provider'] as ProviderValue) || '' as ProviderValue,
+      llm_adjudicator_provider: (settings['llm_adjudicator_provider'] as ProviderValue) || '' as ProviderValue,
+      smart_upload_confidence_threshold: parseNum(settings['smart_upload_confidence_threshold']),
+      smart_upload_auto_approve_threshold: parseNum(settings['smart_upload_auto_approve_threshold']),
+      smart_upload_rate_limit_rpm: parseNum(settings['smart_upload_rate_limit_rpm']),
+      smart_upload_max_concurrent: parseNum(settings['smart_upload_max_concurrent']),
+      llm_two_pass_enabled: parseBool(settings['llm_two_pass_enabled']),
+      smart_upload_enable_autonomous_mode: parseBool(settings['smart_upload_enable_autonomous_mode']),
+      smart_upload_enable_ocr_first: parseBool(settings['smart_upload_enable_ocr_first']),
+      smart_upload_store_raw_ocr_text: parseBool(settings['smart_upload_store_raw_ocr_text']),
+      smart_upload_text_layer_threshold_pct: parseNum(settings['smart_upload_text_layer_threshold_pct']),
+      smart_upload_ocr_max_pages: parseNum(settings['smart_upload_ocr_max_pages']),
+      smart_upload_text_probe_pages: parseNum(settings['smart_upload_text_probe_pages']),
+      smart_upload_ocr_rate_limit_rpm: parseNum(settings['smart_upload_ocr_rate_limit_rpm']),
+      smart_upload_llm_max_pages: parseNum(settings['smart_upload_llm_max_pages']),
+      smart_upload_llm_max_header_batches: parseNum(settings['smart_upload_llm_max_header_batches']),
+      smart_upload_ocr_engine: (settings['smart_upload_ocr_engine'] as OcrEngineValue) || '' as OcrEngineValue,
+      smart_upload_ocr_mode: (settings['smart_upload_ocr_mode'] as OcrModeValue) || '' as OcrModeValue,
     },
   });
 
   const provider = form.watch('llm_provider');
+  const defaultProvider = form.watch('llm_default_provider') || provider;
   const providerConfig = LLM_PROVIDERS.find((p) => p.value === provider);
   const apiKeyField = getApiKeyFieldForProvider(provider);
   const apiKeyValue = form.watch(apiKeyField as keyof SmartUploadSettings) as string;
 
+  // per-step providers (with fallback to default/global)
+  const visionProviderVal = form.watch('llm_vision_provider') || defaultProvider;
+  const verificationProviderVal = form.watch('llm_verification_provider') || defaultProvider;
+  const headerLabelProviderVal = form.watch('llm_header_label_provider') || defaultProvider;
+  const adjudicatorProviderVal = form.watch('llm_adjudicator_provider') || defaultProvider;
+
+  const visionApiKey = form.watch(
+    getApiKeyFieldForProvider(visionProviderVal) as any,
+  );
+  const verificationApiKey = form.watch(
+    getApiKeyFieldForProvider(verificationProviderVal) as any,
+  );
+  const headerApiKey = form.watch(
+    getApiKeyFieldForProvider(headerLabelProviderVal) as any,
+  );
+  const adjudicatorApiKey = form.watch(
+    getApiKeyFieldForProvider(adjudicatorProviderVal) as any,
+  );
+
   // Fetch models when provider or API key changes
-  const fetchModels = useCallback(async () => {
-    if (provider === 'custom') {
-      // Custom provider - models must be entered manually
-      setVisionModels([]);
-      setVerificationModels([]);
-      return;
-    }
-
-    if (providerRequiresApiKey(provider) && (!apiKeyValue || apiKeyValue === '__UNSET__')) {
-      setModelError('Please enter an API key to fetch available models');
-      setVisionModels([]);
-      setVerificationModels([]);
-      return;
-    }
-
-    setIsLoadingModels(true);
-    setModelError(null);
-
-    try {
-      const params = new URLSearchParams({ provider });
-      // Only forward the key if the user has typed a real value (not a masked placeholder).
-      // When the key is '__SET__', the server resolves it from the DB automatically.
-      if (apiKeyValue && !apiKeyValue.startsWith('__')) {
-        params.set('apiKey', apiKeyValue);
-      }
-      // Forward endpoint for providers that need it; server falls back to DB / default.
-      const endpointValue = form.getValues('llm_endpoint_url');
-      if (endpointValue) {
-        params.set('endpoint', endpointValue);
+  const fetchModelsFor = useCallback(
+    async (
+      providerVal: ProviderValue | string | undefined,
+      modelKey: string,
+      setModels: React.Dispatch<React.SetStateAction<ModelInfo[]>>,
+      setLoading: (b: boolean) => void,
+      setErr: (msg: string | null) => void
+    ) => {
+      // Skip if no provider is set
+      if (!providerVal || providerVal === '') {
+        setModels([]);
+        return;
       }
 
-      const response = await fetch(`/api/admin/uploads/models?${params}`);
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to fetch models');
+      if (providerVal === 'custom') {
+        setModels([]);
+        return;
       }
 
-      const data: ModelsResponse = await response.json();
-      
-      setVisionModels(data.models);
-      setVerificationModels(data.models);
-
-      // Auto-select recommended model if current selection is empty or invalid
-      const currentVision = form.getValues('llm_vision_model');
-      const currentVerification = form.getValues('llm_verification_model');
-      
-      const validModelIds = data.models.map((m) => m.id);
-      
-      if ((!currentVision || !validModelIds.includes(currentVision)) && data.recommendedModel) {
-        form.setValue('llm_vision_model', data.recommendedModel);
-      }
-      
-      if ((!currentVerification || !validModelIds.includes(currentVerification)) && data.recommendedModel) {
-        // For verification, prefer cheaper/smaller models if available
-        const verificationModel = data.models.find(
-          (m) => !m.recommended && m.priceDisplay.includes('Free')
-        )?.id || data.recommendedModel;
-        form.setValue('llm_verification_model', verificationModel);
+      const keyFieldName = getApiKeyFieldForProvider(providerVal);
+      const apiKey = form.getValues(keyFieldName as keyof SmartUploadSettings) as string;
+      if (providerRequiresApiKey(providerVal as ProviderValue) && (!apiKey || apiKey === '__UNSET__')) {
+        setErr('Please enter an API key to fetch available models');
+        setModels([]);
+        return;
       }
 
-      if (data.warning) {
-        toast.warning(data.warning);
+      setLoading(true);
+      setErr(null);
+
+      try {
+        const params = new URLSearchParams({ provider: String(providerVal) });
+        if (apiKey && !apiKey.startsWith('__')) {
+          params.set('apiKey', apiKey);
+        }
+        const endpointValue = form.getValues('llm_endpoint_url');
+        if (endpointValue) params.set('endpoint', String(endpointValue));
+
+        const response = await fetch(`/api/admin/uploads/models?${params}`);
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to fetch models');
+        }
+        const data: ModelsResponse = await response.json();
+
+        setModels(data.models);
+
+        const current = form.getValues(modelKey as keyof SmartUploadSettings);
+        const currentStr = String(current);
+        const validModelIds = data.models.map((m) => m.id);
+        if ((!current || !validModelIds.includes(currentStr)) && data.recommendedModel) {
+          // special handling for verification cheaper model
+          if (modelKey === 'llm_verification_model') {
+            const verificationModel =
+              data.models.find((m) => !m.recommended && m.priceDisplay.includes('Free'))?.id ||
+              data.recommendedModel;
+            form.setValue(modelKey as any, verificationModel);
+          } else {
+            form.setValue(modelKey as any, data.recommendedModel);
+          }
+        }
+
+        if (data.warning) {
+          toast.warning(data.warning);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to fetch models';
+        setErr(message);
+        toast.error(message);
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to fetch models';
-      setModelError(message);
-      toast.error(message);
-    } finally {
-      setIsLoadingModels(false);
-    }
-  }, [provider, apiKeyValue, form]);
+    },
+    [form]
+  );
+
+  const fetchAllModels = useCallback(() => {
+    fetchModelsFor(visionProviderVal, 'llm_vision_model', setVisionModels, (b) =>
+      setStepLoading((p) => ({ ...p, vision: b }))
+    , (m) => setStepError((p) => ({ ...p, vision: m })))
+      .catch(() => {});
+    fetchModelsFor(verificationProviderVal, 'llm_verification_model', setVerificationModels, (b) =>
+      setStepLoading((p) => ({ ...p, verification: b }))
+    , (m) => setStepError((p) => ({ ...p, verification: m })))
+      .catch(() => {});
+    fetchModelsFor(headerLabelProviderVal, 'llm_header_label_model', setHeaderLabelModels, (b) =>
+      setStepLoading((p) => ({ ...p, header: b }))
+    , (m) => setStepError((p) => ({ ...p, header: m })))
+      .catch(() => {});
+    fetchModelsFor(adjudicatorProviderVal, 'llm_adjudicator_model', setAdjudicatorModels, (b) =>
+      setStepLoading((p) => ({ ...p, adjudicator: b }))
+    , (m) => setStepError((p) => ({ ...p, adjudicator: m })))
+      .catch(() => {});
+  }, [visionProviderVal, verificationProviderVal, headerLabelProviderVal, adjudicatorProviderVal, fetchModelsFor]);
 
   // Fetch models on initial load and when dependencies change
   useEffect(() => {
-    if (provider !== 'custom') {
-      fetchModels();
-    }
-  }, [provider, fetchModels]);
+    if (visionProviderVal) fetchAllModels();
+  }, [
+    visionProviderVal,
+    verificationProviderVal,
+    headerLabelProviderVal,
+    adjudicatorProviderVal,
+    visionApiKey,
+    verificationApiKey,
+    headerApiKey,
+    adjudicatorApiKey,
+    form.watch('llm_endpoint_url'),
+    fetchAllModels
+  ]);
 
   const handleProviderChange = (value: ProviderValue) => {
     form.setValue('llm_provider', value);
@@ -365,7 +476,27 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
       // Clear models until we fetch new ones
       form.setValue('llm_vision_model', '');
       form.setValue('llm_verification_model', '');
+      form.setValue('llm_header_label_model', '');
     }
+  };
+
+  const handleStepProviderChange = (step: StepName, value: ProviderValue) => {
+    const key =
+      step === 'vision'
+        ? 'llm_vision_provider'
+        : step === 'verification'
+        ? 'llm_verification_provider'
+        : step === 'headerLabel'
+        ? 'llm_header_label_provider'
+        : 'llm_adjudicator_provider';
+    form.setValue(key as any, value);
+    // clear associated model so UI forces reselect
+    let modelKey = '';
+    if (step === 'vision') modelKey = 'llm_vision_model';
+    if (step === 'verification') modelKey = 'llm_verification_model';
+    if (step === 'headerLabel') modelKey = 'llm_header_label_model';
+    if (step === 'adjudicator') modelKey = 'llm_adjudicator_model';
+    form.setValue(modelKey as any, '');
   };
 
   const onSubmit = async (values: SmartUploadSettings) => {
@@ -622,7 +753,7 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={fetchModels}
+                onClick={fetchAllModels}
                 disabled={isLoadingModels || provider === 'custom'}
               >
                 {isLoadingModels ? (
@@ -692,7 +823,156 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
                   </FormItem>
                 )}
               />
+              <FormField
+                control={form.control}
+                name="llm_header_label_model"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Header Label Model</FormLabel>
+                    <FormControl>
+                      {provider === 'custom' ? (
+                        <Input
+                          placeholder="Enter model name"
+                          {...field}
+                          value={field.value || ''}
+                        />
+                      ) : (
+                        <ModelSelector
+                          models={headerLabelModels}
+                          value={field.value || ''}
+                          onChange={field.onChange}
+                          disabled={isLoadingModels || !!modelError}
+                          placeholder="Select header-label model"
+                        />
+                      )}
+                    </FormControl>
+                    <FormDescription>Used only for header labelling when set</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
+
+            {/* Per-step provider dropdowns */}
+            <div className="mt-6">
+              <CardTitle className="text-base">Per-step Providers</CardTitle>
+              <div className="grid gap-4 md:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="llm_vision_provider"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Vision Step Provider</FormLabel>
+                      <Select
+                        value={field.value || ''}
+                        onValueChange={(v) => handleStepProviderChange('vision', v as ProviderValue)}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="(use default)" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="">Use default</SelectItem>
+                          {LLM_PROVIDERS.map((p) => (
+                            <SelectItem key={p.value} value={p.value}>
+                              {p.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="llm_verification_provider"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Verification Step Provider</FormLabel>
+                      <Select
+                        value={field.value || ''}
+                        onValueChange={(v) => handleStepProviderChange('verification', v as ProviderValue)}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="(use default)" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="">Use default</SelectItem>
+                          {LLM_PROVIDERS.map((p) => (
+                            <SelectItem key={p.value} value={p.value}>
+                              {p.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="llm_header_label_provider"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Header-label Step Provider</FormLabel>
+                      <Select
+                        value={field.value || ''}
+                        onValueChange={(v) => handleStepProviderChange('headerLabel', v as ProviderValue)}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="(use default)" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="">Use default</SelectItem>
+                          {LLM_PROVIDERS.map((p) => (
+                            <SelectItem key={p.value} value={p.value}>
+                              {p.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="llm_adjudicator_provider"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Adjudicator Step Provider</FormLabel>
+                      <Select
+                        value={field.value || ''}
+                        onValueChange={(v) => handleStepProviderChange('adjudicator', v as ProviderValue)}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="(use default)" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="">Use default</SelectItem>
+                          {LLM_PROVIDERS.map((p) => (
+                            <SelectItem key={p.value} value={p.value}>
+                              {p.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
+
+            {/* Model params for header/adjudicator later */}
           </CardContent>
         </Card>
 
@@ -965,7 +1245,7 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
                 <FormItem>
                   <FormLabel>Autonomous Approval Threshold (%)</FormLabel>
                   <FormControl>
-                    <input
+                    <Input
                       type="number"
                       min={0}
                       max={100}
@@ -978,6 +1258,7 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
                   <FormDescription className="text-xs">
                     Uploads with confidence ≥ this value are auto-committed (0–100).
                   </FormDescription>
+                  <FormMessage />
                 </FormItem>
               )}
             />
@@ -988,7 +1269,7 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
                 <FormItem>
                   <FormLabel>Adjudicator Model <span className="text-muted-foreground">(optional)</span></FormLabel>
                   <FormControl>
-                    <input
+                    <Input
                       type="text"
                       placeholder="e.g. gemma3:27b — defaults to vision model if blank"
                       className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
@@ -999,6 +1280,259 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
                   <FormDescription className="text-xs">
                     Model used for second-pass adjudication. Leave blank to reuse the vision model.
                   </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </CardContent>
+        </Card>
+
+        {/* OCR-first configuration */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5 text-primary" />
+              OCR-first Settings
+            </CardTitle>
+            <CardDescription>
+              Configure the OCR-first pipeline that runs before the LLM.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <FormField
+              control={form.control}
+              name="smart_upload_enable_ocr_first"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-center space-x-3 space-y-0">
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                  <div className="space-y-1 leading-none">
+                    <FormLabel>Enable OCR-first Pipeline</FormLabel>
+                    <FormDescription className="text-xs">
+                      Run OCR ahead of the LLM to improve accuracy on scanned PDFs.
+                    </FormDescription>
+                  </div>
+                </FormItem>
+              )}
+            />
+            <div className="grid gap-4 md:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="smart_upload_text_layer_threshold_pct"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Text Layer Threshold (%)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        {...field}
+                        value={field.value}
+                        onChange={(e) => field.onChange(Number(e.target.value))}
+                      />
+                    </FormControl>
+                    <FormDescription className="text-xs">
+                      Percent confidence required to skip OCR (0–100).
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="smart_upload_ocr_engine"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>OCR Engine</FormLabel>
+                    <FormControl>
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select engine" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="tesseract">Tesseract</SelectItem>
+                          <SelectItem value="ocrmypdf">ocrmypdf</SelectItem>
+                          <SelectItem value="vision_api">Vision API</SelectItem>
+                          <SelectItem value="native">Native</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormControl>
+                    <FormDescription className="text-xs">
+                      Engine used for OCR processing.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="smart_upload_ocr_mode"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>OCR Mode</FormLabel>
+                    <FormControl>
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select mode" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="header">Header Only</SelectItem>
+                          <SelectItem value="full">Full Document</SelectItem>
+                          <SelectItem value="both">Headers + Full</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormControl>
+                    <FormDescription className="text-xs">
+                      Choose pages to run OCR on.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="smart_upload_ocr_max_pages"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Max OCR Pages</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={100}
+                        {...field}
+                        value={field.value}
+                        onChange={(e) => field.onChange(Number(e.target.value))}
+                      />
+                    </FormControl>
+                    <FormDescription className="text-xs">
+                      Maximum number of pages to run OCR on.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="smart_upload_text_probe_pages"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Text Probe Pages</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={100}
+                        {...field}
+                        value={field.value}
+                        onChange={(e) => field.onChange(Number(e.target.value))}
+                      />
+                    </FormControl>
+                    <FormDescription className="text-xs">
+                      Pages to inspect for an existing text layer.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="smart_upload_store_raw_ocr_text"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-start space-x-3 space-y-0 pt-2">
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                    <div className="space-y-1 leading-none">
+                      <FormLabel>Store Raw OCR Text</FormLabel>
+                      <FormDescription className="text-xs">
+                        Save OCR output to the database for debugging.
+                      </FormDescription>
+                    </div>
+                  </FormItem>
+                )}
+              />
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="smart_upload_ocr_rate_limit_rpm"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>OCR Rate Limit (RPM)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={10}
+                        {...field}
+                        value={field.value}
+                        onChange={(e) => field.onChange(Number(e.target.value))}
+                      />
+                    </FormControl>
+                    <FormDescription className="text-xs">
+                      Max OCR jobs per minute.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="smart_upload_llm_max_pages"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>LLM Max Pages</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={100}
+                        {...field}
+                        value={field.value}
+                        onChange={(e) => field.onChange(Number(e.target.value))}
+                      />
+                    </FormControl>
+                    <FormDescription className="text-xs">
+                      Maximum pages sent to LLM after OCR.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <FormField
+              control={form.control}
+              name="smart_upload_llm_max_header_batches"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>LLM Max Header Batches</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={10}
+                      {...field}
+                      value={field.value}
+                      onChange={(e) => field.onChange(Number(e.target.value))}
+                    />
+                  </FormControl>
+                  <FormDescription className="text-xs">
+                    Limit for header-label LLM batching.
+                  </FormDescription>
+                  <FormMessage />
                 </FormItem>
               )}
             />

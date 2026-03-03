@@ -33,7 +33,7 @@ import { bootstrapSmartUploadSettings } from '@/lib/smart-upload/bootstrap';
 // Configuration
 // =============================================================================
 
-const TEST_MUSIC_DIR = path.resolve(__dirname, '..', 'storage', 'smart-upload', 'test_music');
+const TEST_MUSIC_DIR = path.resolve(__dirname, '..', 'storage', 'test_music');
 const STORAGE_DIR = path.resolve(__dirname, '..', 'storage', 'smart-upload');
 const POLL_INTERVAL_MS = 2000;
 const MAX_WAIT_MS = 5 * 60 * 1000; // 5 minutes max per file
@@ -69,27 +69,53 @@ async function main() {
   const args = process.argv.slice(2);
   
   let pdfFiles: string[] = [];
+  let requireOcrFirst = false;
+  let maxFiles: number | undefined;
   
+  // parse simple flags
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === '--require-ocr-first') {
+      requireOcrFirst = true;
+    } else if (a === '--max-files' && args[i+1]) {
+      maxFiles = parseInt(args[i+1], 10);
+      i++;
+    }
+  }
+
+  // helper to recursively collect PDFs
+  async function collectPdfs(dir: string, out: string[]) {
+    const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      const p = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        await collectPdfs(p, out);
+      } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.pdf')) {
+        out.push(p);
+      }
+    }
+  }
+
   if (args.includes('--all') || args.length === 0) {
-    // Find all PDFs in test_music/
-    const entries = await readdir(TEST_MUSIC_DIR).catch(() => []);
-    pdfFiles = (entries as string[])
-      .filter((f: string) => f.toLowerCase().endsWith('.pdf'))
-      .map((f: string) => path.join(TEST_MUSIC_DIR, f));
+    await collectPdfs(TEST_MUSIC_DIR, pdfFiles);
   } else if (args.includes('--files')) {
     const fileIdx = args.indexOf('--files');
     pdfFiles = args.slice(fileIdx + 1).map((f) => 
       path.isAbsolute(f) ? f : path.resolve(process.cwd(), f)
     );
   } else {
-    // Treat all args as file paths
-    pdfFiles = args.map((f) => 
+    // Treat all args as file paths (skip recognized flags)
+    pdfFiles = args.filter((a) => !a.startsWith('--')).map((f) => 
       path.isAbsolute(f) ? f : path.resolve(process.cwd(), f)
     );
   }
 
+  if (maxFiles && pdfFiles.length > maxFiles) {
+    pdfFiles = pdfFiles.slice(0, maxFiles);
+  }
+
   if (pdfFiles.length === 0) {
-    console.error('No PDF files found. Place PDFs in test_music/ or pass --files <path>');
+    console.error('No PDF files found. Place PDFs in storage/test_music/ or pass --files <path>');
     process.exit(1);
   }
 
@@ -233,24 +259,38 @@ async function main() {
       const ocrFirstUsed = notes?.includes('OCR-first pipeline') ?? false;
 
       if (parseStatus === 'PARSED' || parseStatus === 'PARSE_FAILED') {
-        results.set(session.sessionId, {
-          status: dbSession.status || 'UNKNOWN',
-          parseStatus,
-          confidence: dbSession.confidenceScore || 0,
-          partsCreated: parsedParts?.length ?? 0,
-          routingDecision: dbSession.routingDecision || null,
-          ocrFirstUsed,
-        });
-
-        const icon = parseStatus === 'PARSED' ? '✓' : '✗';
-        const pipeline = ocrFirstUsed ? 'OCR-FIRST' : 'LLM';
-        console.log(
-          `  ${icon} ${session.fileName}: ${parseStatus} | ` +
-          `confidence=${dbSession.confidenceScore} | ` +
-          `parts=${parsedParts?.length ?? 0} | ` +
-          `routing=${dbSession.routingDecision} | ` +
-          `pipeline=${pipeline}`
-        );
+        const ocrFirstUsed = notes?.includes('OCR-first pipeline') ?? false;
+        // if requireOcrFirst fails and pipeline used LLM, treat as failure
+        if (requireOcrFirst && !ocrFirstUsed) {
+          results.set(session.sessionId, {
+            status: dbSession.status || 'UNKNOWN',
+            parseStatus,
+            confidence: dbSession.confidenceScore || 0,
+            partsCreated: parsedParts?.length ?? 0,
+            routingDecision: dbSession.routingDecision || null,
+            error: 'OCR-first not used',
+            ocrFirstUsed,
+          });
+          console.log(`  ✗ ${session.fileName}: parse ${parseStatus} but OCR-FIRST not used`);
+        } else {
+          results.set(session.sessionId, {
+            status: dbSession.status || 'UNKNOWN',
+            parseStatus,
+            confidence: dbSession.confidenceScore || 0,
+            partsCreated: parsedParts?.length ?? 0,
+            routingDecision: dbSession.routingDecision || null,
+            ocrFirstUsed,
+          });
+          const icon = parseStatus === 'PARSED' ? '✓' : '✗';
+          const pipeline = ocrFirstUsed ? 'OCR-FIRST' : 'LLM';
+          console.log(
+            `  ${icon} ${session.fileName}: ${parseStatus} | ` +
+            `confidence=${dbSession.confidenceScore} | ` +
+            `parts=${parsedParts?.length ?? 0} | ` +
+            `routing=${dbSession.routingDecision} | ` +
+            `pipeline=${pipeline}`
+          );
+        }
       } else {
         allDone = false;
       }
@@ -276,6 +316,10 @@ async function main() {
     const result = results.get(session.sessionId);
     if (!result) {
       console.log(`  ✗ ${session.fileName}: TIMEOUT (no result after ${MAX_WAIT_MS / 1000}s)`);
+      failCount++;
+      continue;
+    }
+    if (requireOcrFirst && result.error === 'OCR-first not used') {
       failCount++;
       continue;
     }
@@ -305,7 +349,7 @@ async function main() {
       }
     }
 
-    if (result.parseStatus === 'PARSED' && result.partsCreated > 0) {
+    if (result.parseStatus === 'PARSED' && result.partsCreated > 0 && !result.error) {
       successCount++;
     } else {
       failCount++;

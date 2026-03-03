@@ -28,6 +28,9 @@ import type { CuttingInstruction } from '@/types/smart-upload';
 // Types
 // =============================================================================
 
+/**
+ * Header Image Segmentation Options
+ */
 export interface HeaderImageSegmentationOptions {
   /** Header crop height as a fraction of the page height. Default 0.20. */
   cropHeightFraction?: number;
@@ -46,6 +49,17 @@ export interface HeaderImageSegmentationOptions {
   fallbackCropFractions?: number[];
   /** Cache tag for pdf-renderer (e.g. session-id). */
   cacheTag?: string;
+  /** Preprocessing options for OCR */
+  preprocessing?: {
+    /** Enable threshold/binarization. Default false. */
+    enableThreshold?: boolean;
+    /** Threshold value (0-255). Default 128. */
+    thresholdValue?: number;
+    /** Enable deskew. Default false. */
+    enableDeskew?: boolean;
+    /** Deskew angle tolerance in degrees. Default 5. */
+    deskewTolerance?: number;
+  };
 }
 
 export interface HeaderImageSegmentationResult {
@@ -211,6 +225,20 @@ async function tryOcr(base64Image: string): Promise<{ text: string; confidence: 
  *
  * Returns null when segmentation is not feasible (e.g. PDF too short).
  */
+/**
+ * Run local header-image segmentation on a PDF buffer.
+ *
+ * This is a drop-in replacement for the LLM header-label pass in
+ * smart-upload-processor.ts.  It produces 0-indexed CuttingInstructions
+ * compatible with splitPdfByCuttingInstructions().
+ *
+ * Returns null when segmentation is not feasible (e.g. PDF too short).
+ *
+ * @param pdfBuffer - PDF buffer to segment
+ * @param totalPages - Total number of pages in the PDF
+ * @param options - Segmentation options
+ * @returns Segmentation result or null
+ */
 export async function segmentByHeaderImages(
   pdfBuffer: Buffer,
   totalPages: number,
@@ -228,6 +256,7 @@ export async function segmentByHeaderImages(
     enableOcr = true,
     fallbackCropFractions = [0.15, 0.25, 0.30],
     cacheTag,
+    preprocessing,
   } = options;
 
   // Skip segmentation for very short PDFs — boundary detection is meaningless.
@@ -236,6 +265,11 @@ export async function segmentByHeaderImages(
   }
 
   const allPageIndices = Array.from({ length: totalPages }, (_, i) => i);
+
+  // Track diagnostics
+  const hashDistances: number[] = [];
+  let ocrFailures = 0;
+  let ocrFallbacks = 0;
 
   // ── Step 1: Render header crops ──────────────────────────────────────────
   let headerCrops: string[];
@@ -268,8 +302,8 @@ export async function segmentByHeaderImages(
   const pageHashes: PageHashEntry[] = await Promise.all(
     headerCrops.map(async (crop, i) => ({
       pageIndex: i,
-      hash: await computeAHash(crop, hashWidth * 2, hashHeight * 2),  // full resolution hash
-      hashSmall: await computeAHash(crop, hashWidth, hashHeight),      // small hash for boundary detection
+      hash: await computeAHash(crop, hashWidth * 2, hashHeight * 2),
+      hashSmall: await computeAHash(crop, hashWidth, hashHeight),
     }))
   );
 
@@ -286,6 +320,7 @@ export async function segmentByHeaderImages(
         pageHashes[i - 1].hashSmall,
         pageHashes[i].hashSmall,
       );
+      hashDistances.push(hashDist);
     }
 
     const isBoundary = isLastPage || (hashDist !== null && hashDist >= hashDistanceThreshold);
@@ -320,6 +355,7 @@ export async function segmentByHeaderImages(
     logger.info('header-image-segmentation: no meaningful boundaries detected', {
       totalPages,
       hashThreshold: hashDistanceThreshold,
+      hashDistances: hashDistances.slice(0, 10), // Log first 10 distances
       durationMs: Math.round(nowMs() - start),
     });
     return null;
@@ -336,6 +372,7 @@ export async function segmentByHeaderImages(
 
       // Retry with fallback crop fractions if OCR returned no text
       if ((!ocrResult.text || ocrResult.confidence < OCR_CONFIDENCE_MIN) && fallbackCropFractions.length > 0) {
+        ocrFallbacks++;
         for (const altFraction of fallbackCropFractions) {
           if (altFraction === cropHeightFraction) continue;
           try {
@@ -347,7 +384,12 @@ export async function segmentByHeaderImages(
               cropHeightFraction: altFraction,
             });
             if (altCrops[0]) {
-              const altResult = await tryOcr(altCrops[0]);
+              // Apply preprocessing if configured
+              let processedCrop = altCrops[0];
+              if (preprocessing) {
+                processedCrop = await preprocessForOcr(processedCrop, preprocessing);
+              }
+              const altResult = await tryOcr(processedCrop);
               if (altResult.text && altResult.confidence > ocrResult.confidence) {
                 ocrResult = altResult;
                 break;
@@ -366,6 +408,8 @@ export async function segmentByHeaderImages(
           seg.label = candidateLabel;
           seg.ocrConfidence = ocrResult.confidence;
         }
+      } else {
+        ocrFailures++;
       }
 
       logger.info('header-image-segmentation: segment OCR result', {
@@ -379,7 +423,6 @@ export async function segmentByHeaderImages(
   }
 
   // ── Step 5: Fill unlabelled segments with auto-labels ────────────────────
-  // Segments with no OCR label → "Part N" fallback so they still produce valid parts.
   let autoPartCounter = 1;
   for (const seg of segments) {
     if (!seg.label) {
@@ -406,9 +449,6 @@ export async function segmentByHeaderImages(
   const ocrFraction = segments.length > 0 ? ocrLabelledCount / segments.length : 0;
   const hasOcrLabels = ocrLabelledCount > 0;
 
-  // Confidence formula:
-  //   base + (# OCR-confirmed labels / total segments) * bonus * 2
-  //   Capped at MAX_CONFIDENCE. Min is BASE_SEGMENT_CONFIDENCE if at least 2 segments found.
   const confidence = Math.min(
     MAX_CONFIDENCE,
     Math.round(BASE_SEGMENT_CONFIDENCE + ocrFraction * LABEL_CONFIDENCE_BONUS * 2 * (segments.length / totalPages * 10)),
@@ -424,14 +464,24 @@ export async function segmentByHeaderImages(
     hashDistanceFromPrev: seg.hashDistanceFromPrev,
   }));
 
+  // Enhanced diagnostics logging
   logger.info('header-image-segmentation: segmentation complete', {
     totalPages,
     segmentCount: segments.length,
     ocrLabelledCount,
+    ocrFailures,
+    ocrFallbacks,
     confidence,
     durationMs: Math.round(nowMs() - start),
     hashThreshold: hashDistanceThreshold,
+    hashWidth,
+    hashHeight,
     cropHeightFraction,
+    hashDistanceStats: {
+      min: hashDistances.length > 0 ? Math.min(...hashDistances) : 0,
+      max: hashDistances.length > 0 ? Math.max(...hashDistances) : 0,
+      avg: hashDistances.length > 0 ? Math.round(hashDistances.reduce((a, b) => a + b, 0) / hashDistances.length) : 0,
+    },
   });
 
   return {
@@ -454,15 +504,86 @@ export async function segmentByHeaderImages(
  *
  * Returns the original base64 string on failure (so OCR can still attempt).
  */
-export async function preprocessForOcr(base64Image: string): Promise<string> {
+/**
+ * Preprocess options for OCR
+ */
+export interface OcrPreprocessOptions {
+  /** Enable threshold/binarization. Default false. */
+  enableThreshold?: boolean;
+  /** Threshold value (0-255). Default 128. */
+  thresholdValue?: number;
+  /** Enable deskew. Default false. */
+  enableDeskew?: boolean;
+  /** Deskew angle tolerance in degrees. Default 5. */
+  deskewTolerance?: number;
+}
+
+/**
+ * Preprocess a base64 PNG/JPEG for improved OCR accuracy.
+ * Applies: grayscale → contrast normalization → optional threshold/binarization → optional deskew → mild sharpen → PNG re-encode.
+ *
+ * @param base64Image - Input base64-encoded image
+ * @param options - Preprocessing options
+ * @returns Preprocessed base64-encoded image, or original on failure
+ */
+export async function preprocessForOcr(
+  base64Image: string,
+  options?: OcrPreprocessOptions
+): Promise<string> {
+  const opts = options || {};
+  const enableThreshold = opts.enableThreshold ?? false;
+  const thresholdValue = opts.thresholdValue ?? 128;
+  const enableDeskew = opts.enableDeskew ?? false;
+
   try {
     const imageBuffer = Buffer.from(base64Image, 'base64');
-    const processed = await sharp(imageBuffer)
+
+    let pipeline = sharp(imageBuffer)
       .grayscale()
-      .normalise()                        // contrast stretch
-      .sharpen({ sigma: 1.5, m2: 0.5 })  // mild sharpening
+      .normalise(); // contrast stretch
+
+    // Apply threshold/binarization if enabled
+    if (enableThreshold) {
+      pipeline = pipeline.threshold(thresholdValue);
+    }
+
+    // Apply deskew if enabled (using rotate with auto-fallback)
+    if (enableDeskew) {
+      pipeline = pipeline.rotate(); // Auto-detect and correct skew
+    }
+
+    const processed = await pipeline
+      .sharpen({ sigma: 1.5, m2: 0.5 }) // mild sharpening
       .png({ compressionLevel: 1 })
       .toBuffer();
+
+    return processed.toString('base64');
+  } catch {
+    return base64Image;
+  }
+}
+
+/**
+ * Simple threshold/binarization for OCR preprocessing.
+ * More performant than full sharp pipeline when only threshold is needed.
+ *
+ * @param base64Image - Input base64-encoded image
+ * @param threshold - Threshold value (0-255), default 128
+ * @returns Binarized base64-encoded image, or original on failure
+ */
+export async function binarizeImage(
+  base64Image: string,
+  threshold: number = 128
+): Promise<string> {
+  try {
+    const imageBuffer = Buffer.from(base64Image, 'base64');
+
+    const processed = await sharp(imageBuffer)
+      .grayscale()
+      .threshold(threshold)
+      .png({ compressionLevel: 1 })
+      .toBuffer();
+
     return processed.toString('base64');
   } catch {
     return base64Image;

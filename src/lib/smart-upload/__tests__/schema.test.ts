@@ -107,48 +107,42 @@ describe('SmartUploadSettingsSchema', () => {
       }
     });
 
-    it('should reject empty provider', () => {
+    it('should allow empty provider (optional for incremental updates)', () => {
       const result = SmartUploadSettingsSchema.safeParse({
         ...validSettings,
         llm_provider: '',
       });
-      expect(result.success).toBe(false);
+      expect(result.success).toBe(true);
     });
   });
 
   describe('required fields validation', () => {
-    it('should fail when vision_model is missing', () => {
+    it('should allow vision_model to be missing (optional for incremental updates)', () => {
       const { llm_vision_model: _, ...settingsWithoutVision } = validSettings;
       const result = SmartUploadSettingsSchema.safeParse(settingsWithoutVision);
-      expect(result.success).toBe(false);
-      if (!result.success) {
-        expect(result.error.issues.some(i => i.path.includes('llm_vision_model'))).toBe(true);
-      }
+      expect(result.success).toBe(true);
     });
 
-    it('should fail when verification_model is missing', () => {
+    it('should allow verification_model to be missing (optional for incremental updates)', () => {
       const { llm_verification_model: _, ...settingsWithoutVerification } = validSettings;
       const result = SmartUploadSettingsSchema.safeParse(settingsWithoutVerification);
-      expect(result.success).toBe(false);
-      if (!result.success) {
-        expect(result.error.issues.some(i => i.path.includes('llm_verification_model'))).toBe(true);
-      }
+      expect(result.success).toBe(true);
     });
 
-    it('should fail when vision_system_prompt is empty', () => {
+    it('should allow vision_system_prompt to be empty (optional for incremental updates)', () => {
       const result = SmartUploadSettingsSchema.safeParse({
         ...validSettings,
         llm_vision_system_prompt: '',
       });
-      expect(result.success).toBe(false);
+      expect(result.success).toBe(true);
     });
 
-    it('should fail when verification_system_prompt is empty', () => {
+    it('should allow verification_system_prompt to be empty (optional for incremental updates)', () => {
       const result = SmartUploadSettingsSchema.safeParse({
         ...validSettings,
         llm_verification_system_prompt: '',
       });
-      expect(result.success).toBe(false);
+      expect(result.success).toBe(true);
     });
   });
 
@@ -733,16 +727,17 @@ describe('dbRecordToSettings', () => {
     expect(settings.llm_two_pass_enabled).toBe(true);
   });
 
-  it('should throw when prompts are missing (schema requires min 1 char)', () => {
+  it('should parse successfully when prompts are missing (optional)', () => {
     const record = {
       llm_provider: 'ollama',
       llm_vision_model: 'llama3.2-vision',
       llm_verification_model: 'qwen2.5:7b',
     };
 
-    // dbRecordToSettings uses empty string defaults, but schema requires min 1 char
-    // This will throw because empty strings fail the min(1) validation
-    expect(() => dbRecordToSettings(record)).toThrow();
+    // Prompts are now optional for incremental updates
+    const settings = dbRecordToSettings(record);
+    expect(settings).toBeDefined();
+    expect(settings.llm_provider).toBe('ollama');
   });
 
   it('should parse successfully when prompts are provided in record', () => {

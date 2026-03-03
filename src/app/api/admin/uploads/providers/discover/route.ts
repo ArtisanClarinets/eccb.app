@@ -41,7 +41,7 @@ interface DiscoveryAction {
   note?: string;
 }
 
-async function discoverOllama(): Promise<DiscoveryAction> {
+export async function discoverOllama(): Promise<DiscoveryAction> {
   try {
     const res = await fetch(`${OLLAMA_DEFAULT_HOST}${OLLAMA_TAGS_PATH}`, {
       signal: AbortSignal.timeout(3000),
@@ -68,7 +68,9 @@ async function discoverOllama(): Promise<DiscoveryAction> {
   }
 }
 
-async function discoverGemini(apiKey: string | undefined): Promise<DiscoveryAction> {
+// export helpers (implementations follow)
+
+export async function discoverGemini(apiKey: string | undefined): Promise<DiscoveryAction> {
   if (!apiKey) return { provider: 'gemini', available: false, settingsWritten: [], note: 'No API key found' };
   try {
     const res = await fetch(`${GEMINI_LIST_URL}${apiKey}`, { signal: AbortSignal.timeout(5000) });
@@ -90,7 +92,7 @@ async function discoverGemini(apiKey: string | undefined): Promise<DiscoveryActi
   }
 }
 
-async function discoverOpenRouter(apiKey: string | undefined): Promise<DiscoveryAction> {
+export async function discoverOpenRouter(apiKey: string | undefined): Promise<DiscoveryAction> {
   if (!apiKey) return { provider: 'openrouter', available: false, settingsWritten: [], note: 'No API key found' };
   try {
     const res = await fetch(OPENROUTER_FREE_URL, {
@@ -139,9 +141,23 @@ export async function POST(request: NextRequest) {
     }
     await requirePermission('system:settings');
 
-    // Read existing API keys from DB
+    // Read existing API keys and per-step provider settings from DB
     const existingRows = await prisma.systemSetting.findMany({
-      where: { key: { in: ['llm_gemini_api_key', 'llm_openrouter_api_key', 'llm_provider'] } },
+      where: {
+        key: {
+          in: [
+            'llm_gemini_api_key',
+            'llm_openrouter_api_key',
+            'llm_provider',
+            'llm_default_provider',
+            'llm_vision_provider',
+            'llm_verification_provider',
+            'llm_header_label_provider',
+            'llm_adjudicator_provider',
+            'llm_header_label_model',
+          ],
+        },
+      },
     });
     const existing: Record<string, string> = {};
     for (const row of existingRows) {
@@ -174,13 +190,16 @@ export async function POST(request: NextRequest) {
 
     const written: string[] = [];
     if (shouldWrite && availableProviders.length > 0) {
-      // Priority: Ollama (free, local, no data leaves the machine) > Gemini > OpenRouter
+      // Priority: Ollama > Gemini > OpenRouter
       const best = ollamaResult.available ? ollamaResult
         : geminiResult.available ? geminiResult
         : openrouterResult;
 
       if (best.available) {
         const by = session.user.id;
+
+        // compute header label model default if needed
+        const headerModel = existing.llm_header_label_model || '';
 
         if (best.provider === 'ollama') {
           const model = best.models?.[0] ?? DEFAULT_OLLAMA_VISION_MODEL;
@@ -189,21 +208,81 @@ export async function POST(request: NextRequest) {
           await upsertSetting('llm_endpoint_url', OLLAMA_DEFAULT_HOST, by);
           await upsertSetting('llm_vision_model', visionModel, by);
           await upsertSetting('llm_verification_model', visionModel, by);
-          written.push('llm_provider', 'llm_endpoint_url', 'llm_vision_model', 'llm_verification_model');
+          // backfill per-step providers if not already set
+          if (!existing.llm_default_provider) await upsertSetting('llm_default_provider', 'ollama', by);
+          if (!existing.llm_vision_provider) await upsertSetting('llm_vision_provider', 'ollama', by);
+          if (!existing.llm_verification_provider) await upsertSetting('llm_verification_provider', 'ollama', by);
+          if (!existing.llm_header_label_provider) await upsertSetting('llm_header_label_provider', 'ollama', by);
+          if (!existing.llm_adjudicator_provider) await upsertSetting('llm_adjudicator_provider', 'ollama', by);
+          // header label model defaulted
+          if (!headerModel) {
+            await upsertSetting('llm_header_label_model', visionModel, by);
+          }
+          written.push(
+            'llm_provider',
+            'llm_endpoint_url',
+            'llm_vision_model',
+            'llm_verification_model',
+            'llm_default_provider',
+            'llm_vision_provider',
+            'llm_verification_provider',
+            'llm_header_label_provider',
+            'llm_adjudicator_provider',
+            'llm_header_label_model'
+          );
         } else if (best.provider === 'gemini') {
           const visionModel = best.models?.find((m) => m.includes('flash')) ?? DEFAULT_GEMINI_VISION_MODEL;
           await upsertSetting('llm_provider', 'gemini', by);
           await upsertSetting('llm_vision_model', visionModel, by);
           await upsertSetting('llm_verification_model', visionModel, by);
           if (geminiKey) await upsertSetting('llm_gemini_api_key', geminiKey, by);
-          written.push('llm_provider', 'llm_vision_model', 'llm_verification_model');
+          // backfill providers
+          if (!existing.llm_default_provider) await upsertSetting('llm_default_provider', 'gemini', by);
+          if (!existing.llm_vision_provider) await upsertSetting('llm_vision_provider', 'gemini', by);
+          if (!existing.llm_verification_provider) await upsertSetting('llm_verification_provider', 'gemini', by);
+          if (!existing.llm_header_label_provider) await upsertSetting('llm_header_label_provider', 'gemini', by);
+          if (!existing.llm_adjudicator_provider) await upsertSetting('llm_adjudicator_provider', 'gemini', by);
+          if (!headerModel) {
+            await upsertSetting('llm_header_label_model', visionModel, by);
+          }
+          written.push(
+            'llm_provider',
+            'llm_vision_model',
+            'llm_verification_model',
+            'llm_gemini_api_key',
+            'llm_default_provider',
+            'llm_vision_provider',
+            'llm_verification_provider',
+            'llm_header_label_provider',
+            'llm_adjudicator_provider',
+            'llm_header_label_model'
+          );
         } else if (best.provider === 'openrouter') {
           const visionModel = best.models?.find((m) => /gemma|llava|qwen.*vl/i.test(m)) ?? DEFAULT_OPENROUTER_FREE_VISION_MODEL;
           await upsertSetting('llm_provider', 'openrouter', by);
           await upsertSetting('llm_vision_model', visionModel, by);
           await upsertSetting('llm_verification_model', visionModel, by);
           if (openrouterKey) await upsertSetting('llm_openrouter_api_key', openrouterKey, by);
-          written.push('llm_provider', 'llm_vision_model', 'llm_verification_model');
+          if (!existing.llm_default_provider) await upsertSetting('llm_default_provider', 'openrouter', by);
+          if (!existing.llm_vision_provider) await upsertSetting('llm_vision_provider', 'openrouter', by);
+          if (!existing.llm_verification_provider) await upsertSetting('llm_verification_provider', 'openrouter', by);
+          if (!existing.llm_header_label_provider) await upsertSetting('llm_header_label_provider', 'openrouter', by);
+          if (!existing.llm_adjudicator_provider) await upsertSetting('llm_adjudicator_provider', 'openrouter', by);
+          if (!headerModel) {
+            await upsertSetting('llm_header_label_model', visionModel, by);
+          }
+          written.push(
+            'llm_provider',
+            'llm_vision_model',
+            'llm_verification_model',
+            'llm_openrouter_api_key',
+            'llm_default_provider',
+            'llm_vision_provider',
+            'llm_verification_provider',
+            'llm_header_label_provider',
+            'llm_adjudicator_provider',
+            'llm_header_label_model'
+          );
         }
       }
     }
