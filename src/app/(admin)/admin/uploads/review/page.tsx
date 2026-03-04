@@ -258,6 +258,27 @@ function UploadReviewClient({
     }
   };
 
+  // Auto-refresh: poll every 3 s so table stays current while jobs run
+  useEffect(() => {
+    const POLL_INTERVAL = 3000;
+    const id = setInterval(() => { void fetchSessions(); }, POLL_INTERVAL);
+    return () => clearInterval(id);
+  }, []);
+
+  // SSE: instantly refresh when any upload job completes
+  useEffect(() => {
+    const es = new EventSource('/api/admin/uploads/events');
+    es.onmessage = (e) => {
+      try {
+        const parsed = JSON.parse(e.data as string) as { type: string };
+        if (parsed.type === 'completed') void fetchSessions();
+      } catch {
+        // ignore malformed events
+      }
+    };
+    return () => es.close();
+  }, []);
+
   // Handle select all
   const handleSelectAll = (checked: boolean) => {
     if (checked) {

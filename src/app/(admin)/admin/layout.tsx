@@ -1,5 +1,5 @@
 import React from 'react';
-import { requireRole } from '@/lib/auth/permissions';
+import { requireRole } from '@/lib/auth/guards';
 import {
   ShieldCheck,
   Users,

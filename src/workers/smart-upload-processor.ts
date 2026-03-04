@@ -33,9 +33,9 @@ import { splitPdfByCuttingInstructions, validatePdfBuffer } from '@/lib/services
 import { extractPdfPageHeaders } from '@/lib/services/pdf-text-extractor';
 import { detectPartBoundaries } from '@/lib/services/part-boundary-detector';
 import { extractOcrFallbackMetadata } from '@/lib/services/ocr-fallback';
-import { segmentByHeaderImages, preprocessForOcr } from '@/lib/services/header-image-segmentation';
+import { segmentByHeaderImages, preprocessForOcr as _preprocessForOcr } from '@/lib/services/header-image-segmentation';
 import { labelPages, type PageLabelerResult } from '@/lib/services/page-labeler';
-import { buildAdapterConfigForStep, type LLMStepName } from '@/lib/llm/config-loader';
+import { buildAdapterConfigForStep, type LLMStepName as _LLMStepName } from '@/lib/llm/config-loader';
 import {
   queueSmartUploadSecondPass,
   queueSmartUploadAutoCommit,
@@ -349,6 +349,8 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
   status: string;
   sessionId: string;
   partsCreated?: number;
+  confidenceScore?: number;
+  routingDecision?: RoutingDecision;
 }> {
   const { sessionId, fileId } = job.data;
 
@@ -1550,5 +1552,7 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
     status: 'complete',
     sessionId,
     partsCreated: parsedParts.length,
+    confidenceScore: extraction.confidenceScore,
+    routingDecision,
   };
 }

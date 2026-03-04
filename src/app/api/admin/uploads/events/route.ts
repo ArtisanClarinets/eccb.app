@@ -85,7 +85,13 @@ export async function GET(request: NextRequest) {
       // Handler for completed events
       const completedHandler = (args: { jobId: string; returnvalue: unknown }) => {
         const { jobId, returnvalue } = args;
-        const result = (returnvalue ?? {}) as { sessionId?: string; status?: string; partsCreated?: number };
+        const result = (returnvalue ?? {}) as {
+          sessionId?: string;
+          status?: string;
+          partsCreated?: number;
+          confidenceScore?: number;
+          routingDecision?: string;
+        };
 
         // BullMQ may emit returnvalue=undefined when the processor doesn't
         // return. Treat these as unfiltered so we never silently drop events.
