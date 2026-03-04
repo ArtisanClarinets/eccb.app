@@ -248,7 +248,7 @@ export async function segmentByHeaderImages(
 
   const {
     cropHeightFraction = DEFAULT_CROP_HEIGHT,
-    renderScale = 2,
+    renderScale = 3,  // Higher default for better OCR on sheet music
     hashWidth = DEFAULT_HASH_WIDTH,
     hashHeight = DEFAULT_HASH_HEIGHT,
     hashDistanceThreshold = DEFAULT_HASH_THRESHOLD,
@@ -258,6 +258,11 @@ export async function segmentByHeaderImages(
     cacheTag,
     preprocessing,
   } = options;
+
+  // Minimal base64 prefix of the PLACEHOLDER_IMAGE used by pdf-renderer when a
+  // page fails to render.  If ANY header crop is a placeholder the segmentation
+  // result would be unreliable — return null so the caller falls back safely.
+  const PLACEHOLDER_PREFIX = 'iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAYAAABw4pVU';
 
   // Skip segmentation for very short PDFs — boundary detection is meaningless.
   if (totalPages < MIN_PAGES_TO_SEGMENT) {
@@ -276,8 +281,8 @@ export async function segmentByHeaderImages(
   try {
     headerCrops = await renderPdfHeaderCropBatch(pdfBuffer, allPageIndices, {
       scale: renderScale,
-      maxWidth: 1024,
-      quality: 85,
+      maxWidth: 1600, // Increased from 1024 for better OCR legibility on sheet music
+      quality: 90,
       format: 'png',
       cropHeightFraction,
       cacheTag,
@@ -298,6 +303,17 @@ export async function segmentByHeaderImages(
     return null;
   }
 
+  // Guard: placeholder images indicate rendering failures — segmentation would
+  // be unreliable because all placeholder hashes are identical (distance ≈ 0).
+  const placeholderCount = headerCrops.filter(c => c.startsWith(PLACEHOLDER_PREFIX)).length;
+  if (placeholderCount > 0) {
+    logger.warn('header-image-segmentation: placeholder renders detected — skipping segmentation', {
+      totalPages,
+      placeholderCount,
+    });
+    return null;
+  }
+
   // ── Step 2: Compute perceptual hashes ────────────────────────────────────
   const pageHashes: PageHashEntry[] = await Promise.all(
     headerCrops.map(async (crop, i) => ({
@@ -308,54 +324,84 @@ export async function segmentByHeaderImages(
   );
 
   // ── Step 3: Detect segment boundaries ────────────────────────────────────
-  const segments: Segment[] = [];
-  let currentSegmentStart = 0;
+  // Collect boundary start indices first (never loses coverage).
+  const boundaryStarts: number[] = [0];
 
-  for (let i = 1; i <= totalPages; i++) {
-    const isLastPage = i === totalPages;
-    let hashDist: number | null = null;
-
-    if (!isLastPage) {
-      hashDist = hammingDistance(
-        pageHashes[i - 1].hashSmall,
-        pageHashes[i].hashSmall,
-      );
-      hashDistances.push(hashDist);
-    }
-
-    const isBoundary = isLastPage || (hashDist !== null && hashDist >= hashDistanceThreshold);
-
-    if (isBoundary) {
-      const segEnd = isLastPage ? totalPages - 1 : i - 1;
-      const segLen = segEnd - currentSegmentStart + 1;
-
-      if (segLen >= minSegmentPages) {
-        segments.push({
-          pageStart: currentSegmentStart,
-          pageEnd: segEnd,
-          representativePageIndex: currentSegmentStart,
-          label: null,
-          ocrConfidence: 0,
-          hashDistanceFromPrev: currentSegmentStart > 0
-            ? hammingDistance(
-                pageHashes[currentSegmentStart - 1].hashSmall,
-                pageHashes[currentSegmentStart].hashSmall,
-              )
-            : null,
-        });
-      }
-
-      currentSegmentStart = i;
+  for (let i = 1; i < totalPages; i++) {
+    const hashDist = hammingDistance(
+      pageHashes[i - 1].hashSmall,
+      pageHashes[i].hashSmall,
+    );
+    hashDistances.push(hashDist);
+    if (hashDist >= hashDistanceThreshold) {
+      boundaryStarts.push(i);
     }
   }
 
-  // Fallback: if no boundaries found (or only 1 segment), return null —
+  // Build raw segments from boundary list. By construction these are contiguous
+  // and cover all pages 0..totalPages-1 with no gaps and no overlaps.
+  let rawSegments: Segment[] = boundaryStarts.map((pageStart, idx) => {
+    const pageEnd = idx + 1 < boundaryStarts.length ? boundaryStarts[idx + 1] - 1 : totalPages - 1;
+    return {
+      pageStart,
+      pageEnd,
+      representativePageIndex: pageStart,
+      label: null,
+      ocrConfidence: 0,
+      hashDistanceFromPrev: pageStart > 0
+        ? hammingDistance(
+            pageHashes[pageStart - 1].hashSmall,
+            pageHashes[pageStart].hashSmall,
+          )
+        : null,
+    };
+  });
+
+  // ── Merge segments that are smaller than minSegmentPages ──────────────────
+  // Instead of silently dropping small segments (which creates page gaps),
+  // absorb them into their nearest neighbour so coverage is always complete.
+  if (minSegmentPages > 1 && rawSegments.length > 1) {
+    let didMerge = true;
+    while (didMerge && rawSegments.length > 1) {
+      didMerge = false;
+      const merged: Segment[] = [];
+      for (let i = 0; i < rawSegments.length; i++) {
+        const seg = rawSegments[i];
+        const segLen = seg.pageEnd - seg.pageStart + 1;
+        if (segLen < minSegmentPages) {
+          if (merged.length > 0) {
+            // Absorb into the previous segment.
+            merged[merged.length - 1].pageEnd = seg.pageEnd;
+          } else if (i + 1 < rawSegments.length) {
+            // First segment is too small — extend the next segment's start.
+            rawSegments[i + 1] = {
+              ...rawSegments[i + 1],
+              pageStart: seg.pageStart,
+              representativePageIndex: seg.pageStart,
+              hashDistanceFromPrev: seg.hashDistanceFromPrev,
+            };
+          } else {
+            // Single segment case — keep it.
+            merged.push({ ...seg });
+          }
+          didMerge = true;
+        } else {
+          merged.push({ ...seg });
+        }
+      }
+      rawSegments = merged;
+    }
+  }
+
+  const segments = rawSegments;
+
+  // Fallback: if no boundaries found (only 1 segment), return null —
   // the entire PDF is likely a single part and the standard pipeline handles it.
   if (segments.length <= 1) {
     logger.info('header-image-segmentation: no meaningful boundaries detected', {
       totalPages,
       hashThreshold: hashDistanceThreshold,
-      hashDistances: hashDistances.slice(0, 10), // Log first 10 distances
+      hashDistances: hashDistances.slice(0, 10),
       durationMs: Math.round(nowMs() - start),
     });
     return null;
@@ -367,8 +413,15 @@ export async function segmentByHeaderImages(
       const repPage = seg.representativePageIndex;
       const cropBase64 = headerCrops[repPage];
 
-      // First attempt with current crop height
-      let ocrResult = await tryOcr(cropBase64);
+      // Always preprocess before OCR to improve accuracy on scanned sheet music.
+      // Binarisation + sharpening are effective for low-contrast scans.
+      const defaultPreprocessing = { enableThreshold: true, thresholdValue: 128 };
+      const effectivePreprocessing = { ...defaultPreprocessing, ...(preprocessing || {}) };
+      let initialCrop = cropBase64;
+      try {
+        initialCrop = await preprocessForOcr(cropBase64, effectivePreprocessing);
+      } catch { /* preprocessing is best-effort; fall back to raw crop */ }
+      let ocrResult = await tryOcr(initialCrop);
 
       // Retry with fallback crop fractions if OCR returned no text
       if ((!ocrResult.text || ocrResult.confidence < OCR_CONFIDENCE_MIN) && fallbackCropFractions.length > 0) {
@@ -377,18 +430,17 @@ export async function segmentByHeaderImages(
           if (altFraction === cropHeightFraction) continue;
           try {
             const altCrops = await renderPdfHeaderCropBatch(pdfBuffer, [repPage], {
-              scale: renderScale,
-              maxWidth: 1024,
-              quality: 85,
+              scale: Math.max(renderScale, 3), // Ensure high-res for OCR retry
+              maxWidth: 1600,
+              quality: 90,
               format: 'png',
               cropHeightFraction: altFraction,
             });
-            if (altCrops[0]) {
-              // Apply preprocessing if configured
+            if (altCrops[0] && !altCrops[0].startsWith(PLACEHOLDER_PREFIX)) {
               let processedCrop = altCrops[0];
-              if (preprocessing) {
-                processedCrop = await preprocessForOcr(processedCrop, preprocessing);
-              }
+              try {
+                processedCrop = await preprocessForOcr(processedCrop, effectivePreprocessing);
+              } catch { /* preprocessing is best-effort */ }
               const altResult = await tryOcr(processedCrop);
               if (altResult.text && altResult.confidence > ocrResult.confidence) {
                 ocrResult = altResult;

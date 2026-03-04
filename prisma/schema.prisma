@@ -282,6 +282,7 @@ model MusicPiece {
   isArchived         Boolean           @default(false)
   confidenceScore    Int?
   source            String?
+  workFingerprintHash String?          @db.Char(16)
   ensembleType       String?
   keySignature       String?
   timeSignature      String?
@@ -305,6 +306,7 @@ model MusicPiece {
   setlistItems      StandSetlistItem[]
 
   @@index([title])
+  @@index([workFingerprintHash])
   @@index([composerId])
   @@index([difficulty])
   @@index([isArchived])

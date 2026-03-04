@@ -169,26 +169,43 @@ function convertHeaderImageResult(
   source: PageLabelSource
 ): { pageLabels: Record<number, PageLabel>; cuttingInstructions: CuttingInstruction[]; confidence: number } {
   const pageLabels: Record<number, PageLabel> = {};
-  const confidenceValues: number[] = [];
+
+  // Use result.confidence as the authoritative segmentation quality score.
+  // diag.ocrConfidence reflects per-segment text recognition quality — it may be 0
+  // for auto-labeled segments (e.g., "Part 1") even when the perceptual-hash
+  // boundary detection was highly reliable.  Averaging those zeros collapses the
+  // overall confidence to 0, which is incorrect.
+  const baseConfidence = result.confidence;
 
   for (const diag of result.diagnostics) {
-    const pageNum = diag.pageStart + 1; // Use pageStart as 0-indexed, convert to 1-indexed
-    pageLabels[pageNum] = {
-      label: diag.label || 'Unknown',
-      confidence: diag.ocrConfidence,
-      source,
-    };
-    confidenceValues.push(diag.ocrConfidence);
-  }
+    // Per-page label confidence:
+    //   • When OCR recognised text with confidence > 0, blend it with baseConfidence
+    //     so the page label reflects both signal sources.
+    //   • When OCR confidence is 0 (auto-label "Part N"), fall back to baseConfidence
+    //     as a floor — never let it collapse to 0 unless the entire segmentation failed.
+    const perPageConfidence = diag.ocrConfidence > 0
+      ? Math.max(diag.ocrConfidence, Math.min(baseConfidence, 60))
+      : Math.max(baseConfidence, 40);
 
-  const avgConfidence = confidenceValues.length > 0
-    ? Math.round(confidenceValues.reduce((a, b) => a + b, 0) / confidenceValues.length)
-    : result.confidence;
+    // Expand labels to cover EVERY page in the segment (pageStart..pageEnd inclusive),
+    // using 1-indexed page numbers (page-labeler contract).
+    // The previous code only labelled pageStart, leaving all interior pages unlabelled.
+    for (let page0 = diag.pageStart; page0 <= diag.pageEnd; page0++) {
+      const pageNum = page0 + 1; // 0-indexed → 1-indexed
+      pageLabels[pageNum] = {
+        label: diag.label || 'Unknown',
+        confidence: perPageConfidence,
+        source,
+      };
+    }
+  }
 
   return {
     pageLabels,
     cuttingInstructions: result.cuttingInstructions,
-    confidence: avgConfidence,
+    // Return result.confidence directly — never average ocrConfidence values,
+    // which may all be 0 for valid segments without OCR text.
+    confidence: baseConfidence,
   };
 }
 

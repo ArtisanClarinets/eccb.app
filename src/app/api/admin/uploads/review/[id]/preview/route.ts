@@ -37,8 +37,13 @@ export async function GET(
 
     // Parse page query parameter (0-indexed, default to 0)
     const url = new URL(req.url);
-    const pageParam = url.searchParams.get('page');
+    const pageParam    = url.searchParams.get('page');
+    const scaleParam   = url.searchParams.get('scale');
+    const maxWidthParam = url.searchParams.get('maxWidth');
+
     const pageIndex = pageParam ? parseInt(pageParam, 10) : 0;
+    const renderScale   = scaleParam    ? Math.min(6, Math.max(1, parseFloat(scaleParam)))    : 3;
+    const renderMaxWidth = maxWidthParam ? Math.min(4000, Math.max(800, parseInt(maxWidthParam, 10))) : 2000;
 
     if (isNaN(pageIndex) || pageIndex < 0) {
       return NextResponse.json(
@@ -88,22 +93,30 @@ export async function GET(
       );
     }
 
-    // Render requested page to PNG base64
+    // Render requested page to JPEG base64 at the requested scale
     const imageBase64 = await renderPdfToImage(pdfBuffer, {
-      pageIndex: pageIndex,
-      quality: 85,
-      maxWidth: 1200,
-      format: 'png',
+      pageIndex,
+      quality: 90,
+      maxWidth: renderMaxWidth,
+      format: 'jpeg',
+      scale: renderScale,
     });
+
+    const mimeType = 'image/jpeg';
 
     logger.info('PDF preview generated', {
       sessionId: id,
       pageIndex,
       totalPages,
+      renderScale,
+      renderMaxWidth,
       imageLength: imageBase64.length,
     });
 
-    return NextResponse.json({ imageBase64, totalPages });
+    return NextResponse.json(
+      { imageBase64, totalPages, mimeType },
+      { headers: { 'Cache-Control': 'private, max-age=300, stale-while-revalidate=60' } }
+    );
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
     logger.error('Failed to generate PDF preview', { error: err.message });

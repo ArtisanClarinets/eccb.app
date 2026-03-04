@@ -1360,9 +1360,10 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
           altValidation.instructions.push(...altGapInstructions);
         }
 
-        // Split the PDF with the alternate instructions
+        // altValidation.instructions are already 0-indexed (validateAndNormalizeInstructions
+        // with oneIndexed:true converts them internally). Do NOT subtract 1 again.
         const altValidatedInstructions = sanitizeCuttingInstructionsForSplit(
-          altValidation.instructions.map((i) => ({ ...i, pageRange: [i.pageRange[0] - 1, i.pageRange[1] - 1] as [number, number] }))
+          altValidation.instructions
         );
         const altSplitResults = await splitPdfByCuttingInstructions(
           pdfBuffer,

@@ -620,4 +620,79 @@ describe('labelPages', () => {
       expect(segmentByHeaderImages).not.toHaveBeenCalled();
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // Confidence regression — A6
+  // Bug: convertHeaderImageResult averaged per-segment ocrConfidence values which
+  // collapsed to 0 when all diagnositics had ocrConfidence=0 (hash-matched segments).
+  // Fix: uses result.confidence as base and Math.max(ocrConfidence, Math.min(base, 60)).
+  // ---------------------------------------------------------------------------
+  describe('convertHeaderImageResult — confidence regression (A6)', () => {
+    it('does not collapse to confidence=0 when all segment ocrConfidence values are 0', async () => {
+      // Bug: the old code averaged per-segment ocrConfidence values, which collapsed
+      // to 0 when all segments were auto-labelled via perceptual-hash (ocrConfidence=0).
+      // Fix: convertHeaderImageResult now uses result.confidence as the base confidence.
+      vi.mocked(extractPdfPageHeaders).mockResolvedValueOnce({
+        pageHeaders: [],
+        totalPages: 4,
+        hasTextLayer: false,
+        textLayerCoverage: 0,
+      });
+
+      const mockOcrResultAllZeroConfidence = {
+        segmentCount: 2,
+        confidence: 70,
+        cuttingInstructions: [
+          {
+            instrument: 'Oboe',
+            partName: 'Oboe',
+            section: 'Woodwind',
+            transposition: 'C',
+            partNumber: 1,
+            pageRange: [0, 1],
+          },
+          {
+            instrument: 'Bassoon',
+            partName: 'Bassoon',
+            section: 'Woodwind',
+            transposition: 'C',
+            partNumber: 2,
+            pageRange: [2, 3],
+          },
+        ],
+        diagnostics: [
+          // ocrConfidence=0 means auto-labelled via hash — these are the values
+          // that previously collapsed the final confidence to 0.
+          { pageStart: 0, pageEnd: 1, label: 'Oboe', ocrConfidence: 0, segmentIndex: 0, hashDistanceFromPrev: null },
+          { pageStart: 2, pageEnd: 3, label: 'Bassoon', ocrConfidence: 0, segmentIndex: 1, hashDistanceFromPrev: 5 },
+        ],
+        hasOcrLabels: false,
+        isDefinitive: false,
+      };
+
+      const theResult = mockOcrResultAllZeroConfidence;
+      // mockReset() is required here because a persistent mock implementation from
+      // an earlier test (e.g., mockResolvedValue(null)) would override Once-values
+      // and our mockImplementation without a full reset. vi.clearAllMocks() alone
+      // does NOT clear persistent implementations in Vitest 4.
+      vi.mocked(segmentByHeaderImages).mockReset();
+      vi.mocked(segmentByHeaderImages).mockResolvedValue(theResult as any);
+
+      const result = await labelPages({
+        pdfBuffer: fakePdf,
+        totalPages: 4,
+        sessionId: 'test-session',
+        enableOcr: true,
+        enableLlm: false,
+      });
+
+      // OCR path should succeed with segmentCount=2 and confidence=70
+      expect(result.strategyUsed).toBe('ocr');
+      // Pre-fix: confidence would collapse to 0 (avg of all ocrConfidence=0 values)
+      // Post-fix: confidence must reflect result.confidence=70 (the segmentation confidence)
+      expect(result.confidence).toBeGreaterThan(0);
+      // Pages should be labelled (segments expanded to cover their full range)
+      expect(Object.keys(result.pageLabels).length).toBeGreaterThanOrEqual(4);
+    });
+  });
 });

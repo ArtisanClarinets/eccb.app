@@ -5,6 +5,7 @@ import { describe, it, expect } from 'vitest';
 import {
   computeSha256,
   computeWorkFingerprint,
+  computeWorkFingerprintV2,
   computePartFingerprint,
   checkSourceDuplicate,
   checkWorkDuplicate,
@@ -213,5 +214,51 @@ describe('resolveDeduplicationPolicy', () => {
   it('prioritizes source match over everything', () => {
     const result = resolveDeduplicationPolicy(sourceMatch, newPiece);
     expect(result.policy).toBe('SKIP_DUPLICATE');
+  });
+});
+
+// =============================================================================
+// computeWorkFingerprintV2 — arranger-aware fingerprint (regression A6)
+// =============================================================================
+describe('computeWorkFingerprintV2', () => {
+  it('returns a 16-char hex hash', () => {
+    const fp = computeWorkFingerprintV2('Semper Fidelis', 'John Philip Sousa', null);
+    expect(fp.hash).toHaveLength(16);
+    expect(fp.hash).toMatch(/^[0-9a-f]+$/);
+  });
+
+  it('includes arranger so arrangement hash differs from original', () => {
+    const original = computeWorkFingerprintV2('Semper Fidelis', 'John Philip Sousa', null);
+    const arranged = computeWorkFingerprintV2('Semper Fidelis', 'John Philip Sousa', 'Frank Erickson');
+    expect(original.hash).not.toBe(arranged.hash);
+  });
+
+  it('treats null arranger same as empty string arranger', () => {
+    const a = computeWorkFingerprintV2('Stars and Stripes Forever', 'Sousa', null);
+    const b = computeWorkFingerprintV2('Stars and Stripes Forever', 'Sousa', '');
+    expect(a.hash).toBe(b.hash);
+  });
+
+  it('is case- and whitespace-insensitive across all three fields', () => {
+    const a = computeWorkFingerprintV2('Stars And Stripes Forever', 'Sousa', 'John Moss');
+    const b = computeWorkFingerprintV2('stars and stripes forever', 'sousa', 'john moss');
+    expect(a.hash).toBe(b.hash);
+  });
+
+  it('is deterministic', () => {
+    const a = computeWorkFingerprintV2('Semper Fidelis', 'John Philip Sousa', 'Frank Erickson');
+    const b = computeWorkFingerprintV2('Semper Fidelis', 'John Philip Sousa', 'Frank Erickson');
+    expect(a.hash).toBe(b.hash);
+  });
+
+  it('exposes normalizedArranger field', () => {
+    const fp = computeWorkFingerprintV2('Test', 'Composer', '  My Arranger  ');
+    expect(fp.normalizedArranger).toBe('my arranger');
+  });
+
+  it('two different arrangers → two different hashes for same title+composer', () => {
+    const a = computeWorkFingerprintV2('March', 'Sousa', 'Erickson');
+    const b = computeWorkFingerprintV2('March', 'Sousa', 'Fennell');
+    expect(a.hash).not.toBe(b.hash);
   });
 });

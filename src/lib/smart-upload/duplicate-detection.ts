@@ -39,6 +39,11 @@ export interface WorkFingerprint {
   hash: string;
 }
 
+export interface WorkFingerprintV2 extends WorkFingerprint {
+  /** Normalized arranger name used for matching. */
+  normalizedArranger: string;
+}
+
 // =============================================================================
 // Hash Functions
 // =============================================================================
@@ -65,6 +70,26 @@ export function computeWorkFingerprint(
   const hash = createHash('sha256').update(combined).digest('hex').slice(0, 16);
 
   return { normalizedTitle, normalizedComposer, hash };
+}
+
+/**
+ * Compute a v2 work fingerprint that includes the arranger.
+ * Preferred over computeWorkFingerprint for new commits — ensures that a
+ * choral arrangement and the original orchestration are treated as distinct works.
+ */
+export function computeWorkFingerprintV2(
+  title: string,
+  composer: string | undefined | null,
+  arranger: string | undefined | null
+): WorkFingerprintV2 {
+  const normalizedTitle    = normalizeForFingerprint(title);
+  const normalizedComposer = normalizeForFingerprint(composer ?? '');
+  const normalizedArranger = normalizeForFingerprint(arranger ?? '');
+
+  const combined = `${normalizedTitle}::${normalizedComposer}::${normalizedArranger}`;
+  const hash = createHash('sha256').update(combined).digest('hex').slice(0, 16);
+
+  return { normalizedTitle, normalizedComposer, normalizedArranger, hash };
 }
 
 /**

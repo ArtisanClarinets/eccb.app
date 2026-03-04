@@ -361,32 +361,27 @@ export async function extractOcrFallbackMetadata(params: {
   // 1) Attempt text-layer extraction first (fast and deterministic)
   // Incremental probing: stop early when meaningful text is found
   try {
-    let hasMeaningfulText = false;
+    // Single call — parse all probe pages in one pass.
+    // The previous O(n²) loop (calling extractPdfPageHeaders once per page) is
+    // replaced with a single call; we iterate the returned headers to compute the
+    // same hasMeaningfulText / pagesScanned / totalChars statistics cheaply.
+    const extraction = await extractPdfPageHeaders(pdfBuffer, { maxPages: maxTextProbePages });
+    const isImageScanned = !extraction.hasTextLayer || extraction.textLayerCoverage < 0.4;
+
     let pagesScanned = 0;
     let totalChars = 0;
 
-    for (let pageNum = 1; pageNum <= maxTextProbePages; pageNum++) {
-      const extraction = await extractPdfPageHeaders(pdfBuffer, { maxPages: pageNum });
-      const isImageScanned = !extraction.hasTextLayer || extraction.textLayerCoverage < 0.4;
-
-      if (!isImageScanned && extraction.pageHeaders.length > 0) {
-        const pageText = extraction.pageHeaders[pageNum - 1]?.fullText || '';
-        const headerText = extraction.pageHeaders[pageNum - 1]?.headerText || '';
+    if (!isImageScanned) {
+      for (let i = 0; i < extraction.pageHeaders.length; i++) {
+        const pageText  = extraction.pageHeaders[i]?.fullText  || '';
+        const headerText = extraction.pageHeaders[i]?.headerText || '';
         const combinedLength = (pageText + headerText).length;
-
         totalChars += combinedLength;
         pagesScanned++;
-
-        if (combinedLength >= minMeaningfulChars) {
-          hasMeaningfulText = true;
-          break;
-        }
+        // Stop scanning once we've found substantial text on any page
+        if (combinedLength >= minMeaningfulChars) break;
       }
     }
-
-    // Use first page(s) text to guess title/composer
-    const extraction = await extractPdfPageHeaders(pdfBuffer, { maxPages: maxTextProbePages });
-    const isImageScanned = !extraction.hasTextLayer || extraction.textLayerCoverage < 0.4;
 
     const combinedText = extraction.pageHeaders
       .slice(0, Math.min(extraction.pageHeaders.length, maxTextProbePages))

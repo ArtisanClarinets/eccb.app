@@ -93,6 +93,13 @@ class NodeFsStandardFontDataFactory {
   }
 }
 
+/**
+ * Maximum total canvas pixels we will allocate for a single page render.
+ * At A3 landscape (14×11") @ 72 dpi × scale 6 = 6048×4536 = 27.4 M px — well under limit.
+ * Prevents OOM crashes for huge-format PDFs rendered at high scale.
+ */
+const MAX_CANVAS_PIXELS = 40_000_000;
+
 // Minimal 100×100 white PNG used as a placeholder for pages that fail to render
 const PLACEHOLDER_IMAGE =
   'iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAYAAABw4pVUAAAADUlEQVR42u3BMQEAAADCoPVPbQhfoAAAAOA1v9QJZX6z/sIAAAAASUVORK5CYII=';
@@ -211,6 +218,30 @@ function normalizeScale(s: unknown, fallback: number): number {
   return n <= 0 ? fallback : n;
 }
 
+/**
+ * Compute a pdfjs viewport for a page at the requested scale, clamped so that
+ * the resulting canvas stays under MAX_CANVAS_PIXELS.  Returns the (possibly
+ * reduced) viewport and a flag indicating whether clamping was applied.
+ */
+function computeClampedViewport(
+  page: any,
+  scale: number
+): { viewport: any; wasClamped: boolean; effectiveScale: number } {
+  const viewport = page.getViewport({ scale });
+  const rawW = Math.floor(viewport.width);
+  const rawH = Math.floor(viewport.height);
+  if (rawW * rawH <= MAX_CANVAS_PIXELS) {
+    return { viewport, wasClamped: false, effectiveScale: scale };
+  }
+  const shrink = Math.sqrt(MAX_CANVAS_PIXELS / (rawW * rawH));
+  const effectiveScale = scale * shrink;
+  return {
+    viewport: page.getViewport({ scale: effectiveScale }),
+    wasClamped: true,
+    effectiveScale,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // In-process render cache
 //
@@ -291,12 +322,18 @@ export async function renderPdfToImage(
     }
 
     const page = await pdfDocument.getPage(pageIndex + 1);
-    const viewport = page.getViewport({ scale: sc });
+    const { viewport, wasClamped, effectiveScale } = computeClampedViewport(page, sc);
 
-    const canvasWidth = Math.floor(viewport.width);
+    const canvasWidth  = Math.floor(viewport.width);
     const canvasHeight = Math.floor(viewport.height);
 
-    const canvas = createCanvas(canvasWidth, canvasHeight);
+    if (wasClamped) {
+      logger.warn('pdf-renderer: scale clamped to avoid OOM', {
+        pageIndex, requestedScale: sc, effectiveScale, canvasWidth, canvasHeight,
+      });
+    }
+
+    const canvas  = createCanvas(canvasWidth, canvasHeight);
     const context = canvas.getContext('2d');
 
     await page.render({
@@ -333,6 +370,7 @@ export async function renderPdfToImage(
       pageIndex,
       format: fmt,
       scale: sc,
+      effectiveScale,
       maxWidth: mw,
       quality: q,
       durationMs,
@@ -441,17 +479,22 @@ export async function renderPdfPageBatch(
         const pageStart = nowMs();
 
         const page = await pdfDocument.getPage(idx + 1);
-        const viewport = page.getViewport({ scale: sc });
+        const { viewport: batchViewport, wasClamped: batchClamped, effectiveScale: batchEffScale } = computeClampedViewport(page, sc);
+        const canvasWidth  = Math.floor(batchViewport.width);
+        const canvasHeight = Math.floor(batchViewport.height);
 
-        const canvasWidth = Math.floor(viewport.width);
-        const canvasHeight = Math.floor(viewport.height);
+        if (batchClamped) {
+          logger.warn('renderPdfPageBatch: scale clamped to avoid OOM', {
+            idx, requestedScale: sc, effectiveScale: batchEffScale, canvasWidth, canvasHeight,
+          });
+        }
 
         const canvas = createCanvas(canvasWidth, canvasHeight);
         const context = canvas.getContext('2d');
 
         await page.render({
           canvasContext: context as unknown as CanvasRenderingContext2D,
-          viewport,
+          viewport: batchViewport,
           canvas: canvas as unknown as HTMLCanvasElement,
         }).promise;
 
@@ -592,17 +635,22 @@ export async function renderPdfHeaderCropBatch(
         const pageStart = nowMs();
 
         const page = await pdfDocument.getPage(idx + 1);
-        const viewport = page.getViewport({ scale: sc });
+        const { viewport: cropViewport, wasClamped: cropClamped, effectiveScale: cropEffScale } = computeClampedViewport(page, sc);
+        const canvasWidth  = Math.floor(cropViewport.width);
+        const canvasHeight = Math.floor(cropViewport.height);
 
-        const canvasWidth = Math.floor(viewport.width);
-        const canvasHeight = Math.floor(viewport.height);
+        if (cropClamped) {
+          logger.warn('renderPdfHeaderCropBatch: scale clamped to avoid OOM', {
+            idx, requestedScale: sc, effectiveScale: cropEffScale, canvasWidth, canvasHeight,
+          });
+        }
 
         const canvas = createCanvas(canvasWidth, canvasHeight);
         const context = canvas.getContext('2d');
 
         await page.render({
           canvasContext: context as unknown as CanvasRenderingContext2D,
-          viewport,
+          viewport: cropViewport,
           canvas: canvas as unknown as HTMLCanvasElement,
         }).promise;
 

@@ -435,13 +435,19 @@ function UploadReviewClient({
     }
   };
 
-  // Load PDF preview image for a session (with pagination)
-  const loadPreviewImage = useCallback(async (sessionId: string, page: number = 0) => {
+  // Load PDF preview image for a session (with pagination + server-side scale)
+  const loadPreviewImage = useCallback(async (sessionId: string, page: number = 0, zoom: number = 1) => {
     setPreviewLoading(true);
     try {
-      const res = await fetch(`/api/admin/uploads/review/${sessionId}/preview?page=${page}`);
+      // Map zoom level to a render scale that gives a real higher-res image on the server.
+      // Clamp to [1,6] matching the route's accepted range.
+      const renderScale  = Math.min(6, Math.max(1, Math.ceil(zoom * 2)));
+      const renderMaxWidth = Math.min(4000, Math.max(800, renderScale * 600));
+      const res = await fetch(
+        `/api/admin/uploads/review/${sessionId}/preview?page=${page}&scale=${renderScale}&maxWidth=${renderMaxWidth}`
+      );
       if (res.ok) {
-        const data = await res.json() as { imageBase64?: string; totalPages?: number };
+        const data = await res.json() as { imageBase64?: string; totalPages?: number; mimeType?: string };
         setPreviewImages((prev) => ({
           ...prev,
           [sessionId]: data.imageBase64 && data.totalPages
@@ -465,16 +471,19 @@ function UploadReviewClient({
   const loadPartPreviewImage = useCallback(async (
     sessionId: string,
     partStorageKey: string,
-    page: number = 0
+    page: number = 0,
+    zoom: number = 1
   ) => {
     setPreviewLoading(true);
     try {
+      const renderScale   = Math.min(6, Math.max(1, Math.ceil(zoom * 2)));
+      const renderMaxWidth = Math.min(4000, Math.max(800, renderScale * 600));
       const encodedKey = encodeURIComponent(partStorageKey);
       const res = await fetch(
-        `/api/admin/uploads/review/${sessionId}/part-preview?partStorageKey=${encodedKey}&page=${page}`
+        `/api/admin/uploads/review/${sessionId}/part-preview?partStorageKey=${encodedKey}&page=${page}&scale=${renderScale}&maxWidth=${renderMaxWidth}`
       );
       if (res.ok) {
-        const data = await res.json() as { imageBase64?: string; totalPages?: number };
+        const data = await res.json() as { imageBase64?: string; totalPages?: number; mimeType?: string };
         setPartPreviewImages((prev) => ({
           ...prev,
           [partStorageKey]: data.imageBase64 && data.totalPages
@@ -528,14 +537,18 @@ function UploadReviewClient({
   const handlePageChange = (newPage: number) => {
     if (editingSession && newPage >= 0 && newPage < totalPages) {
       setCurrentPage(newPage);
-      loadPreviewImage(editingSession.id, newPage);
+      loadPreviewImage(editingSession.id, newPage, zoomLevel);
     }
   };
 
-  // Handle zoom change
+  // Handle zoom change — re-request a higher-resolution render from the server
   const handleZoomChange = (newZoom: number) => {
     if (newZoom >= 0.5 && newZoom <= 2) {
       setZoomLevel(newZoom);
+      // Re-fetch the current page at the new scale (server renders at higher DPI)
+      if (editingSession) {
+        loadPreviewImage(editingSession.id, currentPage, newZoom);
+      }
     }
   };
 
@@ -545,7 +558,7 @@ function UploadReviewClient({
     setPartCurrentPage(0);
     setPartZoomLevel(1);
     if (editingSession) {
-      loadPartPreviewImage(editingSession.id, part.storageKey, 0);
+      loadPartPreviewImage(editingSession.id, part.storageKey, 0, 1);
     }
   };
 
@@ -554,15 +567,18 @@ function UploadReviewClient({
     if (selectedPart && newPage >= 0 && newPage < partTotalPages) {
       setPartCurrentPage(newPage);
       if (editingSession) {
-        loadPartPreviewImage(editingSession.id, selectedPart.storageKey, newPage);
+        loadPartPreviewImage(editingSession.id, selectedPart.storageKey, newPage, partZoomLevel);
       }
     }
   };
 
-  // Handle part zoom change
+  // Handle part zoom change — re-request a higher-resolution render from the server
   const handlePartZoomChange = (newZoom: number) => {
     if (newZoom >= 0.5 && newZoom <= 2) {
       setPartZoomLevel(newZoom);
+      if (editingSession && selectedPart) {
+        loadPartPreviewImage(editingSession.id, selectedPart.storageKey, partCurrentPage, newZoom);
+      }
     }
   };
 
@@ -906,10 +922,9 @@ function UploadReviewClient({
                       )}
                     >
                       <img
-                        src={`data:image/png;base64,${previewImages[editingSession.id]?.imageBase64}`}
+                        src={`data:image/jpeg;base64,${previewImages[editingSession.id]?.imageBase64}`}
                         alt={`PDF page ${currentPage + 1}`}
-                        className="object-contain"
-                        style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'center' }}
+                        className="object-contain w-full"
                       />
                     </div>
                   ) : (
@@ -1016,13 +1031,9 @@ function UploadReviewClient({
                             )}
                           >
                             <img
-                              src={`data:image/png;base64,${partPreviewImages[selectedPart.storageKey]?.imageBase64}`}
+                              src={`data:image/jpeg;base64,${partPreviewImages[selectedPart.storageKey]?.imageBase64}`}
                               alt={`Part ${selectedPart.partName} page ${partCurrentPage + 1}`}
-                              className="object-contain"
-                              style={{
-                                transform: `scale(${partZoomLevel})`,
-                                transformOrigin: 'center',
-                              }}
+                              className="object-contain w-full"
                             />
                           </div>
                         ) : (
