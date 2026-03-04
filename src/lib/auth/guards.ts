@@ -38,7 +38,8 @@ export async function requireRole(...roles: string[]) {
   });
   
   const userRoleTypes = userRoles.map(ur => ur.role.type);
-  const hasRole = roles.some(role => userRoleTypes.includes(role as never));
+  // SUPER_ADMIN bypasses all role checks
+  const hasRole = userRoleTypes.includes('SUPER_ADMIN') || roles.some(role => userRoleTypes.includes(role as never));
   
   if (!hasRole) {
     redirect('/forbidden');
