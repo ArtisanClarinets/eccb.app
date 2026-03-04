@@ -54,8 +54,10 @@ import {
   buildHeaderLabelPrompt,
   buildPdfVisionPrompt,
   buildVisionPrompt,
+  buildVisionMetadataPrompt,
   DEFAULT_HEADER_LABEL_SYSTEM_PROMPT,
   DEFAULT_PDF_VISION_USER_PROMPT_TEMPLATE,
+  DEFAULT_VISION_METADATA_ONLY_USER_PROMPT_TEMPLATE,
   DEFAULT_VISION_SYSTEM_PROMPT,
   DEFAULT_VISION_USER_PROMPT_TEMPLATE,
   PROMPT_VERSION,
@@ -325,6 +327,83 @@ function buildFallbackMetadata(totalPages: number): ExtractedMetadata {
       },
     ],
     notes: 'Metadata extraction failed — manual review required',
+  };
+}
+
+/**
+ * Parse an image-mode vision response that contains metadata ONLY (no cuttingInstructions).
+ *
+ * In image-sampled mode the LLM only sees MAX_SAMPLED_PAGES pages and MUST NOT
+ * be asked for full-document cutting instructions.  This parser intentionally
+ * ignores any cuttingInstructions field in the response to prevent the model
+ * from fabricating instructions for pages it never saw.
+ */
+function parseVisionMetadataResponse(content: string): Omit<ExtractedMetadata, 'cuttingInstructions'> & { cuttingInstructions: [] } {
+  const result = parseJsonLenient<Record<string, unknown>>(content, 'object');
+  if (!result.ok) {
+    logger.error('parseVisionMetadataResponse: JSON extraction failed', {
+      error: result.error,
+    });
+    return {
+      title: 'Unknown Title',
+      confidenceScore: 0,
+      fileType: 'FULL_SCORE',
+      isMultiPart: false,
+      parts: [],
+      cuttingInstructions: [],
+      notes: 'Metadata extraction failed — manual review required',
+    };
+  }
+
+  const parsed = result.value;
+
+  const title =
+    typeof parsed.title === 'string' && parsed.title.trim()
+      ? parsed.title.trim()
+      : null; // null allowed in metadata-only mode — we don't guess
+
+  const confidenceScore = normalizeConfidence(parsed.confidenceScore);
+  const isMultiPart = parsed.isMultiPart === true;
+
+  const rawParts = Array.isArray(parsed.parts) ? parsed.parts : [];
+  const parts = rawParts.map((p: unknown, i: number) => {
+    const part = (p ?? {}) as Record<string, unknown>;
+    return {
+      instrument: typeof part.instrument === 'string' ? part.instrument.trim() : `Unknown Part ${i + 1}`,
+      partName: typeof part.partName === 'string' ? part.partName.trim() : `Part ${i + 1}`,
+      section: typeof part.section === 'string' ? part.section : 'Other',
+      transposition: typeof part.transposition === 'string' ? part.transposition : 'C',
+      partNumber: typeof part.partNumber === 'number' ? part.partNumber : i + 1,
+    };
+  });
+
+  return {
+    title: title ?? 'Unknown Title',
+    subtitle: typeof parsed.subtitle === 'string' ? parsed.subtitle : undefined,
+    composer: typeof parsed.composer === 'string' ? parsed.composer : undefined,
+    arranger: typeof parsed.arranger === 'string' ? parsed.arranger : undefined,
+    publisher: typeof parsed.publisher === 'string' ? parsed.publisher : undefined,
+    copyrightYear:
+      typeof parsed.copyrightYear === 'number'
+        ? parsed.copyrightYear
+        : typeof parsed.copyrightYear === 'string' && parsed.copyrightYear.trim()
+          ? parsed.copyrightYear.trim()
+          : undefined,
+    ensembleType: typeof parsed.ensembleType === 'string' ? parsed.ensembleType : undefined,
+    keySignature: typeof parsed.keySignature === 'string' ? parsed.keySignature : undefined,
+    timeSignature: typeof parsed.timeSignature === 'string' ? parsed.timeSignature : undefined,
+    tempo: typeof parsed.tempo === 'string' ? parsed.tempo : undefined,
+    fileType: (['FULL_SCORE', 'CONDUCTOR_SCORE', 'CONDENSED_SCORE', 'PART'] as const).includes(
+      parsed.fileType as never
+    )
+      ? (parsed.fileType as ExtractedMetadata['fileType'])
+      : 'FULL_SCORE',
+    isMultiPart,
+    parts,
+    // CRITICAL: always returns empty array — cuttingInstructions come from deterministic segmentation
+    cuttingInstructions: [],
+    confidenceScore,
+    notes: typeof parsed.notes === 'string' ? parsed.notes : undefined,
   };
 }
 
@@ -622,6 +701,17 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
     const ocrMeta = await extractOcrFallbackMetadata({
       pdfBuffer,
       filename: smartSession.fileName,
+      options: {
+        ocrEngine: (llmConfig.ocrEngine as 'pdf_text' | 'tesseract' | 'ocrmypdf' | 'vision_api' | 'native' | undefined) ?? 'native',
+        ocrMode: (llmConfig.ocrMode as 'header' | 'full' | 'both' | undefined) ?? 'both',
+        maxTextProbePages: llmConfig.textProbePages ?? 3,
+        maxOcrPages: llmConfig.ocrMaxPages > 0 ? Math.min(llmConfig.ocrMaxPages, totalPages) : Math.min(totalPages, 10),
+        enableTesseractOcr: llmConfig.enableOcrFirst ?? true,
+        returnRawOcrText: llmConfig.storeRawOcrText ?? false,
+        autoAcceptConfidenceThreshold: llmConfig.ocrConfidenceThreshold ?? 70,
+        renderScale: 3,
+        renderMaxWidth: 1800,
+      },
     });
 
     // Use page-labeler results for cutting instructions
@@ -943,7 +1033,7 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
       }
 
       // Send sampled images to vision LLM
-      await progress('analyzing', 30, 'Running AI vision analysis on pages');
+      await progress('analyzing', 30, 'Running AI vision analysis on pages (metadata only)');
 
       const budgetCheck = budget.check();
       if (!budgetCheck.allowed) {
@@ -957,9 +1047,12 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
         label: `Original Page ${sampledIndices[index] + 1}`,
       }));
 
-      // Use step-specific config for vision pass
-      const visionPrompt = buildVisionPrompt(
-        llmConfig.visionUserPrompt || DEFAULT_VISION_USER_PROMPT_TEMPLATE,
+      // CRITICAL: use the METADATA-ONLY prompt for image-based vision mode.
+      // We only have MAX_SAMPLED_PAGES images — asking for cuttingInstructions
+      // across ALL pages is mathematically impossible and produces fabricated gaps.
+      // cuttingInstructions will be sourced exclusively from deterministicInstructions.
+      const metadataOnlyPrompt = buildVisionMetadataPrompt(
+        llmConfig.visionMetadataOnlyUserPrompt || DEFAULT_VISION_METADATA_ONLY_USER_PROMPT_TEMPLATE,
         {
           totalPages,
           sampledPageNumbers: sampledIndices,
@@ -968,7 +1061,7 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
       // Include original filename as context — helps title/composer extraction
       // when the PDF is scanned (no text layer) and the LLM must guess.
       const filenameHint = `\nOriginal filename: "${smartSession.fileName}"\nUse this filename as a strong hint for the title if the title page is unclear or missing. Do NOT guess a title from instrument pages.`;
-      visionPromptRef = visionPrompt + filenameHint;
+      visionPromptRef = metadataOnlyPrompt + filenameHint;
 
       visionResult = await callVisionModel(
         visionAdapterConfig,
@@ -978,19 +1071,74 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
           system: visionStepConfig.systemPrompt || DEFAULT_VISION_SYSTEM_PROMPT,
           responseFormat: { type: 'json' },
           modelParams: visionStepConfig.modelParams,
-          maxTokens: 65536,
+          maxTokens: 4096, // metadata only — smaller budget needed
           temperature: 0.1,
         },
       );
       budget.record();
     }
 
-    extraction = parseVisionResponse(visionResult.content, totalPages);
+    // Parse vision response — metadata-only in image mode, full in PDF mode
+    if (canSendPdf) {
+      extraction = parseVisionResponse(visionResult.content, totalPages);
+    } else {
+      // Image mode: parse metadata only (no cuttingInstructions from LLM)
+      const metadataParsed = parseVisionMetadataResponse(visionResult.content);
+      extraction = { ...metadataParsed, cuttingInstructions: [] };
 
-    // ── Retry once if LLM response appears truncated ───────────────────────
-    // When isMultiPart=true but no cuttingInstructions, the LLM likely stopped
-    // generating before completing the JSON. Retry once with the same model.
+      // CRITICAL: cuttingInstructions MUST come from deterministic segmentation.
+      // If deterministic segmentation failed, we CANNOT proceed — fail safe.
+      if (!deterministicInstructions || deterministicInstructions.length === 0) {
+        logger.warn('Image-mode vision: no deterministic cutting instructions available — routing to human review', {
+          sessionId,
+          deterministicConfidence,
+          totalPages,
+          fullVisionFallbackReasons,
+        });
+
+        const failureNote = [
+          'Image-mode vision: metadata extracted but no deterministic cutting instructions.',
+          'Provider does not support native PDF input and deterministic segmentation failed.',
+          'Reasons: ' + fullVisionFallbackReasons.join('; '),
+        ].join(' ');
+
+        await prisma.smartUploadSession.update({
+          where: { uploadSessionId: sessionId },
+          data: {
+            extractedMetadata: { ...extraction, notes: failureNote } as any,
+            confidenceScore: Math.min(extraction.confidenceScore, 10),
+            routingDecision: 'no_parse_second_pass',
+            parseStatus: 'NOT_PARSED',
+            secondPassStatus: 'QUEUED',
+            requiresHumanReview: true,
+            llmProvider: llmConfig.provider,
+            llmVisionModel: llmConfig.visionModel,
+            llmPromptVersion: llmConfig.promptVersion || PROMPT_VERSION,
+            firstPassRaw: visionResult.content,
+            strategyHistory: JSON.stringify(strategyHistory) as any,
+          },
+        });
+        await queueSmartUploadSecondPass(sessionId);
+        await progress('queued_for_second_pass', 100, 'No deterministic segmentation — queued for human review / second pass');
+        clearRenderCache(sessionId);
+        return { status: 'queued_for_second_pass', sessionId };
+      }
+
+      // Deterministic instructions exist — overlay them on the metadata extraction
+      extraction.cuttingInstructions = toOneIndexedInstructions(deterministicInstructions);
+      extraction.confidenceScore = Math.max(extraction.confidenceScore, deterministicConfidence);
+      extraction.segmentationConfidence = deterministicConfidence;
+      logger.info('Image-mode vision: metadata from LLM, cuttingInstructions from deterministic segmentation', {
+        sessionId,
+        parts: deterministicInstructions.length,
+        deterministicConfidence,
+        visionConfidence: metadataParsed.confidenceScore,
+      });
+    }
+
+    // For PDF mode: retry if isMultiPart=true but no cutting instructions
     if (
+      canSendPdf &&
       extraction.isMultiPart &&
       (!extraction.cuttingInstructions || extraction.cuttingInstructions.length === 0) &&
       budget.check().allowed
@@ -1036,25 +1184,11 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
       }
     }
 
-    // If deterministic segmentation produced instructions, overlay them on the LLM extraction
-    if (deterministicInstructions && deterministicInstructions.length > 0) {
-      extraction.cuttingInstructions = toOneIndexedInstructions(deterministicInstructions);
-      // Boost confidence when deterministic path used
-      extraction.confidenceScore = Math.max(
-        extraction.confidenceScore,
-        deterministicConfidence
-      );
-      logger.info('Using deterministic cutting instructions (with LLM metadata)', {
-        sessionId,
-        parts: deterministicInstructions.length,
-      });
-    }
-
     // Persist per-page labels and segmentation confidence in extractedMetadata
     if (Object.keys(pageLabels).length > 0) {
       extraction.pageLabels = pageLabels;
     }
-    if (deterministicConfidence > 0) {
+    if (deterministicConfidence > 0 && !extraction.segmentationConfidence) {
       extraction.segmentationConfidence = deterministicConfidence;
     }
 
@@ -1116,46 +1250,53 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
   // Detect and fill uncovered page ranges (gaps between cuts)
   const gapInstructions = buildGapInstructions(instructionValidation.instructions, totalPages);
   if (gapInstructions.length > 0) {
-    logger.warn('Gap pages detected — adding uncovered parts', {
+    const gapPageCount = gapInstructions.reduce(
+      (sum, g) => sum + (g.pageRange[1] - g.pageRange[0] + 1), 0
+    );
+    logger.warn('Gap pages detected — HARD FAIL: routing to human review / second pass', {
       sessionId,
       gaps: gapInstructions.map((g) => g.pageRange),
+      gapPageCount,
     });
+
+    // CRITICAL: Never silently create "Unlabelled Pages X-Y" parts.
+    // Gaps indicate the segmentation pipeline failed to cover all pages.
+    // Force human review + second pass regardless of stated confidence.
     instructionValidation.instructions.push(...gapInstructions);
     instructionValidation.warnings.push(
-      `${gapInstructions.length} uncovered page range(s) were added as 'Unlabelled' parts`
+      `${gapInstructions.length} uncovered page range(s) detected — session routed to human review`
     );
 
-    // If ALL instructions are gap-fills (LLM returned 0 valid cutting instructions),
-    // the extraction is fundamentally incomplete — force low confidence.
-    const validLlmInstructions = instructionValidation.instructions.length - gapInstructions.length;
-    if (validLlmInstructions === 0) {
-      logger.warn('No valid cutting instructions from LLM — forcing low confidence', {
-        sessionId,
-        originalConfidence: extraction.confidenceScore,
-      });
-      extraction.confidenceScore = Math.min(extraction.confidenceScore, 10);
-    } else {
-      // Some valid instructions exist but gaps remain — the extraction is incomplete.
-      // Cap confidence below auto-approve to force review or second pass.
-      const gapPageCount = gapInstructions.reduce(
-        (sum, g) => sum + (g.pageRange[1] - g.pageRange[0] + 1), 0
-      );
-      if (gapPageCount > 0) {
-        const cappedConfidence = Math.min(
-          extraction.confidenceScore,
-          llmConfig.autoApproveThreshold - 1,
-        );
-        if (cappedConfidence < extraction.confidenceScore) {
-          logger.info('Gap pages exist — capping confidence below auto-approve threshold', {
-            sessionId,
-            originalConfidence: extraction.confidenceScore,
-            cappedConfidence,
-            gapPageCount,
-          });
-          extraction.confidenceScore = cappedConfidence;
-        }
-      }
-    }
+    // Force the session to fail safe — confidence collapses, human review required
+    extraction.confidenceScore = Math.min(extraction.confidenceScore, 10);
+    extraction.requiresHumanReview = true;
+
+    const gapNote = `Gaps detected: ${gapInstructions.map(g => `pages ${g.pageRange[0]+1}-${g.pageRange[1]+1}`).join(', ')}. Requires human review.`;
+    extraction.notes = extraction.notes ? `${extraction.notes} | ${gapNote}` : gapNote;
+
+    // Persist and queue for human review — do NOT continue to split/auto-commit
+    await prisma.smartUploadSession.update({
+      where: { uploadSessionId: sessionId },
+      data: {
+        extractedMetadata: JSON.parse(JSON.stringify(extraction)) as any,
+        confidenceScore: extraction.confidenceScore,
+        routingDecision: 'no_parse_second_pass',
+        parseStatus: 'NOT_PARSED',
+        secondPassStatus: 'QUEUED',
+        requiresHumanReview: true,
+        cuttingInstructions: JSON.parse(JSON.stringify(instructionValidation.instructions)) as any,
+        llmProvider: llmConfig.provider,
+        llmVisionModel: llmConfig.visionModel,
+        llmVerifyModel: llmConfig.verificationModel,
+        llmPromptVersion: llmConfig.promptVersion || PROMPT_VERSION,
+        ...(firstPassRaw ? { firstPassRaw } : {}),
+        strategyHistory: JSON.parse(JSON.stringify(strategyHistory)) as any,
+      },
+    });
+    await queueSmartUploadSecondPass(sessionId);
+    await progress('queued_for_second_pass', 100, `Gaps in cutting instructions (${gapPageCount} pages) — queued for human review`);
+    clearRenderCache(sessionId);
+    return { status: 'queued_for_second_pass', sessionId };
   }
 
   const normalizedInstructionsZero = instructionValidation.instructions;

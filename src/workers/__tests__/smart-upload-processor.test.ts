@@ -57,6 +57,39 @@ vi.mock('@/lib/llm/config-loader', () => ({
   }),
 }));
 
+vi.mock('@/lib/llm/providers', () => ({
+  getProviderMeta: vi.fn().mockReturnValue({ supportsPdfInput: true }),
+}));
+
+vi.mock('@/lib/services/ocr-fallback', () => ({
+  extractOcrFallbackMetadata: vi.fn().mockResolvedValue({
+    title: 'American Patrol',
+    composer: 'F.W. Meacham',
+    confidence: 65,
+    isImageScanned: false,
+    needsManualReview: false,
+  }),
+}));
+
+vi.mock('@/lib/services/page-labeler', () => ({
+  labelPages: vi.fn().mockResolvedValue({
+    cuttingInstructions: [],
+    pageLabels: {},
+    confidence: 0,
+    strategyUsed: 'text',
+    diagnostics: {
+      strategies: [],
+      totalDurationMs: 0,
+      budgetRemaining: 10,
+      budgetLimit: 10,
+    },
+  }),
+}));
+
+vi.mock('@/lib/services/header-image-segmentation', () => ({
+  segmentByHeaderImages: vi.fn().mockResolvedValue(null), // no segmentation in tests
+}));
+
 vi.mock('@/lib/services/pdf-renderer', () => ({
   renderPdfPageBatch: vi.fn().mockResolvedValue(['base64page1', 'base64page2', 'base64page3']),
   renderPdfHeaderCropBatch: vi
@@ -110,6 +143,7 @@ import { downloadFile, uploadFile } from '@/lib/services/storage';
 import { callVisionModel } from '@/lib/llm';
 import { loadSmartUploadRuntimeConfig } from '@/lib/llm/config-loader';
 import { splitPdfByCuttingInstructions, validatePdfBuffer } from '@/lib/services/pdf-splitter';
+import { renderPdfPageBatch } from '@/lib/services/pdf-renderer';
 import {
   queueSmartUploadSecondPass,
 } from '@/lib/jobs/smart-upload';
@@ -164,6 +198,19 @@ function makeLlmConfig(overrides: Record<string, unknown> = {}) {
     visionModelParams: {},
     verificationModelParams: {},
     promptVersion: '1.0',
+    // Default: use PDF mode so full vision response (with cuttingInstructions) is trusted
+    sendFullPdfToLlm: true,
+    enableOcrFirst: true,
+    ocrEngine: 'native' as const,
+    ocrMode: 'both' as const,
+    textProbePages: 3,
+    ocrMaxPages: 3,
+    storeRawOcrText: false,
+    ocrConfidenceThreshold: 70,
+    budgetMaxLlmCalls: 10,
+    budgetMaxInputTokens: 100000,
+    headerLabelUserPrompt: '',
+    adjudicatorUserPrompt: '',
     ...overrides,
   };
 }
@@ -231,6 +278,8 @@ describe('processSmartUpload — integration', () => {
     });
 
     vi.mocked(uploadFile).mockResolvedValue('mock-etag');
+
+    vi.mocked(validatePdfBuffer).mockResolvedValue({ valid: true, pageCount: 3 });
 
     vi.mocked(loadSmartUploadRuntimeConfig).mockResolvedValue(makeLlmConfig() as any);
 
@@ -398,14 +447,17 @@ describe('processSmartUpload — integration', () => {
   });
 
   it('marks session PARSE_FAILED when samplePdfPages throws', async () => {
-    // validation succeeds but rendering fails during second PDF load
-    vi.mocked(validatePdfBuffer).mockResolvedValue({ valid: true, pageCount: 3 });
+    // Switch to image mode so samplePdfPages is actually invoked
+    const { getProviderMeta } = await import('@/lib/llm/providers');
+    vi.mocked(getProviderMeta).mockReturnValue({ supportsPdfInput: false } as any);
+    vi.mocked(loadSmartUploadRuntimeConfig).mockResolvedValue(
+      makeLlmConfig({ sendFullPdfToLlm: false }) as any
+    );
 
-    const { PDFDocument } = await import('pdf-lib');
-    // first call (page count) ok, second call used by samplePdfPages throws
-    vi.mocked(PDFDocument.load)
-      .mockResolvedValueOnce({ getPageCount: () => 3 })
-      .mockRejectedValueOnce(new Error('render error'));
+    // Make renderPdfPageBatch (called by samplePdfPages) reject so the
+    // pdf-lib PDFDocument.load mock is NOT polluted for subsequent tests.
+    const { renderPdfPageBatch } = await import('@/lib/services/pdf-renderer');
+    vi.mocked(renderPdfPageBatch).mockRejectedValueOnce(new Error('render error'));
 
     const job = makeJob(SESSION_ID);
     const result = await processSmartUpload(job);
@@ -417,6 +469,9 @@ describe('processSmartUpload — integration', () => {
         data: expect.objectContaining({ parseStatus: 'PARSE_FAILED' }),
       })
     );
+
+    // Restore provider mock
+    vi.mocked(getProviderMeta).mockReturnValue({ supportsPdfInput: true } as any);
   });
 
   it('marks session PARSE_FAILED when splitting fails', async () => {
@@ -435,5 +490,128 @@ describe('processSmartUpload — integration', () => {
         data: expect.objectContaining({ parseStatus: 'PARSE_FAILED' }),
       })
     );
+  });
+
+  // -----------------------------------------------------------------------
+  // Image mode (non-PDF provider) — Step 1 invariants
+  // -----------------------------------------------------------------------
+
+  it('image mode: routes to second pass when no deterministic instructions available', async () => {
+    // Switch to image mode (provider does NOT support PDF input)
+    const { getProviderMeta } = await import('@/lib/llm/providers');
+    vi.mocked(getProviderMeta).mockReturnValue({ supportsPdfInput: false } as any);
+    vi.mocked(loadSmartUploadRuntimeConfig).mockResolvedValue(
+      makeLlmConfig({ sendFullPdfToLlm: false }) as any
+    );
+
+    vi.mocked(callVisionModel).mockResolvedValue({ content: HIGH_CONFIDENCE_RESPONSE });
+    // page-labeler returns low confidence → useFullVisionLLM=true BUT deterministicInstructions=null
+    const { labelPages } = await import('@/lib/services/page-labeler');
+    vi.mocked(labelPages).mockResolvedValue({
+      cuttingInstructions: [], // empty - no deterministic results
+      pageLabels: {},
+      confidence: 0,
+      strategyUsed: 'text',
+      diagnostics: { strategies: [], totalDurationMs: 0, budgetRemaining: 10, budgetLimit: 10 },
+    } as any);
+
+    const job = makeJob(SESSION_ID);
+    const result = await processSmartUpload(job);
+
+    // Must route to second pass, not complete
+    expect(result.status).toBe('queued_for_second_pass');
+    expect(prisma.smartUploadSession.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          requiresHumanReview: true,
+          secondPassStatus: 'QUEUED',
+          parseStatus: 'NOT_PARSED',
+          routingDecision: 'no_parse_second_pass',
+        }),
+      })
+    );
+    expect(queueSmartUploadSecondPass).toHaveBeenCalledWith(SESSION_ID);
+
+    // Restore provider mock for subsequent tests
+    vi.mocked(getProviderMeta).mockReturnValue({ supportsPdfInput: true } as any);
+  });
+
+  it('image mode: NEVER creates "Unlabelled Pages" with no deterministic instructions', async () => {
+    const { getProviderMeta } = await import('@/lib/llm/providers');
+    vi.mocked(getProviderMeta).mockReturnValue({ supportsPdfInput: false } as any);
+    vi.mocked(loadSmartUploadRuntimeConfig).mockResolvedValue(
+      makeLlmConfig({ sendFullPdfToLlm: false }) as any
+    );
+
+    const GAP_RESPONSE = JSON.stringify({
+      title: 'Test',
+      confidenceScore: 75,
+      fileType: 'FULL_SCORE',
+      isMultiPart: false,
+    });
+    vi.mocked(callVisionModel).mockResolvedValue({ content: GAP_RESPONSE });
+
+    const { labelPages } = await import('@/lib/services/page-labeler');
+    vi.mocked(labelPages).mockResolvedValue({
+      cuttingInstructions: [],
+      pageLabels: {},
+      confidence: 0,
+      strategyUsed: 'text',
+      diagnostics: { strategies: [], totalDurationMs: 0, budgetRemaining: 10, budgetLimit: 10 },
+    } as any);
+
+    const job = makeJob(SESSION_ID);
+    const result = await processSmartUpload(job);
+
+    // Must be queued, not complete with unlabelled parts
+    expect(result.status).toBe('queued_for_second_pass');
+
+    // No split should have happened
+    expect(splitPdfByCuttingInstructions).not.toHaveBeenCalled();
+
+    // No uploads of unlabelled parts
+    expect(uploadFile).not.toHaveBeenCalled();
+
+    vi.mocked(getProviderMeta).mockReturnValue({ supportsPdfInput: true } as any);
+  });
+
+  // -----------------------------------------------------------------------
+  // Gap instructions — Step 10 invariants
+  // -----------------------------------------------------------------------
+
+  it('gaps in cutting instructions force human review and second pass (PDF mode)', async () => {
+    const GAP_RESPONSE = JSON.stringify({
+      title: 'Test',
+      composer: 'Composer',
+      confidenceScore: 85,
+      fileType: 'FULL_SCORE',
+      isMultiPart: true,
+      parts: [
+        { instrument: 'Flute', partName: 'Flute', section: 'Woodwinds', transposition: 'C', partNumber: 1 },
+      ],
+      // Only covers page 1–2 out of 3 → creates a gap on page 3
+      cuttingInstructions: [
+        { partName: 'Flute', instrument: 'Flute', section: 'Woodwinds', transposition: 'C', partNumber: 1, pageRange: [1, 2] },
+      ],
+    });
+    vi.mocked(callVisionModel).mockResolvedValue({ content: GAP_RESPONSE });
+
+    const job = makeJob(SESSION_ID);
+    const result = await processSmartUpload(job);
+
+    // Must NOT continue to split with an "Unlabelled Pages" part
+    expect(result.status).toBe('queued_for_second_pass');
+
+    // Session must be marked as requiring human review
+    const updateCalls = vi.mocked(prisma.smartUploadSession.update).mock.calls;
+    const reviewUpdate = updateCalls.find(c => (c[0] as any).data?.requiresHumanReview === true);
+    expect(reviewUpdate).toBeDefined();
+    expect((reviewUpdate![0] as any).data.secondPassStatus).toBe('QUEUED');
+    expect((reviewUpdate![0] as any).data.parseStatus).toBe('NOT_PARSED');
+
+    expect(queueSmartUploadSecondPass).toHaveBeenCalledWith(SESSION_ID);
+
+    // No parts should be uploaded
+    expect(uploadFile).not.toHaveBeenCalled();
   });
 });

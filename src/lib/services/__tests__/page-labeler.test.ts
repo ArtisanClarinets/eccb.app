@@ -48,6 +48,16 @@ vi.mock('@/lib/services/header-image-segmentation', () => ({
   segmentByHeaderImages: vi.fn(),
 }));
 
+// Mock pdf-renderer so LLM strategy gets valid header crop images without
+// actually rendering the fake PDF buffer. The returned string must be at
+// least 200 chars so the "skip degenerate placeholder" guard passes.
+const FAKE_HEADER_IMAGE = 'A'.repeat(300);
+vi.mock('@/lib/services/pdf-renderer', () => ({
+  renderPdfHeaderCropBatch: vi.fn().mockImplementation((buf: Buffer, indices: number[]) =>
+    Promise.resolve(indices.map(() => FAKE_HEADER_IMAGE))
+  ),
+}));
+
 vi.mock('@/lib/smart-upload/budgets', () => {
   class MockSessionBudget {
     check() {

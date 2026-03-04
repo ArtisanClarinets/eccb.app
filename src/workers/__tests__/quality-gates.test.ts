@@ -92,7 +92,8 @@ vi.mock('@/lib/services/part-boundary-detector', () => ({
 
 vi.mock('@/lib/services/pdf-splitter', () => ({
   splitPdfByCuttingInstructions: vi.fn(),
-  validatePdfBuffer: vi.fn().mockResolvedValue({ valid: true, pageCount: 3 }),
+  // 20 pages matches the pdf-lib PDFDocument.load mock (getPageCount: () => 20)
+  validatePdfBuffer: vi.fn().mockResolvedValue({ valid: true, pageCount: 20 }),
 }));
 
 vi.mock('@/lib/jobs/smart-upload', () => ({
@@ -108,6 +109,29 @@ vi.mock('@/lib/jobs/smart-upload', () => ({
 
 vi.mock('@/lib/logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+}));
+
+// PDF-capable provider so canSendPdf=true — quality-gate tests need LLM cuttingInstructions
+vi.mock('@/lib/llm/providers', () => ({
+  getProviderMeta: vi.fn().mockReturnValue({ supportsPdfInput: true }),
+}));
+
+vi.mock('@/lib/services/ocr-fallback', () => ({
+  extractOcrFallbackMetadata: vi.fn().mockResolvedValue({
+    title: null, composer: null, confidence: 0, rawText: '', pageCount: 0,
+  }),
+}));
+
+vi.mock('@/lib/services/page-labeler', () => ({
+  labelPages: vi.fn().mockResolvedValue({
+    cuttingInstructions: [], pageLabels: {}, confidence: 0,
+    strategyUsed: 'text',
+    diagnostics: { strategies: [], totalDurationMs: 0, budgetRemaining: 10, budgetLimit: 10 },
+  }),
+}));
+
+vi.mock('@/lib/services/header-image-segmentation', () => ({
+  segmentByHeaderImages: vi.fn().mockResolvedValue(null),
 }));
 
 // ---------------------------------------------------------------------------
@@ -169,6 +193,19 @@ function makeAutonomousConfig(overrides: Record<string, unknown> = {}) {
     visionModelParams: {},
     verificationModelParams: {},
     promptVersion: '1.0',
+    // PDF mode: provider mock returns supportsPdfInput:true
+    sendFullPdfToLlm: true,
+    enableOcrFirst: true,
+    ocrEngine: 'native' as const,
+    ocrMode: 'both' as const,
+    textProbePages: 3,
+    ocrMaxPages: 3,
+    storeRawOcrText: false,
+    ocrConfidenceThreshold: 70,
+    budgetMaxLlmCalls: 10,
+    budgetMaxInputTokens: 100000,
+    headerLabelUserPrompt: '',
+    adjudicatorUserPrompt: '',
     ...overrides,
   };
 }
@@ -240,13 +277,13 @@ describe('Auto-commit Quality Gates (DoD §1.5)', () => {
         confidenceScore: 95, // would pass confidence gate alone
         isMultiPart: false,
         cuttingInstructions: [
-          { instrument: 'null', partName: 'Part 1', section: 'Woodwinds', transposition: 'C', partNumber: 1, pageRange: [1, 2] },
+          { instrument: 'null', partName: 'Part 1', section: 'Woodwinds', transposition: 'C', partNumber: 1, pageRange: [1, 20] },
         ],
       }),
     });
 
     vi.mocked(splitPdfByCuttingInstructions).mockResolvedValue([
-      makePartResult('null', 'Part 1', 2),
+      makePartResult('null', 'Part 1', 20),
     ] as any);
 
     const job = makeJob();
@@ -267,13 +304,13 @@ describe('Auto-commit Quality Gates (DoD §1.5)', () => {
         confidenceScore: 95,
         isMultiPart: false,
         cuttingInstructions: [
-          { instrument: 'unknown', partName: 'Mystery', section: 'Woodwinds', transposition: 'C', partNumber: 1, pageRange: [1, 3] },
+          { instrument: 'unknown', partName: 'Mystery', section: 'Woodwinds', transposition: 'C', partNumber: 1, pageRange: [1, 20] },
         ],
       }),
     });
 
     vi.mocked(splitPdfByCuttingInstructions).mockResolvedValue([
-      makePartResult('unknown', 'Mystery', 3),
+      makePartResult('unknown', 'Mystery', 20),
     ] as any);
 
     await processSmartUpload(makeJob());
@@ -317,13 +354,13 @@ describe('Auto-commit Quality Gates (DoD §1.5)', () => {
         confidenceScore: 95,
         isMultiPart: false,
         cuttingInstructions: [
-          { instrument: 'Flute', partName: 'Flute', section: 'Woodwinds', transposition: 'C', partNumber: 1, pageRange: [1, 15] },
+          { instrument: 'Flute', partName: 'Flute', section: 'Woodwinds', transposition: 'C', partNumber: 1, pageRange: [1, 20] },
         ],
       }),
     });
 
     vi.mocked(splitPdfByCuttingInstructions).mockResolvedValue([
-      makePartResult('Flute', 'Flute', 15), // > maxPagesPerPart (12)
+      makePartResult('Flute', 'Flute', 20), // 20 > maxPagesPerPart (12) → Gate 2 fires
     ] as any);
 
     await processSmartUpload(makeJob());
@@ -414,15 +451,15 @@ describe('Auto-commit Quality Gates (DoD §1.5)', () => {
         confidenceScore: 95,
         isMultiPart: true,
         cuttingInstructions: [
-          { instrument: 'Flute', partName: 'Flute', section: 'Woodwinds', transposition: 'C', partNumber: 1, pageRange: [1, 3] },
-          { instrument: 'Clarinet', partName: 'Clarinet', section: 'Woodwinds', transposition: 'Bb', partNumber: 2, pageRange: [4, 6] },
+          { instrument: 'Flute', partName: 'Flute', section: 'Woodwinds', transposition: 'C', partNumber: 1, pageRange: [1, 10] },
+          { instrument: 'Clarinet', partName: 'Clarinet', section: 'Woodwinds', transposition: 'Bb', partNumber: 2, pageRange: [11, 20] },
         ],
       }),
     });
 
     vi.mocked(splitPdfByCuttingInstructions).mockResolvedValue([
-      makePartResult('Flute', 'Flute', 3),
-      makePartResult('Clarinet', 'Clarinet', 3),
+      makePartResult('Flute', 'Flute', 10),
+      makePartResult('Clarinet', 'Clarinet', 10),
     ] as any);
 
     await processSmartUpload(makeJob());
@@ -458,13 +495,13 @@ describe('Auto-commit Quality Gates (DoD §1.5)', () => {
         confidenceScore: 95,
         isMultiPart: false,
         cuttingInstructions: [
-          { instrument: 'Clarinet', partName: 'Clarinet', section: 'Woodwinds', transposition: 'Bb', partNumber: 1, pageRange: [1, 4] },
+          { instrument: 'Clarinet', partName: 'Clarinet', section: 'Woodwinds', transposition: 'Bb', partNumber: 1, pageRange: [1, 20] },
         ],
       }),
     });
 
     vi.mocked(splitPdfByCuttingInstructions).mockResolvedValue([
-      makePartResult('Clarinet', 'Clarinet', 4),
+      makePartResult('Clarinet', 'Clarinet', 20),
     ] as any);
 
     await processSmartUpload(makeJob());
@@ -488,13 +525,13 @@ describe('Auto-commit Quality Gates (DoD §1.5)', () => {
         confidenceScore: 75, // above skipParseThreshold(55) but below autoApproveThreshold(80)
         isMultiPart: false,
         cuttingInstructions: [
-          { instrument: 'Tuba', partName: 'Tuba', section: 'Brass', transposition: 'C', partNumber: 1, pageRange: [1, 3] },
+          { instrument: 'Tuba', partName: 'Tuba', section: 'Brass', transposition: 'C', partNumber: 1, pageRange: [1, 20] },
         ],
       }),
     });
 
     vi.mocked(splitPdfByCuttingInstructions).mockResolvedValue([
-      makePartResult('Tuba', 'Tuba', 3, 'Brass'),
+      makePartResult('Tuba', 'Tuba', 20, 'Brass'),
     ] as any);
 
     await processSmartUpload(makeJob());

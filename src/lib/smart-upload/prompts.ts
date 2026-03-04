@@ -4,7 +4,7 @@
 // System prompts define behavior; user prompts define task input/output.
 // ============================================================
 
-export const PROMPT_VERSION = '3.0.0';
+export const PROMPT_VERSION = '3.1.0';
 
 // =============================================================================
 // System Prompts
@@ -78,6 +78,60 @@ Required object schema:
     }
   ],
   "totalPageCount": number,
+  "confidenceScore": integer 0-100,
+  "notes": string | null
+}`;
+
+/**
+ * METADATA-ONLY template for image-sampled mode.
+ *
+ * IMPORTANT: This template MUST NOT request cuttingInstructions because only
+ * a small sample of pages (e.g. 8) is sent to the LLM. Requesting full-document
+ * cutting instructions from sampled pages is mathematically impossible and produces
+ * incomplete/gapped instructions.
+ *
+ * cuttingInstructions for image-based mode come exclusively from deterministic
+ * segmentation (text-layer boundary detection or local header-image segmentation).
+ */
+export const DEFAULT_VISION_METADATA_ONLY_USER_PROMPT_TEMPLATE = `Analyze the provided sample pages and extract document-level metadata only. Return ONE JSON object.
+
+Context:
+- Total pages in original PDF: {{totalPages}}
+- Sampled pages provided: {{sampledPages}}
+- Sampled page labels: {{pageList}}
+
+IMPORTANT RULES:
+1. Do NOT return cuttingInstructions — you have only a sample of pages and cannot determine part boundaries.
+2. If the title page is not among the sampled pages, set title to null — do NOT guess a title from instrument pages.
+3. Instrument pages (showing individual parts) do NOT indicate the overall title or composer.
+4. Return valid JSON only (no markdown fences, no prose).
+5. Allowed null values for any field you cannot determine with confidence.
+6. For isMultiPart: set to true only if the pages clearly show multiple different instrument parts.
+7. For parts[]: list instrument parts you can identify from the sampled pages. May be incomplete.
+
+Required object schema (metadata only — no cuttingInstructions):
+{
+  "title": string | null,
+  "subtitle": string | null,
+  "composer": string | null,
+  "arranger": string | null,
+  "publisher": string | null,
+  "copyrightYear": number | null,
+  "ensembleType": string | null,
+  "keySignature": string | null,
+  "timeSignature": string | null,
+  "tempo": string | null,
+  "fileType": "FULL_SCORE" | "CONDUCTOR_SCORE" | "CONDENSED_SCORE" | "PART",
+  "isMultiPart": boolean,
+  "parts": [
+    {
+      "instrument": string,
+      "partName": string,
+      "section": "Woodwinds" | "Brass" | "Percussion" | "Strings" | "Keyboard" | "Vocals" | "Score" | "Other",
+      "transposition": "C" | "Bb" | "Eb" | "F" | "G" | "D" | "A",
+      "partNumber": number
+    }
+  ],
   "confidenceScore": integer 0-100,
   "notes": string | null
 }`;
@@ -218,6 +272,7 @@ Required object schema:
 
 /**
  * Build the first-pass user prompt from template/context.
+ * For full-document mode (canSendPdf=true) this includes cuttingInstructions.
  */
 export function buildVisionPrompt(
   template: string,
@@ -227,6 +282,29 @@ export function buildVisionPrompt(
   }
 ): string {
   const safeTemplate = template?.trim() || DEFAULT_VISION_USER_PROMPT_TEMPLATE;
+  const pageList = context.sampledPageNumbers.map((n) => n + 1).join(', ');
+
+  return safeTemplate
+    .replace(/{{totalPages}}/g, String(context.totalPages))
+    .replace(/{{pageList}}/g, pageList)
+    .replace(/{{sampledPages}}/g, String(context.sampledPageNumbers.length));
+}
+
+/**
+ * Build a metadata-only user prompt for image-sampled (non-PDF-native) mode.
+ *
+ * This intentionally does NOT request cuttingInstructions — the LLM only sees
+ * a sample of pages and cannot produce valid full-document cutting instructions.
+ * cuttingInstructions must come from deterministic segmentation only.
+ */
+export function buildVisionMetadataPrompt(
+  template: string | undefined,
+  context: {
+    totalPages: number;
+    sampledPageNumbers: number[];
+  }
+): string {
+  const safeTemplate = template?.trim() || DEFAULT_VISION_METADATA_ONLY_USER_PROMPT_TEMPLATE;
   const pageList = context.sampledPageNumbers.map((n) => n + 1).join(', ');
 
   return safeTemplate
@@ -314,6 +392,7 @@ export function getDefaultPromptsRecord(): Record<string, string> {
     llm_adjudicator_prompt: DEFAULT_ADJUDICATOR_PROMPT,
     // User prompt templates
     llm_vision_user_prompt: DEFAULT_VISION_USER_PROMPT_TEMPLATE,
+    llm_vision_metadata_only_user_prompt: DEFAULT_VISION_METADATA_ONLY_USER_PROMPT_TEMPLATE,
     llm_pdf_vision_user_prompt: DEFAULT_PDF_VISION_USER_PROMPT_TEMPLATE,
     llm_verification_user_prompt: DEFAULT_VERIFICATION_USER_PROMPT_TEMPLATE,
     llm_header_label_user_prompt: DEFAULT_HEADER_LABEL_USER_PROMPT_TEMPLATE,

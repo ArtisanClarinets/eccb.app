@@ -874,27 +874,51 @@ export async function runOcrmypdf(buffer: Buffer): Promise<{ text: string; confi
       try {
         if (fs) {
           const outputBuffer = fs.readFileSync(outputPath);
-          const pdfLib = await import('pdf-lib').catch(() => null);
 
-          if (!pdfLib?.PDFDocument) {
-            throw new Error('pdf-lib not available');
+          // Use pdfjs-dist to extract text — pdf-lib does NOT have a getTextContent() API.
+          // ocrmypdf embeds a text layer in the output PDF, which pdfjs can read.
+          const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs').catch(() => null);
+
+          if (!pdfjsLib?.getDocument) {
+            throw new Error('pdfjs-dist not available');
           }
 
-          const doc = await pdfLib.PDFDocument.load(outputBuffer, {
-            ignoreEncryption: true,
-          });
+          type PdfGetDocumentParams = Parameters<typeof pdfjsLib.getDocument>[0];
 
-          const pages = doc.getPages();
+          const pdfData = new Uint8Array(outputBuffer);
+          let loadingTask: any;
+          let pdfDocument: any;
           let fullText = '';
+          let pagesScanned = 0;
 
-          for (const page of pages.slice(0, DEFAULT_MAX_OCR_PAGES)) {
-            const text = (page as any).getTextContent?.();
-            if (text?.items) {
-              const pageText = text.items
-                .map((item: any) => item.str)
-                .join(' ');
-              fullText += pageText + '\n';
+          try {
+            loadingTask = pdfjsLib.getDocument({
+              data: pdfData,
+              disableWorker: true,
+            } as unknown as PdfGetDocumentParams);
+
+            pdfDocument = await loadingTask.promise;
+            const numPages: number = pdfDocument.numPages;
+            const pagesToRead = Math.min(numPages, DEFAULT_MAX_OCR_PAGES);
+
+            for (let i = 1; i <= pagesToRead; i++) {
+              try {
+                const page = await pdfDocument.getPage(i);
+                const textContent = await page.getTextContent();
+                const pageText = textContent.items
+                  .filter((item: any) => 'str' in item)
+                  .map((item: any) => (item as any).str)
+                  .join(' ');
+                if (pageText.trim()) {
+                  fullText += pageText + '\n';
+                }
+                pagesScanned++;
+              } catch {
+                // skip individual page failures
+              }
             }
+          } finally {
+            try { if (loadingTask?.destroy) await loadingTask.destroy(); } catch { /* ok */ }
           }
 
           try {
@@ -905,7 +929,7 @@ export async function runOcrmypdf(buffer: Buffer): Promise<{ text: string; confi
 
           logger.info('OCR (ocrmypdf) completed', {
             durationMs: Math.round(nowMs() - start),
-            pagesScanned: pages.length,
+            pagesScanned,
             extractedChars: fullText.length,
           });
 

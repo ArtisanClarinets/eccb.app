@@ -20,6 +20,7 @@ import { buildHeaderLabelPrompt } from '@/lib/smart-upload/prompts';
 import { extractPdfPageHeaders, normalizePdfText } from '@/lib/services/pdf-text-extractor';
 import { detectPartBoundaries, type SegmentationResult } from '@/lib/services/part-boundary-detector';
 import { segmentByHeaderImages, type HeaderImageSegmentationResult } from '@/lib/services/header-image-segmentation';
+import { renderPdfHeaderCropBatch } from '@/lib/services/pdf-renderer';
 import { callVisionModel, runtimeToAdapterConfig } from '@/lib/llm/index';
 import { type CuttingInstruction } from '@/lib/services/cutting-instructions';
 
@@ -469,17 +470,49 @@ export async function labelPages(options: PageLabelerOptions): Promise<PageLabel
 
       const maxPagesToProcess = Math.min(totalPages, maxLLmPages);
       const pagesToLabel: number[] = [];
-      
+
       // Sample pages evenly across the document
       const step = Math.max(1, Math.floor(maxPagesToProcess / maxHeaderBatches));
       for (let i = 0; i < maxPagesToProcess && pagesToLabel.length < maxHeaderBatches; i += step) {
         pagesToLabel.push(i + 1); // 1-indexed
       }
 
-      for (const pageNum of pagesToLabel) {
+      // Batch-render header crops for all sampled pages up-front.
+      // renderPdfHeaderCropBatch expects 0-indexed page numbers.
+      const pageIndices0 = pagesToLabel.map(p => p - 1);
+      let headerCrops: string[] = new Array(pagesToLabel.length).fill('');
+      try {
+        headerCrops = await renderPdfHeaderCropBatch(pdfBuffer, pageIndices0, {
+          scale: 2,
+          maxWidth: 768,
+          quality: 85,
+          format: 'png',
+          cropHeightFraction: 0.2,
+          cacheTag,
+        });
+      } catch (renderErr) {
+        logger.warn('page-labeler: header crop render failed; LLM fallback will be skipped', {
+          error: renderErr instanceof Error ? renderErr.message : String(renderErr),
+        });
+      }
+
+      // Convert runtime config to adapter config once (shared across all LLM calls)
+      const adapterConfig = runtimeToAdapterConfig(llmConfig);
+
+      for (let i = 0; i < pagesToLabel.length; i++) {
+        const pageNum = pagesToLabel[i];
+        const imageBase64 = headerCrops[i] || '';
+
         if (!budget.check().allowed) {
           llmReason = 'budget exhausted during processing';
           break;
+        }
+
+        // Skip pages where rendering produced an empty or placeholder result.
+        // The placeholder PNG is ~100 bytes base64-encoded; real renders are much larger.
+        if (imageBase64.length < 200) {
+          logger.warn('page-labeler: skipping LLM call — header crop render unavailable', { pageNum });
+          continue;
         }
 
         budget.record(1000);
@@ -490,13 +523,10 @@ export async function labelPages(options: PageLabelerOptions): Promise<PageLabel
           { pageNumbers: [pageNum] }
         );
 
-        // Convert runtime config to adapter config
-        const adapterConfig = runtimeToAdapterConfig(llmConfig);
-
-        // Invoke LLM
+        // Invoke LLM with the rendered header crop image
         const response = await callVisionModel(
           adapterConfig,
-          [],
+          [{ mimeType: 'image/png', base64Data: imageBase64, label: `Page ${pageNum} header` }],
           prompt,
           {
             system: llmConfig.headerLabelPrompt,

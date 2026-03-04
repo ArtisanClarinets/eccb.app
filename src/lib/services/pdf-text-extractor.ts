@@ -18,6 +18,8 @@
  * - hasTextLayer threshold remains 0.6 (unchanged)
  */
 
+import * as fs from 'fs';
+import * as nodePath from 'path';
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { logger } from '@/lib/logger';
 
@@ -69,6 +71,40 @@ const MIN_TEXT_CHARS = 10;
 const MAX_FULL_TEXT_CHARS = 500;
 
 type PdfGetDocumentParams = Parameters<typeof pdfjsLib.getDocument>[0];
+
+// ---------------------------------------------------------------------------
+// Node.js filesystem-backed CMap and standard font data factories.
+// Mirrors the same classes in pdf-renderer.ts.
+// Without these, pdfjs falls back to DOM-based font loading which fails on
+// the server and produces garbled glyphs in CIDFont sheet-music PDFs.
+// ---------------------------------------------------------------------------
+const PDFJS_DIST_DIR = nodePath.join(process.cwd(), 'node_modules', 'pdfjs-dist');
+const CMAP_DIR = nodePath.join(PDFJS_DIST_DIR, 'cmaps');
+const FONTS_DIR = nodePath.join(PDFJS_DIST_DIR, 'standard_fonts');
+
+class NodeFsCMapReaderFactory {
+  fetch({ name }: { name: string }): Promise<{ cMapData: Uint8Array; isCompressed: boolean }> {
+    const bcmapPath = nodePath.join(CMAP_DIR, `${name}.bcmap`);
+    const cmapPath  = nodePath.join(CMAP_DIR, name);
+    if (fs.existsSync(bcmapPath)) {
+      return Promise.resolve({ cMapData: new Uint8Array(fs.readFileSync(bcmapPath)), isCompressed: true });
+    }
+    if (fs.existsSync(cmapPath)) {
+      return Promise.resolve({ cMapData: new Uint8Array(fs.readFileSync(cmapPath)), isCompressed: false });
+    }
+    return Promise.reject(new Error(`CMap not found: ${name}`));
+  }
+}
+
+class NodeFsStandardFontDataFactory {
+  fetch({ filename }: { filename: string }): Promise<Uint8Array> {
+    const fontPath = nodePath.join(FONTS_DIR, filename);
+    if (fs.existsSync(fontPath)) {
+      return Promise.resolve(new Uint8Array(fs.readFileSync(fontPath)));
+    }
+    return Promise.reject(new Error(`Standard font not found: ${filename}`));
+  }
+}
 
 function asError(err: unknown): Error {
   return err instanceof Error ? err : new Error(String(err));
@@ -154,6 +190,14 @@ export async function extractPdfPageHeaders(
     loadingTask = pdfjsLib.getDocument({
       data: pdfData,
       disableWorker: true,
+      // Supply filesystem-backed factories so pdfjs can decode CIDFonts and
+      // standard font fallbacks without DOM or network access. Without these,
+      // sheet music PDFs with CMap-encoded notation fonts produce garbled text.
+      CMapReaderFactory: NodeFsCMapReaderFactory,
+      StandardFontDataFactory: NodeFsStandardFontDataFactory,
+      cMapPacked: true,
+      useSystemFonts: false,
+      isEvalSupported: false,
     } as unknown as PdfGetDocumentParams);
 
     pdfDocument = await loadingTask.promise;

@@ -74,7 +74,7 @@ vi.mock('@/lib/services/part-boundary-detector', () => ({
 
 vi.mock('@/lib/services/pdf-splitter', () => ({
   splitPdfByCuttingInstructions: vi.fn(),
-  validatePdfBuffer: vi.fn().mockResolvedValue({ valid: true, pageCount: 3 }),
+  validatePdfBuffer: vi.fn().mockResolvedValue({ valid: true, pageCount: 12 }),
 }));
 
 vi.mock('@/lib/jobs/smart-upload', () => ({
@@ -90,6 +90,32 @@ vi.mock('@/lib/jobs/smart-upload', () => ({
 
 vi.mock('@/lib/logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+}));
+
+// Providers — report PDF-capable so canSendPdf=true (PDF mode) is exercised
+vi.mock('@/lib/llm/providers', () => ({
+  getProviderMeta: vi.fn().mockReturnValue({ supportsPdfInput: true }),
+}));
+
+// OCR fallback — no extractable text for these scanned-PDF scenarios
+vi.mock('@/lib/services/ocr-fallback', () => ({
+  extractOcrFallbackMetadata: vi.fn().mockResolvedValue({
+    title: null, composer: null, confidence: 0, rawText: '', pageCount: 0,
+  }),
+}));
+
+// Page labeler — low confidence → useFullVisionLLM=true (falls through to LLM)
+vi.mock('@/lib/services/page-labeler', () => ({
+  labelPages: vi.fn().mockResolvedValue({
+    cuttingInstructions: [], pageLabels: {}, confidence: 0,
+    strategyUsed: 'text',
+    diagnostics: { strategies: [], totalDurationMs: 0, budgetRemaining: 10, budgetLimit: 10 },
+  }),
+}));
+
+// Header-image segmentation — no segments for scanned test PDFs
+vi.mock('@/lib/services/header-image-segmentation', () => ({
+  segmentByHeaderImages: vi.fn().mockResolvedValue(null),
 }));
 
 // ---------------------------------------------------------------------------
@@ -139,6 +165,19 @@ function baseCfg(overrides: Record<string, unknown> = {}) {
     enableFullyAutonomousMode: false,
     visionModelParams: {}, verificationModelParams: {},
     promptVersion: '1.0',
+    // PDF mode: provider mock returns supportsPdfInput:true, so send full PDF to LLM
+    sendFullPdfToLlm: true,
+    enableOcrFirst: true,
+    ocrEngine: 'native' as const,
+    ocrMode: 'both' as const,
+    textProbePages: 3,
+    ocrMaxPages: 3,
+    storeRawOcrText: false,
+    ocrConfidenceThreshold: 70,
+    budgetMaxLlmCalls: 10,
+    budgetMaxInputTokens: 100000,
+    headerLabelUserPrompt: '',
+    adjudicatorUserPrompt: '',
     ...overrides,
   };
 }
@@ -273,52 +312,35 @@ describe('Regression: AmericanPatrol condensed title layout', () => {
       segmentationConfidence: 20,
     } as any);
 
-    // Header-label LLM call returns per-page labels
-    vi.mocked(callVisionModel)
-      // First call: header-label pass for all 12 pages
-      .mockResolvedValueOnce({
-        content: JSON.stringify([
-          { page: 1, label: null, confidence: 0 }, // cover
-          { page: 2, label: '1st Bb Clarinet', confidence: 92 },
-          { page: 3, label: '1st Bb Clarinet', confidence: 90 },
-          { page: 4, label: '2nd Bb Clarinet', confidence: 91 },
-          { page: 5, label: '2nd Bb Clarinet', confidence: 88 },
-          { page: 6, label: 'Bb Bass Clarinet', confidence: 89 },
-          { page: 7, label: '1st Alto Saxophone', confidence: 93 },
-          { page: 8, label: '2nd Alto Saxophone', confidence: 90 },
-          { page: 9, label: 'Tenor Saxophone', confidence: 91 },
-          { page: 10, label: 'Baritone Saxophone', confidence: 88 },
-          { page: 11, label: 'Tuba', confidence: 94 },
-          { page: 12, label: 'Tuba', confidence: 93 },
-        ]),
-      })
-      // Second call: full vision analysis
-      .mockResolvedValueOnce({
-        content: JSON.stringify({
-          title: 'American Patrol',
-          composer: 'F.W. Meacham',
-          arranger: 'arr. Lake',
-          copyrightYear: 1977,
-          ensembleType: 'Concert Band',
-          fileType: 'FULL_SCORE',
-          isMultiPart: true,
-          confidenceScore: 88,
-          cuttingInstructions: [
-            { instrument: '1st Bb Clarinet', partName: '1st Bb Clarinet', section: 'Woodwinds', transposition: 'Bb', partNumber: 1, pageRange: [2, 3] },
-            { instrument: '2nd Bb Clarinet', partName: '2nd Bb Clarinet', section: 'Woodwinds', transposition: 'Bb', partNumber: 2, pageRange: [4, 5] },
-            { instrument: 'Bb Bass Clarinet', partName: 'Bb Bass Clarinet', section: 'Woodwinds', transposition: 'Bb', partNumber: 3, pageRange: [6, 6] },
-            { instrument: '1st Alto Saxophone', partName: '1st Alto Saxophone', section: 'Woodwinds', transposition: 'Eb', partNumber: 4, pageRange: [7, 7] },
-            { instrument: '2nd Alto Saxophone', partName: '2nd Alto Saxophone', section: 'Woodwinds', transposition: 'Eb', partNumber: 5, pageRange: [8, 8] },
-            { instrument: 'Tenor Saxophone', partName: 'Tenor Saxophone', section: 'Woodwinds', transposition: 'Bb', partNumber: 6, pageRange: [9, 9] },
-            { instrument: 'Baritone Saxophone', partName: 'Baritone Saxophone', section: 'Woodwinds', transposition: 'Eb', partNumber: 7, pageRange: [10, 10] },
-            { instrument: 'Tuba', partName: 'Tuba', section: 'Brass', transposition: 'C', partNumber: 8, pageRange: [11, 12] },
-          ],
-        }),
-      });
+    // In PDF mode a single vision call is made — include the cover page
+    // (page 1) as a part so there are no gaps (gap = hard fail → second pass).
+    vi.mocked(callVisionModel).mockResolvedValue({
+      content: JSON.stringify({
+        title: 'American Patrol',
+        composer: 'F.W. Meacham',
+        arranger: 'arr. Lake',
+        copyrightYear: 1977,
+        ensembleType: 'Concert Band',
+        fileType: 'FULL_SCORE',
+        isMultiPart: true,
+        confidenceScore: 88,
+        cuttingInstructions: [
+          { instrument: 'Cover Page', partName: 'Cover Page', section: 'Score', transposition: 'C', partNumber: 0, pageRange: [1, 1] },
+          { instrument: '1st Bb Clarinet', partName: '1st Bb Clarinet', section: 'Woodwinds', transposition: 'Bb', partNumber: 1, pageRange: [2, 3] },
+          { instrument: '2nd Bb Clarinet', partName: '2nd Bb Clarinet', section: 'Woodwinds', transposition: 'Bb', partNumber: 2, pageRange: [4, 5] },
+          { instrument: 'Bb Bass Clarinet', partName: 'Bb Bass Clarinet', section: 'Woodwinds', transposition: 'Bb', partNumber: 3, pageRange: [6, 6] },
+          { instrument: '1st Alto Saxophone', partName: '1st Alto Saxophone', section: 'Woodwinds', transposition: 'Eb', partNumber: 4, pageRange: [7, 7] },
+          { instrument: '2nd Alto Saxophone', partName: '2nd Alto Saxophone', section: 'Woodwinds', transposition: 'Eb', partNumber: 5, pageRange: [8, 8] },
+          { instrument: 'Tenor Saxophone', partName: 'Tenor Saxophone', section: 'Woodwinds', transposition: 'Bb', partNumber: 6, pageRange: [9, 9] },
+          { instrument: 'Baritone Saxophone', partName: 'Baritone Saxophone', section: 'Woodwinds', transposition: 'Eb', partNumber: 7, pageRange: [10, 10] },
+          { instrument: 'Tuba', partName: 'Tuba', section: 'Brass', transposition: 'C', partNumber: 8, pageRange: [11, 12] },
+        ],
+      }),
+    });
 
     vi.mocked(splitPdfByCuttingInstructions).mockResolvedValue(
-      ['1st Bb Clarinet', '2nd Bb Clarinet', 'Bb Bass Clarinet', '1st Alto Saxophone', '2nd Alto Saxophone', 'Tenor Saxophone', 'Baritone Saxophone', 'Tuba'].map((instr, i) => ({
-        instruction: { partName: instr, instrument: instr, section: 'Woodwinds', transposition: 'Bb', partNumber: i + 1, pageRange: [1 + i * 1, 1 + i * 1] },
+      ['Cover Page', '1st Bb Clarinet', '2nd Bb Clarinet', 'Bb Bass Clarinet', '1st Alto Saxophone', '2nd Alto Saxophone', 'Tenor Saxophone', 'Baritone Saxophone', 'Tuba'].map((instr, i) => ({
+        instruction: { partName: instr, instrument: instr, section: 'Woodwinds', transposition: 'Bb', partNumber: i, pageRange: [i, i] },
         buffer: Buffer.from(`part-${i}`),
         pageCount: 1,
       })) as any
@@ -327,7 +349,7 @@ describe('Regression: AmericanPatrol condensed title layout', () => {
     const result = await processSmartUpload(makeJob());
 
     expect(result.status).toBe('complete');
-    expect(result.partsCreated).toBe(8);
+    expect(result.partsCreated).toBe(9); // 8 instrument parts + 1 cover
 
     // Verify copyrightYear is persisted in extractedMetadata
     const updateCalls = vi.mocked(prisma.smartUploadSession.update).mock.calls;
@@ -421,8 +443,16 @@ describe('Regression: multi-part PDF with frequent instrument changes', () => {
     ] as any);
 
     const result = await processSmartUpload(makeJob());
-    expect(result.status).toBe('complete');
-    // Gap pages were added as a part
-    expect(result.partsCreated).toBeGreaterThanOrEqual(2);
+    // Gap pages now trigger hard-fail → routed to human review / second pass
+    expect(result.status).toBe('queued_for_second_pass');
+
+    // Session must be marked for human review
+    const updateCalls = vi.mocked(prisma.smartUploadSession.update).mock.calls;
+    const reviewUpdate = updateCalls.find((c) => (c[0] as any).data?.requiresHumanReview === true);
+    expect(reviewUpdate).toBeDefined();
+    expect((reviewUpdate![0] as any).data.secondPassStatus).toBe('QUEUED');
+
+    // Nothing was split / uploaded — fail-safe fires before the split phase
+    expect(uploadFile).not.toHaveBeenCalled();
   });
 });

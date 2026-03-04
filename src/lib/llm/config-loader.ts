@@ -92,8 +92,10 @@ export interface LLMRuntimeConfig {
   headerLabelModelParams: Record<string, unknown>;
   adjudicatorModelParams: Record<string, unknown>;
   promptVersion?: string;
-  /** User prompt template for vision extraction (image mode) */
+  /** User prompt template for vision extraction (image mode, full schema including cuttingInstructions) */
   visionUserPrompt?: string;
+  /** User prompt template for image-sampled metadata-only extraction (no cuttingInstructions) */
+  visionMetadataOnlyUserPrompt?: string;
   /** User prompt template for PDF-to-LLM vision extraction */
   pdfVisionUserPrompt?: string;
   /** User prompt template for verification (second pass) */
@@ -167,6 +169,7 @@ const DB_KEYS = [
   'llm_adjudicator_prompt',
   // User prompt templates (stored in DB as single source of truth)
   'llm_vision_user_prompt',
+  'llm_vision_metadata_only_user_prompt',
   'llm_pdf_vision_user_prompt',
   'llm_verification_user_prompt',
   'llm_header_label_user_prompt',
@@ -404,6 +407,7 @@ export async function loadLLMConfig(): Promise<LLMRuntimeConfig> {
     promptVersion: db['llm_prompt_version'] || PROMPT_VERSION,
     // ── User prompt templates — DB is the single source of truth ──────────
     visionUserPrompt: db['llm_vision_user_prompt'] || undefined,
+    visionMetadataOnlyUserPrompt: db['llm_vision_metadata_only_user_prompt'] || undefined,
     pdfVisionUserPrompt: db['llm_pdf_vision_user_prompt'] || undefined,
     verificationUserPrompt: db['llm_verification_user_prompt'] || undefined,
     headerLabelUserPrompt: db['llm_header_label_user_prompt'] || undefined,
