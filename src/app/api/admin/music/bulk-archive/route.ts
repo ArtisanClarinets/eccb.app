@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/db';
 import { getSession } from '@/lib/auth/guards';
 import { requirePermission } from '@/lib/auth/permissions';
@@ -37,6 +38,10 @@ export async function POST(request: NextRequest) {
       ids,
       userId: session.user.id,
     });
+
+    // Invalidate cache for music library page
+    revalidatePath('/admin/music');
+    revalidatePath('/member/music');
 
     return NextResponse.json({
       success: true,

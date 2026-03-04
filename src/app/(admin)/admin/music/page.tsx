@@ -4,16 +4,7 @@ import { prisma } from '@/lib/db';
 import { requirePermission } from '@/lib/auth/guards';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import {
   Select,
   SelectContent,
@@ -26,11 +17,9 @@ import {
   Plus,
   Search,
   Download,
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
 } from 'lucide-react';
-import { MusicLibraryTable, type MusicPieceWithRelations } from '@/components/admin/MusicLibraryTable';
+import { type MusicPieceWithRelations } from '@/components/admin/MusicLibraryTable';
+import { RealTimeMusicLibrary } from '@/components/admin/RealTimeMusicLibrary';
 
 
 export const metadata: Metadata = {
@@ -211,15 +200,16 @@ export default async function AdminMusicPage({
     return `/api/admin/music/export${queryString ? `?${queryString}` : ''}`;
   };
 
-  // Helper to render sort icon
-  const getSortIcon = (field: SortField) => {
-    if (sortField !== field) return <ArrowUpDown className="ml-1 h-4 w-4" />;
-    return sortOrder === 'asc' ? (
-      <ArrowUp className="ml-1 h-4 w-4" />
-    ) : (
-      <ArrowDown className="ml-1 h-4 w-4" />
-    );
-  };
+  // Helper to render sort icon (kept for future pagination enhancements)
+  // const getSortIcon = (field: SortField) => {
+  //   if (sortField !== field) return <ArrowUpDown className="ml-1 h-4 w-4" />;
+  //   return sortOrder === 'asc' ? (
+  //     <ArrowUp className="ml-1 h-4 w-4" />
+  //   ) : (
+  //     <ArrowDown className="ml-1 h-4 w-4" />
+  //   );
+  // };
+
 
   // Define difficulty colors and labels
   const difficultyColors: Record<string, string> = {
@@ -386,8 +376,8 @@ export default async function AdminMusicPage({
               )}
             </div>
           ) : (
-            <MusicLibraryTable
-              pieces={pieces as MusicPieceWithRelations[]}
+            <RealTimeMusicLibrary
+              initialPieces={pieces as MusicPieceWithRelations[]}
               difficultyColors={difficultyColors}
               difficultyLabels={difficultyLabels}
             />

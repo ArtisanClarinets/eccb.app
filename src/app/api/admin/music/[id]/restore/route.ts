@@ -1,5 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { NextRequest, NextResponse } from 'next/server';import { revalidatePath } from 'next/cache';import { prisma } from '@/lib/db';
 import { getSession } from '@/lib/auth/guards';
 import { requirePermission } from '@/lib/auth/permissions';
 import { MUSIC_EDIT } from '@/lib/auth/permission-constants';
@@ -50,6 +49,11 @@ export async function POST(
       title: piece.title,
       userId: session.user.id,
     });
+
+    // Invalidate cache for music pages
+    revalidatePath('/admin/music');
+    revalidatePath(`/admin/music/${id}`);
+    revalidatePath('/member/music');
 
     return NextResponse.json({
       success: true,
