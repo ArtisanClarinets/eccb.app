@@ -43,4 +43,5 @@ next-env.d.ts
 # uploaded files
 /public/uploads/*
 !/public/uploads/.gitkeep
-storage/smart-upload/
+*/smart-upload/*
+*./smart-upload
