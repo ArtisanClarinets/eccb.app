@@ -88,12 +88,17 @@ export async function GET(request: NextRequest) {
       routingDecision: s.routingDecision,
     }));
 
-    // Get counts by status
-    const [pendingCount, approvedCount, rejectedCount] = await Promise.all([
-      prisma.smartUploadSession.count({ where: { status: 'PENDING_REVIEW' } }),
-      prisma.smartUploadSession.count({ where: { status: 'APPROVED' } }),
-      prisma.smartUploadSession.count({ where: { status: 'REJECTED' } }),
-    ]);
+    // Get counts by status (optimized into a single query)
+    const statusCounts = await prisma.smartUploadSession.groupBy({
+      by: ['status'],
+      where: { status: { in: ['PENDING_REVIEW', 'APPROVED', 'REJECTED'] } },
+      _count: { _all: true },
+    });
+
+    // Map grouped counts to individual variables
+    const pendingCount = statusCounts.find(c => c.status === 'PENDING_REVIEW')?._count._all ?? 0;
+    const approvedCount = statusCounts.find(c => c.status === 'APPROVED')?._count._all ?? 0;
+    const rejectedCount = statusCounts.find(c => c.status === 'REJECTED')?._count._all ?? 0;
 
     return NextResponse.json({
       sessions: transformedSessions,
