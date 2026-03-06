@@ -91,6 +91,7 @@ export async function GET(request: NextRequest) {
     // Get counts by status (optimized into a single query)
     const statusCounts = await prisma.smartUploadSession.groupBy({
       by: ['status'],
+      where: { status: { in: ['PENDING_REVIEW', 'APPROVED', 'REJECTED'] } },
       _count: { _all: true },
     });
 
