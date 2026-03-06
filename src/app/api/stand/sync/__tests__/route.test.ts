@@ -6,6 +6,12 @@ vi.mock('@/lib/rate-limit', () => ({
   applyRateLimit: vi.fn().mockResolvedValue(null),
 }));
 
+vi.mock('@/lib/stand/settings', () => ({
+  getStandSettings: vi.fn().mockResolvedValue({
+    accessPolicy: 'any_member',
+  }),
+}));
+
 // Mock auth
 vi.mock('@/lib/auth/config', () => ({
   auth: {
@@ -13,6 +19,11 @@ vi.mock('@/lib/auth/config', () => ({
       getSession: vi.fn(),
     },
   },
+}));
+
+// Mock permissions
+vi.mock('@/lib/auth/permissions', () => ({
+  getUserRoles: vi.fn().mockResolvedValue(['MUSICIAN']),
 }));
 
 // Mock prisma
@@ -39,6 +50,9 @@ vi.mock('@/lib/db', () => ({
     event: {
       findFirst: vi.fn().mockResolvedValue(null),
       findUnique: vi.fn(),
+    },
+    attendance: {
+      findFirst: vi.fn().mockResolvedValue(null),
     },
   },
 }));

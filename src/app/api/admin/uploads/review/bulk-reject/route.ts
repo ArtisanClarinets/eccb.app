@@ -66,67 +66,73 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Check which sessions are already committed to the library in bulk
+    const committedFiles = await prisma.musicFile.findMany({
+      where: {
+        originalUploadId: { in: uploadSessions.map(s => s.uploadSessionId) },
+      },
+      select: {
+        originalUploadId: true,
+      },
+    });
+
+    const committedIds = new Set(committedFiles.map(f => f.originalUploadId));
+
     const rejected: string[] = [];
     const skipped: { id: string; reason: string }[] = [];
+    const toRejectIds: string[] = [];
 
     for (const uploadSession of uploadSessions) {
-      try {
-        // Prevent rejecting already-committed sessions
-        const alreadyCommitted = await prisma.musicFile.findFirst({
-          where: { originalUploadId: uploadSession.uploadSessionId },
-          select: { id: true },
-        });
-
-        if (alreadyCommitted) {
-          skipped.push({
-            id: uploadSession.uploadSessionId,
-            reason: 'Session has already been committed to the library',
-          });
-          continue;
-        }
-
-        // Update the session status to REJECTED
-        const updatedSession = await prisma.smartUploadSession.update({
-          where: { uploadSessionId: uploadSession.uploadSessionId },
-          data: {
-            status: 'REJECTED',
-            reviewedBy: session.user.id,
-            reviewedAt: new Date(),
-            // Store rejection reason in routingDecision for audit trail
-            routingDecision: reason
-              ? `REJECTED: ${reason}`
-              : 'REJECTED',
-          },
-        });
-
-        rejected.push(uploadSession.uploadSessionId);
-
-        // Clean up temporary files after rejection (best-effort, non-fatal)
-        try {
-          await cleanupSmartUploadTempFiles(uploadSession.uploadSessionId);
-        } catch (cleanupErr) {
-          logger.warn('Failed to clean up temp files after rejection', {
-            sessionId: uploadSession.uploadSessionId,
-            error: cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr),
-          });
-        }
-
-        logger.info('Smart upload rejected (bulk)', {
-          sessionId: uploadSession.uploadSessionId,
-          userId: session.user.id,
-          reason: reason ?? 'No reason provided',
-        });
-      } catch (err) {
-        const error = err instanceof Error ? err : new Error(String(err));
-        logger.error('Bulk reject: failed to reject session', {
-          sessionId: uploadSession.uploadSessionId,
-          error: error.message,
-        });
+      if (committedIds.has(uploadSession.uploadSessionId)) {
         skipped.push({
           id: uploadSession.uploadSessionId,
-          reason: `Rejection error: ${error.message}`,
+          reason: 'Session has already been committed to the library',
         });
+      } else {
+        toRejectIds.push(uploadSession.uploadSessionId);
       }
+    }
+
+    if (toRejectIds.length > 0) {
+      const now = new Date();
+
+      // Batch update the session statuses to REJECTED
+      await prisma.smartUploadSession.updateMany({
+        where: {
+          uploadSessionId: { in: toRejectIds },
+        },
+        data: {
+          status: 'REJECTED',
+          reviewedBy: session.user.id,
+          reviewedAt: now,
+          routingDecision: reason ? `REJECTED: ${reason}` : 'REJECTED',
+        },
+      });
+
+      rejected.push(...toRejectIds);
+
+      // Clean up temporary files in parallel (best-effort)
+      // Use Promise.allSettled to ensure one failure doesn't stop others
+      const cleanupResults = await Promise.allSettled(
+        toRejectIds.map(id => cleanupSmartUploadTempFiles(id))
+      );
+
+      // Log cleanup failures
+      cleanupResults.forEach((result, index) => {
+        if (result.status === 'rejected') {
+          logger.warn('Failed to clean up temp files after rejection (bulk)', {
+            sessionId: toRejectIds[index],
+            error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+          });
+        }
+      });
+
+      logger.info('Smart uploads rejected in bulk', {
+        count: toRejectIds.length,
+        userId: session.user.id,
+        reason: reason ?? 'No reason provided',
+        sessionIds: toRejectIds,
+      });
     }
 
     return NextResponse.json({

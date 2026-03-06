@@ -695,26 +695,38 @@ export async function markOverdueAssignments() {
 
     let markedCount = 0;
     
+    // ⚡ Bolt: Batch database operations in loops to prevent N+1 queries
+    const updateOperations: any[] = [];
+    const createHistoryOperations: any[] = [];
+
     for (const assignment of overdueAssignments) {
       if (assignment.status !== AssignmentStatus.OVERDUE) {
-        await prisma.musicAssignment.update({
-          where: { id: assignment.id },
-          data: { status: AssignmentStatus.OVERDUE },
-        });
+        updateOperations.push(
+          prisma.musicAssignment.update({
+            where: { id: assignment.id },
+            data: { status: AssignmentStatus.OVERDUE },
+          })
+        );
 
-        await prisma.musicAssignmentHistory.create({
-          data: {
-            assignmentId: assignment.id,
-            action: 'MARKED_OVERDUE',
-            fromStatus: assignment.status,
-            toStatus: AssignmentStatus.OVERDUE,
-            notes: `Automatically marked overdue (due date: ${assignment.dueDate?.toISOString()})`,
-            performedBy: session.user.id,
-          },
-        });
+        createHistoryOperations.push(
+          prisma.musicAssignmentHistory.create({
+            data: {
+              assignmentId: assignment.id,
+              action: 'MARKED_OVERDUE',
+              fromStatus: assignment.status,
+              toStatus: AssignmentStatus.OVERDUE,
+              notes: `Automatically marked overdue (due date: ${assignment.dueDate?.toISOString()})`,
+              performedBy: session.user.id,
+            },
+          })
+        );
 
         markedCount++;
       }
+    }
+
+    if (updateOperations.length > 0) {
+      await prisma.$transaction([...updateOperations, ...createHistoryOperations]);
     }
 
     await auditLog({
