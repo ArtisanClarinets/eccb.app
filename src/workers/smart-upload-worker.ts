@@ -1072,11 +1072,6 @@ export function startSmartUploadWorker(): void {
   );
 }
 
-/** @deprecated Use stopSmartUploadProcessorWorker() instead */
-export async function stopSmartUploadWorker(): Promise<void> {
-  // no-op: unified worker handles shutdown
-}
-
 /** @deprecated Use isSmartUploadProcessorWorkerRunning() instead */
 export function isSmartUploadWorkerRunning(): boolean {
   return false;
