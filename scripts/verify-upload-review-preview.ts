@@ -75,7 +75,7 @@ async function main(): Promise<void> {
   // (which requires the Next.js environment setup done via tsconfig paths).
   let renderFn: RenderFn;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+     
     const mod = await import('../src/lib/services/pdf-renderer');
     renderFn = mod.renderPdfPageToImageWithInfo as RenderFn;
   } catch (err) {
