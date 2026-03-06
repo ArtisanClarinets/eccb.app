@@ -1,0 +1,4 @@
+## 2024-03-06 - [CRITICAL] Fix unauthenticated setup API endpoints
+**Vulnerability:** Setup API endpoints (`/api/setup` and `/api/setup/status`) were exposed without authentication, allowing any unauthenticated user to trigger database migrations, seed data, or view setup status.
+**Learning:** The setup endpoints were created to simplify initial installation, but lacked the `validateSetupRequest` guard check that ensures `SETUP_MODE` is true and a valid `SETUP_TOKEN` is provided. The `setup-guard.ts` utility existed but was not applied to the actual route handlers.
+**Prevention:** Ensure that all new API routes, especially administrative or setup-related ones, include appropriate authorization checks. A shared guard like `validateSetupRequest` should be implemented consistently across all related endpoints.
