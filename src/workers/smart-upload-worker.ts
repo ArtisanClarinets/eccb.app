@@ -880,8 +880,21 @@ async function processSecondPass(job: Job<SmartUploadSecondPassJobData>): Promis
         llmVerifyModel: llmConfig.verificationModel,
       });
       await finalizeSmartUploadSession(
-        sessionId, smartSession, updateData, finalMetadata, finalConfidence,
-        originalPdfBuffer, parsedParts, llmConfig, adjudicationData
+        sessionId,
+        {
+          parseStatus: smartSession.parseStatus,
+          routingDecision: smartSession.routingDecision,
+          fileName: smartSession.fileName,
+          uploadSessionId: smartSession.uploadSessionId,
+          extractedMetadata: (smartSession.extractedMetadata as unknown) as ExtractedMetadata | null,
+        },
+        updateData,
+        finalMetadata,
+        finalConfidence,
+        originalPdfBuffer,
+        parsedParts,
+        llmConfig,
+        adjudicationData
       );
     } else {
       // No parts parsed yet - re-run full vision extraction as second opinion
@@ -1002,8 +1015,21 @@ Include a "corrections" field explaining any corrections made from the first pas
         llmVerifyModel: llmConfig.verificationModel,
       });
       await finalizeSmartUploadSession(
-        sessionId, smartSession, updateData, finalMetadata, finalConfidence,
-        originalPdfBuffer, parsedParts, llmConfig, adjudicationData
+        sessionId,
+        {
+          parseStatus: smartSession.parseStatus,
+          routingDecision: smartSession.routingDecision,
+          fileName: smartSession.fileName,
+          uploadSessionId: smartSession.uploadSessionId,
+          extractedMetadata: (smartSession.extractedMetadata as unknown) as ExtractedMetadata | null,
+        },
+        updateData,
+        finalMetadata,
+        finalConfidence,
+        originalPdfBuffer,
+        parsedParts,
+        llmConfig,
+        adjudicationData
       );
     }
 
