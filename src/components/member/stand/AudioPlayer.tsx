@@ -149,6 +149,7 @@ export function AudioPlayer() {
         <button
           onClick={setA}
           title="Set loop start"
+          aria-label="Set loop start"
           className="flex-1 px-2 py-1 border rounded text-xs hover:bg-muted transition-colors"
         >
           {audioLoopStart !== null ? `A: ${fmtTime(audioLoopStart)}` : 'Set A'}
@@ -156,6 +157,7 @@ export function AudioPlayer() {
         <button
           onClick={setB}
           title="Set loop end"
+          aria-label="Set loop end"
           className="flex-1 px-2 py-1 border rounded text-xs hover:bg-muted transition-colors"
         >
           {audioLoopEnd !== null ? `B: ${fmtTime(audioLoopEnd)}` : 'Set B'}
@@ -164,6 +166,7 @@ export function AudioPlayer() {
           <button
             onClick={clearLoop}
             title="Clear A-B loop"
+            aria-label="Clear A-B loop"
             className="px-2 py-1 border rounded text-xs text-destructive hover:bg-destructive/10 transition-colors"
           >
             Clear

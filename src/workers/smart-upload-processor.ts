@@ -1311,7 +1311,10 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
   const gapInstructions = buildGapInstructions(instructionValidation.instructions, totalPages);
   if (gapInstructions.length > 0) {
     const gapPageCount = gapInstructions.reduce(
-      (sum, g) => sum + (g.pageRange![1] - g.pageRange![0] + 1), 0
+      (sum, g) => {
+        if (!g.pageRange) return sum;
+        return sum + (g.pageRange[1] - g.pageRange[0] + 1);
+      }, 0
     );
     logger.warn('Gap pages detected — HARD FAIL: routing to human review / second pass', {
       sessionId,
@@ -1331,7 +1334,7 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
     extraction.confidenceScore = Math.min(extraction.confidenceScore, 10);
     extraction.requiresHumanReview = true;
 
-    const gapNote = `Gaps detected: ${gapInstructions.map(g => `pages ${g.pageRange[0]+1}-${g.pageRange[1]+1}`).join(', ')}. Requires human review.`;
+    const gapNote = `Gaps detected: ${gapInstructions.map(g => g.pageRange ? `pages ${g.pageRange[0]+1}-${g.pageRange[1]+1}` : '').join(', ')}. Requires human review.`;
     extraction.notes = extraction.notes ? `${extraction.notes} | ${gapNote}` : gapNote;
 
     // Persist and queue for human review — do NOT continue to split/auto-commit
