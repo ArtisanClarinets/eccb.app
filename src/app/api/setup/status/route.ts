@@ -79,7 +79,7 @@ async function checkDatabaseConnection(): Promise<{ connected: boolean; provider
  * GET /api/setup/status
  * Get current setup status
  */
-export async function GET(request: Request): Promise<NextResponse<StatusResponse>> {
+export async function GET(request: Request): Promise<NextResponse<StatusResponse> | NextResponse> {
   // Validate request is authorized for setup
   const authResponse = validateSetupRequest(request);
   if (authResponse) return authResponse;
