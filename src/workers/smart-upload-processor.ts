@@ -1341,19 +1341,19 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
     await prisma.smartUploadSession.update({
       where: { uploadSessionId: sessionId },
       data: {
-        extractedMetadata: deepCloneJSON(extraction) as any,
+        extractedMetadata: JSON.parse(JSON.stringify(extraction)) as any,
         confidenceScore: extraction.confidenceScore,
         routingDecision: 'no_parse_second_pass',
         parseStatus: 'NOT_PARSED',
         secondPassStatus: 'QUEUED',
         requiresHumanReview: true,
-        cuttingInstructions: deepCloneJSON(instructionValidation.instructions) as any,
+        cuttingInstructions: JSON.parse(JSON.stringify(instructionValidation.instructions)) as any,
         llmProvider: llmConfig.provider,
         llmVisionModel: llmConfig.visionModel,
         llmVerifyModel: llmConfig.verificationModel,
         llmPromptVersion: llmConfig.promptVersion || PROMPT_VERSION,
         ...(firstPassRaw ? { firstPassRaw } : {}),
-        strategyHistory: deepCloneJSON(strategyHistory) as any,
+        strategyHistory: JSON.parse(JSON.stringify(strategyHistory)) as any,
       },
     });
     await queueSmartUploadSecondPass(sessionId);

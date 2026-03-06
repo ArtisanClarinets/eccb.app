@@ -22,7 +22,6 @@ import { evaluateQualityGates, isForbiddenLabel } from '@/lib/smart-upload/quali
 import { buildPartStorageSlug, buildPartFilename } from '@/lib/smart-upload/part-naming';
 import { parseJsonLenient } from '@/lib/smart-upload/json';
 import { logger } from '@/lib/logger';
-import { deepCloneJSON } from '@/lib/json';
 import {
   buildVerificationPrompt,
   DEFAULT_VERIFICATION_SYSTEM_PROMPT,
@@ -304,7 +303,7 @@ function shuffleArray<T>(array: T[]): T[] {
 
 async function finalizeSmartUploadSession(
   sessionId: string,
-  smartSession: { parseStatus: string | null; routingDecision: string | null; fileName: string; uploadSessionId: string; extractedMetadata: ExtractedMetadata | null },
+  smartSession: { parseStatus: string | null; routingDecision: string | null; fileName: string; uploadSessionId: string; extractedMetadata: unknown },
   updateData: Record<string, unknown>,
   finalMetadata: ExtractedMetadata,
   finalConfidence: number,
@@ -347,7 +346,7 @@ async function finalizeSmartUploadSession(
   }
   // Base update data
   Object.assign(updateData, {
-    extractedMetadata: deepCloneJSON(finalMetadata) as any,
+    extractedMetadata: finalMetadata,
     confidenceScore: finalConfidence,
     llmProvider: llmConfig.provider,
     llmPromptVersion: llmConfig.promptVersion || '2.0.0',
@@ -357,7 +356,7 @@ async function finalizeSmartUploadSession(
   if (adjudicationData) {
     Object.assign(updateData, {
       adjudicatorStatus: adjudicationData.status,
-      adjudicatorResult: deepCloneJSON(finalMetadata) as any, // Adjudicated metadata is the final metadata
+      adjudicatorResult: finalMetadata, // Adjudicated metadata is the final metadata
       adjudicatorRaw: adjudicationData.raw,
       finalConfidence: finalConfidence,
       requiresHumanReview: adjudicationData.requiresHumanReview,
@@ -407,7 +406,7 @@ async function finalizeSmartUploadSession(
         cuttingInstructions: correctedCuttingInstructions,
         isMultiPart: false,
       };
-      updateData.extractedMetadata = deepCloneJSON(finalMetadata) as any;
+      updateData.extractedMetadata = finalMetadata;
       logger.info('Second pass: single-document score — replaced garbage instructions with full-score', {
         sessionId,
         scoreType,
@@ -452,7 +451,7 @@ async function finalizeSmartUploadSession(
         );
         finalMetadata = { ...finalMetadata, cuttingInstructions: correctedCuttingInstructions };
         // Keep updateData in sync with the enriched metadata
-        updateData.extractedMetadata = deepCloneJSON(finalMetadata) as any;
+        updateData.extractedMetadata = finalMetadata;
         // If any single unlabelled gap covers more than 10 pages the session
         // cannot be auto-approved — a human reviewer must adjust the splits.
         const largeGap = oneIndexedGaps.some(
@@ -477,7 +476,7 @@ async function finalizeSmartUploadSession(
   if (correctedCuttingInstructions && correctedCuttingInstructions.length > 0) {
     // Sanitize instructions before splitting — remove entries with invalid pageRange
     correctedCuttingInstructions = sanitizeCuttingInstructionsForSplit(correctedCuttingInstructions);
-    updateData.cuttingInstructions = deepCloneJSON(correctedCuttingInstructions) as any;
+    updateData.cuttingInstructions = correctedCuttingInstructions;
 
     if (smartSession.parseStatus !== 'PARSED') {
       const splitResults = await splitPdfByCuttingInstructions(
@@ -505,8 +504,8 @@ async function finalizeSmartUploadSession(
           pageCount: part.pageCount, pageRange: part.instruction.pageRange,
         });
       }
-      updateData.parsedParts = deepCloneJSON(newParsedParts) as any;
-      updateData.tempFiles = deepCloneJSON(tempFiles) as any;
+      updateData.parsedParts = newParsedParts;
+      updateData.tempFiles = tempFiles;
       updateData.parseStatus = 'PARSED';
       logger.info('PDF split completed in second pass', { sessionId, partsCount: newParsedParts.length });
     } else if (parsedParts && parsedParts.length > 0) {
@@ -533,7 +532,7 @@ async function finalizeSmartUploadSession(
           pageCount: part.pageCount, pageRange: part.instruction.pageRange,
         });
       }
-      updateData.parsedParts = deepCloneJSON(newParsedParts) as any;
+      updateData.parsedParts = newParsedParts;
       logger.info('Re-split PDF in second pass', { sessionId, newPartsCount: newParsedParts.length });
     }
   }
@@ -688,13 +687,13 @@ async function processSecondPass(job: Job<SmartUploadSecondPassJobData>): Promis
     }
 
     // FIX: Treat fields as JSON directly, NOT strings (Bug #2 fix)
-    const metadata = (smartSession.extractedMetadata as unknown) as ExtractedMetadata | null;
+    const metadata = smartSession.extractedMetadata as ExtractedMetadata | null;
     if (!metadata) {
       throw new Error('Missing extracted metadata');
     }
 
-    const parsedParts = (smartSession.parsedParts as unknown) as ParsedPartRecord[] | null;
-    const cuttingInstructions = (smartSession.cuttingInstructions as unknown) as CuttingInstruction[] | null;
+    const parsedParts = smartSession.parsedParts as ParsedPartRecord[] | null;
+    const cuttingInstructions = smartSession.cuttingInstructions as CuttingInstruction[] | null;
 
     let verificationPrompt: string = '';
 
@@ -873,28 +872,10 @@ async function processSecondPass(job: Job<SmartUploadSecondPassJobData>): Promis
         await progress('adjudicating', 90, 'Adjudication complete');
       }
 
-      Object.assign(updateData, {
-        secondPassResult: deepCloneJSON(secondPassResult) as any,
-        secondPassRaw,
-        secondPassStatus: 'COMPLETE',
-        llmVerifyModel: llmConfig.verificationModel,
-      });
+      Object.assign(updateData, { secondPassResult, secondPassRaw, secondPassStatus: 'COMPLETE', llmVerifyModel: llmConfig.verificationModel });
       await finalizeSmartUploadSession(
-        sessionId,
-        {
-          parseStatus: smartSession.parseStatus,
-          routingDecision: smartSession.routingDecision,
-          fileName: smartSession.fileName,
-          uploadSessionId: smartSession.uploadSessionId,
-          extractedMetadata: (smartSession.extractedMetadata as unknown) as ExtractedMetadata | null,
-        },
-        updateData,
-        finalMetadata,
-        finalConfidence,
-        originalPdfBuffer,
-        parsedParts,
-        llmConfig,
-        adjudicationData
+        sessionId, smartSession, updateData, finalMetadata, finalConfidence,
+        originalPdfBuffer, parsedParts, llmConfig, adjudicationData
       );
     } else {
       // No parts parsed yet - re-run full vision extraction as second opinion
@@ -1008,28 +989,10 @@ Include a "corrections" field explaining any corrections made from the first pas
         await progress('adjudicating', 90, 'Adjudication complete');
       }
 
-      Object.assign(updateData, {
-        secondPassResult: deepCloneJSON(secondPassResult) as any,
-        secondPassRaw,
-        secondPassStatus: 'COMPLETE',
-        llmVerifyModel: llmConfig.verificationModel,
-      });
+      Object.assign(updateData, { secondPassResult, secondPassRaw, secondPassStatus: 'COMPLETE', llmVerifyModel: llmConfig.verificationModel });
       await finalizeSmartUploadSession(
-        sessionId,
-        {
-          parseStatus: smartSession.parseStatus,
-          routingDecision: smartSession.routingDecision,
-          fileName: smartSession.fileName,
-          uploadSessionId: smartSession.uploadSessionId,
-          extractedMetadata: (smartSession.extractedMetadata as unknown) as ExtractedMetadata | null,
-        },
-        updateData,
-        finalMetadata,
-        finalConfidence,
-        originalPdfBuffer,
-        parsedParts,
-        llmConfig,
-        adjudicationData
+        sessionId, smartSession, updateData, finalMetadata, finalConfidence,
+        originalPdfBuffer, parsedParts, llmConfig, adjudicationData
       );
     }
 
@@ -1070,6 +1033,11 @@ export function startSmartUploadWorker(): void {
   logger.warn(
     'startSmartUploadWorker() is deprecated — secondPass jobs are now handled by the unified worker in smart-upload-processor-worker.ts'
   );
+}
+
+/** @deprecated Use stopSmartUploadProcessorWorker() instead */
+export async function stopSmartUploadWorker(): Promise<void> {
+  // no-op: unified worker handles shutdown
 }
 
 /** @deprecated Use isSmartUploadProcessorWorkerRunning() instead */
