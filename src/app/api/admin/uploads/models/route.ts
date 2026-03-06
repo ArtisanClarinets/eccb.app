@@ -6,6 +6,7 @@ import { SYSTEM_CONFIG } from '@/lib/auth/permission-constants';
 import { prisma } from '@/lib/db';
 import { getApiKeyFieldForProvider } from '@/lib/smart-upload/schema';
 import { LLM_PROVIDERS } from '@/lib/llm/providers';
+import { validateOutboundEndpoint } from '@/lib/network/safe-endpoint';
 
 // =============================================================================
 // DB Key Loader (fallback when API key is masked on the client)
@@ -693,7 +694,7 @@ export async function GET(request: NextRequest) {
     // Parse query parameters
     const { searchParams } = new URL(request.url);
     const provider = searchParams.get('provider') as Provider | null;
-    const clientApiKey = searchParams.get('apiKey') || undefined;
+    const clientApiKey = request.headers.get('x-provider-api-key') || undefined;
     const clientEndpoint = searchParams.get('endpoint') || undefined;
 
     // Validate required parameters
@@ -716,6 +717,19 @@ export async function GET(request: NextRequest) {
     const apiKey = await resolveApiKey(provider, clientApiKey);
     const endpoint = await resolveEndpoint(provider, clientEndpoint);
 
+    const endpointPolicy = provider === 'ollama' || provider === 'ollama-cloud'
+      ? 'allow-local'
+      : 'strict-public';
+    const validatedEndpoint = endpoint
+      ? validateOutboundEndpoint(endpoint, endpointPolicy)
+      : null;
+
+    if (validatedEndpoint && !validatedEndpoint.valid) {
+      return NextResponse.json({ error: validatedEndpoint.error }, { status: 400 });
+    }
+
+    const safeEndpoint = validatedEndpoint?.valid ? validatedEndpoint.url.toString() : endpoint;
+
     // Fetch models based on provider
     let models: ModelInfo[];
     let filteredForVision = false;
@@ -723,7 +737,7 @@ export async function GET(request: NextRequest) {
 
     switch (provider) {
       case 'ollama': {
-        const ollamaEndpoint = endpoint || 'http://localhost:11434';
+        const ollamaEndpoint = safeEndpoint || 'http://localhost:11434';
         models = await fetchOllamaModels(ollamaEndpoint);
         filteredForVision = true;
         break;
@@ -772,13 +786,13 @@ export async function GET(request: NextRequest) {
       }
 
       case 'custom': {
-        if (!endpoint) {
+        if (!safeEndpoint) {
           return NextResponse.json(
             { error: 'Missing required parameter: endpoint for custom provider' },
             { status: 400 }
           );
         }
-        models = await fetchCustomModels(endpoint, apiKey);
+        models = await fetchCustomModels(safeEndpoint, apiKey);
         warning = 'Custom provider: vision capability detection unavailable. Please verify model supports vision.';
         break;
       }
@@ -813,7 +827,7 @@ export async function GET(request: NextRequest) {
 
       case 'ollama-cloud': {
         // Ollama instance at a remote URL (same API as local Ollama)
-        const ollamaCloudEndpoint = endpoint || 'http://localhost:11434';
+        const ollamaCloudEndpoint = safeEndpoint || 'http://localhost:11434';
         models = await fetchOllamaModels(ollamaCloudEndpoint);
         filteredForVision = true;
         break;
@@ -859,7 +873,7 @@ export async function GET(request: NextRequest) {
     });
 
     return NextResponse.json(
-      { error: `Failed to fetch models: ${errorMessage}` },
+      { error: 'Failed to fetch models from provider.' },
       { status: 502 }
     );
   }

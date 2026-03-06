@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getSession } from '@/lib/auth/guards';
 import { requirePermission } from '@/lib/auth/permissions';
+import { validateCSRF } from '@/lib/csrf';
 import { logger } from '@/lib/logger';
 
 // =============================================================================
@@ -135,6 +136,14 @@ async function upsertSetting(key: string, value: string, updatedBy: string): Pro
 
 export async function POST(request: NextRequest) {
   try {
+    const csrfResult = validateCSRF(request);
+    if (!csrfResult.valid) {
+      return NextResponse.json(
+        { error: 'CSRF validation failed', reason: csrfResult.reason },
+        { status: 403 }
+      );
+    }
+
     const session = await getSession();
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

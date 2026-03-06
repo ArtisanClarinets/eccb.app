@@ -4,7 +4,8 @@
  * Enqueues a BullMQ second-pass verification job for the given session.
  * The actual LLM work is done by smart-upload-worker.ts (processSecondPass).
  *
- * Eligible session states for enqueueing: secondPassStatus is null, 'QUEUED', or 'FAILED'.
+ * Eligible session states for enqueueing: secondPassStatus is null, 'NOT_NEEDED',
+ * 'FAILED', or 'COMPLETE'.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -30,10 +31,13 @@ export async function POST(request: NextRequest) {
   }
 
   // Allow service-token auth for internal worker calls (no CSRF needed)
+  // Only enable this path when a real token is configured.
   const authHeader = request.headers.get('authorization');
+  const configuredServiceToken = process.env.SMART_UPLOAD_SERVICE_TOKEN;
   const isServiceToken =
+    Boolean(configuredServiceToken) &&
     authHeader?.startsWith('Bearer ') &&
-    authHeader.slice(7) === process.env.SMART_UPLOAD_SERVICE_TOKEN;
+    authHeader.slice(7) === configuredServiceToken;
 
   if (!isServiceToken) {
     const csrfResult = validateCSRF(request);
@@ -84,7 +88,12 @@ export async function POST(request: NextRequest) {
     }
 
     const currentStatus = smartSession.secondPassStatus as SecondPassStatus | null;
-    const eligibleStatuses: Array<SecondPassStatus | null> = [null, 'QUEUED', 'FAILED'];
+    const eligibleStatuses: Array<SecondPassStatus | null> = [
+      null,
+      'NOT_NEEDED',
+      'FAILED',
+      'COMPLETE',
+    ];
     if (!eligibleStatuses.includes(currentStatus)) {
       return NextResponse.json(
         {
@@ -150,4 +159,3 @@ export async function OPTIONS() {
     },
   });
 }
-

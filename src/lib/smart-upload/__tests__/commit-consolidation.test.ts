@@ -27,7 +27,10 @@ const mockTx = {
 
 vi.mock('@/lib/db', () => ({
   prisma: {
-    smartUploadSession: { findUnique: vi.fn() },
+    smartUploadSession: { 
+      findUnique: vi.fn(),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+    },
     musicFile: { findFirst: vi.fn() },
     musicPart: { count: vi.fn() },
     $transaction: vi.fn(async (fn: (tx: typeof mockTx) => Promise<unknown>) => fn(mockTx)),

@@ -1,40 +1,12 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "default_agent": "foundry",
+  "default_agent": "orchestrator",
+
   "agent": {
-    "foundry": {
-      "description": "Foundry Orchestrator Agent - Runs enterprise iterative workflow with quality gates and peer review",
-      "mode": "primary",
-      "prompt": "You are Foundry Orchestrator Agent. Execute the enterprise state-machine workflow end-to-end: decompose intent, coordinate specialized agents, enforce security and compliance, require peer review from another agent, run quality gates, and iterate until release readiness.",
-      "tools": {
-        "read": true,
-        "write": true,
-        "edit": true,
-        "bash": true,
-        "task": true,
-        "SequentialThinking": true,
-        "Memory": true,
-        "critical-thinking": true,
-        "audit.logToolCall": true,
-        "audit.replayRun": true,
-        "audit.checkReproducibility": true
-      },
-      "permission": {
-        "edit": "ask",
-        "bash": {
-          "git status*": "allow",
-          "git log*": "allow",
-          "git diff*": "allow",
-          "ls*": "allow",
-          "pwd": "allow"
-        }
-      },
-      "maxSteps": 1000000
-    },
     "orchestrator": {
       "description": "Enterprise Orchestrator Agent - Coordinates all specialized agents with governance oversight",
       "mode": "primary",
-      "prompt": "You are Enterprise Orchestrator Agent. Your role is to coordinate specialized agents, enforce security protocols, and ensure compliance with enterprise governance standards. Always verify agent permissions before delegation. Maintain audit trails for all operations. Prioritize security, compliance, and traceability in all workflows.",
+      "prompt": "You are the Enterprise Orchestrator Agent. Your role is to coordinate specialized agents, enforce security protocols, and ensure compliance with Fortune-500 governance standards. Always verify agent permissions before delegation. Maintain audit trails for all operations. Prioritize security, compliance, and traceability in all workflows.",
       "tools": {
         "read": true,
         "write": true,
@@ -58,8 +30,9 @@
           "pwd": "allow"
         }
       },
-      "maxSteps": 1000000
+      "maxSteps": 100
     },
+
     "architecture": {
       "description": "Architecture Agent - System design with sequential thinking capabilities",
       "mode": "subagent",
@@ -77,6 +50,7 @@
         "DeepWiki-SSE": true
       }
     },
+
     "codegen": {
       "description": "Codegen Agent - Code generation with memory and critical thinking",
       "mode": "primary",
@@ -93,8 +67,8 @@
         "SequentialThinking": true,
         "Memory": true,
         "critical-thinking": true,
-        "next-devtools": false,
-        "Desktop-Commander": false
+        "next-devtools": true,
+        "Desktop-Commander": true
       },
       "permission": {
         "edit": "ask",
@@ -114,6 +88,7 @@
         }
       }
     },
+
     "database": {
       "description": "Database Agent - Prisma ORM and database operations",
       "mode": "subagent",
@@ -134,10 +109,11 @@
         }
       }
     },
+
     "proposal": {
       "description": "Proposal Agent - Generates client-ready proposals, SOWs, and compliance documentation.",
       "mode": "primary",
-      "prompt": "You are Proposal Agent. Generate client proposals, SOWs, and compliance documentation based on research and architecture artifacts. Ensure all outputs adhere to legal, technical, and delivery standards. Use peer review tools for gate-keeping.",
+      "prompt": "You are the Proposal Agent. Generate client proposals, SOWs, and compliance documentation based on research and architecture artifacts. Ensure all outputs adhere to legal, technical, and delivery standards. Use peer review tools for gate-keeping.",
       "tools": {
         "read": true,
         "write": true,
@@ -150,6 +126,7 @@
         "critical-thinking": true
       }
     },
+
     "qa": {
       "description": "QA Agent - Testing with TestSprite integration",
       "mode": "subagent",
@@ -159,7 +136,7 @@
         "write": true,
         "edit": true,
         "bash": true,
-        "testsprite": false,
+        "testsprite": true,
         "qa.testplan.generate": true,
         "qa.risk_matrix.generate": true,
         "qa.static.run": true,
@@ -177,15 +154,16 @@
         }
       }
     },
+
     "delivery": {
       "description": "Delivery Agent - Deployment, runbooks, and client handoff.",
       "mode": "subagent",
-      "prompt": "You are Delivery Agent. Manage final delivery, create runbooks, and package client handoff materials. Ensure environment parity and operational readiness.",
+      "prompt": "You are the Delivery Agent. Manage final delivery, create runbooks, and package client handoff materials. Ensure environment parity and operational readiness.",
       "tools": {
         "read": true,
         "write": true,
         "bash": true,
-        "Desktop-Commander": false,
+        "Desktop-Commander": true,
         "delivery.runbook.generate": true,
         "delivery.nginx.generate": true,
         "delivery.smoketest.run": true,
@@ -200,6 +178,7 @@
         }
       }
     },
+
     "research": {
       "description": "Research Agent - DeepWiki and documentation analysis",
       "mode": "subagent",
@@ -222,6 +201,7 @@
         "Memory": true
       }
     },
+
     "security": {
       "description": "Security Agent - Serena for code analysis and auditing",
       "mode": "subagent",
@@ -230,165 +210,206 @@
         "read": true,
         "write": true,
         "edit": true,
-        "Serena": false,
+        "Serena": true,
         "Memory": true,
         "critical-thinking": true
       }
     }
   },
+
   "tools": {
     "SequentialThinking": true,
-    "Desktop-Commander": true,
+    "Desktop-Commander": false,
     "Memory": true,
-    "critical-thinking": true,
+    "critical-thinking": false,
     "testsprite": false,
-    "next-devtools": true,
+    "next-devtools": false,
     "Prisma": false,
     "webfetch": true,
     "search": true,
-    "rate-limit": true,
-    "source-normalize": true,
+    "enforceRateLimit": true,
+    "normalizeSource": true,
     "audit.logToolCall": false,
     "audit.replayRun": false,
     "audit.checkReproducibility": false,
+
     "research.plan": true,
     "research.gather": true,
     "research.claims.extract": true,
     "research.citations.analyze": true,
     "research.peer_review": true,
     "research.dossier.finalize": true,
+
     "discovery.session.start": false,
     "discovery.session.export": true,
     "qa.testplan.generate": false,
     "qa.risk_matrix.generate": false,
     "qa.static.run": false,
     "qa.peer_review": false,
+
     "docs.prd.generate": false,
     "docs.sow.generate": false,
     "proposal.generate": false,
     "proposal.peer_review": false,
     "proposal.package.export": false,
+
     "arch.generate": false,
     "backlog.generate": false,
     "codegen.scaffold": false,
     "codegen.feature": false,
     "codegen.tests": false,
     "ci.verify": false,
+
     "delivery.runbook.generate": false,
     "delivery.nginx.generate": false,
     "delivery.smoketest.run": false,
     "delivery.handoff.package": false,
+
     "DeepWiki-SSE": true,
-    "Serena": true
+    "Serena": false
   },
+
   "mcp": {
-    "opencode-tools": {
+    "SequentialThinking": {
       "type": "local",
-      "command": [
-        "opencode-tools",
-        "mcp"
-      ],
-      "enabled": false
-    },
-    "Memory": {
-      "type": "local",
-      "command": [
-        "npx",
-        "-y",
-        "@modelcontextprotocol/server-memory@latest"
-      ],
-      "enabled": false,
-      "timeout": 5000
-    },
-    "critical-thinking": {
-      "type": "local",
-      "command": [
-        "npx",
-        "-y",
-        "mcp-server-actor-critic-thinking"
-      ],
+      "command": ["npx", "-y", "@modelcontextprotocol/server-sequential-thinking"],
       "enabled": true,
-      "timeout": 15000
+      "timeout": 10000
     },
-    "Serena": {
-      "type": "local",
-      "command": [
-        "uvx",
-        "--from",
-        "git+https://github.com/oraios/serena",
-        "serena",
-        "start-mcp-server"
-      ],
-      "enabled": true,
-      "timeout": 15000
-    },
-    "sequential-thinking": {
-      "type": "local",
-      "command": [
-        "npx",
-        "-y",
-        "@modelcontextprotocol/server-sequential-thinking"
-      ],
-      "enabled": false
-    },
-    "shadcn": {
-      "type": "local",
-      "command": [
-        "npx",
-        "shadcn@latest",
-        "mcp"
-      ],
-      "enabled": false
-    },
+
     "Desktop-Commander": {
       "type": "local",
-      "command": [
-        "npx",
-        "-y",
-        "@wonderwhy-er/desktop-commander"
-      ],
-      "enabled": false
+      "command": ["npx", "-y", "@wonderwhy-er/desktop-commander"],
+      "enabled": true,
+      "timeout": 30000
     },
+
+    "Memory": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-memory@latest"],
+      "enabled": true,
+      "environment": {
+        "MEMORY_FILE_PATH": "{env:HOME}/.mcp/memory.json"
+      },
+      "timeout": 5000
+    },
+
+    "critical-thinking": {
+      "type": "local",
+      "command": ["npx", "-y", "mcp-server-actor-critic-thinking"],
+      "enabled": true,
+      "timeout": 15000
+    },
+
+    "testsprite": {
+      "type": "local",
+      "command": ["npx", "-y", "@testsprite/testsprite-mcp"],
+      "enabled": true,
+      "environment": {
+        "API_KEY": "{env:TESTSPRITE_API_KEY}"
+      },
+      "timeout": 30000
+    },
+
     "next-devtools": {
       "type": "local",
-      "command": [
-        "npx",
-        "-y",
-        "next-devtools-mcp@latest"
-      ],
-      "enabled": true
+      "command": ["npx", "-y", "next-devtools-mcp@latest"],
+      "enabled": true,
+      "timeout": 10000
     },
-    "prisma-mcp-server": {
-      "type": "local",
-      "command": [
-        "npx",
-        "-y",
-        "prisma",
-        "mcp"
-      ],
-      "enabled": false
+
+    "DeepWiki-SSE": {
+      "type": "remote",
+      "url": "https://mcp.deepwiki.com/mcp",
+      "enabled": true,
+      "timeout": 15000
     },
-    "Better Auth": {
+
+    "Serena": {
       "type": "local",
-      "command": [
-        "npx",
-        "-y",
-        "mcp-remote",
-        "https://mcp.inkeep.com/better-auth/mcp"
-      ],
-      "enabled": false
+      "command": ["uvx", "--from", "git+https://github.com/oraios/serena", "serena", "start-mcp-server"],
+      "enabled": true,
+      "timeout": 20000
     },
-    "Stripe": {
+
+    "webfetch": {
       "type": "local",
-      "command": [
-        "npx",
-        "-y",
-        "mcp-remote",
-        "https://mcp.stripe.com"
-      ],
-      "enabled": false
+      "command": ["npx", "-y", "@opencode/webfetch"],
+      "enabled": true,
+      "timeout": 15000
+    },
+
+    "search": {
+      "type": "local",
+      "command": ["npx", "-y", "@opencode/search"],
+      "enabled": true,
+      "timeout": 15000
+    },
+
+    "enforceRateLimit": {
+      "type": "local",
+      "command": ["npx", "-y", "@opencode/rate-limit"],
+      "enabled": true,
+      "timeout": 5000
+    },
+
+    "normalizeSource": {
+      "type": "local",
+      "command": ["npx", "-y", "@opencode/source-normalize"],
+      "enabled": true,
+      "timeout": 5000
+    },
+
+    "research.plan": {
+      "type": "local",
+      "command": ["npx", "-y", "@opencode/research-suite", "plan"],
+      "enabled": true,
+      "timeout": 20000
+    },
+
+    "research.gather": {
+      "type": "local",
+      "command": ["npx", "-y", "@opencode/research-suite", "gather"],
+      "enabled": true,
+      "timeout": 30000
+    },
+
+    "research.claims.extract": {
+      "type": "local",
+      "command": ["npx", "-y", "@opencode/research-suite", "extract-claims"],
+      "enabled": true,
+      "timeout": 20000
+    },
+
+    "research.citations.analyze": {
+      "type": "local",
+      "command": ["npx", "-y", "@opencode/research-suite", "analyze-citations"],
+      "enabled": true,
+      "timeout": 20000
+    },
+
+    "research.peer_review": {
+      "type": "local",
+      "command": ["npx", "-y", "@opencode/research-suite", "peer-review"],
+      "enabled": true,
+      "timeout": 15000
+    },
+
+    "research.dossier.finalize": {
+      "type": "local",
+      "command": ["npx", "-y", "@opencode/research-suite", "finalize-dossier"],
+      "enabled": true,
+      "timeout": 25000
+    },
+
+    "discovery.session.export": {
+      "type": "local",
+      "command": ["npx", "-y", "@opencode/discovery-suite", "export-session"],
+      "enabled": true,
+      "timeout": 15000
     }
   },
+
   "permission": {
     "edit": "allow",
     "bash": {
@@ -399,11 +420,6 @@
       "pwd": "allow",
       "echo *": "allow"
     },
-    "write": "allow",
-    "read": "allow"
-  },
-  "plugin": [
-    "octto",
-    "code-yeongyu/oh-my-opencode"
-  ]
+    "write": "allow"
+  }
 }

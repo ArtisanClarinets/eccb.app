@@ -8,6 +8,7 @@ import { SYSTEM_CONFIG } from '@/lib/auth/permission-constants';
 import { z } from 'zod';
 import { getDefaultEndpointForProvider } from '@/lib/llm/providers';
 import { ProviderValueSchema } from '@/lib/smart-upload/schema';
+import { validateOutboundEndpoint } from '@/lib/network/safe-endpoint';
 
 // =============================================================================
 // Schema
@@ -52,6 +53,16 @@ export async function POST(request: NextRequest) {
     }
 
     const { provider, endpoint, apiKey, model } = parsed.data;
+
+    if (endpoint?.trim()) {
+      const endpointPolicy = provider === 'ollama' || provider === 'ollama-cloud'
+        ? 'allow-local'
+        : 'strict-public';
+      const endpointValidation = validateOutboundEndpoint(endpoint.trim(), endpointPolicy);
+      if (!endpointValidation.valid) {
+        return NextResponse.json({ ok: false, error: endpointValidation.error }, { status: 400 });
+      }
+    }
 
     // ensure required fields beyond schema
     if ((provider === 'openai' || provider === 'anthropic' || provider === 'gemini' || provider === 'openrouter' || provider === 'custom') && !apiKey) {
@@ -218,7 +229,6 @@ export async function POST(request: NextRequest) {
     }
 
     if (!response.ok) {
-      const errBody = await response.text().catch(() => '');
       const hint = response.status === 401
         ? ' — check your API key.'
         : response.status === 404
@@ -234,7 +244,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         ok: false,
         error: errText,
-        detail: errBody.substring(0, 200),
       });
     }
 

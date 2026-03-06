@@ -35,7 +35,7 @@ export interface WorkFingerprint {
   normalizedTitle: string;
   /** Normalized composer name used for matching. */
   normalizedComposer: string;
-  /** Combined hash of normalizedTitle + normalizedComposer. */
+  /** Combined SHA-256 hash of normalizedTitle + normalizedComposer. */
   hash: string;
 }
 
@@ -67,7 +67,7 @@ export function computeWorkFingerprint(
   const normalizedComposer = normalizeForFingerprint(composer ?? '');
 
   const combined = `${normalizedTitle}::${normalizedComposer}`;
-  const hash = createHash('sha256').update(combined).digest('hex').slice(0, 16);
+  const hash = createHash('sha256').update(combined).digest('hex');
 
   return { normalizedTitle, normalizedComposer, hash };
 }
@@ -87,7 +87,7 @@ export function computeWorkFingerprintV2(
   const normalizedArranger = normalizeForFingerprint(arranger ?? '');
 
   const combined = `${normalizedTitle}::${normalizedComposer}::${normalizedArranger}`;
-  const hash = createHash('sha256').update(combined).digest('hex').slice(0, 16);
+  const hash = createHash('sha256').update(combined).digest('hex');
 
   return { normalizedTitle, normalizedComposer, normalizedArranger, hash };
 }
@@ -113,6 +113,30 @@ export function computePartFingerprint(
     .update(parts.join('::'))
     .digest('hex')
     .slice(0, 16);
+}
+
+/**
+ * Stable part identity hash for DB-level dedupe.
+ *
+ * Unlike `computePartFingerprint`, this intentionally excludes the upload
+ * session id and page ranges, so it stays stable across retries/re-segmentation
+ * of the same musical part within the same piece.
+ */
+export function computePartIdentityFingerprint(
+  pieceId: string,
+  canonicalInstrument: string,
+  partName: string,
+  chair: string | null,
+  transposition: string
+): string {
+  const parts = [
+    pieceId,
+    normalizeForFingerprint(canonicalInstrument),
+    normalizeForFingerprint(partName),
+    normalizeForFingerprint(chair ?? ''),
+    normalizeForFingerprint(transposition),
+  ];
+  return createHash('sha256').update(parts.join('::')).digest('hex');
 }
 
 // =============================================================================

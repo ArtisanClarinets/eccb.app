@@ -1,0 +1,1 @@
+After code changes: run targeted tests first, then npm run lint, and if significant behavior changed run npm run build. For DB schema changes run npm run db:generate/migrations as needed. Verify security-sensitive paths for authn/authz, input validation, logging/auditing, and safe error handling before finalizing.

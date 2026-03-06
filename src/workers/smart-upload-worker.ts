@@ -339,9 +339,11 @@ async function finalizeSmartUploadSession(
   }
   const effectiveSegConf = finalMetadata.segmentationConfidence;
 
-  // Only cap finalConfidence by segmentationConfidence when the seg confidence
-  // was set independently (not derived from finalConfidence itself above).
-  if (typeof effectiveSegConf === 'number' && !hasSecondPassInstructions) {
+  // Always cap finalConfidence by segmentationConfidence when a numeric
+  // value is available.  We previously skipped this step if the session had
+  // "second pass" instructions, but that led to situations where the
+  // confidence reported to the DB exceeded the segConf used for gating.
+  if (typeof effectiveSegConf === 'number') {
     finalConfidence = Math.min(finalConfidence, effectiveSegConf);
   }
   // Base update data
@@ -617,9 +619,17 @@ async function processSecondPass(job: Job<SmartUploadSecondPassJobData>): Promis
     throw new Error('Session not found');
   }
 
-  // Check secondPassStatus is QUEUED, FAILED, or null (race condition safety)
+  // Check secondPassStatus is eligible for a (re)run.
   const currentSecondPassStatus = smartSession.secondPassStatus as SecondPassStatus;
-  if (currentSecondPassStatus !== 'QUEUED' && currentSecondPassStatus !== 'FAILED' && currentSecondPassStatus !== null) {
+  // Only QUEUED or FAILED sessions may be re-run; COMPLETE / NOT_NEEDED /
+  // any other state should be treated as ineligible.  The previous logic
+  // allowed COMPLETE which caused later code to dereference missing fields
+  // (e.g. fileName) and throw confusing errors.  Update test expectations
+  // accordingly.
+  if (
+    currentSecondPassStatus !== 'QUEUED' &&
+    currentSecondPassStatus !== 'FAILED'
+  ) {
     throw new Error(`Session is not eligible for second pass. Current status: ${currentSecondPassStatus}`);
   }
 

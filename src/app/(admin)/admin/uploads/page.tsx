@@ -216,8 +216,16 @@ async function processUpload(
   if (!response.ok) {
     let errMsg = `Server error ${response.status}`;
     try {
-      const errBody = await response.json();
-      if (typeof errBody?.error === 'string') errMsg = errBody.error;
+      const errBody = await response.json() as {
+        error?: string;
+        duplicate?: boolean;
+        message?: string;
+      };
+      if (errBody.duplicate && errBody.message) {
+        errMsg = errBody.message;
+      } else if (typeof errBody?.error === 'string') {
+        errMsg = errBody.error;
+      }
     } catch {
       // ignore parse errors
     }
@@ -498,7 +506,15 @@ export default function SmartMusicUploadPage() {
               or click to browse — only PDF files are accepted (max 50 MB each)
             </p>
           </div>
-          <Button variant="secondary" size="sm" onClick={e => e.stopPropagation()}>
+          <Button
+            variant="secondary"
+            size="sm"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              fileInputRef.current?.click();
+            }}
+          >
             Browse Files
           </Button>
         </CardContent>

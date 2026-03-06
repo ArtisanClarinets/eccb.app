@@ -35,6 +35,10 @@ vi.mock('@/lib/auth/permissions', () => ({
   getUserRoles: vi.fn().mockResolvedValue(['MUSICIAN']),
 }));
 
+vi.mock('@/lib/csrf', () => ({
+  validateCSRF: vi.fn().mockReturnValue({ valid: true }),
+}));
+
 import { auth } from '@/lib/auth/config';
 import { prisma } from '@/lib/db';
 import { getUserRoles } from '@/lib/auth/permissions';

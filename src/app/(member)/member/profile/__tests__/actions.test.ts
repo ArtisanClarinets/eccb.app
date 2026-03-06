@@ -210,7 +210,8 @@ describe('Profile Actions', () => {
       const result = await updateProfileImage(formData);
 
       expect(result.success).toBe(true);
-      expect(result.imageUrl).toContain('data:image/png;base64');
+      // the action returns the storage path, not the base64 payload
+      expect(result.imageUrl).toMatch(/^\/uploads\/profiles\//);
     });
 
     it('should reject invalid file types', async () => {

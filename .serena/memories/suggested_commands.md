@@ -1,0 +1,1 @@
+Core commands: npm run dev, npm run build, npm run start, npm run lint, npm run test, npm run db:generate. Single test: npx vitest run <file>. System utilities on Linux: git status, git diff, git log, ls, pwd, grep/rg, find/glob equivalents via tooling.

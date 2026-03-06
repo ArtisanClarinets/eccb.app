@@ -37,9 +37,24 @@ vi.mock('@/lib/db', () => ({
       findMany: vi.fn().mockResolvedValue([]),
       count: vi.fn().mockResolvedValue(0),
       create: vi.fn(),
+      findFirst: vi.fn(),
     },
     musicPiece: {
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
+    },
+    member: {
+      findFirst: vi.fn().mockResolvedValue({
+        id: 'member-1',
+        sections: [],
+      }),
+    },
+    event: {
+      findFirst: vi.fn(),
+    },
+    userRole: {
+      findMany: vi.fn().mockResolvedValue([]),
+      findFirst: vi.fn().mockResolvedValue(null),
     },
   },
 }));

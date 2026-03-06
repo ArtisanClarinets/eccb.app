@@ -332,9 +332,10 @@ function UploadReviewClient({
   const handleApprove = async (session: SmartUploadSession) => {
     setLoading(true);
     try {
-      const metadata = editedMetadata.title
-        ? editedMetadata
-        : session.extractedMetadata || {};
+      const metadata = {
+        ...(session.extractedMetadata || {}),
+        ...editedMetadata,
+      };
 
       const response = await fetch(`/api/admin/uploads/review/${session.id}/approve`, {
         method: 'POST',
@@ -656,10 +657,14 @@ function UploadReviewClient({
 
   const canTriggerSecondPass = (session: SmartUploadSession) => {
     return (
-      session.secondPassStatus === 'QUEUED' ||
-      session.secondPassStatus === 'FAILED'
+      session.secondPassStatus === null ||
+      session.secondPassStatus === 'NOT_NEEDED' ||
+      session.secondPassStatus === 'FAILED' ||
+      session.secondPassStatus === 'COMPLETE'
     );
   };
+
+  const currentEditedTitle = (editedMetadata.title || '').trim();
 
   return (
     <div className="space-y-6">
@@ -1449,7 +1454,7 @@ function UploadReviewClient({
             </Button>
             <Button
               onClick={() => editingSession && handleApprove(editingSession)}
-              disabled={!editedMetadata.title}
+              disabled={!currentEditedTitle}
               className="bg-primary hover:bg-primary/90"
             >
               <Check className="mr-2 h-4 w-4" />

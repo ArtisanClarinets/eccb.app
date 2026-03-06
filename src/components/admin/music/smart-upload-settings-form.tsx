@@ -376,13 +376,15 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
 
       try {
         const params = new URLSearchParams({ provider: String(providerVal) });
-        if (apiKey && !apiKey.startsWith('__')) {
-          params.set('apiKey', apiKey);
-        }
         const endpointValue = form.getValues('llm_endpoint_url');
         if (endpointValue) params.set('endpoint', String(endpointValue));
 
-        const response = await fetch(`/api/admin/uploads/models?${params}`);
+        const headers: HeadersInit = {};
+        if (apiKey && !apiKey.startsWith('__')) {
+          headers['x-provider-api-key'] = apiKey;
+        }
+
+        const response = await fetch(`/api/admin/uploads/models?${params}`, { headers });
 
         if (!response.ok) {
           const error = await response.json();

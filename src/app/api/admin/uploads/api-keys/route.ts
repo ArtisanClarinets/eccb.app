@@ -85,6 +85,12 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    // CSRF validation FIRST (defense in depth)
+    const csrf = validateCSRF(req);
+    if (!csrf.valid) {
+      return NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 });
+    }
+
     const session = await getSession();
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -93,11 +99,6 @@ export async function POST(req: NextRequest) {
     const hasPermission = await checkUserPermission(session.user.id, SYSTEM_CONFIG);
     if (!hasPermission) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-
-    const csrf = validateCSRF(req);
-    if (!csrf.valid) {
-      return NextResponse.json({ error: csrf.reason || 'CSRF validation failed' }, { status: 403 });
     }
 
     const body = await req.json();

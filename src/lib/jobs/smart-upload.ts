@@ -64,6 +64,7 @@ export async function queueSmartUploadProcess(
     SMART_UPLOAD_JOB_NAMES.PROCESS,
     { sessionId, fileId } as SmartUploadProcessData,
     {
+      jobId: `${SMART_UPLOAD_JOB_NAMES.PROCESS}:${sessionId}`,
       priority: 5,
       attempts: 3,
       backoff: { type: 'exponential', delay: 5000 },
@@ -102,6 +103,7 @@ export async function queueSmartUploadSecondPass(
     SMART_UPLOAD_JOB_NAMES.SECOND_PASS,
     { sessionId } as SmartUploadSecondPassData,
     {
+      jobId: `${SMART_UPLOAD_JOB_NAMES.SECOND_PASS}:${sessionId}`,
       priority: 10, // Higher priority than initial processing
       attempts: 3,
       backoff: { type: 'exponential', delay: 5000 },
@@ -137,6 +139,7 @@ export async function queueSmartUploadAutoCommit(sessionId: string): Promise<Job
     SMART_UPLOAD_JOB_NAMES.AUTO_COMMIT,
     { sessionId } as SmartUploadAutoCommitData,
     {
+      jobId: `${SMART_UPLOAD_JOB_NAMES.AUTO_COMMIT}:${sessionId}`,
       priority: 3, // Higher priority than second pass
       attempts: 3,
       backoff: { type: 'exponential', delay: 5000 },

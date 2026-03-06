@@ -282,7 +282,7 @@ model MusicPiece {
   isArchived         Boolean           @default(false)
   confidenceScore    Int?
   source            String?
-  workFingerprintHash String?          @db.Char(16)
+  workFingerprintHash String?          @unique(map: "MusicPiece_workFingerprintHash_key") @db.Char(64)
   ensembleType       String?
   keySignature       String?
   timeSignature      String?
@@ -306,7 +306,6 @@ model MusicPiece {
   setlistItems      StandSetlistItem[]
 
   @@index([title])
-  @@index([workFingerprintHash])
   @@index([composerId])
   @@index([difficulty])
   @@index([isArchived])
@@ -340,6 +339,8 @@ model MusicFile {
   instrumentName    String?
   section           String?
   partNumber        Int?
+  /// Stable identity fingerprint for PART records (piece + canonical part identity).
+  partFingerprintHash String?         @db.Char(64)
   downloads         FileDownload[]
   piece             MusicPiece         @relation(fields: [pieceId], references: [id], onDelete: Cascade)
   versions          MusicFileVersion[]
@@ -347,6 +348,9 @@ model MusicFile {
 
   @@index([pieceId])
   @@index([fileType])
+  @@index([contentHash])
+  @@index([partFingerprintHash])
+  @@unique([pieceId, fileType, partFingerprintHash], map: "MusicFile_pieceId_fileType_partFingerprintHash_key")
 }
 
 model MusicFileVersion {
@@ -375,6 +379,13 @@ enum SmartUploadStatus {
   PENDING_REVIEW
   APPROVED
   REJECTED
+}
+
+enum SmartUploadSessionCommitStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETE
+  FAILED
 }
 
 model SmartUploadSession {
@@ -427,6 +438,18 @@ model SmartUploadSession {
   rawOcrText        String?           @db.LongText
   /// Character count of raw OCR text (for quick validation)
   ocrTextChars      Int?
+  /// Commit lifecycle status for idempotent ingest tracking
+  commitStatus      SmartUploadSessionCommitStatus? @default(NOT_STARTED)
+  /// Number of commit attempts for this session.
+  commitAttempts    Int               @default(0)
+  /// Timestamp when commit completed successfully.
+  committedAt       DateTime?
+  /// Committed MusicPiece id (if commit completed).
+  committedPieceId  String?
+  /// Committed primary MusicFile id (if commit completed).
+  committedFileId   String?
+  /// Last commit error message (sanitized).
+  commitError       String?           @db.Text
 
   @@index([uploadSessionId])
   @@index([status])
@@ -434,6 +457,11 @@ model SmartUploadSession {
   @@index([sourceSha256])
   @@index([ocrEngineUsed])
   @@index([ocrModeUsed])
+  @@index([commitStatus])
+  @@index([committedPieceId])
+  @@index([committedFileId])
+  // Unique constraint for active uploads (commitStatus != COMPLETE) enforced via generated column
+  @@index([sourceSha256, commitStatus])
 }
 
 model MusicPart {
@@ -450,12 +478,16 @@ model MusicPart {
   transposition String?
   pageCount    Int?
   storageKey   String?
+  /// Stable identity fingerprint for dedupe across retries/re-segmentation.
+  partFingerprintHash String? @db.Char(64)
   file         MusicFile? @relation(fields: [fileId], references: [id])
   instrument   Instrument @relation(fields: [instrumentId], references: [id])
   piece        MusicPiece @relation(fields: [pieceId], references: [id], onDelete: Cascade)
 
   @@index([pieceId])
   @@index([instrumentId])
+  @@index([partFingerprintHash])
+  @@unique([pieceId, partFingerprintHash], map: "MusicPart_pieceId_partFingerprintHash_key")
   @@index([fileId], map: "MusicPart_fileId_fkey")
 }
 

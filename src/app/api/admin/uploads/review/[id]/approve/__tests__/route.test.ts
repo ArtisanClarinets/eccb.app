@@ -88,6 +88,10 @@ vi.mock('@/lib/logger', () => ({
   },
 }));
 
+vi.mock('@/lib/csrf', () => ({
+  validateCSRF: vi.fn().mockReturnValue({ valid: true }),
+}));
+
 // Import after mocks are set up
 import { POST, OPTIONS } from '../route';
 

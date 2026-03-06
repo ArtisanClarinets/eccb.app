@@ -533,6 +533,8 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
       textLayerSuccess: boolean;
       textLayerEngine?: string;
       textLayerChars: number;
+      textLayerThreshold?: number;
+      textLayerCoverage?: number;
       ocrAttempt: boolean;
       ocrSuccess: boolean;
       ocrEngine?: string;
@@ -595,10 +597,25 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
   /** Per-page labels collected during segmentation (1-indexed page → label text) */
   const pageLabels: Record<number, string> = {};
 
-  if (pageHeaderResult.hasTextLayer) {
-    logger.info('Text layer detected — attempting deterministic segmentation', {
+  // ── Enterprise OCR-First Gating: textLayerThresholdPct ─────────────
+  // If text layer coverage is below threshold, skip it entirely and use OCR.
+  // This ensures scanned PDFs get proper OCR treatment even if they have
+  // some embedded text (e.g., from previous OCR passes).
+  // textLayerThresholdPct is stored as a percentage (e.g. 40 for 40%),
+  // but pageHeaderResult.textLayerCoverage is a fraction (0–1).  Convert the
+  // configured number to a fraction before comparing.  This bug caused all
+  // deterministic segmentation paths to be skipped in tests (coverage like
+  // 0.6 < 40).
+  const textLayerThresholdPct = (llmConfig.textLayerThresholdPct ?? 40) / 100;
+  const textLayerCoverage = pageHeaderResult.textLayerCoverage ?? 0;
+  const textLayerMeetsThreshold =
+    pageHeaderResult.hasTextLayer && textLayerCoverage >= textLayerThresholdPct;
+
+  if (textLayerMeetsThreshold) {
+    logger.info('Text layer detected and meets threshold — attempting deterministic segmentation', {
       sessionId,
-      coverage: pageHeaderResult.textLayerCoverage,
+      coverage: textLayerCoverage,
+      threshold: textLayerThresholdPct,
     });
 
     const segResult = detectPartBoundaries(pageHeaderResult.pageHeaders, totalPages, true);
@@ -617,7 +634,12 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
         confidence: deterministicConfidence,
       });
     }
-  }
+  } else if (pageHeaderResult.hasTextLayer) {
+    logger.info('Text layer detected but below threshold — skipping text layer, will use OCR', {
+      sessionId,
+      coverage: textLayerCoverage,
+      threshold: textLayerThresholdPct,
+    });  }
 
   // -----------------------------------------------------------------
   // OCR-First Pipeline (Phase 4):
@@ -634,16 +656,18 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
   let pageLabelerResult: PageLabelerResult | null = null;
   let useFullVisionLLM = false;
   const fullVisionFallbackReasons: string[] = [];
-  let ocrProvenance = {
-    textLayerAttempt: false,
-    textLayerSuccess: false,
-    textLayerEngine: '' as string,
-    textLayerChars: 0,
+  let ocrProvenance: StrategyAttempt['provenance'] = {
+    textLayerAttempt: pageHeaderResult.hasTextLayer,
+    textLayerSuccess: textLayerMeetsThreshold && deterministicInstructions !== null,
+    textLayerEngine: textLayerMeetsThreshold ? 'pdf-lib-text-layer' : '',
+    textLayerChars: pageHeaderResult.pageHeaders.reduce((sum, h) => sum + (h.headerText?.length ?? 0), 0),
+    textLayerThreshold: textLayerThresholdPct,
+    textLayerCoverage: textLayerCoverage,
     ocrAttempt: false,
     ocrSuccess: false,
-    ocrEngine: '' as string,
+    ocrEngine: '',
     ocrConfidence: 0,
-    llmFallbackReasons: [] as string[],
+    llmFallbackReasons: [],
   };
 
   await progress('analyzing', 15, 'Running page-labeler (OCR-first pipeline)');
@@ -684,6 +708,8 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
         textLayerSuccess: textDiag?.success ?? false,
         textLayerEngine: 'pdf-lib-text-layer',
         textLayerChars: textDiag?.labelsExtracted ?? 0,
+        textLayerThreshold: textLayerThresholdPct,
+        textLayerCoverage: textLayerCoverage,
         ocrAttempt: ocrDiag?.pagesProcessed ? ocrDiag.pagesProcessed > 0 : false,
         ocrSuccess: ocrDiag?.success ?? false,
         ocrEngine: 'header-image-hash-segmentation',
@@ -1141,7 +1167,17 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
 
     // Parse vision response — metadata-only in image mode, full in PDF mode
     if (canSendPdf) {
+      // In native PDF mode we replace the extraction object with the full
+      // response from the LLM parser.  However the parser does **not** return
+      // any segmentationConfidence value, so we must preserve whatever
+      // deterministic confidence we computed earlier (e.g. from text-layer
+      // segmentation).  Without this the quality‑gate logic would be blind to
+      // poor segmentation and auto‑commit could slip through (see Gate 4). 
+      const previousSegConf = deterministicConfidence || extraction.segmentationConfidence;
       extraction = parseVisionResponse(visionResult.content, totalPages);
+      if (previousSegConf && extraction.segmentationConfidence === undefined) {
+        extraction.segmentationConfidence = previousSegConf;
+      }
     } else {
       // Image mode: parse metadata only (no cuttingInstructions from LLM)
       const metadataParsed = parseVisionMetadataResponse(visionResult.content);
@@ -1231,6 +1267,10 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
       }
 
       const retryExtraction = parseVisionResponse(visionResult.content, totalPages);
+      // preserve segmentationConfidence from the prior attempt
+      if (deterministicConfidence && retryExtraction.segmentationConfidence === undefined) {
+        retryExtraction.segmentationConfidence = deterministicConfidence;
+      }
       // Use retry result only if it has better cutting instructions
       if (retryExtraction.cuttingInstructions && retryExtraction.cuttingInstructions.length > 0) {
         logger.info('Retry produced valid cutting instructions', {
@@ -1311,7 +1351,7 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
   const gapInstructions = buildGapInstructions(instructionValidation.instructions, totalPages);
   if (gapInstructions.length > 0) {
     const gapPageCount = gapInstructions.reduce(
-      (sum, g) => sum + (g.pageRange[2] - g.pageRange[0] + 1), 0
+      (sum, g) => sum + (g.pageRange[1] - g.pageRange[0] + 1), 0
     );
     logger.warn('Gap pages detected — HARD FAIL: routing to human review / second pass', {
       sessionId,

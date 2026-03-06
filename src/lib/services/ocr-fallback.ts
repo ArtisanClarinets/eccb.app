@@ -38,11 +38,32 @@ import { preprocessForOcr } from '@/lib/services/header-image-segmentation';
 export interface OCRMetadata {
   title: string;
   composer?: string;
+  arranger?: string;
+  publisher?: string;
   confidence: number;
   isImageScanned: boolean;
   needsManualReview: boolean;
   /** Raw OCR text if requested (never logged) */
   rawOcrText?: string;
+  /** Number of characters extracted from text layer */
+  textLayerChars?: number;
+  /** Number of pages processed by OCR */
+  ocrPagesProcessed?: number;
+  /** OCR engine used */
+  ocrEngine?: string;
+  /** Structured provenance for enterprise audit */
+  provenance?: {
+    textLayerAttempt: boolean;
+    textLayerSuccess: boolean;
+    textLayerEngine: string;
+    textLayerChars: number;
+    ocrAttempt: boolean;
+    ocrSuccess: boolean;
+    ocrEngine: string;
+    ocrConfidence: number;
+    ocrPagesProcessed: number;
+    sources: string[];
+  };
 }
 
 /**

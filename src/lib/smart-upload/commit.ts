@@ -21,7 +21,8 @@ import type { ExtractedMetadata, ParsedPartRecord } from '@/types/smart-upload';
 import { normalizeExtractedMetadata, normalizePersonName } from './metadata-normalizer';
 import { getSectionForLabel } from './canonical-instruments';
 import { isForbiddenLabel } from './quality-gates';
-import { computeWorkFingerprintV2 } from './duplicate-detection';
+import { normalizeInstrumentLabel } from './part-naming';
+import { computePartIdentityFingerprint, computeWorkFingerprintV2 } from './duplicate-detection';
 
 // =============================================================================
 // Types
@@ -81,6 +82,11 @@ async function findOrCreatePerson(
   return created.id;
 }
 
+function normalizeCommitErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.slice(0, 500);
+}
+
 // =============================================================================
 // Core Commit Function
 // =============================================================================
@@ -115,7 +121,34 @@ export async function commitSmartUploadSessionToLibrary(
     throw new Error(`SmartUploadSession not found: ${sessionId}`);
   }
 
-  // ── Idempotency check ────────────────────────────────────────────
+  // ── Idempotency check: committed pointers on session ─────────────────────
+  if (
+    uploadSession.commitStatus === 'COMPLETE' &&
+    uploadSession.committedPieceId &&
+    uploadSession.committedFileId
+  ) {
+    const [piece, partsCount] = await Promise.all([
+      prisma.musicPiece.findUnique({
+        where: { id: uploadSession.committedPieceId },
+        select: { title: true },
+      }),
+      prisma.musicPart.count({ where: { pieceId: uploadSession.committedPieceId } }),
+    ]);
+
+    if (piece) {
+      logger.info('Commit idempotency: session already marked committed', { sessionId });
+      return {
+        musicPieceId: uploadSession.committedPieceId,
+        musicPieceTitle: piece.title,
+        musicFileId: uploadSession.committedFileId,
+        sessionId,
+        partsCommitted: partsCount,
+        wasIdempotent: true,
+      };
+    }
+  }
+
+  // ── Idempotency check: committed file lookup ─────────────────────
   // If this session was already committed, return existing data instead of failing.
   // IMPORTANT: filter to the *original* MusicFile only (fileType != 'PART').
   // Part files also share originalUploadId=sessionId, so a plain findFirst
@@ -130,6 +163,23 @@ export async function commitSmartUploadSessionToLibrary(
 
   if (existingImportedFile) {
     logger.info('Commit idempotency: session already committed', { sessionId });
+
+    const now = new Date();
+    await prisma.smartUploadSession.update({
+      where: { uploadSessionId: sessionId },
+      data: {
+        status: 'APPROVED',
+        reviewedBy: approvedBy,
+        reviewedAt: uploadSession.reviewedAt ?? now,
+        commitStatus: 'COMPLETE',
+        committedAt: uploadSession.committedAt ?? now,
+        committedPieceId: existingImportedFile.piece.id,
+        committedFileId: existingImportedFile.id,
+        commitError: null,
+      },
+    }).catch(() => {
+      // best-effort recovery write for legacy sessions
+    });
 
     // Count existing parts for this piece
     const partsCount = await prisma.musicPart.count({
@@ -158,6 +208,80 @@ export async function commitSmartUploadSessionToLibrary(
     throw new Error(
       `Session ${sessionId} is not commit-eligible (status: ${uploadSession.status})`
     );
+  }
+
+  // ── CAS-style locking: attempt to transition from NOT_STARTED/FAILED to IN_PROGRESS ─────────
+  const casResult = await prisma.smartUploadSession.updateMany({
+    where: {
+      uploadSessionId: sessionId,
+      OR: [
+        { commitStatus: { in: ['NOT_STARTED', 'FAILED'] } },
+        { commitStatus: null },
+      ],
+    },
+    data: {
+      commitStatus: 'IN_PROGRESS',
+      commitAttempts: { increment: 1 },
+      commitError: null,
+    },
+  });
+
+  if (casResult.count === 0) {
+    // Another process is already committing this session
+    // Check if it's already complete
+    const currentSession = await prisma.smartUploadSession.findUnique({
+      where: { uploadSessionId: sessionId },
+      select: { commitStatus: true, committedPieceId: true, committedFileId: true },
+    });
+
+    if (currentSession?.commitStatus === 'COMPLETE' && currentSession.committedPieceId) {
+      // Already committed by another process - return idempotent result
+      const piece = await prisma.musicPiece.findUnique({
+        where: { id: currentSession.committedPieceId },
+        select: { title: true },
+      });
+      const partsCount = await prisma.musicPart.count({
+        where: { pieceId: currentSession.committedPieceId },
+      });
+
+      logger.info('Commit idempotency: another process completed the commit', { sessionId });
+      return {
+        musicPieceId: currentSession.committedPieceId,
+        musicPieceTitle: piece?.title ?? 'Unknown',
+        musicFileId: currentSession.committedFileId!,
+        sessionId,
+        partsCommitted: partsCount,
+        wasIdempotent: true,
+      };
+    }
+
+    // It's IN_PROGRESS - wait briefly and retry once
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const retrySession = await prisma.smartUploadSession.findUnique({
+      where: { uploadSessionId: sessionId },
+      select: { commitStatus: true, committedPieceId: true, committedFileId: true },
+    });
+
+    if (retrySession?.commitStatus === 'COMPLETE' && retrySession.committedPieceId) {
+      const piece = await prisma.musicPiece.findUnique({
+        where: { id: retrySession.committedPieceId },
+        select: { title: true },
+      });
+      const partsCount = await prisma.musicPart.count({
+        where: { pieceId: retrySession.committedPieceId },
+      });
+
+      return {
+        musicPieceId: retrySession.committedPieceId,
+        musicPieceTitle: piece?.title ?? 'Unknown',
+        musicFileId: retrySession.committedFileId!,
+        sessionId,
+        partsCommitted: partsCount,
+        wasIdempotent: true,
+      };
+    }
+
+    throw new Error(`Session ${sessionId} is already being committed by another process`);
   }
 
   // ── Prepare metadata ─────────────────────────────────────────────
@@ -192,128 +316,148 @@ export async function commitSmartUploadSessionToLibrary(
     }
   }
 
-  // 2. Transaction
-  const txResult = await prisma.$transaction(async (tx) => {
-    // 2a. Composer
-    const composerName = (overrides.composer ?? normalized?.composer.normalized ?? extractedMetadata?.composer ?? '').trim();
-    const composerId = await findOrCreatePerson(tx, composerName);
+  // 2. Transaction with error handling
+  let txResult: { musicPiece: { id: string; title: string }; musicFile: { id: string }; partsCommitted: number };
 
-    // 2b. Arranger
-    const arrangerName = (overrides.arranger ?? normalized?.arranger.normalized ?? extractedMetadata?.arranger ?? '').trim();
-    const arrangerId = await findOrCreatePerson(tx, arrangerName);
+  try {
+    txResult = await prisma.$transaction(async (tx) => {
+      // 2a. Composer
+      const composerName = (overrides.composer ?? normalized?.composer.normalized ?? extractedMetadata?.composer ?? '').trim();
+      const composerId = await findOrCreatePerson(tx, composerName);
 
-    // 2c. Publisher
-    let publisherId: string | null = null;
-    const publisherName = (
-      overrides.publisher ??
-      normalized?.publisher.normalized ??
-      extractedMetadata?.publisher ??
-      ''
-    ).trim();
-    if (publisherName) {
-      let publisher = await tx.publisher.findUnique({ where: { name: publisherName } });
-      if (!publisher) {
-        publisher = await tx.publisher.create({ data: { name: publisherName } });
+      // 2b. Arranger
+      const arrangerName = (overrides.arranger ?? normalized?.arranger.normalized ?? extractedMetadata?.arranger ?? '').trim();
+      const arrangerId = await findOrCreatePerson(tx, arrangerName);
+
+      // 2c. Publisher
+      let publisherId: string | null = null;
+      const publisherName = (
+        overrides.publisher ??
+        normalized?.publisher.normalized ??
+        extractedMetadata?.publisher ??
+        ''
+      ).trim();
+      if (publisherName) {
+        let publisher = await tx.publisher.findUnique({ where: { name: publisherName } });
+        if (!publisher) {
+          publisher = await tx.publisher.create({ data: { name: publisherName } });
+        }
+        publisherId = publisher.id;
       }
-      publisherId = publisher.id;
-    }
 
-    // 2d. Work fingerprint — used for library-level deduplication
-    const workFP = computeWorkFingerprintV2(title, composerName || null, arrangerName || null);
-    const workFingerprintHash = workFP.hash;
+      // 2d. Work fingerprint — used for library-level deduplication
+      const workFP = computeWorkFingerprintV2(title, composerName || null, arrangerName || null);
+      const workFingerprintHash = workFP.hash;
 
-    // 2e. Find-or-create MusicPiece (work-level dedup by title+composer+arranger)
-    const existingPiece = await tx.musicPiece.findFirst({
-      where: { workFingerprintHash },
-    });
-    const pieceAlreadyExisted = Boolean(existingPiece);
-
-    const pieceData = {
-      title,
-      composerId,
-      arrangerId,
-      publisherId,
-      workFingerprintHash,
-      difficulty: ((overrides.difficulty ?? null) as MusicDifficulty | null),
-      confidenceScore: extractedMetadata?.confidenceScore ?? null,
-      source: 'SMART_UPLOAD' as const,
-      ensembleType: overrides.ensembleType ?? normalized?.ensembleType.normalized ?? extractedMetadata?.ensembleType ?? null,
-      keySignature: overrides.keySignature ?? extractedMetadata?.keySignature ?? null,
-      timeSignature: overrides.timeSignature ?? extractedMetadata?.timeSignature ?? null,
-      tempo: overrides.tempo ?? extractedMetadata?.tempo ?? null,
-    };
-
-    let musicPiece: Awaited<ReturnType<typeof tx.musicPiece.create>>;
-
-    if (existingPiece) {
-      // Piece already in library — update only fields that are currently null
-      // to avoid overwriting manually curated metadata.
-      type PieceRow = typeof existingPiece;
-      const nullUpdates = (Object.keys(pieceData) as (keyof PieceRow)[]).reduce<Partial<typeof pieceData>>(
-        (acc, key) => {
-          if (existingPiece![key] == null && pieceData[key as keyof typeof pieceData] != null) {
-            (acc as Record<string, unknown>)[key] = pieceData[key as keyof typeof pieceData];
-          }
-          return acc;
-        },
-        {}
-      );
-      musicPiece = Object.keys(nullUpdates).length > 0
-        ? await tx.musicPiece.update({ where: { id: existingPiece.id }, data: nullUpdates })
-        : existingPiece;
-    } else {
-      musicPiece = await tx.musicPiece.create({
-        data: {
-          ...pieceData,
-          notes: `Imported via Smart Upload on ${new Date().toISOString()}`,
-        },
+      // 2e. Find-or-create MusicPiece (work-level dedup by title+composer+arranger)
+      const existingPiece = await tx.musicPiece.findFirst({
+        where: { workFingerprintHash },
       });
-    }
+      const pieceAlreadyExisted = Boolean(existingPiece);
 
-    // 2f. MusicFile — create new or version-bump existing
-    const fileType = ((extractedMetadata?.fileType ?? 'FULL_SCORE') as FileType);
-    let musicFile: Awaited<ReturnType<typeof tx.musicFile.create>>;
+      const pieceData = {
+        title,
+        composerId,
+        arrangerId,
+        publisherId,
+        workFingerprintHash,
+        difficulty: ((overrides.difficulty ?? null) as MusicDifficulty | null),
+        confidenceScore: extractedMetadata?.confidenceScore ?? null,
+        source: 'SMART_UPLOAD' as const,
+        ensembleType: overrides.ensembleType ?? normalized?.ensembleType.normalized ?? extractedMetadata?.ensembleType ?? null,
+        keySignature: overrides.keySignature ?? extractedMetadata?.keySignature ?? null,
+        timeSignature: overrides.timeSignature ?? extractedMetadata?.timeSignature ?? null,
+        tempo: overrides.tempo ?? extractedMetadata?.tempo ?? null,
+      };
 
-    if (pieceAlreadyExisted) {
-      // Look for the primary (non-part) file for this piece
-      const existingFile = await tx.musicFile.findFirst({
-        where: { pieceId: musicPiece.id, fileType: { not: 'PART' as FileType } },
-        orderBy: { uploadedAt: 'desc' },
-      });
+      let musicPiece: Awaited<ReturnType<typeof tx.musicPiece.create>>;
 
-      if (existingFile) {
-        // Snapshot current file as a version before updating
-        const versionCount = await tx.musicFileVersion.count({ where: { fileId: existingFile.id } });
-        await tx.musicFileVersion.create({
-          data: {
-            fileId: existingFile.id,
-            version: versionCount + 1,
-            fileName: existingFile.fileName,
-            storageKey: existingFile.storageKey,
-            fileSize: existingFile.fileSize,
-            mimeType: existingFile.mimeType,
-            changeNote: `Superseded by re-upload session ${uploadSession.uploadSessionId} on ${new Date().toISOString()}`,
-            uploadedBy: approvedBy,
+      if (existingPiece) {
+        // Piece already in library — update only fields that are currently null
+        // to avoid overwriting manually curated metadata.
+        type PieceRow = typeof existingPiece;
+        const nullUpdates = (Object.keys(pieceData) as (keyof PieceRow)[]).reduce<Partial<typeof pieceData>>(
+          (acc, key) => {
+            if (existingPiece![key] == null && pieceData[key as keyof typeof pieceData] != null) {
+              (acc as Record<string, unknown>)[key] = pieceData[key as keyof typeof pieceData];
+            }
+            return acc;
           },
-        });
-
-        // Point the file record at the new storage key
-        musicFile = await tx.musicFile.update({
-          where: { id: existingFile.id },
-          data: {
-            fileName: uploadSession.fileName,
-            fileSize: uploadSession.fileSize,
-            mimeType: uploadSession.mimeType,
-            storageKey: uploadSession.storageKey,
-            uploadedBy: approvedBy,
-            extractedMetadata: JSON.stringify(extractedMetadata),
-            originalUploadId: uploadSession.uploadSessionId,
-            contentHash: uploadSession.sourceSha256 ?? null,
-            version: (existingFile.version ?? 1) + 1,
-          },
-        });
+          {}
+        );
+        musicPiece = Object.keys(nullUpdates).length > 0
+          ? await tx.musicPiece.update({ where: { id: existingPiece.id }, data: nullUpdates })
+          : existingPiece;
       } else {
-        // Piece exists but has no primary file yet — create one
+        musicPiece = await tx.musicPiece.create({
+          data: {
+            ...pieceData,
+            notes: `Imported via Smart Upload on ${new Date().toISOString()}`,
+          },
+        });
+      }
+
+      // 2f. MusicFile — create new or version-bump existing
+      const fileType = ((extractedMetadata?.fileType ?? 'FULL_SCORE') as FileType);
+      let musicFile: Awaited<ReturnType<typeof tx.musicFile.create>>;
+
+      if (pieceAlreadyExisted) {
+        // Look for the primary (non-part) file for this piece
+        const existingFile = await tx.musicFile.findFirst({
+          where: { pieceId: musicPiece.id, fileType: { not: 'PART' as FileType } },
+          orderBy: { uploadedAt: 'desc' },
+        });
+
+        if (existingFile) {
+          // Snapshot current file as a version before updating
+          const versionCount = await tx.musicFileVersion.count({ where: { fileId: existingFile.id } });
+          await tx.musicFileVersion.create({
+            data: {
+              fileId: existingFile.id,
+              version: versionCount + 1,
+              fileName: existingFile.fileName,
+              storageKey: existingFile.storageKey,
+              fileSize: existingFile.fileSize,
+              mimeType: existingFile.mimeType,
+              changeNote: `Superseded by re-upload session ${uploadSession.uploadSessionId} on ${new Date().toISOString()}`,
+              uploadedBy: approvedBy,
+            },
+          });
+
+          // Point the file record at the new storage key
+          musicFile = await tx.musicFile.update({
+            where: { id: existingFile.id },
+            data: {
+              fileName: uploadSession.fileName,
+              fileSize: uploadSession.fileSize,
+              mimeType: uploadSession.mimeType,
+              storageKey: uploadSession.storageKey,
+              uploadedBy: approvedBy,
+              extractedMetadata: JSON.stringify(extractedMetadata),
+              originalUploadId: uploadSession.uploadSessionId,
+              contentHash: uploadSession.sourceSha256 ?? null,
+              version: (existingFile.version ?? 1) + 1,
+            },
+          });
+        } else {
+          // Piece exists but has no primary file yet — create one
+          musicFile = await tx.musicFile.create({
+            data: {
+              pieceId: musicPiece.id,
+              fileName: uploadSession.fileName,
+              fileType,
+              fileSize: uploadSession.fileSize,
+              mimeType: uploadSession.mimeType,
+              storageKey: uploadSession.storageKey,
+              uploadedBy: approvedBy,
+              extractedMetadata: JSON.stringify(extractedMetadata),
+              source: 'SMART_UPLOAD',
+              originalUploadId: uploadSession.uploadSessionId,
+              contentHash: uploadSession.sourceSha256 ?? null,
+            },
+          });
+        }
+      } else {
         musicFile = await tx.musicFile.create({
           data: {
             pieceId: musicPiece.id,
@@ -330,55 +474,74 @@ export async function commitSmartUploadSessionToLibrary(
           },
         });
       }
-    } else {
-      musicFile = await tx.musicFile.create({
-        data: {
-          pieceId: musicPiece.id,
-          fileName: uploadSession.fileName,
-          fileType,
-          fileSize: uploadSession.fileSize,
-          mimeType: uploadSession.mimeType,
-          storageKey: uploadSession.storageKey,
-          uploadedBy: approvedBy,
-          extractedMetadata: JSON.stringify(extractedMetadata),
-          source: 'SMART_UPLOAD',
-          originalUploadId: uploadSession.uploadSessionId,
-          contentHash: uploadSession.sourceSha256 ?? null,
-        },
-      });
-    }
-    finalMusicFileKeys.push(uploadSession.storageKey);
+      finalMusicFileKeys.push(uploadSession.storageKey);
 
-    // 2g. MusicParts
-    let partsCommitted = 0;
+      // 2g. MusicParts
+      let partsCommitted = 0;
 
-    if (hasPreSplitParts && parsedParts.length > 0) {
-      for (const part of parsedParts) {
-        const instrumentName = part.instrument?.trim() || 'Unknown';
-        const family = getSectionForLabel(instrumentName);
+      if (hasPreSplitParts && parsedParts.length > 0) {
+        for (const part of parsedParts) {
+          const normalizedPart = normalizeInstrumentLabel(part.instrument?.trim() || 'Unknown');
+          const instrumentName = normalizedPart.instrument?.trim() || 'Unknown';
+          const partName = part.partName?.trim() || instrumentName;
+          const partFingerprintHash = computePartIdentityFingerprint(
+            musicPiece.id,
+            instrumentName,
+            partName,
+            normalizedPart.chair,
+            normalizedPart.transposition,
+          );
+          const family = getSectionForLabel(instrumentName);
 
-        let instrument = await tx.instrument.findFirst({ where: { name: { equals: instrumentName } } });
-        if (!instrument) {
-          instrument = await tx.instrument.create({
-            data: { name: instrumentName, family, sortOrder: 999 },
-          });
-        }
+          let instrument = await tx.instrument.findFirst({ where: { name: { equals: instrumentName } } });
+          if (!instrument) {
+            instrument = await tx.instrument.create({
+              data: { name: instrumentName, family, sortOrder: 999 },
+            });
+          }
 
-        if (pieceAlreadyExisted) {
-          // Upsert: find existing part by instrument + partNumber, update or create
-          const existingMusicPart = await tx.musicPart.findFirst({
-            where: {
-              pieceId: musicPiece.id,
-              instrumentId: instrument.id,
-              partNumber: part.partNumber ?? null,
-            },
-          });
+          let existingMusicPart = null as Awaited<ReturnType<typeof tx.musicPart.findFirst>>;
+          if (pieceAlreadyExisted) {
+            existingMusicPart = await tx.musicPart.findFirst({
+              where: {
+                pieceId: musicPiece.id,
+                partFingerprintHash,
+              },
+            });
+
+            if (!existingMusicPart) {
+              existingMusicPart = await tx.musicPart.findFirst({
+                where: {
+                  pieceId: musicPiece.id,
+                  instrumentId: instrument.id,
+                  partNumber: part.partNumber ?? null,
+                },
+              });
+            }
+          }
 
           if (existingMusicPart) {
-            // Update the part file
-            const existingPartFile = await tx.musicFile.findFirst({
-              where: { pieceId: musicPiece.id, fileType: 'PART' as FileType, partNumber: part.partNumber ?? null, instrumentName },
+            // Update the existing PART file by stable fingerprint (fallback to legacy key shape)
+            let existingPartFile = await tx.musicFile.findFirst({
+              where: {
+                pieceId: musicPiece.id,
+                fileType: 'PART' as FileType,
+                partFingerprintHash,
+              },
             });
+
+            if (!existingPartFile) {
+              existingPartFile = await tx.musicFile.findFirst({
+                where: {
+                  pieceId: musicPiece.id,
+                  fileType: 'PART' as FileType,
+                  partNumber: part.partNumber ?? null,
+                  instrumentName,
+                },
+              });
+            }
+
+            let partFileId: string | null = null;
             if (existingPartFile) {
               const pvCount = await tx.musicFileVersion.count({ where: { fileId: existingPartFile.id } });
               await tx.musicFileVersion.create({
@@ -393,154 +556,261 @@ export async function commitSmartUploadSessionToLibrary(
                   uploadedBy: approvedBy,
                 },
               });
-              await tx.musicFile.update({
+
+              const updatedPartFile = await tx.musicFile.update({
                 where: { id: existingPartFile.id },
                 data: {
-                  fileName: part.fileName, fileSize: part.fileSize,
-                  storageKey: part.storageKey, uploadedBy: approvedBy,
+                  fileName: part.fileName,
+                  fileSize: part.fileSize,
+                  storageKey: part.storageKey,
+                  uploadedBy: approvedBy,
                   originalUploadId: uploadSession.uploadSessionId,
                   contentHash: uploadSession.sourceSha256 ?? null,
                   version: (existingPartFile.version ?? 1) + 1,
+                  partFingerprintHash,
+                  partLabel: partName,
+                  instrumentName,
+                  section: part.section ?? null,
+                  partNumber: part.partNumber ?? null,
+                  pageCount: part.pageCount ?? null,
                 },
               });
+              partFileId = updatedPartFile.id;
+              finalMusicFileKeys.push(part.storageKey);
+            } else {
+              const createdPartFile = await tx.musicFile.create({
+                data: {
+                  pieceId: musicPiece.id,
+                  fileName: part.fileName,
+                  fileType: 'PART' as FileType,
+                  fileSize: part.fileSize,
+                  mimeType: 'application/pdf',
+                  storageKey: part.storageKey,
+                  uploadedBy: approvedBy,
+                  source: 'SMART_UPLOAD',
+                  originalUploadId: uploadSession.uploadSessionId,
+                  contentHash: uploadSession.sourceSha256 ?? null,
+                  partFingerprintHash,
+                  partLabel: partName,
+                  instrumentName,
+                  section: part.section ?? null,
+                  partNumber: part.partNumber ?? null,
+                  pageCount: part.pageCount ?? null,
+                },
+              });
+              partFileId = createdPartFile.id;
               finalMusicFileKeys.push(part.storageKey);
             }
+
             await tx.musicPart.update({
               where: { id: existingMusicPart.id },
               data: {
-                partName: part.partName,
+                partName,
+                fileId: partFileId ?? existingMusicPart.fileId,
                 section: part.section ?? null,
-                transposition: part.transposition ?? null,
+                partNumber: part.partNumber ?? null,
+                partLabel: partName,
+                transposition: part.transposition ?? normalizedPart.transposition ?? null,
                 pageCount: part.pageCount ?? null,
                 storageKey: part.storageKey ?? null,
+                partFingerprintHash,
               },
             });
           } else {
-            // New part for this piece
             const partFile = await tx.musicFile.create({
               data: {
-                pieceId: musicPiece.id, fileName: part.fileName,
-                fileType: 'PART' as FileType, fileSize: part.fileSize,
-                mimeType: 'application/pdf', storageKey: part.storageKey,
-                uploadedBy: approvedBy, source: 'SMART_UPLOAD',
+                pieceId: musicPiece.id,
+                fileName: part.fileName,
+                fileType: 'PART' as FileType,
+                fileSize: part.fileSize,
+                mimeType: 'application/pdf',
+                storageKey: part.storageKey,
+                uploadedBy: approvedBy,
+                source: 'SMART_UPLOAD',
                 originalUploadId: uploadSession.uploadSessionId,
                 contentHash: uploadSession.sourceSha256 ?? null,
-                partLabel: part.partName ?? null, instrumentName: part.instrument ?? null,
-                section: part.section ?? null, partNumber: part.partNumber ?? null,
+                partFingerprintHash,
+                partLabel: partName,
+                instrumentName,
+                section: part.section ?? null,
+                partNumber: part.partNumber ?? null,
                 pageCount: part.pageCount ?? null,
               },
             });
             finalMusicFileKeys.push(part.storageKey);
+
             await tx.musicPart.create({
               data: {
-                pieceId: musicPiece.id, instrumentId: instrument.id,
-                partName: part.partName, fileId: partFile.id,
-                section: part.section ?? null, partNumber: part.partNumber ?? null,
-                partLabel: part.partName ?? null, transposition: part.transposition ?? null,
-                pageCount: part.pageCount ?? null, storageKey: part.storageKey ?? null,
+                pieceId: musicPiece.id,
+                instrumentId: instrument.id,
+                partName,
+                fileId: partFile.id,
+                section: part.section ?? null,
+                partNumber: part.partNumber ?? null,
+                partLabel: partName,
+                transposition: part.transposition ?? normalizedPart.transposition ?? null,
+                pageCount: part.pageCount ?? null,
+                storageKey: part.storageKey ?? null,
+                partFingerprintHash,
               },
             });
           }
-        } else {
-          const partFile = await tx.musicFile.create({
-            data: {
-              pieceId: musicPiece.id,
-              fileName: part.fileName,
-              fileType: 'PART' as FileType,
-              fileSize: part.fileSize,
-              mimeType: 'application/pdf',
-              storageKey: part.storageKey,
-              uploadedBy: approvedBy,
-              source: 'SMART_UPLOAD',
-              originalUploadId: uploadSession.uploadSessionId,
-              contentHash: uploadSession.sourceSha256 ?? null,
-              partLabel: part.partName ?? null,
-              instrumentName: part.instrument ?? null,
-              section: part.section ?? null,
-              partNumber: part.partNumber ?? null,
-              pageCount: part.pageCount ?? null,
-            },
-          });
-          finalMusicFileKeys.push(part.storageKey);
+          partsCommitted++;
+        }
+      } else if (
+        extractedMetadata?.isMultiPart &&
+        Array.isArray(extractedMetadata.parts) &&
+        extractedMetadata.parts.length > 0
+      ) {
+        for (const part of extractedMetadata.parts) {
+          const normalizedPart = normalizeInstrumentLabel(part.instrument?.trim() || 'Unknown');
+          const instrumentName = normalizedPart.instrument?.trim();
+          if (!instrumentName) continue;
+          const partName = part.partName?.trim() || instrumentName;
+          const partFingerprintHash = computePartIdentityFingerprint(
+            musicPiece.id,
+            instrumentName,
+            partName,
+            normalizedPart.chair,
+            normalizedPart.transposition,
+          );
+          const family = getSectionForLabel(instrumentName);
 
+          let instrument = await tx.instrument.findFirst({ where: { name: { equals: instrumentName } } });
+          if (!instrument) {
+            instrument = await tx.instrument.create({
+              data: { name: instrumentName, family, sortOrder: 999 },
+            });
+          }
           await tx.musicPart.create({
             data: {
               pieceId: musicPiece.id,
               instrumentId: instrument.id,
-              partName: part.partName,
-              fileId: partFile.id,
-              section: part.section ?? null,
-              partNumber: part.partNumber ?? null,
-              partLabel: part.partName ?? null,
-              transposition: part.transposition ?? null,
-              pageCount: part.pageCount ?? null,
-              storageKey: part.storageKey ?? null,
+              partName,
+              fileId: musicFile.id,
+              partFingerprintHash,
             },
           });
+          partsCommitted++;
         }
-        partsCommitted++;
+      } else {
+        // Single instrument from override or extractedMetadata
+        const instrumentName = (
+          overrides.instrument?.trim() ??
+          extractedMetadata?.instrument?.trim() ??
+          ''
+        );
+        if (instrumentName) {
+          const normalizedPart = normalizeInstrumentLabel(instrumentName);
+          const canonicalInstrument = normalizedPart.instrument || instrumentName;
+          const partName = overrides.partNumber ?? canonicalInstrument;
+          const partFingerprintHash = computePartIdentityFingerprint(
+            musicPiece.id,
+            canonicalInstrument,
+            partName,
+            normalizedPart.chair,
+            normalizedPart.transposition,
+          );
+          const family = getSectionForLabel(instrumentName);
+          let instrument = await tx.instrument.findFirst({ where: { name: { equals: instrumentName } } });
+          if (!instrument) {
+            instrument = await tx.instrument.create({
+              data: { name: instrumentName, family, sortOrder: 999 },
+            });
+          }
+          await tx.musicPart.create({
+            data: {
+              pieceId: musicPiece.id,
+              instrumentId: instrument.id,
+              partName,
+              fileId: musicFile.id,
+              partFingerprintHash,
+            },
+          });
+          partsCommitted++;
+        }
       }
-    } else if (
-      extractedMetadata?.isMultiPart &&
-      Array.isArray(extractedMetadata.parts) &&
-      extractedMetadata.parts.length > 0
-    ) {
-      for (const part of extractedMetadata.parts) {
-        const instrumentName = part.instrument?.trim();
-        if (!instrumentName) continue;
-        const family = getSectionForLabel(instrumentName);
 
-        let instrument = await tx.instrument.findFirst({ where: { name: { equals: instrumentName } } });
-        if (!instrument) {
-          instrument = await tx.instrument.create({
-            data: { name: instrumentName, family, sortOrder: 999 },
-          });
-        }
-        await tx.musicPart.create({
-          data: {
-            pieceId: musicPiece.id,
-            instrumentId: instrument.id,
-            partName: part.partName || part.instrument,
-            fileId: musicFile.id,
-          },
+      // 2g. Mark session approved and commit complete (CAS-style update)
+      await tx.smartUploadSession.update({
+        where: { uploadSessionId: sessionId },
+        data: {
+          status: 'APPROVED',
+          reviewedBy: approvedBy,
+          reviewedAt: new Date(),
+          commitStatus: 'COMPLETE',
+          committedAt: new Date(),
+          committedPieceId: musicPiece.id,
+          committedFileId: musicFile.id,
+          commitError: null,
+        },
+      });
+
+      return { musicPiece, musicFile, partsCommitted };
+    }, { maxWait: 30000, timeout: 60000 });
+  } catch (error) {
+    // Transaction failed - mark as FAILED and persist error
+    const errorMessage = normalizeCommitErrorMessage(error);
+    const errorCode = (error as { code?: string }).code;
+
+    // Handle Prisma unique constraint violations (P2002) as race-condition recovery
+    if (errorCode === 'P2002') {
+      logger.warn('Commit: Unique constraint violation - checking for existing commit', {
+        sessionId,
+        error: errorMessage,
+      });
+
+      // Check if another process already committed
+      const existingSession = await prisma.smartUploadSession.findUnique({
+        where: { uploadSessionId: sessionId },
+        select: { commitStatus: true, committedPieceId: true, committedFileId: true },
+      });
+
+      if (existingSession?.commitStatus === 'COMPLETE' && existingSession.committedPieceId) {
+        const piece = await prisma.musicPiece.findUnique({
+          where: { id: existingSession.committedPieceId },
+          select: { title: true },
         });
-        partsCommitted++;
-      }
-    } else {
-      // Single instrument from override or extractedMetadata
-      const instrumentName = (
-        overrides.instrument?.trim() ??
-        extractedMetadata?.instrument?.trim() ??
-        ''
-      );
-      if (instrumentName) {
-        const family = getSectionForLabel(instrumentName);
-        let instrument = await tx.instrument.findFirst({ where: { name: { equals: instrumentName } } });
-        if (!instrument) {
-          instrument = await tx.instrument.create({
-            data: { name: instrumentName, family, sortOrder: 999 },
-          });
-        }
-        await tx.musicPart.create({
-          data: {
-            pieceId: musicPiece.id,
-            instrumentId: instrument.id,
-            partName: overrides.partNumber ?? instrumentName,
-            fileId: musicFile.id,
-          },
+        const partsCount = await prisma.musicPart.count({
+          where: { pieceId: existingSession.committedPieceId },
         });
-        partsCommitted++;
+
+        logger.info('Commit idempotency: race condition resolved, commit already complete', { sessionId });
+        return {
+          musicPieceId: existingSession.committedPieceId,
+          musicPieceTitle: piece?.title ?? 'Unknown',
+          musicFileId: existingSession.committedFileId!,
+          sessionId,
+          partsCommitted: partsCount,
+          wasIdempotent: true,
+        };
       }
     }
 
-    // 2g. Mark session approved
-    await tx.smartUploadSession.update({
+    // Mark session as failed
+    await prisma.smartUploadSession.update({
       where: { uploadSessionId: sessionId },
-      data: { status: 'APPROVED', reviewedBy: approvedBy, reviewedAt: new Date() },
+      data: {
+        commitStatus: 'FAILED',
+        commitError: errorMessage,
+      },
+    }).catch((updateErr) => {
+      // Best-effort error persistence
+      logger.error('Failed to persist commit error', {
+        sessionId,
+        originalError: errorMessage,
+        updateError: updateErr instanceof Error ? updateErr.message : String(updateErr),
+      });
     });
 
-    return { musicPiece, musicFile, partsCommitted };
-  });
+    logger.error('Commit transaction failed', {
+      sessionId,
+      error: errorMessage,
+      errorCode,
+    });
+
+    throw new Error(`Commit failed for session ${sessionId}: ${errorMessage}`);
+  }
 
   // 3. Cleanup orphaned temp files (best-effort, non-fatal)
   const tempFiles = (uploadSession.tempFiles as string[] | null) ?? [];

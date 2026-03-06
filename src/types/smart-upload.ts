@@ -27,6 +27,67 @@ export interface ParsedPartRecord {
   pageRange: [number, number];
 }
 
+/**
+ * Structured confidence breakdown for metadata extraction
+ */
+export interface MetadataConfidenceBreakdown {
+  /** Overall confidence score (0-100) */
+  overall: number;
+  /** Title extraction confidence (0-100) */
+  title: number;
+  /** Composer extraction confidence (0-100) */
+  composer: number;
+  /** Arranger extraction confidence (0-100) */
+  arranger: number;
+  /** Part segmentation confidence (0-100) */
+  segmentation: number;
+  /** Source weight distribution (how much each source contributed) */
+  sourceWeights: {
+    textLayer?: number;
+    ocr?: number;
+    llmVision?: number;
+    filename?: number;
+  };
+}
+
+/**
+ * OCR provenance for audit and reproducibility
+ */
+export interface OcrProvenance {
+  /** Whether text layer was attempted */
+  textLayerAttempt: boolean;
+  /** Whether text layer succeeded */
+  textLayerSuccess: boolean;
+  /** Text layer extraction engine name */
+  textLayerEngine?: string;
+  /** Characters extracted from text layer */
+  textLayerChars: number;
+  /** Whether OCR was attempted */
+  ocrAttempt: boolean;
+  /** Whether OCR succeeded */
+  ocrSuccess: boolean;
+  /** OCR engine name (e.g., 'tesseract', 'header-image-hash-segmentation') */
+  ocrEngine?: string;
+  /** OCR confidence score (0-100) */
+  ocrConfidence: number;
+  /** Pages processed by OCR */
+  ocrPagesProcessed?: number;
+  /** Reasons for falling back to LLM vision */
+  llmFallbackReasons: string[];
+}
+
+/**
+ * Per-page label with provenance
+ */
+export interface PageLabelWithProvenance {
+  /** The label text */
+  label: string;
+  /** Source of the label: 'text_layer', 'ocr', 'llm', 'inferred' */
+  source: 'text_layer' | 'ocr' | 'llm' | 'inferred';
+  /** Confidence for this specific label (0-100) */
+  confidence: number;
+}
+
 export interface ExtractedMetadata {
   title: string;
   composer?: string;
@@ -53,8 +114,14 @@ export interface ExtractedMetadata {
   requiresHumanReview?: boolean;
   /** Per-page header labels extracted during segmentation (1-indexed page → label text) */
   pageLabels?: Record<number, string>;
+  /** Per-page header labels with provenance (1-indexed page → label with source) */
+  pageLabelsWithProvenance?: Record<number, PageLabelWithProvenance>;
   /** Segmentation confidence from deterministic or vision-based segmentation */
   segmentationConfidence?: number;
+  /** Structured confidence breakdown for enterprise audit */
+  metadataConfidence?: MetadataConfidenceBreakdown;
+  /** OCR provenance for reproducibility and debugging */
+  ocrProvenance?: OcrProvenance;
 }
 
 export type RoutingDecision =

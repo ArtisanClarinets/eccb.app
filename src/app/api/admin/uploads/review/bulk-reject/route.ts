@@ -5,6 +5,7 @@ import { requirePermission } from '@/lib/auth/permissions';
 import { MUSIC_EDIT } from '@/lib/auth/permission-constants';
 import { logger } from '@/lib/logger';
 import { cleanupSmartUploadTempFiles } from '@/lib/services/smart-upload-cleanup';
+import { validateCSRF } from '@/lib/csrf';
 import { z } from 'zod';
 
 // =============================================================================
@@ -25,6 +26,14 @@ const bulkRejectSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
+    const csrfResult = validateCSRF(request);
+    if (!csrfResult.valid) {
+      return NextResponse.json(
+        { error: 'CSRF validation failed', reason: csrfResult.reason },
+        { status: 403 }
+      );
+    }
+
     // Check authentication
     const session = await getSession();
     if (!session?.user?.id) {

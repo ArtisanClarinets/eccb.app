@@ -26,8 +26,24 @@ vi.mock('@/lib/db', () => ({
   prisma: {
     userPreferences: {
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
       create: vi.fn(),
       upsert: vi.fn(),
+      update: vi.fn(),
+      findMany: vi.fn(),
+    },
+    member: {
+      findFirst: vi.fn().mockResolvedValue({
+        id: 'member-1',
+        sections: [],
+      }),
+      findUnique: vi.fn(),
+    },
+    event: {
+      findFirst: vi.fn(),
+    },
+    userRole: {
+      findMany: vi.fn().mockResolvedValue([]),
     },
   },
 }));

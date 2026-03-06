@@ -3,6 +3,11 @@ import { renderHook, act, waitFor } from '@testing-library/react';
 import { useStandSync } from '../use-stand-sync';
 import { useStandStore } from '@/store/standStore';
 
+// polyfill global WebSocket to satisfy isWebSocketAvailable() in Node
+// (the hook checks for "typeof WebSocket !== 'undefined'")
+// @ts-ignore
+(global as any).WebSocket = class {};
+
 // We'll mock socket.io-client
 type SocketHandler = (...args: unknown[]) => void;
 let handlers: Record<string, SocketHandler> = {};
@@ -33,6 +38,7 @@ describe('useStandSync', () => {
       useStandSync({
         eventId: 'evt1',
         userId: 'usr1',
+        realtimeEnabled: true, // the hook defaults to polling unless realtime is requested
         // onAnnotation writes directly to store to avoid network calls
         onAnnotation: (msg) => {
           const d = msg.data as any;

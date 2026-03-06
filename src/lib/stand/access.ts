@@ -247,7 +247,8 @@ export function assertCanWriteLayer(
   sectionId?: string | null
 ): NextResponse | null {
   if (!canWriteLayer(ctx, layer, sectionId)) {
-    return NextResponse.json({ error: 'Forbidden: insufficient layer permissions' }, { status: 403 });
+    // provide a little more context for diagnostics/tests
+    return NextResponse.json({ error: `Forbidden: insufficient layer permissions (${layer.toLowerCase()})` }, { status: 403 });
   }
   return null;
 }

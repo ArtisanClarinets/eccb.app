@@ -35,6 +35,10 @@ vi.mock('@/lib/services/smart-upload-cleanup', () => ({
   cleanupSmartUploadTempFiles: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock('@/lib/csrf', () => ({
+  validateCSRF: vi.fn().mockReturnValue({ valid: true }),
+}));
+
 import { getSession } from '@/lib/auth/guards';
 import { requirePermission } from '@/lib/auth/permissions';
 import { prisma } from '@/lib/db';

@@ -21,18 +21,24 @@ vi.mock('@/lib/db', () => ({
     standSession: {
       count: vi.fn().mockResolvedValue(0),
       upsert: vi.fn().mockResolvedValue({}),
+      findFirst: vi.fn(),
+      findMany: vi.fn(),
     },
     annotation: {
       findMany: vi.fn().mockResolvedValue([]),
+      findFirst: vi.fn(),
     },
     userRole: {
       findFirst: vi.fn().mockResolvedValue(null),
+      findMany: vi.fn().mockResolvedValue([]),
     },
     member: {
       findFirst: vi.fn().mockResolvedValue(null),
+      findUnique: vi.fn(),
     },
     event: {
       findFirst: vi.fn().mockResolvedValue(null),
+      findUnique: vi.fn(),
     },
   },
 }));

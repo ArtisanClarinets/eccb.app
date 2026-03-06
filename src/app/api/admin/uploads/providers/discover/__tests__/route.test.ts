@@ -10,15 +10,16 @@ const mockPrismaUpsert = vi.hoisted(() => vi.fn());
 const mockLoggerInfo = vi.hoisted(() => vi.fn());
 const mockLoggerError = vi.hoisted(() => vi.fn());
 const mockFetch = vi.hoisted(() => vi.fn());
+const mockValidateCSRF = vi.hoisted(() => vi.fn());
 
 vi.mock('@/lib/auth/guards', () => ({ getSession: mockGetSession }));
 vi.mock('@/lib/auth/permissions', () => ({ requirePermission: mockRequirePermission }));
 vi.mock('@/lib/db', () => ({ prisma: { systemSetting: { findMany: mockPrismaFindMany, upsert: mockPrismaUpsert } } }));
 vi.mock('@/lib/logger', () => ({ logger: { info: mockLoggerInfo, error: mockLoggerError } }));
+vi.mock('@/lib/csrf', () => ({ validateCSRF: mockValidateCSRF }));
 
 // import route after mocks so spies can be applied
 import { POST } from '../route';
-import * as discoverModule from '../route';
 
 function createRequest() {
   return new NextRequest('http://localhost/api/admin/uploads/providers/discover', { method: 'POST' });
@@ -33,6 +34,7 @@ describe('provider discovery route', () => {
     mockRequirePermission.mockResolvedValue(undefined);
     mockLoggerInfo.mockReturnValue(undefined);
     mockLoggerError.mockReturnValue(undefined);
+    mockValidateCSRF.mockReturnValue({ valid: true });
     mockFetch.mockReset();
     global.fetch = mockFetch;
   });

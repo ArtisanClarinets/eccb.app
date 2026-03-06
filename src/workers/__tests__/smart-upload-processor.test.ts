@@ -100,8 +100,10 @@ vi.mock('@/lib/services/pdf-renderer', () => ({
 
 vi.mock('@/lib/services/pdf-text-extractor', () => ({
   extractPdfPageHeaders: vi.fn().mockResolvedValue({
+    pageHeaders: [],
+    totalPages: 3,
     hasTextLayer: false,
-    headers: [],
+    textLayerCoverage: 0,
   }),
 }));
 
