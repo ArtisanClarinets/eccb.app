@@ -19,6 +19,7 @@ import {
   type SetupProgressStatus,
 } from '@/lib/setup/types';
 import { logger } from '@/lib/logger';
+import { validateSetupRequest } from '@/lib/setup/setup-guard';
 
 // =============================================================================
 // Types
@@ -151,7 +152,11 @@ async function runFullSetup(): Promise<SetupResponse> {
  * GET /api/setup
  * Get current setup status
  */
-export async function GET(): Promise<NextResponse<SetupResponse>> {
+export async function GET(request: Request): Promise<NextResponse<SetupResponse>> {
+  // Validate request is authorized for setup
+  const authResponse = validateSetupRequest(request);
+  if (authResponse) return authResponse;
+
   try {
     const status = getSetupStatus();
 
@@ -181,6 +186,10 @@ export async function GET(): Promise<NextResponse<SetupResponse>> {
  * Run setup operations
  */
 export async function POST(request: Request): Promise<NextResponse<SetupResponse>> {
+  // Validate request is authorized for setup
+  const authResponse = validateSetupRequest(request);
+  if (authResponse) return authResponse;
+
   try {
     // Validate request body
     const body = await request.json();

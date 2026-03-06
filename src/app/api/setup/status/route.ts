@@ -13,6 +13,7 @@ import { prisma } from '@/lib/db';
 import { checkMigrationStatus } from '@/lib/setup/schema-automation';
 import { SetupPhase } from '@/lib/setup/types';
 import { logger } from '@/lib/logger';
+import { validateSetupRequest } from '@/lib/setup/setup-guard';
 
 // =============================================================================
 // Types
@@ -78,7 +79,11 @@ async function checkDatabaseConnection(): Promise<{ connected: boolean; provider
  * GET /api/setup/status
  * Get current setup status
  */
-export async function GET(): Promise<NextResponse<StatusResponse>> {
+export async function GET(request: Request): Promise<NextResponse<StatusResponse>> {
+  // Validate request is authorized for setup
+  const authResponse = validateSetupRequest(request);
+  if (authResponse) return authResponse;
+
   try {
     // Check database connection
     const dbStatus = await checkDatabaseConnection();
