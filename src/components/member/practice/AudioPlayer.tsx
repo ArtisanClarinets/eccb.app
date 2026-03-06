@@ -78,17 +78,17 @@ export function AudioPlayer({ src, title }: AudioPlayerProps) {
       <audio ref={audioRef} src={src} />
 
       <div className="flex items-center gap-4 mb-2">
-        <Button variant="ghost" size="icon" onClick={() => {
+        <Button variant="ghost" size="icon" aria-label="Skip backward 5 seconds" onClick={() => {
           if(audioRef.current) audioRef.current.currentTime -= 5;
         }}>
           <SkipBack className="h-4 w-4" />
         </Button>
 
-        <Button size="icon" onClick={togglePlay}>
+        <Button size="icon" aria-label={isPlaying ? "Pause" : "Play"} onClick={togglePlay}>
           {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
         </Button>
 
-        <Button variant="ghost" size="icon" onClick={() => {
+        <Button variant="ghost" size="icon" aria-label="Skip forward 5 seconds" onClick={() => {
           if(audioRef.current) audioRef.current.currentTime += 5;
         }}>
           <SkipForward className="h-4 w-4" />
@@ -109,7 +109,7 @@ export function AudioPlayer({ src, title }: AudioPlayerProps) {
       </div>
 
        <div className="flex items-center justify-end">
-          <Button variant="ghost" size="icon" onClick={toggleMute} className="h-6 w-6">
+          <Button variant="ghost" size="icon" aria-label={isMuted ? "Unmute" : "Mute"} onClick={toggleMute} className="h-6 w-6">
             {isMuted ? <VolumeX className="h-3 w-3" /> : <Volume2 className="h-3 w-3" />}
           </Button>
       </div>
