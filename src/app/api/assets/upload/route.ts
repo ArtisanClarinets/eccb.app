@@ -9,6 +9,7 @@ import { logger } from '@/lib/logger';
 import { CMS_EDIT } from '@/lib/auth/permission-constants';
 import { env } from '@/lib/env';
 import { z } from 'zod';
+import { virusScanner } from '@/lib/services/virus-scanner';
 
 // =============================================================================
 // Constants
@@ -339,6 +340,20 @@ export async function POST(request: NextRequest) {
       });
       return NextResponse.json(
         { error: 'File content does not match declared type' },
+        { status: 400 }
+      );
+    }
+
+    // Virus scan (if enabled)
+    const virusScan = await virusScanner.scan(buffer);
+    if (!virusScan.clean) {
+      logger.warn('Asset upload rejected: virus detected', {
+        userId: session.user.id,
+        filename: file.name,
+        message: virusScan.message,
+      });
+      return NextResponse.json(
+        { error: 'File failed security scan' },
         { status: 400 }
       );
     }

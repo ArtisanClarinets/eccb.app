@@ -102,6 +102,7 @@ export function AudioTrackerSettings() {
         <button
           onClick={handleToggle}
           disabled={isLoading}
+          aria-label={enabled ? 'Disable audio tracking' : 'Enable audio tracking'}
           className={cn(
             'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
             'focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2',
@@ -129,6 +130,7 @@ export function AudioTrackerSettings() {
         <>
           <button
             onClick={() => setShowAdvanced(!showAdvanced)}
+            aria-expanded={showAdvanced}
             className="flex items-center gap-1 text-sm text-primary hover:text-primary-dark transition-colors"
           >
             <Settings className="w-4 h-4" />

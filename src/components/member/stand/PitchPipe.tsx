@@ -48,7 +48,7 @@ export function PitchPipe() {
       </select>
       <div className="grid grid-cols-6 gap-1 mt-2">
         {notes.map((n) => (
-          <button key={n.name} onClick={() => playTone(n.freq)} className="p-1 border">
+          <button key={n.name} onClick={() => playTone(n.freq)} className="p-1 border" aria-label={`Play note ${n.name}`}>
             {n.name}
           </button>
         ))}
