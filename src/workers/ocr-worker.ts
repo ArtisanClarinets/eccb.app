@@ -79,8 +79,11 @@ async function getDefaultOcrOptions(): Promise<OcrFallbackOptions> {
 
   return {
     maxTextProbePages: cfg.textProbePages,
-    enableTesseractOcr: cfg.ocrEngine === 'tesseract' || cfg.ocrEngine === 'ocrmypdf',
+    // Only tesseract is a local Tesseract OCR engine; ocrmypdf is a separate pipeline
+    enableTesseractOcr: cfg.ocrEngine === 'tesseract',
+    ocrEngine: cfg.ocrEngine,
     ocrMode: cfg.ocrMode,
+    maxOcrPages: cfg.ocrMaxPages ?? 0,
     renderScale: 2, // Keep render defaults - not exposed as settings
     renderMaxWidth: 1024,
     renderFormat: 'png',

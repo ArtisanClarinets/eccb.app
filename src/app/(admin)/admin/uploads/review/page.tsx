@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import _Link from 'next/link';
 import {
   Card,
@@ -181,6 +181,18 @@ function getSecondPassStatusBadge(secondPassStatus: SecondPassStatus | null): Re
 
 const _ZOOM_LEVELS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
+/**
+ * Format a 0-based [start, end] page range for human display (1-based).
+ * If either bound is 0 the range is treated as 0-based and +1 is applied.
+ * Otherwise displayed as-is (already 1-based).
+ */
+function formatHumanRange(range: [number, number]): string {
+  if (range[0] === 0 || range[1] === 0) {
+    return `${range[0] + 1}–${range[1] + 1}`;
+  }
+  return `${range[0]}–${range[1]}`;
+}
+
 // =============================================================================
 // Client Component
 // =============================================================================
@@ -204,8 +216,25 @@ function UploadReviewClient({
   const [bulkRejectDialogOpen, setBulkRejectDialogOpen] = useState(false);
   const [bulkRejectReason, setBulkRejectReason] = useState('');
   // State for PDF preview images keyed by session id
-  const [previewImages, setPreviewImages] = useState<Record<string, { imageBase64: string; totalPages: number } | null>>({});
-  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewImages, setPreviewImages] = useState<Record<string, { imageBase64: string; totalPages: number; mimeType: string } | null>>({});
+  const [originalPreviewLoading, setOriginalPreviewLoading] = useState(false);
+  const [partPreviewLoading, setPartPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [partPreviewError, setPartPreviewError] = useState<string | null>(null);
+  // Preview quality format: persisted in localStorage
+  const [previewFormat, setPreviewFormat] = useState<'png' | 'jpeg'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('eccb_preview_format');
+      if (saved === 'jpeg') return 'jpeg';
+    }
+    return 'png';
+  });
+  // AbortController refs for in-flight preview requests
+  const originalPreviewAbortRef = useRef<AbortController | null>(null);
+  const partPreviewAbortRef = useRef<AbortController | null>(null);
+  // Debounce timer refs
+  const originalPreviewDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const partPreviewDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // PDF preview pagination and zoom state
   const [currentPage, setCurrentPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
@@ -213,7 +242,7 @@ function UploadReviewClient({
   const [isFullscreen, setIsFullscreen] = useState(false);
   // Part preview state
   const [selectedPart, setSelectedPart] = useState<ParsedPartRecord | null>(null);
-  const [partPreviewImages, setPartPreviewImages] = useState<Record<string, { imageBase64: string; totalPages: number } | null>>({});
+  const [partPreviewImages, setPartPreviewImages] = useState<Record<string, { imageBase64: string; totalPages: number; mimeType: string } | null>>({});
   const [partCurrentPage, setPartCurrentPage] = useState(0);
   const [partTotalPages, setPartTotalPages] = useState(0);
   const [partZoomLevel, setPartZoomLevel] = useState(1);
@@ -435,73 +464,109 @@ function UploadReviewClient({
     }
   };
 
-  // Load PDF preview image for a session (with pagination + server-side scale)
-  const loadPreviewImage = useCallback(async (sessionId: string, page: number = 0, zoom: number = 1) => {
-    setPreviewLoading(true);
-    try {
-      // Map zoom level to a render scale that gives a real higher-res image on the server.
-      // Clamp to [1,6] matching the route's accepted range.
-      const renderScale  = Math.min(6, Math.max(1, Math.ceil(zoom * 2)));
-      const renderMaxWidth = Math.min(4000, Math.max(800, renderScale * 600));
-      const res = await fetch(
-        `/api/admin/uploads/review/${sessionId}/preview?page=${page}&scale=${renderScale}&maxWidth=${renderMaxWidth}`
-      );
-      if (res.ok) {
-        const data = await res.json() as { imageBase64?: string; totalPages?: number; mimeType?: string };
-        setPreviewImages((prev) => ({
-          ...prev,
-          [sessionId]: data.imageBase64 && data.totalPages
-            ? { imageBase64: data.imageBase64, totalPages: data.totalPages }
-            : null,
-        }));
-        if (data.totalPages) {
-          setTotalPages(data.totalPages);
-        }
-      } else {
-        setPreviewImages((prev) => ({ ...prev, [sessionId]: null }));
-      }
-    } catch {
-      setPreviewImages((prev) => ({ ...prev, [sessionId]: null }));
-    } finally {
-      setPreviewLoading(false);
+  // Load PDF preview image for a session (PNG by default for lossless quality)
+  const loadPreviewImage = useCallback(async (sessionId: string, page: number = 0, fmt?: 'png' | 'jpeg') => {
+    // Cancel any pending debounce
+    if (originalPreviewDebounceRef.current) {
+      clearTimeout(originalPreviewDebounceRef.current);
     }
-  }, []);
+    // Abort any in-flight request
+    if (originalPreviewAbortRef.current) {
+      originalPreviewAbortRef.current.abort();
+    }
 
-  // Load part preview image
+    const format = fmt ?? previewFormat;
+    const qualityParam = format === 'jpeg' ? '&quality=92' : '';
+
+    originalPreviewDebounceRef.current = setTimeout(async () => {
+      const controller = new AbortController();
+      originalPreviewAbortRef.current = controller;
+      setOriginalPreviewLoading(true);
+      setPreviewError(null);
+      try {
+        const res = await fetch(
+          `/api/admin/uploads/review/${sessionId}/preview?page=${page}&scale=3&maxWidth=2000&format=${format}${qualityParam}`,
+          { signal: controller.signal }
+        );
+        if (res.ok) {
+          const data = await res.json() as { imageBase64?: string; totalPages?: number; mimeType?: string };
+          setPreviewImages((prev) => ({
+            ...prev,
+            [sessionId]: data.imageBase64 && data.totalPages
+              ? { imageBase64: data.imageBase64, totalPages: data.totalPages, mimeType: data.mimeType ?? 'image/png' }
+              : null,
+          }));
+          if (data.totalPages) {
+            setTotalPages(data.totalPages);
+          }
+        } else {
+          setPreviewImages((prev) => ({ ...prev, [sessionId]: null }));
+          setPreviewError(`Preview failed (HTTP ${res.status})`);
+        }
+      } catch (e) {
+        if ((e as Error)?.name === 'AbortError') return;
+        setPreviewImages((prev) => ({ ...prev, [sessionId]: null }));
+        setPreviewError('Preview fetch failed');
+      } finally {
+        setOriginalPreviewLoading(false);
+      }
+    }, 150);
+  }, [previewFormat]);
+
+  // Load part preview image (PNG by default for lossless quality)
   const loadPartPreviewImage = useCallback(async (
     sessionId: string,
     partStorageKey: string,
     page: number = 0,
-    zoom: number = 1
+    fmt?: 'png' | 'jpeg'
   ) => {
-    setPreviewLoading(true);
-    try {
-      const renderScale   = Math.min(6, Math.max(1, Math.ceil(zoom * 2)));
-      const renderMaxWidth = Math.min(4000, Math.max(800, renderScale * 600));
-      const encodedKey = encodeURIComponent(partStorageKey);
-      const res = await fetch(
-        `/api/admin/uploads/review/${sessionId}/part-preview?partStorageKey=${encodedKey}&page=${page}&scale=${renderScale}&maxWidth=${renderMaxWidth}`
-      );
-      if (res.ok) {
-        const data = await res.json() as { imageBase64?: string; totalPages?: number; mimeType?: string };
-        setPartPreviewImages((prev) => ({
-          ...prev,
-          [partStorageKey]: data.imageBase64 && data.totalPages
-            ? { imageBase64: data.imageBase64, totalPages: data.totalPages }
-            : null,
-        }));
-        if (data.totalPages) {
-          setPartTotalPages(data.totalPages);
-        }
-      } else {
-        setPartPreviewImages((prev) => ({ ...prev, [partStorageKey]: null }));
-      }
-    } catch {
-      setPartPreviewImages((prev) => ({ ...prev, [partStorageKey]: null }));
-    } finally {
-      setPreviewLoading(false);
+    // Cancel any pending debounce
+    if (partPreviewDebounceRef.current) {
+      clearTimeout(partPreviewDebounceRef.current);
     }
-  }, []);
+    // Abort any in-flight request
+    if (partPreviewAbortRef.current) {
+      partPreviewAbortRef.current.abort();
+    }
+
+    const format = fmt ?? previewFormat;
+    const qualityParam = format === 'jpeg' ? '&quality=92' : '';
+
+    partPreviewDebounceRef.current = setTimeout(async () => {
+      const controller = new AbortController();
+      partPreviewAbortRef.current = controller;
+      setPartPreviewLoading(true);
+      setPartPreviewError(null);
+      try {
+        const encodedKey = encodeURIComponent(partStorageKey);
+        const res = await fetch(
+          `/api/admin/uploads/review/${sessionId}/part-preview?partStorageKey=${encodedKey}&page=${page}&scale=3&maxWidth=2000&format=${format}${qualityParam}`,
+          { signal: controller.signal }
+        );
+        if (res.ok) {
+          const data = await res.json() as { imageBase64?: string; totalPages?: number; mimeType?: string };
+          setPartPreviewImages((prev) => ({
+            ...prev,
+            [partStorageKey]: data.imageBase64 && data.totalPages
+              ? { imageBase64: data.imageBase64, totalPages: data.totalPages, mimeType: data.mimeType ?? 'image/png' }
+              : null,
+          }));
+          if (data.totalPages) {
+            setPartTotalPages(data.totalPages);
+          }
+        } else {
+          setPartPreviewImages((prev) => ({ ...prev, [partStorageKey]: null }));
+          setPartPreviewError(`Preview failed (HTTP ${res.status})`);
+        }
+      } catch (e) {
+        if ((e as Error)?.name === 'AbortError') return;
+        setPartPreviewImages((prev) => ({ ...prev, [partStorageKey]: null }));
+        setPartPreviewError('Preview fetch failed');
+      } finally {
+        setPartPreviewLoading(false);
+      }
+    }, 150);
+  }, [previewFormat]);
 
   // Open edit dialog
   const openEditDialog = (session: SmartUploadSession) => {
@@ -516,6 +581,9 @@ function UploadReviewClient({
     setPartTotalPages(0);
     setPartZoomLevel(1);
     setIsPartFullscreen(false);
+    // Reset error states
+    setPreviewError(null);
+    setPartPreviewError(null);
     // Kick off preview image load asynchronously
     loadPreviewImage(session.id, 0);
   };
@@ -537,18 +605,25 @@ function UploadReviewClient({
   const handlePageChange = (newPage: number) => {
     if (editingSession && newPage >= 0 && newPage < totalPages) {
       setCurrentPage(newPage);
-      loadPreviewImage(editingSession.id, newPage, zoomLevel);
+      loadPreviewImage(editingSession.id, newPage);
     }
   };
 
-  // Handle zoom change — re-request a higher-resolution render from the server
+  // Handle format toggle — saves to localStorage and re-fetches the active preview
+  const handleFormatChange = (fmt: 'png' | 'jpeg') => {
+    setPreviewFormat(fmt);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('eccb_preview_format', fmt);
+    }
+    if (editingSession) {
+      loadPreviewImage(editingSession.id, currentPage, fmt);
+    }
+  };
+
+  // Handle zoom change — CSS transform only, no server re-fetch
   const handleZoomChange = (newZoom: number) => {
-    if (newZoom >= 0.5 && newZoom <= 2) {
+    if (newZoom >= 0.5 && newZoom <= 3) {
       setZoomLevel(newZoom);
-      // Re-fetch the current page at the new scale (server renders at higher DPI)
-      if (editingSession) {
-        loadPreviewImage(editingSession.id, currentPage, newZoom);
-      }
     }
   };
 
@@ -558,7 +633,7 @@ function UploadReviewClient({
     setPartCurrentPage(0);
     setPartZoomLevel(1);
     if (editingSession) {
-      loadPartPreviewImage(editingSession.id, part.storageKey, 0, 1);
+      loadPartPreviewImage(editingSession.id, part.storageKey, 0);
     }
   };
 
@@ -567,18 +642,15 @@ function UploadReviewClient({
     if (selectedPart && newPage >= 0 && newPage < partTotalPages) {
       setPartCurrentPage(newPage);
       if (editingSession) {
-        loadPartPreviewImage(editingSession.id, selectedPart.storageKey, newPage, partZoomLevel);
+        loadPartPreviewImage(editingSession.id, selectedPart.storageKey, newPage);
       }
     }
   };
 
-  // Handle part zoom change — re-request a higher-resolution render from the server
+  // Handle part zoom change — CSS transform only, no server re-fetch
   const handlePartZoomChange = (newZoom: number) => {
-    if (newZoom >= 0.5 && newZoom <= 2) {
+    if (newZoom >= 0.5 && newZoom <= 3) {
       setPartZoomLevel(newZoom);
-      if (editingSession && selectedPart) {
-        loadPartPreviewImage(editingSession.id, selectedPart.storageKey, partCurrentPage, newZoom);
-      }
     }
   };
 
@@ -890,10 +962,21 @@ function UploadReviewClient({
                           variant="outline"
                           size="sm"
                           onClick={() => handleZoomChange(zoomLevel + 0.25)}
-                          disabled={zoomLevel >= 2}
+                          disabled={zoomLevel >= 3}
                         >
                           <Plus className="h-4 w-4" />
                         </Button>
+                      </div>
+                      {/* Format Toggle */}
+                      <div className="flex items-center gap-1 ml-2 rounded-md border overflow-hidden">
+                        <button
+                          className={cn('px-2 py-1 text-xs font-mono', previewFormat === 'png' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted')}
+                          onClick={() => handleFormatChange('png')}
+                        >PNG</button>
+                        <button
+                          className={cn('px-2 py-1 text-xs font-mono', previewFormat === 'jpeg' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted')}
+                          onClick={() => handleFormatChange('jpeg')}
+                        >JPEG</button>
                       </div>
                       {/* Fullscreen Toggle */}
                       <Button
@@ -910,26 +993,34 @@ function UploadReviewClient({
                       </Button>
                     </div>
                   </div>
-                  {previewLoading || previewImages[editingSession.id] === undefined ? (
+                  {originalPreviewLoading || previewImages[editingSession.id] === undefined ? (
                     <div className="w-full h-64 bg-muted rounded-lg flex items-center justify-center">
                       <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" />
                     </div>
                   ) : previewImages[editingSession.id] ? (
                     <div
                       className={cn(
-                        'overflow-auto bg-gray-100 rounded-lg flex items-center justify-center',
+                        'overflow-auto bg-gray-100 rounded-lg',
                         isFullscreen ? 'h-[calc(100vh-300px)]' : 'h-64'
                       )}
                     >
                       <img
-                        src={`data:image/jpeg;base64,${previewImages[editingSession.id]?.imageBase64}`}
+                        src={`data:${previewImages[editingSession.id]?.mimeType ?? 'image/png'};base64,${previewImages[editingSession.id]?.imageBase64}`}
                         alt={`PDF page ${currentPage + 1}`}
-                        className="object-contain w-full"
+                        className="max-w-none block"
+                        style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'top left' }}
                       />
                     </div>
                   ) : (
-                    <div className="w-full h-20 bg-muted rounded-lg flex items-center justify-center border border-dashed">
-                      <span className="text-xs text-muted-foreground">Preview unavailable</span>
+                    <div className="w-full h-20 bg-muted rounded-lg flex flex-col items-center justify-center gap-2 border border-dashed">
+                      {previewError && <span className="text-xs text-red-500">{previewError}</span>}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => editingSession && loadPreviewImage(editingSession.id, currentPage)}
+                      >
+                        Retry
+                      </Button>
                     </div>
                   )}
                 </TabsContent>
@@ -950,7 +1041,7 @@ function UploadReviewClient({
                           <span className="font-medium text-xs">{part.partName}</span>
                           <span className="text-xs opacity-70">{part.instrument}</span>
                           <span className="text-xs opacity-50">
-                            {part.pageRange[0]}-{part.pageRange[1]} ({part.pageCount} pages)
+                            {formatHumanRange(part.pageRange as [number, number])} ({part.pageCount} pages)
                           </span>
                         </Button>
                       ))}
@@ -999,7 +1090,7 @@ function UploadReviewClient({
                                 variant="outline"
                                 size="sm"
                                 onClick={() => handlePartZoomChange(partZoomLevel + 0.25)}
-                                disabled={partZoomLevel >= 2}
+                                disabled={partZoomLevel >= 3}
                               >
                                 <Plus className="h-4 w-4" />
                               </Button>
@@ -1019,26 +1110,34 @@ function UploadReviewClient({
                             </Button>
                           </div>
                         </div>
-                        {previewLoading || partPreviewImages[selectedPart.storageKey] === undefined ? (
+                        {partPreviewLoading || partPreviewImages[selectedPart.storageKey] === undefined ? (
                           <div className="w-full h-64 bg-muted rounded-lg flex items-center justify-center">
                             <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" />
                           </div>
                         ) : partPreviewImages[selectedPart.storageKey] ? (
                           <div
                             className={cn(
-                              'overflow-auto bg-gray-100 rounded-lg flex items-center justify-center',
+                              'overflow-auto bg-gray-100 rounded-lg',
                               isPartFullscreen ? 'h-[calc(100vh-400px)]' : 'h-64'
                             )}
                           >
                             <img
-                              src={`data:image/jpeg;base64,${partPreviewImages[selectedPart.storageKey]?.imageBase64}`}
+                              src={`data:${partPreviewImages[selectedPart.storageKey]?.mimeType ?? 'image/png'};base64,${partPreviewImages[selectedPart.storageKey]?.imageBase64}`}
                               alt={`Part ${selectedPart.partName} page ${partCurrentPage + 1}`}
-                              className="object-contain w-full"
+                              className="max-w-none block"
+                              style={{ transform: `scale(${partZoomLevel})`, transformOrigin: 'top left' }}
                             />
                           </div>
                         ) : (
-                          <div className="w-full h-20 bg-muted rounded-lg flex items-center justify-center border border-dashed">
-                            <span className="text-xs text-muted-foreground">Preview unavailable</span>
+                          <div className="w-full h-20 bg-muted rounded-lg flex flex-col items-center justify-center gap-2 border border-dashed">
+                            {partPreviewError && <span className="text-xs text-red-500">{partPreviewError}</span>}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => editingSession && selectedPart && loadPartPreviewImage(editingSession.id, selectedPart.storageKey, partCurrentPage)}
+                            >
+                              Retry
+                            </Button>
                           </div>
                         )}
                       </>
@@ -1080,7 +1179,7 @@ function UploadReviewClient({
                       {' '}
                       {editingSession.cuttingInstructions
                         .filter(inst => (inst.partNumber ?? 0) >= 9900)
-                        .map(inst => `pages ${inst.pageRange[0]}–${inst.pageRange[1]}`)
+                        .map(inst => `pages ${formatHumanRange(inst.pageRange as [number, number])}`)
                         .join(', ')}
                       . Review the cutting instructions or re-run AI analysis.
                     </p>

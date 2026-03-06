@@ -87,6 +87,10 @@ export interface LLMRuntimeConfig {
   budgetMaxLlmCalls: number;
   /** Maximum input tokens allowed per upload session. 0 = unlimited. */
   budgetMaxInputTokens: number;
+  /** Enable Redis-backed LLM response cache to avoid redundant API calls. */
+  enableLlmCache: boolean;
+  /** TTL for LLM response cache entries (seconds). Default 86400 (24 h). */
+  llmCacheTtlSeconds: number;
   visionModelParams: Record<string, unknown>;
   verificationModelParams: Record<string, unknown>;
   headerLabelModelParams: Record<string, unknown>;
@@ -161,6 +165,8 @@ const DB_KEYS = [
   'smart_upload_ocr_confidence_threshold',
   'smart_upload_budget_max_llm_calls_per_session',
   'smart_upload_budget_max_input_tokens_per_session',
+  'smart_upload_enable_llm_cache',
+  'smart_upload_llm_cache_ttl_seconds',
   'llm_adjudicator_model',
   'llm_two_pass_enabled',
   'llm_vision_system_prompt',
@@ -403,6 +409,9 @@ export async function loadLLMConfig(): Promise<LLMRuntimeConfig> {
     // ── Budget / cost limits ──────────────────────────────────────────────
     budgetMaxLlmCalls: Number(db['smart_upload_budget_max_llm_calls_per_session'] ?? 5),
     budgetMaxInputTokens: Number(db['smart_upload_budget_max_input_tokens_per_session'] ?? 500000),
+    // ── LLM response cache ────────────────────────────────────────────────
+    enableLlmCache: (db['smart_upload_enable_llm_cache'] ?? 'true') === 'true',
+    llmCacheTtlSeconds: Number(db['smart_upload_llm_cache_ttl_seconds'] ?? 86400),
     // ── Prompt version ─────────────────────────────────────────────────────
     promptVersion: db['llm_prompt_version'] || PROMPT_VERSION,
     // ── User prompt templates — DB is the single source of truth ──────────

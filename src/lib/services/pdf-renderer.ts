@@ -731,3 +731,185 @@ export async function renderPdfHeaderCropBatch(
     await cleanupPdfDocument(loadingTask, pdfDocument);
   }
 }
+
+// ---------------------------------------------------------------------------
+// renderPdfPageToImageWithInfo
+//
+// Single-page render that returns the image base64, MIME type, total page
+// count, and effective render dimensions — all from a single pdfjs document
+// open.  This eliminates the double-parse that was required when callers used
+// pdf-lib only for page-count and pdfjs for rendering.
+//
+// Supports the same in-process renderCache as renderPdfPageBatch.
+// ---------------------------------------------------------------------------
+
+export interface PageImageWithInfo {
+  imageBase64: string;
+  totalPages: number;
+  mimeType: string;
+  effective: {
+    scale: number;
+    wasClamped: boolean;
+    width: number;
+    height: number;
+  };
+}
+
+/**
+ * Render a single PDF page and return image data together with total page
+ * count so callers never need to open the PDF twice.
+ *
+ * Sheet-music safe JPEG options (chromaSubsampling '4:4:4', mozjpeg encoder)
+ * are automatically applied when format='jpeg' to minimise line-art artefacts.
+ */
+export async function renderPdfPageToImageWithInfo(
+  pdfBuffer: Buffer,
+  options: RenderOptions = {}
+): Promise<PageImageWithInfo> {
+  const {
+    pageIndex = 0,
+    quality = 92,
+    maxWidth = 2000,
+    format = 'png',
+    scale = 3,
+    cacheTag,
+  } = options;
+
+  const fmt = normalizeFormat(format);
+  const q   = normalizeQuality(quality, 92);
+  const mw  = normalizeMaxWidth(maxWidth, 2000);
+  const sc  = normalizeScale(scale, 3);
+
+  const mimeType = fmt === 'jpeg' ? 'image/jpeg' : 'image/png';
+
+  const start = nowMs();
+
+   
+  let loadingTask: any | undefined;
+   
+  let pdfDocument: any | undefined;
+
+  try {
+    ({ loadingTask, pdfDocument } = await openPdfDocument(pdfBuffer));
+
+    const totalPages: number = pdfDocument.numPages;
+
+    // Validate page index
+    if (pageIndex < 0 || pageIndex >= totalPages) {
+      throw new Error(
+        `Page index ${pageIndex} out of range. PDF has ${totalPages} page(s) (0-${totalPages - 1}).`
+      );
+    }
+
+    // Serve from cache when available (after totalPages is known)
+    if (cacheTag) {
+      const key = cacheKey(cacheTag, pageIndex, sc, mw, fmt, q, 'full');
+      const cached = renderCache.get(key);
+      if (cached) {
+        logger.debug('renderPdfPageToImageWithInfo: serving from cache', { cacheTag, pageIndex });
+        return {
+          imageBase64: cached,
+          totalPages,
+          mimeType,
+          effective: { scale: sc, wasClamped: false, width: mw, height: 0 },
+        };
+      }
+    }
+
+    const page = await pdfDocument.getPage(pageIndex + 1);
+    const { viewport, wasClamped, effectiveScale } = computeClampedViewport(page, sc);
+
+    const canvasWidth  = Math.floor(viewport.width);
+    const canvasHeight = Math.floor(viewport.height);
+
+    if (wasClamped) {
+      logger.warn('renderPdfPageToImageWithInfo: scale clamped to avoid OOM', {
+        pageIndex, requestedScale: sc, effectiveScale, canvasWidth, canvasHeight,
+      });
+    }
+
+    const canvas  = createCanvas(canvasWidth, canvasHeight);
+    const context = canvas.getContext('2d');
+
+    await page.render({
+      canvasContext: context as unknown as CanvasRenderingContext2D,
+      viewport,
+      canvas: canvas as unknown as HTMLCanvasElement,
+    }).promise;
+
+    try {
+      if (typeof page.cleanup === 'function') page.cleanup();
+    } catch { /* best-effort */ }
+
+    const rawBuffer = canvas.toBuffer('image/png');
+
+    let imageBuffer: Buffer;
+
+    if (canvasWidth > mw) {
+      // Resize first, then encode into target format
+      const resized = await sharp(rawBuffer).resize({ width: mw, fit: 'inside' }).toBuffer();
+      if (fmt === 'jpeg') {
+        imageBuffer = await sharp(resized)
+          .toFormat('jpeg', { quality: q, chromaSubsampling: '4:4:4', mozjpeg: true })
+          .toBuffer();
+      } else {
+        imageBuffer = resized; // PNG from sharp resize keeps lossless
+      }
+    } else {
+      if (fmt === 'jpeg') {
+        imageBuffer = await sharp(rawBuffer)
+          .toFormat('jpeg', { quality: q, chromaSubsampling: '4:4:4', mozjpeg: true })
+          .toBuffer();
+      } else {
+        imageBuffer = rawBuffer; // Lossless PNG directly from canvas
+      }
+    }
+
+    const imageBase64 = imageBuffer.toString('base64');
+
+    // Populate cache
+    if (cacheTag) {
+      renderCache.set(cacheKey(cacheTag, pageIndex, sc, mw, fmt, q, 'full'), imageBase64);
+    }
+
+    const durationMs = Math.round(nowMs() - start);
+    logger.debug('renderPdfPageToImageWithInfo: completed', {
+      pageIndex,
+      totalPages,
+      format: fmt,
+      scale: sc,
+      effectiveScale,
+      maxWidth: mw,
+      quality: q,
+      wasClamped,
+      durationMs,
+      canvasWidth,
+      canvasHeight,
+    });
+
+    return {
+      imageBase64,
+      totalPages,
+      mimeType,
+      effective: {
+        scale: effectiveScale,
+        wasClamped,
+        width: canvasWidth,
+        height: canvasHeight,
+      },
+    };
+  } catch (error) {
+    const details = safeErrorDetails(error);
+    logger.error('renderPdfPageToImageWithInfo: failed', {
+      ...details,
+      pageIndex,
+      format: fmt,
+      scale: sc,
+      maxWidth: mw,
+      quality: q,
+    });
+    throw asError(error);
+  } finally {
+    await cleanupPdfDocument(loadingTask, pdfDocument);
+  }
+}

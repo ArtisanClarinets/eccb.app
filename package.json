@@ -20,6 +20,7 @@
     "test:run": "tsx scripts/assert-no-skipped-tests.ts && vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest watch",
+    "verify:preview": "tsx scripts/verify-upload-review-preview.ts",
     "check-routes": "tsx scripts/check-routes.ts",
     "db:generate": "prisma generate",
     "db:seed": "prisma db seed",

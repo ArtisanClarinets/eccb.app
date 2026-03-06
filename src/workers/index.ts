@@ -15,6 +15,7 @@ import {
   stopSmartUploadProcessorWorker,
   isSmartUploadProcessorWorkerRunning,
 } from './smart-upload-processor-worker';
+import { startOcrWorker, stopOcrWorker, isOcrWorkerRunning } from './ocr-worker';
 import { logger } from '@/lib/logger';
 import { Redis } from 'ioredis';
 import {
@@ -178,6 +179,7 @@ function startHealthServer(): void {
             email: isEmailWorkerRunning(),
             scheduler: isSchedulerWorkerRunning(),
             smartUpload: isSmartUploadProcessorWorkerRunning(),
+            ocr: isOcrWorkerRunning(),
             sockets: isSocketWorkerRunning(),
           },
           queues: stats,
@@ -194,9 +196,9 @@ function startHealthServer(): void {
       }
     } else if (req.url === '/ready') {
       // Readiness probe - check if workers are ready to accept jobs
-      const ready = isEmailWorkerRunning() && isSchedulerWorkerRunning() && isSmartUploadProcessorWorkerRunning();
+      const ready = isEmailWorkerRunning() && isSchedulerWorkerRunning() && isSmartUploadProcessorWorkerRunning() && isOcrWorkerRunning();
       res.writeHead(ready ? 200 : 503, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ready, sockets: isSocketWorkerRunning() }));
+      res.end(JSON.stringify({ ready, ocr: isOcrWorkerRunning(), sockets: isSocketWorkerRunning() }));
     } else {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Not found' }));
@@ -262,6 +264,7 @@ async function gracefulShutdown(signal: string): Promise<void> {
     stopEmailWorker(),
     stopSchedulerWorker(),
     stopSmartUploadProcessorWorker(),
+    stopOcrWorker(),
   ]);
 
   // Stop WebSocket worker if running
@@ -300,6 +303,7 @@ async function main(): Promise<void> {
   startEmailWorker();
   startSchedulerWorker();
   await startSmartUploadProcessorWorker();
+  startOcrWorker();
 
   // Start scheduler intervals
   startSchedulerIntervals();

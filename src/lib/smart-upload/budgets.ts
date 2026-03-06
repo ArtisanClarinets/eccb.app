@@ -46,10 +46,13 @@ export class SessionBudget {
   private readonly state: BudgetState;
   private readonly sessionId: string;
 
-  constructor(sessionId: string, limits: BudgetLimits) {
+  constructor(sessionId: string, limits: BudgetLimits, initialState?: Partial<BudgetState>) {
     this.sessionId = sessionId;
     this.limits = limits;
-    this.state = { llmCallCount: 0, inputTokensConsumed: 0 };
+    this.state = {
+      llmCallCount: initialState?.llmCallCount ?? 0,
+      inputTokensConsumed: initialState?.inputTokensConsumed ?? 0,
+    };
   }
 
   /**
@@ -128,6 +131,7 @@ export class SessionBudget {
  *
  * @param sessionId The upload session ID.
  * @param settings Parsed smart upload settings containing budget keys.
+ * @param initialState Optional initial counts (e.g. from a previously started session in the DB).
  */
 export function createSessionBudget(
   sessionId: string,
@@ -135,9 +139,14 @@ export function createSessionBudget(
     smart_upload_budget_max_llm_calls_per_session?: number;
     smart_upload_budget_max_input_tokens_per_session?: number;
   },
+  initialState?: Partial<BudgetState>,
 ): SessionBudget {
-  return new SessionBudget(sessionId, {
-    maxLlmCalls: settings.smart_upload_budget_max_llm_calls_per_session ?? 5,
-    maxInputTokens: settings.smart_upload_budget_max_input_tokens_per_session ?? 500_000,
-  });
+  return new SessionBudget(
+    sessionId,
+    {
+      maxLlmCalls: settings.smart_upload_budget_max_llm_calls_per_session ?? 5,
+      maxInputTokens: settings.smart_upload_budget_max_input_tokens_per_session ?? 500_000,
+    },
+    initialState,
+  );
 }

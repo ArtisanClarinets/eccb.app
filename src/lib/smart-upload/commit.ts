@@ -308,6 +308,7 @@ export async function commitSmartUploadSessionToLibrary(
             uploadedBy: approvedBy,
             extractedMetadata: JSON.stringify(extractedMetadata),
             originalUploadId: uploadSession.uploadSessionId,
+            contentHash: uploadSession.sourceSha256 ?? null,
             version: (existingFile.version ?? 1) + 1,
           },
         });
@@ -325,6 +326,7 @@ export async function commitSmartUploadSessionToLibrary(
             extractedMetadata: JSON.stringify(extractedMetadata),
             source: 'SMART_UPLOAD',
             originalUploadId: uploadSession.uploadSessionId,
+            contentHash: uploadSession.sourceSha256 ?? null,
           },
         });
       }
@@ -341,6 +343,7 @@ export async function commitSmartUploadSessionToLibrary(
           extractedMetadata: JSON.stringify(extractedMetadata),
           source: 'SMART_UPLOAD',
           originalUploadId: uploadSession.uploadSessionId,
+          contentHash: uploadSession.sourceSha256 ?? null,
         },
       });
     }
@@ -396,6 +399,7 @@ export async function commitSmartUploadSessionToLibrary(
                   fileName: part.fileName, fileSize: part.fileSize,
                   storageKey: part.storageKey, uploadedBy: approvedBy,
                   originalUploadId: uploadSession.uploadSessionId,
+                  contentHash: uploadSession.sourceSha256 ?? null,
                   version: (existingPartFile.version ?? 1) + 1,
                 },
               });
@@ -420,6 +424,7 @@ export async function commitSmartUploadSessionToLibrary(
                 mimeType: 'application/pdf', storageKey: part.storageKey,
                 uploadedBy: approvedBy, source: 'SMART_UPLOAD',
                 originalUploadId: uploadSession.uploadSessionId,
+                contentHash: uploadSession.sourceSha256 ?? null,
                 partLabel: part.partName ?? null, instrumentName: part.instrument ?? null,
                 section: part.section ?? null, partNumber: part.partNumber ?? null,
                 pageCount: part.pageCount ?? null,
@@ -448,6 +453,7 @@ export async function commitSmartUploadSessionToLibrary(
               uploadedBy: approvedBy,
               source: 'SMART_UPLOAD',
               originalUploadId: uploadSession.uploadSessionId,
+              contentHash: uploadSession.sourceSha256 ?? null,
               partLabel: part.partName ?? null,
               instrumentName: part.instrument ?? null,
               section: part.section ?? null,

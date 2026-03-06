@@ -45,6 +45,10 @@ import { buildPartFilename, buildPartStorageSlug, normalizeInstrumentLabel } fro
 import { evaluateQualityGates, isForbiddenLabel } from '@/lib/smart-upload/quality-gates';
 import { parseJsonLenient } from '@/lib/smart-upload/json';
 import { createSessionBudget } from '@/lib/smart-upload/budgets';
+import { determineRoute, DEFAULT_THRESHOLDS } from '@/lib/smart-upload/fallback-policy';
+import type { RoutingSignals, PolicyThresholds } from '@/lib/smart-upload/fallback-policy';
+import { buildLlmCacheKey, getCachedLlmResponse, setCachedLlmResponse } from '@/lib/smart-upload/llm-cache';
+import type { VisionResponse } from '@/lib/llm/types';
 import { getProviderMeta } from '@/lib/llm/providers';
 import type { LabeledDocument } from '@/lib/llm/types';
 import { sanitizeCuttingInstructionsForSplit } from '@/lib/services/cutting-instructions';
@@ -333,7 +337,7 @@ function buildFallbackMetadata(totalPages: number): ExtractedMetadata {
 /**
  * Parse an image-mode vision response that contains metadata ONLY (no cuttingInstructions).
  *
- * In image-sampled mode the LLM only sees MAX_SAMPLED_PAGES pages and MUST NOT
+ * In image-sampled mode the LLM only sees MAX_SAMPLED_PAGES pages and MUST not
  * be asked for full-document cutting instructions.  This parser intentionally
  * ignores any cuttingInstructions field in the response to prevent the model
  * from fabricating instructions for pages it never saw.
@@ -455,10 +459,64 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
   const llmConfig = await loadSmartUploadRuntimeConfig();
 
   // ── Budget tracking ────────────────────────────────────────────────────
-  const budget = createSessionBudget(sessionId, {
-    smart_upload_budget_max_llm_calls_per_session: llmConfig.budgetMaxLlmCalls,
-    smart_upload_budget_max_input_tokens_per_session: llmConfig.budgetMaxInputTokens,
-  });
+  // Initialize from DB so restarts don't reset the counter.
+  const budget = createSessionBudget(
+    sessionId,
+    {
+      smart_upload_budget_max_llm_calls_per_session: llmConfig.budgetMaxLlmCalls,
+      smart_upload_budget_max_input_tokens_per_session: llmConfig.budgetMaxInputTokens,
+    },
+    { llmCallCount: smartSession.llmCallCount ?? 0 },
+  );
+
+  /** Atomically persist an LLM call to the DB and record it in the in-memory budget. */
+  async function recordLlmCall(promptTokens: number = 0): Promise<void> {
+    budget.record(promptTokens);
+    await prisma.smartUploadSession.update({
+      where: { uploadSessionId: sessionId },
+      data: { llmCallCount: { increment: 1 } },
+    }).catch((err: unknown) => {
+      // Non-fatal — in-memory budget is still tracked; log and continue.
+      logger.warn('Failed to persist llmCallCount increment', { sessionId, err });
+    });
+  }
+
+  /**
+   * Call the vision LLM with transparent Redis-backed caching.
+   * On cache hit: returns the cached response immediately (no LLM call, no budget spend).
+   * On miss: calls LLM, records the budget, stores result in cache.
+   */
+  async function callCachedVision(
+    adapterConfig: Parameters<typeof callVisionModel>[0],
+    images: Parameters<typeof callVisionModel>[1],
+    prompt: string,
+    options: Parameters<typeof callVisionModel>[3],
+  ): Promise<VisionResponse> {
+    if (llmConfig.enableLlmCache) {
+      const cacheKey = buildLlmCacheKey({
+        provider: adapterConfig.llm_provider,
+        model: adapterConfig.llm_vision_model ?? '',
+        systemPrompt: options?.system,
+        userPrompt: prompt,
+        imageBase64List: images.map((img) => img.base64Data),
+        // Include documents in cache key to prevent cross-document collisions in native PDF mode
+        documentBase64List: options?.documents?.map((doc) => doc.base64Data),
+        extra: llmConfig.promptVersion,
+      });
+      const cached = await getCachedLlmResponse(cacheKey);
+      if (cached) {
+        logger.debug('LLM cache hit — skipping API call', { sessionId, cacheKey });
+        return JSON.parse(cached) as VisionResponse;
+      }
+      const result = await callVisionModel(adapterConfig, images, prompt, options);
+      await recordLlmCall((result.usage?.promptTokens ?? 0));
+      await setCachedLlmResponse(cacheKey, JSON.stringify(result), llmConfig.llmCacheTtlSeconds);
+      return result;
+    }
+    const result = await callVisionModel(adapterConfig, images, prompt, options);
+    await recordLlmCall((result.usage?.promptTokens ?? 0));
+    return result;
+  }
 
   // Check if OCR-first is enabled
   const ocrFirstEnabled = llmConfig.enableOcrFirst ?? true;
@@ -691,6 +749,9 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
   // ── Run full-vision LLM only when explicitly needed ────────────────────
   let extraction: ExtractedMetadata;
   let firstPassRaw: string | null = null;
+  // OCR provenance fields captured for DB persistence
+  let capturedRawOcrText: string | null = null;
+  let capturedOcrTextChars: number | null = null;
 
   if (!useFullVisionLLM) {
     // ── OCR-first path sufficient — use page-labeler results directly ───
@@ -713,6 +774,10 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
         renderMaxWidth: 1800,
       },
     });
+
+    // Capture OCR provenance fields for final DB persist
+    if (ocrMeta.rawOcrText) capturedRawOcrText = ocrMeta.rawOcrText;
+    capturedOcrTextChars = ocrProvenance.textLayerChars;
 
     // Use page-labeler results for cutting instructions
     const pageLabelerInstructions = pageLabelerResult?.cuttingInstructions ?? [];
@@ -831,7 +896,7 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
       const filenameHint = `\nOriginal filename: "${smartSession.fileName}"\nUse this filename as a strong hint for the title if the title page is unclear or missing. Do NOT guess a title from instrument pages.`;
       visionPromptRef = pdfPrompt + filenameHint;
 
-      visionResult = await callVisionModel(
+      visionResult = await callCachedVision(
         visionAdapterConfig,
         [], // no images — PDF is the input
         visionPromptRef,
@@ -844,7 +909,6 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
           documents: [pdfDocument],
         },
       );
-      budget.record();
     } else {
       // ── Standard image-based vision mode (fallback for non-PDF providers) ─
       await progress('rendering', 10, 'Rendering PDF pages to images');
@@ -967,7 +1031,7 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
           pageNumbers: batchPageIndices.map((index) => index + 1),
         });
 
-        const batchResult = await callVisionModel(
+        const batchResult = await callCachedVision(
           headerAdapterConfig,
           batchImages.map((base64Data, i) => ({
             mimeType: 'image/png' as const,
@@ -983,8 +1047,6 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
             modelParams: headerLabelStepConfig.modelParams,
           }
         );
-              budget.record();
-
               const batchLabels = parseHeaderLabelResponse(batchResult.content);
               allParsedHeaderLabels.push(...batchLabels);
 
@@ -1063,7 +1125,7 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
       const filenameHint = `\nOriginal filename: "${smartSession.fileName}"\nUse this filename as a strong hint for the title if the title page is unclear or missing. Do NOT guess a title from instrument pages.`;
       visionPromptRef = metadataOnlyPrompt + filenameHint;
 
-      visionResult = await callVisionModel(
+      visionResult = await callCachedVision(
         visionAdapterConfig,
         images,
         visionPromptRef,
@@ -1075,7 +1137,6 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
           temperature: 0.1,
         },
       );
-      budget.record();
     }
 
     // Parse vision response — metadata-only in image mode, full in PDF mode
@@ -1156,7 +1217,7 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
         temperature: 0.1,
       };
       if (pdfDocumentRef) {
-        visionResult = await callVisionModel(visionAdapterConfig, [], visionPromptRef, {
+        visionResult = await callCachedVision(visionAdapterConfig, [], visionPromptRef, {
           ...retryOptions,
           documents: [pdfDocumentRef],
         });
@@ -1166,9 +1227,8 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
           base64Data,
           label: `Original Page ${sampledIndices[index] + 1}`,
         }));
-        visionResult = await callVisionModel(visionAdapterConfig, retryImages, visionPromptRef, retryOptions);
+        visionResult = await callCachedVision(visionAdapterConfig, retryImages, visionPromptRef, retryOptions);
       }
-      budget.record();
 
       const retryExtraction = parseVisionResponse(visionResult.content, totalPages);
       // Use retry result only if it has better cutting instructions
@@ -1251,7 +1311,7 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
   const gapInstructions = buildGapInstructions(instructionValidation.instructions, totalPages);
   if (gapInstructions.length > 0) {
     const gapPageCount = gapInstructions.reduce(
-      (sum, g) => sum + (g.pageRange[1] - g.pageRange[0] + 1), 0
+      (sum, g) => sum + (g.pageRange[2] - g.pageRange[0] + 1), 0
     );
     logger.warn('Gap pages detected — HARD FAIL: routing to human review / second pass', {
       sessionId,
@@ -1617,12 +1677,30 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
     }
   }
 
-  // Determine if we should auto-commit (fully autonomous mode)
-  const shouldAutoCommit =
-    llmConfig.enableFullyAutonomousMode &&
-    finalConfidence >= llmConfig.autonomousApprovalThreshold &&
-    secondPassStatus === 'NOT_NEEDED' &&
-    !qualityGateFailed;
+  // Determine pipeline route via centralised fallback policy
+  const textCoverage = ocrProvenance.textLayerChars > 0 ? 1.0 : (ocrProvenance.ocrEngine ? 0.5 : 0.0);
+  const routingSignals: RoutingSignals = {
+    textCoverage,
+    metadataConfidence: finalConfidence,
+    segmentationConfidence:
+      deterministicConfidence > 0 ? deterministicConfidence : (extraction.segmentationConfidence ?? null),
+    validPartCount: parsedParts.length,
+    hasMetadataConflicts: false,
+    hasDuplicateFlag: false,
+    requiresHumanReview: qualityGateFailed,
+    ocrStatus: ocrProvenance.ocrEngine ? 'COMPLETE' : 'NOT_NEEDED',
+    secondPassStatus,
+    commitStatus: 'NOT_STARTED',
+    workflowStatus: 'PROCESSED',
+    deterministicSegmentation: deterministicConfidence > 0,
+  };
+  const policyThresholds: PolicyThresholds = {
+    ...DEFAULT_THRESHOLDS,
+    minAutoCommitConfidence: llmConfig.autonomousApprovalThreshold,
+    autonomousModeEnabled: llmConfig.enableFullyAutonomousMode,
+  };
+  const routingResult = determineRoute(routingSignals, policyThresholds);
+  const shouldAutoCommit = routingResult.route === 'AUTO_COMMIT';
 
   if (qualityGateFailed && llmConfig.enableFullyAutonomousMode) {
     logger.info('Auto-commit blocked by quality gate(s)', { sessionId, reasons: qualityGateReasons });
@@ -1664,6 +1742,11 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
       }) as any,
       llmPromptVersion: llmConfig.promptVersion || PROMPT_VERSION,
       ...(firstPassRaw ? { firstPassRaw } : {}),
+      // OCR provenance — engine/mode/chars used during this session
+      ocrEngineUsed: ocrProvenance.ocrEngine || ocrProvenance.textLayerEngine || llmConfig.ocrEngine || null,
+      ocrModeUsed: llmConfig.ocrMode || null,
+      ocrTextChars: capturedOcrTextChars ?? ocrProvenance.textLayerChars ?? null,
+      ...(capturedRawOcrText ? { rawOcrText: capturedRawOcrText } : {}),
     },
   });
 

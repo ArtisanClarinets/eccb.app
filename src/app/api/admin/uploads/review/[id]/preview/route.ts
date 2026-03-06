@@ -1,21 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createHash } from 'crypto';
 import { prisma } from '@/lib/db';
 import { getSession } from '@/lib/auth/guards';
 import { checkUserPermission } from '@/lib/auth/permissions';
 import { downloadFile } from '@/lib/services/storage';
-import { renderPdfToImage } from '@/lib/services/pdf-renderer';
+import { renderPdfPageToImageWithInfo } from '@/lib/services/pdf-renderer';
+import { parseRenderParams } from '@/lib/review-preview/render-params';
 import { logger } from '@/lib/logger';
-import { PDFDocument } from 'pdf-lib';
 import type { DownloadResult } from '@/lib/services/storage';
 
 // =============================================================================
 // GET /api/admin/uploads/review/[id]/preview
 //
-// Returns a base64-encoded PNG of the specified page of the uploaded PDF so that
-// admins can visually verify the extracted metadata without leaving the review
-// dialog.  The image is rendered on-demand server-side using pdf-renderer.
-// Supports pagination via ?page=N query parameter (0-indexed, defaults to 0).
+// Returns a base64-encoded image of the specified page of the uploaded PDF so
+// that admins can visually verify the extracted metadata without leaving the
+// review dialog.
+//
+// Query parameters (all optional, backwards-compatible):
+//   page       — 0-indexed page number (default 0)
+//   scale      — render DPI multiplier, clamped [1..6] (default 3)
+//   maxWidth   — max output pixel width, clamped [800..4000] (default 2000)
+//   format     — 'png' (default, lossless) | 'jpeg' (lossy, faster)
+//   quality    — JPEG quality, clamped [60..100], ignored for PNG (default 92)
+//
+// Response JSON:
+//   { imageBase64, totalPages, mimeType, render: { pageIndex, scale, maxWidth, format, quality } }
 // =============================================================================
+
+function stableHash(s: string): string {
+  return createHash('sha1').update(s).digest('hex').slice(0, 12);
+}
 
 export async function GET(
   req: NextRequest,
@@ -35,15 +49,8 @@ export async function GET(
 
     const { id } = await params;
 
-    // Parse page query parameter (0-indexed, default to 0)
     const url = new URL(req.url);
-    const pageParam    = url.searchParams.get('page');
-    const scaleParam   = url.searchParams.get('scale');
-    const maxWidthParam = url.searchParams.get('maxWidth');
-
-    const pageIndex = pageParam ? parseInt(pageParam, 10) : 0;
-    const renderScale   = scaleParam    ? Math.min(6, Math.max(1, parseFloat(scaleParam)))    : 3;
-    const renderMaxWidth = maxWidthParam ? Math.min(4000, Math.max(800, parseInt(maxWidthParam, 10))) : 2000;
+    const { pageIndex, scale, maxWidth, format, quality } = parseRenderParams(url);
 
     if (isNaN(pageIndex) || pageIndex < 0) {
       return NextResponse.json(
@@ -61,60 +68,48 @@ export async function GET(
       return NextResponse.json({ error: 'Session not found' }, { status: 404 });
     }
 
-    // Download PDF bytes from storage
-    let pdfBuffer: Buffer;
-    const downloadResult = await downloadFile(uploadSession.storageKey);
+    // Download PDF bytes from storage (single buffer, no double-parse)
+    const pdfBuffer = await fetchPdfBuffer(await downloadFile(uploadSession.storageKey));
 
-    if (typeof downloadResult === 'string') {
-      // S3 signed URL — fetch the bytes
-      const res = await fetch(downloadResult);
-      if (!res.ok) {
-        throw new Error(`Failed to download PDF from storage: ${res.status}`);
-      }
-      const arrayBuffer = await res.arrayBuffer();
-      pdfBuffer = Buffer.from(arrayBuffer);
-    } else {
-      // Local stream — collect into buffer
-      pdfBuffer = await streamToBuffer((downloadResult as DownloadResult).stream);
-    }
+    // Render — one pdfjs open returns both image and total page count
+    const cacheTagValue = `preview:${id}:${stableHash(`${scale}:${maxWidth}:${format}:${quality}`)}`;
+    const result = await renderPdfPageToImageWithInfo(pdfBuffer, {
+      pageIndex,
+      scale,
+      maxWidth,
+      format,
+      quality,
+      cacheTag: cacheTagValue,
+    });
 
-    // Get total page count using pdf-lib
-    const pdfDoc = await PDFDocument.load(pdfBuffer, { ignoreEncryption: true });
-    const totalPages = pdfDoc.getPageCount();
-
-    // Validate requested page index
-    if (pageIndex >= totalPages) {
+    if (pageIndex >= result.totalPages) {
       return NextResponse.json(
         {
           error: 'Page out of range',
-          detail: `Requested page ${pageIndex} but PDF has ${totalPages} page(s) (0-${totalPages - 1}).`,
+          detail: `Requested page ${pageIndex} but PDF has ${result.totalPages} page(s) (0-${result.totalPages - 1}).`,
         },
         { status: 400 }
       );
     }
 
-    // Render requested page to JPEG base64 at the requested scale
-    const imageBase64 = await renderPdfToImage(pdfBuffer, {
-      pageIndex,
-      quality: 90,
-      maxWidth: renderMaxWidth,
-      format: 'jpeg',
-      scale: renderScale,
-    });
-
-    const mimeType = 'image/jpeg';
-
     logger.info('PDF preview generated', {
       sessionId: id,
       pageIndex,
-      totalPages,
-      renderScale,
-      renderMaxWidth,
-      imageLength: imageBase64.length,
+      totalPages: result.totalPages,
+      scale,
+      maxWidth,
+      format,
+      quality,
+      imageLength: result.imageBase64.length,
     });
 
     return NextResponse.json(
-      { imageBase64, totalPages, mimeType },
+      {
+        imageBase64: result.imageBase64,
+        totalPages: result.totalPages,
+        mimeType: result.mimeType,
+        render: { pageIndex, scale, maxWidth, format, quality },
+      },
       { headers: { 'Cache-Control': 'private, max-age=300, stale-while-revalidate=60' } }
     );
   } catch (error) {
@@ -125,6 +120,19 @@ export async function GET(
       { status: 500 }
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+async function fetchPdfBuffer(downloadResult: string | DownloadResult): Promise<Buffer> {
+  if (typeof downloadResult === 'string') {
+    const res = await fetch(downloadResult);
+    if (!res.ok) throw new Error(`Failed to download PDF from storage: ${res.status}`);
+    return Buffer.from(await res.arrayBuffer());
+  }
+  return streamToBuffer((downloadResult as DownloadResult).stream);
 }
 
 // ---------------------------------------------------------------------------

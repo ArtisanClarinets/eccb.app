@@ -1,21 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createHash } from 'crypto';
 import { prisma } from '@/lib/db';
 import { getSession } from '@/lib/auth/guards';
 import { checkUserPermission } from '@/lib/auth/permissions';
 import { downloadFile } from '@/lib/services/storage';
-import { renderPdfToImage } from '@/lib/services/pdf-renderer';
+import { renderPdfPageToImageWithInfo } from '@/lib/services/pdf-renderer';
+import { parseRenderParams } from '@/lib/review-preview/render-params';
 import { logger } from '@/lib/logger';
-import { PDFDocument } from 'pdf-lib';
 import type { DownloadResult } from '@/lib/services/storage';
 
 // =============================================================================
 // GET /api/admin/uploads/review/[id]/part-preview
 //
-// Returns a base64-encoded PNG of the specified page of a parsed part PDF from
+// Returns a base64-encoded image of the specified page of a parsed part PDF from
 // the SmartUploadSession. The part storage key must belong to the session's
-// parsedParts JSON. Supports pagination via ?page=N query parameter (0-indexed,
-// defaults to 0).
+// parsedParts JSON.
+//
+// Query parameters (all optional, backwards-compatible):
+//   partStorageKey — required; storage key of the part PDF
+//   page           — 0-indexed page number (default 0)
+//   scale          — render DPI multiplier, clamped [1..6] (default 3)
+//   maxWidth       — max output pixel width, clamped [800..4000] (default 2000)
+//   format         — 'png' (default, lossless) | 'jpeg' (lossy, faster)
+//   quality        — JPEG quality, clamped [60..100], ignored for PNG (default 92)
+//
+// Response JSON:
+//   { imageBase64, totalPages, mimeType, render: { pageIndex, scale, maxWidth, format, quality } }
 // =============================================================================
+
+function stableHash(s: string): string {
+  return createHash('sha1').update(s).digest('hex').slice(0, 12);
+}
 
 interface ParsedPart {
   storageKey?: string;
@@ -43,9 +58,6 @@ export async function GET(
     // Parse query parameters
     const url = new URL(req.url);
     const partStorageKeyEncoded = url.searchParams.get('partStorageKey');
-    const pageParam     = url.searchParams.get('page');
-    const scaleParam    = url.searchParams.get('scale');
-    const maxWidthParam = url.searchParams.get('maxWidth');
 
     if (!partStorageKeyEncoded) {
       return NextResponse.json(
@@ -57,10 +69,7 @@ export async function GET(
     // Decode the part storage key (URL-encoded)
     const partStorageKey = decodeURIComponent(partStorageKeyEncoded);
 
-    // Parse page parameter (0-indexed, default to 0)
-    const pageIndex     = pageParam     ? parseInt(pageParam, 10)                          : 0;
-    const renderScale   = scaleParam    ? Math.min(6, Math.max(1, parseFloat(scaleParam))) : 3;
-    const renderMaxWidth = maxWidthParam ? Math.min(4000, Math.max(800, parseInt(maxWidthParam, 10))) : 2000;
+    const { pageIndex, scale, maxWidth, format, quality } = parseRenderParams(url);
 
     if (isNaN(pageIndex) || pageIndex < 0) {
       return NextResponse.json(
@@ -84,81 +93,62 @@ export async function GET(
       try {
         parsedParts = uploadSession.parsedParts as ParsedPart[];
       } catch {
-        logger.warn('Failed to parse parsedParts JSON', {
-          sessionId: id,
-        });
+        logger.warn('Failed to parse parsedParts JSON', { sessionId: id });
       }
     }
 
-    // Check if the provided partStorageKey belongs to this session
     const partExists = parsedParts.some((part) => part.storageKey === partStorageKey);
-
     if (!partExists) {
-      logger.warn('Part storage key not found in session', {
-        sessionId: id,
-        partStorageKey,
-      });
+      logger.warn('Part storage key not found in session', { sessionId: id, partStorageKey });
       return NextResponse.json(
         { error: 'Part not found in session' },
         { status: 404 }
       );
     }
 
-    // Download the part PDF from storage
-    let pdfBuffer: Buffer;
-    const downloadResult = await downloadFile(partStorageKey);
+    // Download the part PDF from storage (single buffer, no double-parse)
+    const pdfBuffer = await fetchPdfBuffer(await downloadFile(partStorageKey));
 
-    if (typeof downloadResult === 'string') {
-      // S3 signed URL — fetch the bytes
-      const res = await fetch(downloadResult);
-      if (!res.ok) {
-        throw new Error(`Failed to download PDF from storage: ${res.status}`);
-      }
-      const arrayBuffer = await res.arrayBuffer();
-      pdfBuffer = Buffer.from(arrayBuffer);
-    } else {
-      // Local stream — collect into buffer
-      pdfBuffer = await streamToBuffer((downloadResult as DownloadResult).stream);
-    }
+    // Render — one pdfjs open returns both image and total page count
+    const cacheTagValue = `part-preview:${id}:${stableHash(partStorageKey)}:${stableHash(`${scale}:${maxWidth}:${format}:${quality}`)}`;
+    const result = await renderPdfPageToImageWithInfo(pdfBuffer, {
+      pageIndex,
+      scale,
+      maxWidth,
+      format,
+      quality,
+      cacheTag: cacheTagValue,
+    });
 
-    // Get total page count using pdf-lib
-    const pdfDoc = await PDFDocument.load(pdfBuffer, { ignoreEncryption: true });
-    const totalPages = pdfDoc.getPageCount();
-
-    // Validate requested page index
-    if (pageIndex >= totalPages) {
+    if (pageIndex >= result.totalPages) {
       return NextResponse.json(
         {
           error: 'Page out of range',
-          detail: `Requested page ${pageIndex} but PDF has ${totalPages} page(s) (0-${totalPages - 1}).`,
+          detail: `Requested page ${pageIndex} but PDF has ${result.totalPages} page(s) (0-${result.totalPages - 1}).`,
         },
         { status: 400 }
       );
     }
 
-    // Render requested page to JPEG base64 at the requested scale
-    const imageBase64 = await renderPdfToImage(pdfBuffer, {
-      pageIndex,
-      quality: 90,
-      maxWidth: renderMaxWidth,
-      format: 'jpeg',
-      scale: renderScale,
-    });
-
-    const mimeType = 'image/jpeg';
-
     logger.info('Part PDF preview generated', {
       sessionId: id,
       partStorageKey,
       pageIndex,
-      totalPages,
-      renderScale,
-      renderMaxWidth,
-      imageLength: imageBase64.length,
+      totalPages: result.totalPages,
+      scale,
+      maxWidth,
+      format,
+      quality,
+      imageLength: result.imageBase64.length,
     });
 
     return NextResponse.json(
-      { imageBase64, totalPages, mimeType },
+      {
+        imageBase64: result.imageBase64,
+        totalPages: result.totalPages,
+        mimeType: result.mimeType,
+        render: { pageIndex, scale, maxWidth, format, quality },
+      },
       { headers: { 'Cache-Control': 'private, max-age=300, stale-while-revalidate=60' } }
     );
   } catch (error) {
@@ -169,6 +159,19 @@ export async function GET(
       { status: 500 }
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+async function fetchPdfBuffer(downloadResult: string | DownloadResult): Promise<Buffer> {
+  if (typeof downloadResult === 'string') {
+    const res = await fetch(downloadResult);
+    if (!res.ok) throw new Error(`Failed to download PDF from storage: ${res.status}`);
+    return Buffer.from(await res.arrayBuffer());
+  }
+  return streamToBuffer((downloadResult as DownloadResult).stream);
 }
 
 // ---------------------------------------------------------------------------
