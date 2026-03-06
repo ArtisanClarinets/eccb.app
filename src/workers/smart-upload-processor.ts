@@ -1311,7 +1311,7 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
   const gapInstructions = buildGapInstructions(instructionValidation.instructions, totalPages);
   if (gapInstructions.length > 0) {
     const gapPageCount = gapInstructions.reduce(
-      (sum, g) => sum + (g.pageRange[1] - g.pageRange[0] + 1), 0
+      (sum, g) => sum + (g.pageRange![1] - g.pageRange![0] + 1), 0
     );
     logger.warn('Gap pages detected — HARD FAIL: routing to human review / second pass', {
       sessionId,
