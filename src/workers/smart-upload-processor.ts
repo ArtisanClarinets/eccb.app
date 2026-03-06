@@ -1311,7 +1311,7 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
   const gapInstructions = buildGapInstructions(instructionValidation.instructions, totalPages);
   if (gapInstructions.length > 0) {
     const gapPageCount = gapInstructions.reduce(
-      (sum, g) => sum + (g.pageRange[2] - g.pageRange[0] + 1), 0
+      (sum, g) => sum + (g.pageRange[1] - g.pageRange[0] + 1), 0
     );
     logger.warn('Gap pages detected — HARD FAIL: routing to human review / second pass', {
       sessionId,
@@ -1338,19 +1338,19 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
     await prisma.smartUploadSession.update({
       where: { uploadSessionId: sessionId },
       data: {
-        extractedMetadata: JSON.parse(JSON.stringify(extraction)) as any,
+        extractedMetadata: deepCloneJSON(extraction) as any,
         confidenceScore: extraction.confidenceScore,
         routingDecision: 'no_parse_second_pass',
         parseStatus: 'NOT_PARSED',
         secondPassStatus: 'QUEUED',
         requiresHumanReview: true,
-        cuttingInstructions: JSON.parse(JSON.stringify(instructionValidation.instructions)) as any,
+        cuttingInstructions: deepCloneJSON(instructionValidation.instructions) as any,
         llmProvider: llmConfig.provider,
         llmVisionModel: llmConfig.visionModel,
         llmVerifyModel: llmConfig.verificationModel,
         llmPromptVersion: llmConfig.promptVersion || PROMPT_VERSION,
         ...(firstPassRaw ? { firstPassRaw } : {}),
-        strategyHistory: JSON.parse(JSON.stringify(strategyHistory)) as any,
+        strategyHistory: deepCloneJSON(strategyHistory) as any,
       },
     });
     await queueSmartUploadSecondPass(sessionId);
