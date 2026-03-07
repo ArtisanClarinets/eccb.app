@@ -30,6 +30,10 @@ vi.mock('@/lib/rate-limit', () => ({
   applyRateLimit: vi.fn().mockResolvedValue(null),
 }));
 
+vi.mock('@/lib/stand/settings', () => ({
+  getStandSettings: vi.fn().mockResolvedValue({ practiceTrackingEnabled: true }),
+}));
+
 // Mock prisma
 vi.mock('@/lib/db', () => ({
   prisma: {
@@ -64,9 +68,15 @@ vi.mock('@/lib/auth/permissions', () => ({
   getUserRoles: vi.fn().mockResolvedValue(['MUSICIAN']),
 }));
 
+vi.mock('@/lib/stand/access', () => ({
+  requireStandAccess: vi.fn().mockResolvedValue({ userId: 'user-1', isDirector: false }),
+  canAccessPiece: vi.fn().mockResolvedValue(true),
+}));
+
 import { auth } from '@/lib/auth/config';
 import { prisma } from '@/lib/db';
 import { isFeatureEnabled } from '@/lib/feature-flags';
+import { getStandSettings } from '@/lib/stand/settings';
 
 const mockAuth = auth as unknown as { api: { getSession: ReturnType<typeof vi.fn> } };
 
@@ -74,11 +84,12 @@ describe('Practice Logs API', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(isFeatureEnabled).mockReturnValue(true);
+    vi.mocked(getStandSettings).mockResolvedValue({ practiceTrackingEnabled: true } as any);
   });
 
   describe('GET', () => {
     it('should return 404 when feature is disabled', async () => {
-      vi.mocked(isFeatureEnabled).mockReturnValue(false);
+      vi.mocked(getStandSettings).mockResolvedValue({ practiceTrackingEnabled: false } as any);
 
       const request = new NextRequest(
         new URL('http://localhost:3000/api/stand/practice-logs')
@@ -151,7 +162,7 @@ describe('Practice Logs API', () => {
 
   describe('POST', () => {
     it('should return 404 when feature is disabled', async () => {
-      vi.mocked(isFeatureEnabled).mockReturnValue(false);
+      vi.mocked(getStandSettings).mockResolvedValue({ practiceTrackingEnabled: false } as any);
 
       const request = new NextRequest(
         new URL('http://localhost:3000/api/stand/practice-logs'),

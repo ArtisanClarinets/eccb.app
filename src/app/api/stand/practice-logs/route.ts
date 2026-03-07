@@ -31,13 +31,18 @@ export async function GET(request: NextRequest) {
     const rateLimited = await applyRateLimit(request, 'stand-annotation');
     if (rateLimited) return rateLimited;
 
-      // feature toggle check first so that unauthenticated callers still return
-      // 404 when disabled
-      const settings = await getStandSettings();
-      if (!settings.practiceTrackingEnabled) return json404('Practice tracking is disabled');
+    // feature toggle check first so that unauthenticated callers still return
+    // 404 when disabled
+    const settings = await getStandSettings();
+    if (!settings.practiceTrackingEnabled) return json404('Practice tracking is disabled');
 
-      const ctx = await requireStandAccess();
-      if (ctx instanceof Response) return ctx;
+    const ctx = await requireStandAccess();
+    if (ctx instanceof Response) return ctx;
+
+    const searchParams = request.nextUrl.searchParams;
+    const requestedUserId = searchParams.get('userId');
+    const pieceId = searchParams.get('pieceId');
+    const limit = Math.min(Math.max(parseInt(searchParams.get('limit') ?? '50', 10), 1), 100);
     const offset = Math.max(parseInt(searchParams.get('offset') ?? '0', 10), 0);
 
     // Non-directors can only see their own logs

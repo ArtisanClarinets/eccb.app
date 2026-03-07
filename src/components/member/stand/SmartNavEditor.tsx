@@ -3,6 +3,8 @@
 import React, { useRef, useState, useCallback, useEffect } from 'react';
 import { useStandStore } from '@/store/standStore';
 import type { NavigationLink } from '@/store/standStore';
+import { Button } from '@/components/ui/button';
+import { Loader2 } from 'lucide-react';
 
 interface DrawRect {
   x1: number;
@@ -291,12 +293,10 @@ export function SmartNavEditor() {
 
       {/* Edit mode toggle button — directors only */}
       {canEdit && (
-        <button
-          className={`absolute bottom-12 right-2 z-30 px-2 py-1 text-xs rounded shadow border transition-colors ${
-            editMode
-              ? 'bg-primary text-primary-foreground border-primary'
-              : 'bg-card text-foreground border-border hover:bg-muted'
-          }`}
+        <Button
+          variant={editMode ? 'default' : 'outline'}
+          size="sm"
+          className="absolute bottom-12 right-2 z-30 shadow"
           onClick={() => {
             setEditMode((v) => !v);
             setDrawRect(null);
@@ -304,9 +304,10 @@ export function SmartNavEditor() {
           }}
           title={editMode ? 'Exit nav editor' : 'Edit navigation hotspots'}
           aria-label={editMode ? 'Exit nav editor' : 'Edit navigation hotspots'}
+          aria-pressed={editMode}
         >
           {editMode ? 'Done' : '🔗 Nav'}
-        </button>
+        </Button>
       )}
 
       {/* Configuration dialog */}
@@ -357,21 +358,24 @@ export function SmartNavEditor() {
             </label>
 
             <div className="flex gap-2 justify-end pt-2">
-              <button
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => { setDialogOpen(false); setPendingLink(null); setDrawRect(null); }}
-                className="px-3 py-1.5 text-sm border rounded hover:bg-muted transition-colors"
                 aria-label="Cancel"
+                disabled={saving}
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
+                size="sm"
                 onClick={handleSave}
                 disabled={saving}
-                className="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors disabled:opacity-50"
                 aria-label="Save hotspot"
               >
+                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {saving ? 'Saving…' : 'Save hotspot'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
