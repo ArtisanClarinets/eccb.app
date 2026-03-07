@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db';
 import { getSession } from '@/lib/auth/guards';
 import { checkUserPermission } from '@/lib/auth/permissions';
 import { uploadFile, validateFileMagicBytes } from '@/lib/services/storage';
+import { virusScanner } from '@/lib/services/virus-scanner';
 import { applyRateLimit } from '@/lib/rate-limit';
 import { validateCSRF } from '@/lib/csrf';
 import { logger } from '@/lib/logger';
@@ -105,34 +106,6 @@ function getExtension(filename: string): string {
 }
 
 // =============================================================================
-// Virus Scanning (Optional)
-// =============================================================================
-
-/**
- * Scan file for viruses using ClamAV.
- * Only called if ENABLE_VIRUS_SCAN is true.
- */
-async function scanForViruses(_buffer: Buffer): Promise<{ clean: boolean; message?: string }> {
-  if (!env.ENABLE_VIRUS_SCAN) {
-    return { clean: true };
-  }
-  
-  try {
-    // ClamAV scanning would go here
-    // For now, we'll just log that it would be scanned
-    logger.info('Virus scanning enabled but not implemented', { 
-      clamavHost: env.CLAMAV_HOST,
-      clamavPort: env.CLAMAV_PORT,
-    });
-    
-    return { clean: true };
-  } catch (error) {
-    logger.error('Virus scan failed', { error });
-    return { clean: false, message: 'Virus scan failed' };
-  }
-}
-
-// =============================================================================
 // Route Handler
 // =============================================================================
 
@@ -232,7 +205,7 @@ export async function POST(request: NextRequest) {
     }
     
     // Virus scan (if enabled)
-    const virusScan = await scanForViruses(buffer);
+    const virusScan = await virusScanner.scan(buffer);
     if (!virusScan.clean) {
       logger.warn('Upload rejected: virus detected', {
         userId: session.user.id,

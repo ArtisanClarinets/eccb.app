@@ -52,4 +52,40 @@ describe('VirusScanner', () => {
       })
     );
   });
+
+  it('should return clean false when implementation throws an error', async () => {
+    env.ENABLE_VIRUS_SCAN = true;
+    const { logger } = await import('@/lib/logger');
+
+    // Force an error in the try block
+    vi.mocked(logger.info).mockImplementationOnce(() => {
+      throw new Error('Unexpected error during scan');
+    });
+
+    const result = await scanner.scan(Buffer.from('test'));
+
+    expect(result.clean).toBe(false);
+    expect(result.message).toBe('Virus scan failed');
+    expect(logger.error).toHaveBeenCalledWith(
+      'Virus scan failed',
+      expect.objectContaining({
+        error: expect.any(Error)
+      })
+    );
+  });
+
+  it('should handle empty buffer correctly', async () => {
+    env.ENABLE_VIRUS_SCAN = true;
+    const result = await scanner.scan(Buffer.from(''));
+    expect(result.clean).toBe(true);
+    expect(result.message).toContain('implementation missing');
+  });
+
+  it('should handle large buffer correctly', async () => {
+    env.ENABLE_VIRUS_SCAN = true;
+    const largeBuffer = Buffer.alloc(1024 * 1024, 'a');
+    const result = await scanner.scan(largeBuffer);
+    expect(result.clean).toBe(true);
+    expect(result.message).toContain('implementation missing');
+  });
 });
