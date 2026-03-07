@@ -14,7 +14,7 @@ START TRANSACTION;
 DROP INDEX IF EXISTS `SmartUploadSession_activeUploadKey_key` ON `SmartUploadSession`;
 
 -- Drop the composite index
-DROP INDEX IF EXISTS `SmartUploadSession_sourceSha256_commitStatusNew_idx` ON `SmartUploadSession`;
+DROP INDEX IF EXISTS `SmartUploadSession_sourceSha256_commitStatus_idx` ON `SmartUploadSession`;
 
 -- Drop the generated column
 ALTER TABLE `SmartUploadSession` 

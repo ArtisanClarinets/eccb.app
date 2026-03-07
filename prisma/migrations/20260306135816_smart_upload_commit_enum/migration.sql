@@ -39,7 +39,21 @@ SET `commitStatusNew` = CASE
 END;
 
 -- ====================================
--- STEP 3: Add unique constraint for active uploads
+-- STEP 3: Drop old column and rename new column
+-- ====================================
+-- First drop the old column
+ALTER TABLE `SmartUploadSession`
+DROP COLUMN `commitStatus`;
+
+-- Rename the new column to the original name
+ALTER TABLE `SmartUploadSession`
+CHANGE COLUMN `commitStatusNew` `commitStatus`
+  ENUM('NOT_STARTED', 'IN_PROGRESS', 'COMPLETE', 'FAILED')
+  NULL
+  DEFAULT 'NOT_STARTED';
+
+-- ====================================
+-- STEP 4: Add unique constraint for active uploads
 -- ====================================
 -- MySQL doesn't support partial indexes, so we use a generated column approach:
 -- - When commitStatus = 'COMPLETE', activeUploadKey is NULL
@@ -51,7 +65,7 @@ END;
 ALTER TABLE `SmartUploadSession` 
 ADD COLUMN `activeUploadKey` VARCHAR(64) 
   AS (CASE 
-    WHEN `commitStatusNew` = 'COMPLETE' THEN NULL 
+    WHEN `commitStatus` = 'COMPLETE' THEN NULL
     ELSE `sourceSha256` 
   END) STORED;
 
@@ -61,26 +75,8 @@ CREATE UNIQUE INDEX `SmartUploadSession_activeUploadKey_key`
 ON `SmartUploadSession`(`activeUploadKey`);
 
 -- Also add index for performance on common queries
-CREATE INDEX `SmartUploadSession_sourceSha256_commitStatusNew_idx` 
-ON `SmartUploadSession`(`sourceSha256`, `commitStatusNew`);
-
--- ====================================
--- STEP 4: Drop old column and rename new column
--- ====================================
--- First drop the old column
-ALTER TABLE `SmartUploadSession` 
-DROP COLUMN `commitStatus`;
-
--- Rename the new column to the original name
-ALTER TABLE `SmartUploadSession` 
-CHANGE COLUMN `commitStatusNew` `commitStatus` 
-  ENUM('NOT_STARTED', 'IN_PROGRESS', 'COMPLETE', 'FAILED') 
-  NULL 
-  DEFAULT 'NOT_STARTED';
-
--- Update the generated column to reference the renamed column
--- (Note: In MySQL, generated columns auto-update, but we need to ensure consistency)
--- The stored generated column will automatically recalculate
+CREATE INDEX `SmartUploadSession_sourceSha256_commitStatus_idx`
+ON `SmartUploadSession`(`sourceSha256`, `commitStatus`);
 
 -- ====================================
 -- STEP 5: Verify migration
