@@ -15,9 +15,6 @@ import {
 } from '@/lib/smart-upload/schema';
 import { loadSmartUploadSettingsFromDB } from '@/lib/smart-upload/bootstrap';
 import {
-  DEFAULT_VISION_SYSTEM_PROMPT,
-  DEFAULT_VERIFICATION_SYSTEM_PROMPT,
-  PROMPT_VERSION,
   getDefaultPromptsRecord,
 } from '@/lib/smart-upload/prompts';
 import { maskSecretValue } from '@/lib/smart-upload/secret-settings';

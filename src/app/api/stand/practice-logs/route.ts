@@ -13,7 +13,7 @@ import { applyRateLimit } from '@/lib/rate-limit';
 import { z } from 'zod';
 import { requireStandAccess, canAccessPiece } from '@/lib/stand/access';
 import { getStandSettings } from '@/lib/stand/settings';
-import { jsonOk, json400, json404, json500, parseBody, cuidSchema } from '@/lib/stand/http';
+import { jsonOk, json404, json500, parseBody, cuidSchema } from '@/lib/stand/http';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -38,7 +38,12 @@ export async function GET(request: NextRequest) {
 
       const ctx = await requireStandAccess();
       if (ctx instanceof Response) return ctx;
+
+    const searchParams = request.nextUrl.searchParams;
+    const limit = Math.min(Math.max(parseInt(searchParams.get('limit') ?? '50', 10), 1), 100);
     const offset = Math.max(parseInt(searchParams.get('offset') ?? '0', 10), 0);
+    const requestedUserId = searchParams.get('userId');
+    const pieceId = searchParams.get('pieceId');
 
     // Non-directors can only see their own logs
     const targetUserId = ctx.isDirector && requestedUserId ? requestedUserId : ctx.userId;

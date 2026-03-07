@@ -5,7 +5,7 @@ import { useStandStore } from '@/store/standStore';
 
 // polyfill global WebSocket to satisfy isWebSocketAvailable() in Node
 // (the hook checks for "typeof WebSocket !== 'undefined'")
-// @ts-ignore
+// @ts-expect-error global websocket mock
 (global as any).WebSocket = class {};
 
 // We'll mock socket.io-client
