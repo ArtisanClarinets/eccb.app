@@ -91,30 +91,34 @@ async function checkRedisHealth(): Promise<'healthy' | 'degraded' | 'unhealthy'>
 }
 
 async function getDatabaseStats(): Promise<DatabaseStats> {
+  const now = new Date();
+
   const [
     memberStats,
-    eventStats,
-    musicStats,
-    userStats,
+    totalEvents,
+    upcomingEvents,
+    pastEvents,
+    totalMusic,
+    inCatalogMusic,
+    totalUsers,
+    activeUsers,
     storageStats,
   ] = await Promise.all([
     // Member stats
     prisma.member.groupBy({
       by: ['status'],
-      _count: true,
+      _count: { _all: true },
     }),
     // Event stats
-    prisma.event.findMany({
-      select: { id: true, startTime: true },
-    }),
+    prisma.event.count(),
+    prisma.event.count({ where: { startTime: { gt: now } } }),
+    prisma.event.count({ where: { startTime: { lte: now } } }),
     // Music stats
-    prisma.musicPiece.findMany({
-      select: { id: true, isArchived: true },
-    }),
+    prisma.musicPiece.count(),
+    prisma.musicPiece.count({ where: { isArchived: false } }),
     // User stats
-    prisma.user.findMany({
-      select: { id: true, emailVerified: true },
-    }),
+    prisma.user.count(),
+    prisma.user.count({ where: { emailVerified: true } }),
     // Storage stats
     prisma.musicFile.aggregate({
       _count: true,
@@ -122,32 +126,30 @@ async function getDatabaseStats(): Promise<DatabaseStats> {
     }),
   ]);
 
-  const now = new Date();
-  
   // Process member stats
   const members = {
-    total: memberStats.reduce((sum, m) => sum + m._count, 0),
-    active: memberStats.find((m) => m.status === 'ACTIVE')?._count || 0,
-    pending: memberStats.find((m) => m.status === 'PENDING')?._count || 0,
+    total: memberStats.reduce((sum, m) => sum + m._count._all, 0),
+    active: memberStats.find((m) => m.status === 'ACTIVE')?._count._all || 0,
+    pending: memberStats.find((m) => m.status === 'PENDING')?._count._all || 0,
   };
 
   // Process event stats
   const events = {
-    total: eventStats.length,
-    upcoming: eventStats.filter((e) => new Date(e.startTime) > now).length,
-    past: eventStats.filter((e) => new Date(e.startTime) <= now).length,
+    total: totalEvents,
+    upcoming: upcomingEvents,
+    past: pastEvents,
   };
 
   // Process music stats
   const music = {
-    total: musicStats.length,
-    inCatalog: musicStats.filter((m) => !m.isArchived).length,
+    total: totalMusic,
+    inCatalog: inCatalogMusic,
   };
 
   // Process user stats
   const users = {
-    total: userStats.length,
-    active: userStats.filter((u) => u.emailVerified).length,
+    total: totalUsers,
+    active: activeUsers,
   };
 
   // Process storage stats
