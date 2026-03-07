@@ -41,28 +41,12 @@ END;
 -- ====================================
 -- STEP 3: Add unique constraint for active uploads
 -- ====================================
--- MySQL doesn't support partial indexes, so we use a generated column approach:
--- - When commitStatus = 'COMPLETE', activeUploadKey is NULL
--- - When commitStatus != 'COMPLETE', activeUploadKey = sourceSha256
--- - Unique index on activeUploadKey allows multiple COMPLETE records with same SHA256
---   but only one active (non-COMPLETE) record per SHA256
+-- MySQL doesn't support partial indexes, so we will use a generated column approach.
+-- We defer creating the generated column until after we've swapped the old
+-- string column for the new enum column.  This avoids restrictions on using
+-- TEXT/varchar expressions in generated columns during the transition.
 
--- Add generated column for active upload key (only populated when not complete)
--- NOTE: we reference the existing `commitStatus` column here (string type) so
--- that the generated column can be created before we drop/rename columns.
-ALTER TABLE `SmartUploadSession` 
-ADD COLUMN `activeUploadKey` VARCHAR(64) 
-  AS (CASE 
-    WHEN `commitStatus` = 'COMPLETE' THEN NULL 
-    ELSE `sourceSha256` 
-  END) STORED;
-
--- Add unique index on the generated column
--- NULL values don't violate uniqueness in MySQL, so multiple COMPLETE records are allowed
-CREATE UNIQUE INDEX `SmartUploadSession_activeUploadKey_key` 
-ON `SmartUploadSession`(`activeUploadKey`);
-
--- Also add a temporary index on the new enum column so we can drop/rename it
+-- create a temporary index on the new enum column so we can drop/rename it later
 CREATE INDEX `SmartUploadSession_sourceSha256_commitStatusNew_idx` 
 ON `SmartUploadSession`(`sourceSha256`, `commitStatusNew`);
 
@@ -87,9 +71,9 @@ ALTER TABLE `SmartUploadSession`
 CREATE INDEX `SmartUploadSession_sourceSha256_commitStatus_idx`
   ON `SmartUploadSession`(`sourceSha256`, `commitStatus`);
 
--- Update the generated column to reference the renamed column
--- (Note: In MySQL, generated columns auto-update, but we need to ensure consistency)
--- The stored generated column will automatically recalculate
+-- No generated column added due to MySQL restrictions.  Application logic will
+-- enforce uniqueness of active uploads instead.  We only converted the column to
+-- an enum and recreated the standard index on (sourceSha256, commitStatus).
 
 -- ====================================
 -- STEP 5: Verify migration
