@@ -40,8 +40,20 @@ export async function GET(request: NextRequest) {
     const ctx = await requireStandAccess();
     if (ctx instanceof NextResponse) return ctx;
 
+    // optional query param to view another user's prefs; only directors are
+    // allowed to do this
+    const { searchParams } = new URL(request.url);
+    const requestedUserId = searchParams.get('userId');
+    let targetUserId = ctx.userId;
+    if (requestedUserId && requestedUserId !== ctx.userId) {
+      if (!ctx.isDirector) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+      targetUserId = requestedUserId;
+    }
+
     let preferences = await prisma.userPreferences.findUnique({
-      where: { userId: ctx.userId },
+      where: { userId: targetUserId },
     });
 
     // Create default preferences if they don't exist

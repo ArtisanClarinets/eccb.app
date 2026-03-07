@@ -1168,15 +1168,13 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
     // Parse vision response — metadata-only in image mode, full in PDF mode
     if (canSendPdf) {
       // In native PDF mode we replace the extraction object with the full
-      // response from the LLM parser.  However the parser does **not** return
-      // any segmentationConfidence value, so we must preserve whatever
-      // deterministic confidence we computed earlier (e.g. from text-layer
-      // segmentation).  Without this the quality‑gate logic would be blind to
-      // poor segmentation and auto‑commit could slip through (see Gate 4). 
-      const previousSegConf = deterministicConfidence || extraction.segmentationConfidence;
+      // response from the LLM parser.  The parser does **not** return any
+      // segmentationConfidence, so we preserve deterministicConfidence if
+      // available.  NOTE: do *not* reference `extraction` here because it may
+      // still be undefined, causing crashes (see failing tests).
       extraction = parseVisionResponse(visionResult.content, totalPages);
-      if (previousSegConf && extraction.segmentationConfidence === undefined) {
-        extraction.segmentationConfidence = previousSegConf;
+      if (deterministicConfidence && extraction.segmentationConfidence === undefined) {
+        extraction.segmentationConfidence = deterministicConfidence;
       }
     } else {
       // Image mode: parse metadata only (no cuttingInstructions from LLM)

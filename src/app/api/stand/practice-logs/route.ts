@@ -31,16 +31,13 @@ export async function GET(request: NextRequest) {
     const rateLimited = await applyRateLimit(request, 'stand-annotation');
     if (rateLimited) return rateLimited;
 
-    const ctx = await requireStandAccess();
-    if (ctx instanceof Response) return ctx;
+      // feature toggle check first so that unauthenticated callers still return
+      // 404 when disabled
+      const settings = await getStandSettings();
+      if (!settings.practiceTrackingEnabled) return json404('Practice tracking is disabled');
 
-    const settings = await getStandSettings();
-    if (!settings.practiceTrackingEnabled) return json404('Practice tracking is disabled');
-
-    const { searchParams } = new URL(request.url);
-    const pieceId = searchParams.get('pieceId');
-    const requestedUserId = searchParams.get('userId');
-    const limit = Math.min(parseInt(searchParams.get('limit') ?? '50', 10), 200);
+      const ctx = await requireStandAccess();
+      if (ctx instanceof Response) return ctx;
     const offset = Math.max(parseInt(searchParams.get('offset') ?? '0', 10), 0);
 
     // Non-directors can only see their own logs
@@ -74,11 +71,12 @@ export async function POST(request: NextRequest) {
     const rateLimited = await applyRateLimit(request, 'stand-annotation');
     if (rateLimited) return rateLimited;
 
-    const ctx = await requireStandAccess();
-    if (ctx instanceof Response) return ctx;
-
+    // feature toggle check first
     const settings = await getStandSettings();
     if (!settings.practiceTrackingEnabled) return json404('Practice tracking is disabled');
+
+    const ctx = await requireStandAccess();
+    if (ctx instanceof Response) return ctx;
 
     const parsed = await parseBody(request, practiceLogCreateSchema);
     if (parsed instanceof Response) return parsed;
@@ -87,7 +85,7 @@ export async function POST(request: NextRequest) {
 
     // Verify piece access
     const hasAccess = await canAccessPiece(ctx.userId, pieceId);
-    if (!hasAccess) return json400('Piece not found or not accessible');
+    if (!hasAccess) return json404('Piece not found or not accessible');
 
     const log = await prisma.practiceLog.create({
       data: {

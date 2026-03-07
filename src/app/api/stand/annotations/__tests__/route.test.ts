@@ -424,7 +424,7 @@ describe('Annotations API', () => {
 
       vi.mocked(prisma.member.findFirst).mockResolvedValueOnce({
         id: 'member-1',
-        sections: [{ sectionId: 'section-clarinet' }],
+        sections: [{ sectionId: 'section-clarinet', isLeader: true }],
       } as any);
 
       vi.mocked(prisma.annotation.create).mockResolvedValueOnce({

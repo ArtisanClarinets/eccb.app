@@ -189,7 +189,7 @@ describe('Annotations [id] API', () => {
       vi.mocked(getUserRoles).mockResolvedValueOnce(['MUSICIAN']);
       vi.mocked(prisma.member.findFirst).mockResolvedValueOnce({
         id: 'member-1',
-        sections: [{ sectionId: 'section-clarinet' }],
+        sections: [{ sectionId: 'section-clarinet', isLeader: true, isLeader: true }],
       } as any);
       vi.mocked(prisma.annotation.update).mockResolvedValueOnce({
         id: 'ann-1',

@@ -120,6 +120,26 @@ describe('Preferences API', () => {
       const response = await GET(request);
       expect(response.status).toBe(403);
     });
+
+    it('should allow directors to view other user preferences', async () => {
+      mockAuth.api.getSession.mockResolvedValue({
+        user: { id: 'dir-1', isDirector: true },
+      });
+      vi.mocked(prisma.userPreferences.findUnique).mockResolvedValueOnce({
+        id: 'pref-2',
+        userId: 'user-2',
+        nightMode: true,
+      } as any);
+
+      const request = new NextRequest(
+        new URL('http://localhost:3000/api/stand/preferences?userId=user-2')
+      );
+
+      const response = await GET(request);
+      const data = await response.json();
+      expect(response.status).toBe(200);
+      expect(data.preferences.userId).toBe('user-2');
+    });
   });
 
   describe('POST (deep merge)', () => {
