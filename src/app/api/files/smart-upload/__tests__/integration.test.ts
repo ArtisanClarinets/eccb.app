@@ -282,7 +282,7 @@ function resetPrismaMocks() {
   mockPrisma.musicPart.update.mockResolvedValue({});
   mockPrisma.musicPart.count.mockResolvedValue(0);
 
-  mockPrisma.$transaction.mockImplementation(async (callback: Function) => {
+  mockPrisma.$transaction.mockImplementation(async (callback: (...args: any[]) => any) => {
     // Return a proper transaction result that commit.ts expects
     const txResult = await callback(mockPrisma);
     return txResult || {
@@ -590,7 +590,7 @@ describe('Smart Upload Integration Tests', () => {
       });
 
       // Setup $transaction mock to return proper structure
-      mockPrisma.$transaction.mockImplementation(async (callback: Function) => {
+      mockPrisma.$transaction.mockImplementation(async (callback: (...args: any[]) => any) => {
         const tx = {
           ...mockPrisma,
           musicPiece: {
