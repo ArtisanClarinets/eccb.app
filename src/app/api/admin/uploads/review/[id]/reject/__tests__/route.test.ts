@@ -1,8 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { NextRequest } from 'next/server';
-import { POST, OPTIONS } from '../route';
 
-// Mock dependencies
+// Mock dependencies before importing the route module
 vi.mock('@/lib/auth/guards', () => ({
   getSession: vi.fn(),
 }));
@@ -38,6 +36,13 @@ vi.mock('@/lib/services/smart-upload-cleanup', () => ({
 vi.mock('@/lib/csrf', () => ({
   validateCSRF: vi.fn().mockReturnValue({ valid: true }),
 }));
+
+import { NextRequest } from 'next/server';
+
+// We'll dynamically import the route module inside beforeEach so that
+// mocks (especially csrf) have been applied.  Declare placeholders here.
+let POST: typeof import('../route').POST;
+let OPTIONS: typeof import('../route').OPTIONS;
 
 import { getSession } from '@/lib/auth/guards';
 import { requirePermission } from '@/lib/auth/permissions';
@@ -93,8 +98,20 @@ function createMockSessionData(overrides: Partial<any> = {}): any {
 // =============================================================================
 
 describe('Reject Upload Session API', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+  beforeEach(async () => {
+    // reset implementations and call counts to ensure each test is isolated
+    vi.resetAllMocks();
+
+    // restore basic mock behavior
+    vi.mocked(requirePermission).mockResolvedValue(true);
+    const csrfMod = await import('@/lib/csrf');
+    vi.mocked(csrfMod.validateCSRF).mockReturnValue({ valid: true });
+
+    // re-import the route after resetting mocks so the imported version
+    // picks up our mocked dependencies (csrf, db, etc.).
+    const mod = await import('../route');
+    POST = mod.POST;
+    OPTIONS = mod.OPTIONS;
   });
 
   afterEach(() => {

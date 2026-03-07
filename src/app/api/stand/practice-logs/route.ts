@@ -38,7 +38,12 @@ export async function GET(request: NextRequest) {
 
       const ctx = await requireStandAccess();
       if (ctx instanceof Response) return ctx;
-    const offset = Math.max(parseInt(searchParams.get('offset') ?? '0', 10), 0);
+
+    const { searchParams } = new URL(request.url);
+    const pieceId = searchParams.get('pieceId');
+    const requestedUserId = searchParams.get('userId');
+    const limit = Math.min(parseInt(searchParams.get('limit') ?? '50', 10), 200);
+    const offset = parseInt(searchParams.get('offset') ?? '0', 10);
 
     // Non-directors can only see their own logs
     const targetUserId = ctx.isDirector && requestedUserId ? requestedUserId : ctx.userId;

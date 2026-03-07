@@ -48,6 +48,11 @@ const mockAuth = auth as unknown as { api: { getSession: ReturnType<typeof vi.fn
 describe('Annotations [id] API', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // default member record ensures requireStandAccess succeeds
+    vi.mocked(prisma.member.findFirst).mockResolvedValue({
+      id: 'member-1',
+      sections: [],
+    } as any);
   });
 
   const createParams = (id: string) => Promise.resolve({ id });
@@ -189,7 +194,7 @@ describe('Annotations [id] API', () => {
       vi.mocked(getUserRoles).mockResolvedValueOnce(['MUSICIAN']);
       vi.mocked(prisma.member.findFirst).mockResolvedValueOnce({
         id: 'member-1',
-        sections: [{ sectionId: 'section-clarinet', isLeader: true, isLeader: true }],
+        sections: [{ sectionId: 'section-clarinet', isLeader: true }],
       } as any);
       vi.mocked(prisma.annotation.update).mockResolvedValueOnce({
         id: 'ann-1',

@@ -151,6 +151,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    console.error('[BulkRejectRoute] caught error:', error);
     logger.error('Failed to bulk reject upload sessions', { error });
     return NextResponse.json(
       { error: 'Failed to bulk reject upload sessions' },

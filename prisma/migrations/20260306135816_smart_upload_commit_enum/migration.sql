@@ -48,10 +48,12 @@ END;
 --   but only one active (non-COMPLETE) record per SHA256
 
 -- Add generated column for active upload key (only populated when not complete)
+-- NOTE: we reference the existing `commitStatus` column here (string type) so
+-- that the generated column can be created before we drop/rename columns.
 ALTER TABLE `SmartUploadSession` 
 ADD COLUMN `activeUploadKey` VARCHAR(64) 
   AS (CASE 
-    WHEN `commitStatusNew` = 'COMPLETE' THEN NULL 
+    WHEN `commitStatus` = 'COMPLETE' THEN NULL 
     ELSE `sourceSha256` 
   END) STORED;
 
@@ -60,7 +62,7 @@ ADD COLUMN `activeUploadKey` VARCHAR(64)
 CREATE UNIQUE INDEX `SmartUploadSession_activeUploadKey_key` 
 ON `SmartUploadSession`(`activeUploadKey`);
 
--- Also add index for performance on common queries
+-- Also add a temporary index on the new enum column so we can drop/rename it
 CREATE INDEX `SmartUploadSession_sourceSha256_commitStatusNew_idx` 
 ON `SmartUploadSession`(`sourceSha256`, `commitStatusNew`);
 
@@ -77,6 +79,13 @@ CHANGE COLUMN `commitStatusNew` `commitStatus`
   ENUM('NOT_STARTED', 'IN_PROGRESS', 'COMPLETE', 'FAILED') 
   NULL 
   DEFAULT 'NOT_STARTED';
+
+-- After renaming we no longer need the temporary index on commitStatusNew;
+-- drop it and recreate a properly named index on the new enum column.
+ALTER TABLE `SmartUploadSession`
+  DROP INDEX `SmartUploadSession_sourceSha256_commitStatusNew_idx`;
+CREATE INDEX `SmartUploadSession_sourceSha256_commitStatus_idx`
+  ON `SmartUploadSession`(`sourceSha256`, `commitStatus`);
 
 -- Update the generated column to reference the renamed column
 -- (Note: In MySQL, generated columns auto-update, but we need to ensure consistency)

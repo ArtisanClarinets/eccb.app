@@ -1,6 +1,16 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { GET, POST } from '@/app/api/stand/practice-logs/route';
 import { NextRequest } from 'next/server';
+import { getStandSettings } from '@/lib/stand/settings';
+
+// Mock stand access helpers and export placeholders
+vi.mock('@/lib/stand/access', () => ({
+  requireStandAccess: vi.fn(),
+  canAccessPiece: vi.fn(),
+}));
+
+let GET: typeof import('@/app/api/stand/practice-logs/route').GET;
+let POST: typeof import('@/app/api/stand/practice-logs/route').POST;
+
 
 // Mock feature flags — enabled by default
 vi.mock('@/lib/feature-flags', () => ({
@@ -18,6 +28,16 @@ vi.mock('@/lib/auth/config', () => ({
       getSession: vi.fn(),
     },
   },
+}));
+
+// Mock stand settings helper
+vi.mock('@/lib/stand/settings', () => ({
+  getStandSettings: vi.fn().mockResolvedValue({
+    practiceTrackingEnabled: true,
+    maxStrokeDataBytes: 1000000,
+    maxAnnotationsPerPage: 100,
+    // include any other fields used by test code if necessary
+  }),
 }));
 
 // Mock headers
@@ -71,14 +91,42 @@ import { isFeatureEnabled } from '@/lib/feature-flags';
 const mockAuth = auth as unknown as { api: { getSession: ReturnType<typeof vi.fn> } };
 
 describe('Practice Logs API', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+  beforeEach(async () => {
+    // reset implementations to ensure no carryover from other tests
+    vi.resetAllMocks();
     vi.mocked(isFeatureEnabled).mockReturnValue(true);
+
+    // restore default stand settings mock after reset
+    const settingsModule = await import('@/lib/stand/settings');
+    vi.mocked(settingsModule.getStandSettings).mockResolvedValue({
+      practiceTrackingEnabled: true,
+      maxStrokeDataBytes: 1000000,
+      maxAnnotationsPerPage: 100,
+    });
+
+    // Provide default stand access context
+    const access = await import('@/lib/stand/access');
+    vi.mocked(access.requireStandAccess).mockResolvedValue({
+      userId: 'user-1',
+      roles: [],
+      isPrivileged: false,
+      isDirector: false,
+      isLibrarian: false,
+      isSectionLeader: false,
+      userSectionIds: [],
+      memberId: 'member-1',
+    });
+    vi.mocked(access.canAccessPiece).mockResolvedValue(true);
+
+    // import route after mocks applied
+    const mod = await import('@/app/api/stand/practice-logs/route');
+    GET = mod.GET;
+    POST = mod.POST;
   });
 
   describe('GET', () => {
     it('should return 404 when feature is disabled', async () => {
-      vi.mocked(isFeatureEnabled).mockReturnValue(false);
+      vi.mocked(getStandSettings).mockResolvedValueOnce({ practiceTrackingEnabled: false });
 
       const request = new NextRequest(
         new URL('http://localhost:3000/api/stand/practice-logs')
@@ -90,6 +138,11 @@ describe('Practice Logs API', () => {
 
     it('should return 401 if no session', async () => {
       mockAuth.api.getSession.mockResolvedValue(null);
+      // simulate guard returning unauthorized response
+      const access = await import('@/lib/stand/access');
+      vi.mocked(access.requireStandAccess).mockResolvedValue(
+        new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 })
+      );
 
       const request = new NextRequest(
         new URL('http://localhost:3000/api/stand/practice-logs')
@@ -147,11 +200,31 @@ describe('Practice Logs API', () => {
         })
       );
     });
+
+    it('should respect limit and offset query params', async () => {
+      mockAuth.api.getSession.mockResolvedValue({ user: { id: 'user-1' } });
+      vi.mocked(prisma.practiceLog.findMany).mockResolvedValueOnce([]);
+      vi.mocked(prisma.practiceLog.count).mockResolvedValueOnce(0);
+
+      const request = new NextRequest(
+        new URL('http://localhost:3000/api/stand/practice-logs?limit=10&offset=25')
+      );
+
+      const response = await GET(request);
+      expect(response.status).toBe(200);
+
+      expect(prisma.practiceLog.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          take: 10,
+          skip: 25,
+        })
+      );
+    });
   });
 
   describe('POST', () => {
     it('should return 404 when feature is disabled', async () => {
-      vi.mocked(isFeatureEnabled).mockReturnValue(false);
+      vi.mocked(getStandSettings).mockResolvedValueOnce({ practiceTrackingEnabled: false });
 
       const request = new NextRequest(
         new URL('http://localhost:3000/api/stand/practice-logs'),
@@ -170,6 +243,10 @@ describe('Practice Logs API', () => {
 
     it('should return 401 if no session', async () => {
       mockAuth.api.getSession.mockResolvedValue(null);
+      const access = await import('@/lib/stand/access');
+      vi.mocked(access.requireStandAccess).mockResolvedValue(
+        new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 })
+      );
 
       const request = new NextRequest(
         new URL('http://localhost:3000/api/stand/practice-logs'),
@@ -223,7 +300,8 @@ describe('Practice Logs API', () => {
 
     it('should return 404 for non-existent piece', async () => {
       mockAuth.api.getSession.mockResolvedValue({ user: { id: 'user-1' } });
-      vi.mocked(prisma.musicPiece.findUnique).mockResolvedValueOnce(null);
+      const access = await import('@/lib/stand/access');
+      vi.mocked(access.canAccessPiece).mockResolvedValueOnce(false);
 
       const request = new NextRequest(
         new URL('http://localhost:3000/api/stand/practice-logs'),

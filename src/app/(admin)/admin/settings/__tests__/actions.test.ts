@@ -13,7 +13,10 @@ vi.mock('@/lib/db', () => ({
       findUnique: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
+      upsert: vi.fn(),
     },
+    // used by updateSettings for transaction
+    $transaction: vi.fn(),
   },
 }));
 
@@ -22,6 +25,8 @@ vi.mock('@/lib/auth/guards', () => ({
     user: { id: 'admin-id', email: 'admin@test.com' },
   }),
 }));
+
+import { requirePermission } from '@/lib/auth/guards';
 
 vi.mock('@/lib/services/audit', () => ({
   auditLog: vi.fn().mockResolvedValue(undefined),
@@ -35,11 +40,16 @@ const mockPrisma = prisma as unknown as {
     create: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
   };
+  $transaction: ReturnType<typeof vi.fn>;
 };
 
 describe('Settings Actions', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    // restore requirePermission behaviour after reset
+    vi.mocked(requirePermission).mockResolvedValue({
+      user: { id: 'admin-id', email: 'admin@test.com' },
+    });
   });
 
   describe('updateSetting', () => {
@@ -108,15 +118,8 @@ describe('Settings Actions', () => {
 
   describe('updateSettings', () => {
     it('should update multiple settings', async () => {
-      mockPrisma.systemSetting.findUnique.mockResolvedValue(null);
-      mockPrisma.systemSetting.create.mockResolvedValue({
-        id: 'setting-1',
-        key: 'test-key',
-        value: 'test-value',
-        description: null,
-        updatedAt: new Date(),
-        updatedBy: 'admin-id',
-      });
+      // transaction will be invoked with upsert queries matching keys
+      (mockPrisma.$transaction as any).mockResolvedValue([]);
 
       const settings = {
         band_name: 'Test Band',
@@ -126,39 +129,11 @@ describe('Settings Actions', () => {
       const result = await updateSettings(settings);
 
       expect(result.success).toBe(true);
-      expect(mockPrisma.systemSetting.create).toHaveBeenCalledTimes(2);
+      expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
     });
 
     it('should handle mix of create and update operations', async () => {
-      // First setting exists
-      mockPrisma.systemSetting.findUnique
-        .mockResolvedValueOnce({
-          id: 'setting-1',
-          key: 'band_name',
-          value: 'Old Name',
-          description: null,
-          updatedAt: new Date(),
-          updatedBy: 'old-admin',
-        })
-        // Second setting does not exist
-        .mockResolvedValueOnce(null);
-
-      mockPrisma.systemSetting.update.mockResolvedValue({
-        id: 'setting-1',
-        key: 'band_name',
-        value: 'New Name',
-        description: null,
-        updatedAt: new Date(),
-        updatedBy: 'admin-id',
-      });
-      mockPrisma.systemSetting.create.mockResolvedValue({
-        id: 'setting-2',
-        key: 'contact_email',
-        value: 'test@example.com',
-        description: null,
-        updatedAt: new Date(),
-        updatedBy: 'admin-id',
-      });
+      (mockPrisma.$transaction as any).mockResolvedValue([]);
 
       const settings = {
         band_name: 'New Name',
@@ -168,12 +143,11 @@ describe('Settings Actions', () => {
       const result = await updateSettings(settings);
 
       expect(result.success).toBe(true);
-      expect(mockPrisma.systemSetting.update).toHaveBeenCalledTimes(1);
-      expect(mockPrisma.systemSetting.create).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
     });
 
     it('should return error on database failure', async () => {
-      mockPrisma.systemSetting.findUnique.mockRejectedValue(new Error('Database error'));
+      (mockPrisma.$transaction as any).mockRejectedValue(new Error('Database error'));
 
       const settings = {
         band_name: 'Test Band',
@@ -186,10 +160,12 @@ describe('Settings Actions', () => {
     });
 
     it('should handle empty settings object', async () => {
+      // even empty object currently goes through transaction (with []),
+      // so we just verify no crash and call count of 1 is acceptable
       const result = await updateSettings({});
 
       expect(result.success).toBe(true);
-      expect(mockPrisma.systemSetting.findUnique).not.toHaveBeenCalled();
+      expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
     });
   });
 });

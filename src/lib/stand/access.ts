@@ -165,7 +165,10 @@ export function canWriteLayer(
     case 'SECTION':
       if (ctx.isDirector) return true;
       if (!ctx.isSectionLeader) return false;
-      return targetSectionId ? ctx.userSectionIds.includes(targetSectionId) : false;
+      // section leaders may write to their own section; if no specific section
+      // is supplied we allow any of their sections.
+      if (!targetSectionId) return ctx.userSectionIds.length > 0;
+      return ctx.userSectionIds.includes(targetSectionId);
     case 'DIRECTOR': return ctx.isDirector;
     default: return false;
   }

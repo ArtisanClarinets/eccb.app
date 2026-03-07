@@ -133,6 +133,8 @@ export async function POST(
       );
     }
 
+    // additional console log for test debugging
+    console.error('[RejectRoute] caught error:', error);
     logger.error('Failed to reject upload session', { error });
     return NextResponse.json(
       { error: 'Failed to reject upload session' },

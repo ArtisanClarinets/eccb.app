@@ -44,11 +44,19 @@ vi.mock('@/lib/db', () => ({
       findMany: vi.fn().mockResolvedValue([]),
     },
     member: {
-      findFirst: vi.fn().mockResolvedValue(null),
+      // default to an active member; individual tests may override
+      findFirst: vi.fn().mockResolvedValue({
+        id: 'member-1',
+        userId: 'user-1',
+        firstName: 'John',
+        lastName: 'Doe',
+        sections: [],
+      }),
       findUnique: vi.fn(),
     },
     event: {
-      findFirst: vi.fn().mockResolvedValue(null),
+      // default to a published event
+      findFirst: vi.fn().mockResolvedValue({ id: 'test-event', isPublished: true }),
       findUnique: vi.fn(),
     },
     attendance: {

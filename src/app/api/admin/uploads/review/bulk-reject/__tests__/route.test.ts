@@ -1,10 +1,17 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NextRequest } from 'next/server';
-import { POST, OPTIONS } from '../route';
+
+let POST: typeof import('../route').POST;
+let OPTIONS: typeof import('../route').OPTIONS;
 
 // Mock dependencies
 vi.mock('@/lib/auth/guards', () => ({
   getSession: vi.fn(),
+  requirePermission: vi.fn().mockResolvedValue(true),
+}));
+
+vi.mock('@/lib/csrf', () => ({
+  validateCSRF: vi.fn().mockReturnValue({ valid: true }),
 }));
 
 vi.mock('@/lib/auth/permissions', () => ({
@@ -64,8 +71,22 @@ function createMockSession(userId: string = TEST_USER_ID): any {
 // =============================================================================
 
 describe('Bulk Reject Upload Sessions API', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+  beforeEach(async () => {
+    vi.resetAllMocks();
+
+    // restore mocks that resetAllMocks cleared
+    const csrfMod = await import('@/lib/csrf');
+    vi.mocked(csrfMod.validateCSRF).mockReturnValue({ valid: true });
+
+    // restore permission mock to always succeed
+    const guards = await import('@/lib/auth/guards');
+    if (guards.requirePermission) {
+      vi.mocked(guards.requirePermission).mockResolvedValue(true);
+    }
+
+    const mod = await import('../route');
+    POST = mod.POST;
+    OPTIONS = mod.OPTIONS;
   });
 
   afterEach(() => {
