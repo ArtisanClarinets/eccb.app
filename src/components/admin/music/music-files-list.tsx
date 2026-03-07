@@ -497,7 +497,7 @@ export function MusicFilesList({ pieceId, files, instruments }: MusicFilesListPr
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <Button variant="ghost" size="icon" asChild aria-label="Download file">
+                        <Button variant="ghost" size="icon" asChild>
                           <a
                             href={`/api/files/${file.storageKey}`}
                             download={file.fileName}
@@ -508,7 +508,7 @@ export function MusicFilesList({ pieceId, files, instruments }: MusicFilesListPr
                         </Button>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" aria-label="More actions">
+                            <Button variant="ghost" size="icon">
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
@@ -589,7 +589,7 @@ export function MusicFilesList({ pieceId, files, instruments }: MusicFilesListPr
                       {formatFileSize(file.fileSize)}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="icon" asChild aria-label="Download file">
+                      <Button variant="ghost" size="icon" asChild>
                         <a
                           href={`/api/files/${file.storageKey}`}
                           download={file.fileName}

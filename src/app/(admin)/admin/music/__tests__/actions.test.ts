@@ -12,12 +12,6 @@ import * as authGuards from '@/lib/auth/guards';
 // Mock dependencies
 vi.mock('@/lib/db', () => ({
   prisma: {
-    $transaction: vi.fn().mockImplementation(async (arg) => {
-      if (Array.isArray(arg)) {
-        return Promise.all(arg);
-      }
-      return arg({});
-    }),
     musicPiece: {
       findUnique: vi.fn(),
       findMany: vi.fn(),

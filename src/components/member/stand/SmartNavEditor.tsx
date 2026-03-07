@@ -280,7 +280,6 @@ export function SmartNavEditor() {
                 onClick={(e) => { e.stopPropagation(); handleDelete(link.id); }}
                 style={{ pointerEvents: 'auto' }}
                 title="Delete hotspot"
-                aria-label="Delete hotspot"
               >
                 ×
               </button>
@@ -303,7 +302,6 @@ export function SmartNavEditor() {
             setDrawing(false);
           }}
           title={editMode ? 'Exit nav editor' : 'Edit navigation hotspots'}
-          aria-label={editMode ? 'Exit nav editor' : 'Edit navigation hotspots'}
         >
           {editMode ? 'Done' : '🔗 Nav'}
         </button>
@@ -360,7 +358,6 @@ export function SmartNavEditor() {
               <button
                 onClick={() => { setDialogOpen(false); setPendingLink(null); setDrawRect(null); }}
                 className="px-3 py-1.5 text-sm border rounded hover:bg-muted transition-colors"
-                aria-label="Cancel"
               >
                 Cancel
               </button>
@@ -368,7 +365,6 @@ export function SmartNavEditor() {
                 onClick={handleSave}
                 disabled={saving}
                 className="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors disabled:opacity-50"
-                aria-label="Save hotspot"
               >
                 {saving ? 'Saving…' : 'Save hotspot'}
               </button>

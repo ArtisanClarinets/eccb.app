@@ -50,16 +50,22 @@ export async function updateSettings(settings: Record<string, string>) {
   const session = await requirePermission(SYSTEM_CONFIG);
 
   try {
-    // ⚡ Bolt: Batch settings updates in a single transaction to avoid N+1 queries
-    const upsertQueries = Object.entries(settings).map(([key, value]) => {
-      return prisma.systemSetting.upsert({
+    for (const [key, value] of Object.entries(settings)) {
+      const existing = await prisma.systemSetting.findUnique({
         where: { key },
-        update: { value, updatedBy: session.user.id },
-        create: { key, value, updatedBy: session.user.id },
       });
-    });
 
-    await prisma.$transaction(upsertQueries);
+      if (existing) {
+        await prisma.systemSetting.update({
+          where: { key },
+          data: { value, updatedBy: session.user.id },
+        });
+      } else {
+        await prisma.systemSetting.create({
+          data: { key, value, updatedBy: session.user.id },
+        });
+      }
+    }
 
     await auditLog({
       action: 'UPDATE_SETTINGS',

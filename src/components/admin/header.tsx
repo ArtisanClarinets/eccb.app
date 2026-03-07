@@ -66,7 +66,7 @@ export function AdminHeader() {
           {/* User menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" aria-label="User menu">
+              <Button variant="ghost" size="icon">
                 <User className="h-5 w-5" />
               </Button>
             </DropdownMenuTrigger>

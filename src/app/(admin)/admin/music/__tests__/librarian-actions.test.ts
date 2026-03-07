@@ -24,16 +24,8 @@ const mockInvalidateMusicAssignmentCache = vi.hoisted(() => vi.fn());
 const mockInvalidateMusicDashboardCache = vi.hoisted(() => vi.fn());
 
 // Mock dependencies
-const mockTransaction = vi.hoisted(() => vi.fn().mockImplementation(async (arg) => {
-  if (Array.isArray(arg)) {
-    return Promise.all(arg);
-  }
-  return arg({});
-}));
-
 vi.mock('@/lib/db', () => ({
   prisma: {
-    $transaction: mockTransaction,
     member: {
       findMany: mockMemberFindMany,
     },
