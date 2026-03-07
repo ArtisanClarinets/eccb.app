@@ -16,6 +16,7 @@ import { getSession } from '@/lib/auth/guards';
 import { requirePermission } from '@/lib/auth/permissions';
 import { validateCSRF } from '@/lib/csrf';
 import { logger } from '@/lib/logger';
+import { getPrimaryApiKey } from '@/lib/llm/api-key-service';
 
 // =============================================================================
 // Constants
@@ -85,7 +86,7 @@ export async function discoverGemini(apiKey: string | undefined): Promise<Discov
       provider: 'gemini',
       available: true,
       models: visionModels,
-      settingsWritten: ['llm_provider', 'llm_vision_model', 'llm_verification_model', 'llm_gemini_api_key'],
+      settingsWritten: ['llm_provider', 'llm_vision_model', 'llm_verification_model'],
       note: `Gemini key valid. Selected "${visionModel}".`,
     };
   } catch {
@@ -110,7 +111,7 @@ export async function discoverOpenRouter(apiKey: string | undefined): Promise<Di
       provider: 'openrouter',
       available: true,
       models: freeModels,
-      settingsWritten: ['llm_provider', 'llm_vision_model', 'llm_verification_model', 'llm_openrouter_api_key'],
+      settingsWritten: ['llm_provider', 'llm_vision_model', 'llm_verification_model'],
       note: `OpenRouter key valid. ${freeModels.length} free models found. Using "${visionModel}".`,
     };
   } catch {
@@ -155,8 +156,6 @@ export async function POST(request: NextRequest) {
       where: {
         key: {
           in: [
-            'llm_gemini_api_key',
-            'llm_openrouter_api_key',
             'llm_provider',
             'llm_default_provider',
             'llm_vision_provider',
@@ -173,8 +172,8 @@ export async function POST(request: NextRequest) {
       if (row.value) existing[row.key] = row.value;
     }
 
-    const geminiKey = existing.llm_gemini_api_key || undefined;
-    const openrouterKey = existing.llm_openrouter_api_key || undefined;
+    const geminiKey = (await getPrimaryApiKey('gemini')) || undefined;
+    const openrouterKey = (await getPrimaryApiKey('openrouter')) || undefined;
     const currentProvider = existing.llm_provider;
 
     // Run all discovery checks in parallel
@@ -244,8 +243,7 @@ export async function POST(request: NextRequest) {
           await upsertSetting('llm_provider', 'gemini', by);
           await upsertSetting('llm_vision_model', visionModel, by);
           await upsertSetting('llm_verification_model', visionModel, by);
-          if (geminiKey) await upsertSetting('llm_gemini_api_key', geminiKey, by);
-          // backfill providers
+          // backfill per-step providers if not already set
           if (!existing.llm_default_provider) await upsertSetting('llm_default_provider', 'gemini', by);
           if (!existing.llm_vision_provider) await upsertSetting('llm_vision_provider', 'gemini', by);
           if (!existing.llm_verification_provider) await upsertSetting('llm_verification_provider', 'gemini', by);
@@ -258,7 +256,6 @@ export async function POST(request: NextRequest) {
             'llm_provider',
             'llm_vision_model',
             'llm_verification_model',
-            'llm_gemini_api_key',
             'llm_default_provider',
             'llm_vision_provider',
             'llm_verification_provider',
@@ -271,7 +268,6 @@ export async function POST(request: NextRequest) {
           await upsertSetting('llm_provider', 'openrouter', by);
           await upsertSetting('llm_vision_model', visionModel, by);
           await upsertSetting('llm_verification_model', visionModel, by);
-          if (openrouterKey) await upsertSetting('llm_openrouter_api_key', openrouterKey, by);
           if (!existing.llm_default_provider) await upsertSetting('llm_default_provider', 'openrouter', by);
           if (!existing.llm_vision_provider) await upsertSetting('llm_vision_provider', 'openrouter', by);
           if (!existing.llm_verification_provider) await upsertSetting('llm_verification_provider', 'openrouter', by);
@@ -284,7 +280,6 @@ export async function POST(request: NextRequest) {
             'llm_provider',
             'llm_vision_model',
             'llm_verification_model',
-            'llm_openrouter_api_key',
             'llm_default_provider',
             'llm_vision_provider',
             'llm_verification_provider',

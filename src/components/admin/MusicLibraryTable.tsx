@@ -121,7 +121,7 @@ export function MusicLibraryTable({
       });
 
       if (response.ok) {
-        const data = await response.json();
+        const _data = await response.json();
         // Update local state by removing/updating affected pieces
         const newPieces = pieces.filter((p) => !selectedIds.has(p.id));
         setPieces(newPieces);

@@ -18,7 +18,6 @@ import {
   buildPartFilename,
   buildPartStorageSlug,
 } from '../part-naming';
-import type { NormalisedInstrument } from '../part-naming';
 
 // =============================================================================
 // Canonical Instrument Name Tests

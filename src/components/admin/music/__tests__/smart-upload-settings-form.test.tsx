@@ -8,10 +8,8 @@
 // }));
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { SmartUploadSettingsForm } from '../smart-upload-settings-form';
-import { LLM_PROVIDERS } from '@/lib/llm/providers';
-import { ProviderValue } from '@/lib/smart-upload/schema';
 
 // helper to render form with settings
 function renderForm(settings: Record<string, string>) {

@@ -12,7 +12,6 @@ import { applyRateLimit } from '@/lib/rate-limit';
 import {
   getStandSettings,
   updateStandSettings,
-  STAND_SETTING_KEYS,
   type StandGlobalSettings,
 } from '@/lib/stand/settings';
 import { getStandSession } from '@/lib/stand/access';

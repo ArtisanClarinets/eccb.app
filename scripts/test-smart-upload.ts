@@ -255,7 +255,7 @@ async function main() {
       const metadata = dbSession.extractedMetadata as Record<string, unknown> | null;
       const parsedParts = dbSession.parsedParts as unknown[] | null;
       const notes = metadata?.notes as string | undefined;
-      const ocrFirstUsed = notes?.includes('OCR-first pipeline') ?? false;
+      const _ocrFirstUsed = notes?.includes('OCR-first pipeline') ?? false;
 
       // Terminal states: PARSED, PARSE_FAILED, or second pass finished (COMPLETE/FAILED)
       const secondPassStatus = (dbSession as Record<string, unknown>).secondPassStatus as string | null;

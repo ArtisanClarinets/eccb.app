@@ -145,7 +145,6 @@ import { downloadFile, uploadFile } from '@/lib/services/storage';
 import { callVisionModel } from '@/lib/llm';
 import { loadSmartUploadRuntimeConfig } from '@/lib/llm/config-loader';
 import { splitPdfByCuttingInstructions, validatePdfBuffer } from '@/lib/services/pdf-splitter';
-import { renderPdfPageBatch } from '@/lib/services/pdf-renderer';
 import {
   queueSmartUploadSecondPass,
 } from '@/lib/jobs/smart-upload';

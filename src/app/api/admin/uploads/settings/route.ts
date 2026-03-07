@@ -11,16 +11,9 @@ import {
   validateSmartUploadSettings,
   mergeSettingsPreservingSecrets,
   SMART_UPLOAD_SETTING_KEYS,
-  SECRET_KEYS,
 } from '@/lib/smart-upload/schema';
 import { loadSmartUploadSettingsFromDB } from '@/lib/smart-upload/bootstrap';
-import {
-  DEFAULT_VISION_SYSTEM_PROMPT,
-  DEFAULT_VERIFICATION_SYSTEM_PROMPT,
-  PROMPT_VERSION,
-  getDefaultPromptsRecord,
-} from '@/lib/smart-upload/prompts';
-import { maskSecretValue } from '@/lib/smart-upload/secret-settings';
+import { getDefaultPromptsRecord } from '@/lib/smart-upload/prompts';
 
 // =============================================================================
 // Schema Validation
@@ -140,21 +133,7 @@ export async function GET() {
 
     const settingsArray: SystemSetting[] = Object.values(settingsMap);
 
-    // Mask secret values
-    const SECRET_KEY_SET = new Set<string>([...SECRET_KEYS]);
-
-    const maskedSettings = settingsArray.map((setting) => {
-      if (SECRET_KEY_SET.has(setting.key)) {
-        const masked = maskSecretValue(setting.value);
-        return {
-          ...setting,
-          value: masked || '__UNSET__',
-        };
-      }
-      return setting;
-    });
-
-    return NextResponse.json({ settings: maskedSettings });
+    return NextResponse.json({ settings: settingsArray });
   } catch (error) {
     logger.error('Failed to fetch smart upload settings', { error });
     return NextResponse.json({ error: 'Failed to fetch settings' }, { status: 500 });

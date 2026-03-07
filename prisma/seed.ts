@@ -218,32 +218,6 @@ async function main() {
       })(),
       description: 'Custom endpoint URL for the LLM provider'
     },
-    // API Keys (stored encrypted, masked in API)
-    { 
-      key: 'llm_openai_api_key', 
-      value: process.env.LLM_OPENAI_API_KEY || '',
-      description: 'OpenAI API key for GPT models'
-    },
-    { 
-      key: 'llm_anthropic_api_key', 
-      value: process.env.LLM_ANTHROPIC_API_KEY || '',
-      description: 'Anthropic API key for Claude models'
-    },
-    { 
-      key: 'llm_openrouter_api_key', 
-      value: process.env.LLM_OPENROUTER_API_KEY || '',
-      description: 'OpenRouter API key for multi-provider access'
-    },
-    { 
-      key: 'llm_gemini_api_key', 
-      value: process.env.LLM_GEMINI_API_KEY || '',
-      description: 'Google Gemini API key'
-    },
-    { 
-      key: 'llm_custom_api_key', 
-      value: process.env.LLM_CUSTOM_API_KEY || '',
-      description: 'API key for custom OpenAI-compatible endpoints'
-    },
     // Model Configuration
     { 
       key: 'llm_vision_model', 

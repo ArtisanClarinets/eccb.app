@@ -57,7 +57,7 @@ export interface SetlistsPanelProps {
   canManage?: boolean;
 }
 
-export function SetlistsPanel({ className, eventId, canManage = false }: SetlistsPanelProps) {
+export function SetlistsPanel({ className, eventId: _eventId, canManage = false }: SetlistsPanelProps) {
   const [setlists, setSetlists] = useState<Setlist[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

@@ -80,13 +80,10 @@ vi.mock('@/lib/smart-upload/prompts', () => ({
 
 // Import after mocks
 import { labelPages } from '../page-labeler';
-import { extractPdfPageHeaders, normalizePdfText } from '@/lib/services/pdf-text-extractor';
+import { extractPdfPageHeaders } from '@/lib/services/pdf-text-extractor';
 import { detectPartBoundaries } from '@/lib/services/part-boundary-detector';
 import { segmentByHeaderImages } from '@/lib/services/header-image-segmentation';
-import { loadLLMConfig } from '@/lib/llm/config-loader';
-import { callVisionModel, runtimeToAdapterConfig } from '@/lib/llm/index';
-import { SessionBudget } from '@/lib/smart-upload/budgets';
-import { buildHeaderLabelPrompt } from '@/lib/smart-upload/prompts';
+import { callVisionModel } from '@/lib/llm/index';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -253,7 +250,7 @@ describe('labelPages', () => {
         usage: { inputTokens: 100, outputTokens: 50 },
       });
 
-      const result = await labelPages({
+      const _result = await labelPages({
         pdfBuffer: fakePdf,
         totalPages: 4,
         sessionId: 'test-session',
@@ -389,7 +386,7 @@ describe('labelPages', () => {
         usage: { inputTokens: 100, outputTokens: 50 },
       });
 
-      const result = await labelPages({
+      const _result = await labelPages({
         pdfBuffer: fakePdf,
         totalPages: 100,
         sessionId: 'test-session',
@@ -419,7 +416,7 @@ describe('labelPages', () => {
         usage: { inputTokens: 100, outputTokens: 50 },
       });
 
-      const result = await labelPages({
+      const _result = await labelPages({
         pdfBuffer: fakePdf,
         totalPages: 100,
         sessionId: 'test-session',

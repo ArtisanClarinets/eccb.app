@@ -7,7 +7,9 @@ import { auditLog } from '@/lib/services/audit';
 import { SYSTEM_CONFIG } from '@/lib/auth/permission-constants';
 import { z } from 'zod';
 import { getDefaultEndpointForProvider } from '@/lib/llm/providers';
-import { ProviderValueSchema } from '@/lib/smart-upload/schema';
+import { ProviderValueSchema, providerRequiresApiKey } from '@/lib/smart-upload/schema';
+import { getPrimaryApiKey } from '@/lib/llm/api-key-service';
+import { type LLMProviderValue } from '@/lib/llm/providers';
 import { validateOutboundEndpoint } from '@/lib/network/safe-endpoint';
 
 // =============================================================================
@@ -17,7 +19,6 @@ import { validateOutboundEndpoint } from '@/lib/network/safe-endpoint';
 const testSchema = z.object({
   provider: ProviderValueSchema,
   endpoint: z.string().optional(),
-  apiKey: z.string().optional(),
   model: z.string(),
 });
 
@@ -52,7 +53,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
     }
 
-    const { provider, endpoint, apiKey, model } = parsed.data;
+    const { provider, endpoint, model } = parsed.data;
+
+    // Resolve API key from encrypted APIKey table
+    const apiKey = await getPrimaryApiKey(provider as LLMProviderValue);
+    if (providerRequiresApiKey(provider) && !apiKey) {
+      return NextResponse.json(
+        { ok: false, error: `No API key configured for ${provider}. Add one via API Key Management.` },
+        { status: 400 }
+      );
+    }
 
     if (endpoint?.trim()) {
       const endpointPolicy = provider === 'ollama' || provider === 'ollama-cloud'
@@ -62,11 +72,6 @@ export async function POST(request: NextRequest) {
       if (!endpointValidation.valid) {
         return NextResponse.json({ ok: false, error: endpointValidation.error }, { status: 400 });
       }
-    }
-
-    // ensure required fields beyond schema
-    if ((provider === 'openai' || provider === 'anthropic' || provider === 'gemini' || provider === 'openrouter' || provider === 'custom') && !apiKey) {
-      return NextResponse.json({ ok: false, error: 'API key is required' }, { status: 400 });
     }
 
     logger.info('Testing LLM connection', {

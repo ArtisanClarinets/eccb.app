@@ -8,7 +8,7 @@
  * - Integration tests for version bumping and merge behavior
  * - Edge cases and boundary conditions
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import {
   computeSha256,
   computeWorkFingerprint,
@@ -20,7 +20,6 @@ import {
   resolveDeduplicationPolicy,
   type DuplicateCheckResult,
   type WorkFingerprint,
-  type WorkFingerprintV2,
 } from '../duplicate-detection';
 
 // =============================================================================

@@ -13,7 +13,7 @@ import { applyRateLimit } from '@/lib/rate-limit';
 import { z } from 'zod';
 import { requireStandAccess, canAccessPiece } from '@/lib/stand/access';
 import { getStandSettings } from '@/lib/stand/settings';
-import { jsonOk, json400, json404, json500, parseBody, cuidSchema } from '@/lib/stand/http';
+import { jsonOk, json404, json500, parseBody, cuidSchema } from '@/lib/stand/http';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

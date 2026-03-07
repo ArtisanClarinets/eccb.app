@@ -12,7 +12,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   normalizeTitle,
-  normalizePersonName,
   normalizePublisher,
   normalizeChair,
   normalizeTransposition,

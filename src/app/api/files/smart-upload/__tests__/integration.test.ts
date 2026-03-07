@@ -195,7 +195,7 @@ vi.mock('@/lib/db', () => ({
 // Test Imports
 // =============================================================================
 
-import { OPTIONS, POST } from '../route';
+import { OPTIONS as _OPTIONS, POST } from '../route';
 import { commitSmartUploadSessionToLibrary } from '@/lib/smart-upload/commit';
 import { evaluateQualityGates } from '@/lib/smart-upload/quality-gates';
 import { prisma } from '@/lib/db';
@@ -282,7 +282,7 @@ function resetPrismaMocks() {
   mockPrisma.musicPart.update.mockResolvedValue({});
   mockPrisma.musicPart.count.mockResolvedValue(0);
 
-  mockPrisma.$transaction.mockImplementation(async (callback: Function) => {
+  mockPrisma.$transaction.mockImplementation(async (callback: (tx: typeof mockPrisma) => Promise<unknown>) => {
     // Return a proper transaction result that commit.ts expects
     const txResult = await callback(mockPrisma);
     return txResult || {
@@ -590,7 +590,7 @@ describe('Smart Upload Integration Tests', () => {
       });
 
       // Setup $transaction mock to return proper structure
-      mockPrisma.$transaction.mockImplementation(async (callback: Function) => {
+      mockPrisma.$transaction.mockImplementation(async (callback: (tx: typeof mockPrisma) => Promise<unknown>) => {
         const tx = {
           ...mockPrisma,
           musicPiece: {
@@ -1006,13 +1006,13 @@ describe('Smart Upload Integration Tests', () => {
 
       // Simulate retry logic
       let attempts = 0;
-      const tryCommit = async () => {
+      const _tryCommit = async () => {
         attempts++;
         try {
           return await commitSmartUploadSessionToLibrary(sessionId, {}, TEST_USER_ID);
         } catch (e) {
           if (attempts < 2) {
-            return tryCommit();
+            return _tryCommit();
           }
           throw e;
         }
@@ -1546,7 +1546,7 @@ describe('Smart Upload Integration Tests', () => {
       });
 
       // Mock a file at exactly the limit
-      const maxSize = 50 * 1024 * 1024; // 50MB
+      const _maxSize = 50 * 1024 * 1024; // 50MB
 
       // The request should be rejected before processing
       // (we can't easily mock the actual file size in the request)

@@ -9,9 +9,6 @@ import {
   Brain,
   CheckCircle2,
   ChevronDown,
-  Eye,
-  EyeOff,
-  ExternalLink,
   Info,
   Loader2,
   RefreshCw,
@@ -64,8 +61,6 @@ import {
   type ProviderValue,
   type OcrEngineValue,
   type OcrModeValue,
-  getApiKeyFieldForProvider,
-  providerRequiresApiKey,
   providerRequiresEndpoint,
 } from '@/lib/smart-upload/schema';
 
@@ -94,69 +89,6 @@ interface ModelsResponse {
 // =============================================================================
 // Component
 // =============================================================================
-
-// Secret input component with show/hide toggle
-function SecretInput({
-  value,
-  onChange,
-  placeholder,
-  disabled = false,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  placeholder: string;
-  disabled?: boolean;
-}) {
-  const [show, setShow] = useState(false);
-  const isSet = value === '__SET__';
-
-  if (isSet) {
-    return (
-      <div className="flex items-center gap-2">
-        <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-md border bg-muted/50 text-sm">
-          <CheckCircle2 className="h-4 w-4 text-green-500" />
-          <span>Key is set</span>
-        </div>
-        <Button type="button" variant="outline" size="sm" onClick={() => onChange('')} disabled={disabled}>
-          Update
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => onChange('__CLEAR__')}
-          disabled={disabled}
-          className="text-red-500 hover:text-red-600"
-        >
-          Clear
-        </Button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex items-center gap-2">
-      <div className="relative flex-1">
-        <Input
-          type={show ? 'text' : 'password'}
-          placeholder={placeholder}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          disabled={disabled}
-          className="pr-10"
-        />
-        <button
-          type="button"
-          onClick={() => setShow(!show)}
-          disabled={disabled}
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-        >
-          {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-        </button>
-      </div>
-    </div>
-  );
-}
 
 // Model selector with recommended badge
 function ModelSelector({
@@ -220,11 +152,9 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
   const [visionModels, setVisionModels] = useState<ModelInfo[]>([]);
   const [verificationModels, setVerificationModels] = useState<ModelInfo[]>([]);
   const [headerLabelModels, setHeaderLabelModels] = useState<ModelInfo[]>([]);
-  const [adjudicatorModels, setAdjudicatorModels] = useState<ModelInfo[]>([]);
-  const [isLoadingModels, setIsLoadingModels] = useState(false);
-  const [modelError, setModelError] = useState<string | null>(null);
+  const [_adjudicatorModels, setAdjudicatorModels] = useState<ModelInfo[]>([]);
 
-  // Add per-step loading/error maps
+  // Per-step loading/error maps — isLoadingModels and modelError are derived below
   const [stepLoading, setStepLoading] = useState<{
     vision: boolean;
     verification: boolean;
@@ -239,33 +169,9 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
     adjudicator?: string | null;
   }>({});
 
-  const [visionProvider, setVisionProvider] = useState(
-    (settings['llm_vision_provider'] as ProviderValue) || '',
-  );
-
-  const [verificationProvider, setVerificationProvider] = useState(
-    (settings['llm_verification_provider'] as ProviderValue) || '',
-  );
-
-  const [headerLabelProvider, setHeaderLabelProvider] = useState(
-    (settings['llm_header_label_provider'] as ProviderValue) || '',
-  );
-
-  const [adjudicatorProvider, setAdjudicatorProvider] = useState(
-    (settings['llm_adjudicator_provider'] as ProviderValue) || '',
-  );
-
-  const [visionModel, setVisionModel] = useState(
-    (settings['llm_vision_model'] as string) || '',
-  );
-
-  const [verificationModel, setVerificationModel] = useState(
-    (settings['llm_verification_model'] as string) || '',
-  );
-
-  const [headerLabelModel, setHeaderLabelModel] = useState(
-    (settings['llm_header_label_model'] as string) || '',
-  );
+  // Derived aggregate loading/error state for the UI
+  const isLoadingModels = stepLoading.vision || stepLoading.verification || stepLoading.header || stepLoading.adjudicator;
+  const modelError = stepError.vision || stepError.verification || stepError.header || stepError.adjudicator || null;
 
   // form initialization with schema and default parsing of persisted settings
   const parseBool = (v: unknown) => v === 'true' || v === true;
@@ -290,15 +196,6 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
       llm_verification_provider: (settings['llm_verification_provider'] as ProviderValue) || '' as ProviderValue,
       llm_header_label_provider: (settings['llm_header_label_provider'] as ProviderValue) || '' as ProviderValue,
       llm_adjudicator_provider: (settings['llm_adjudicator_provider'] as ProviderValue) || '' as ProviderValue,
-      // API keys must be initialized from settings so fetchModelsFor can detect saved keys
-      llm_openai_api_key: (settings['llm_openai_api_key'] as string) || '',
-      llm_anthropic_api_key: (settings['llm_anthropic_api_key'] as string) || '',
-      llm_openrouter_api_key: (settings['llm_openrouter_api_key'] as string) || '',
-      llm_gemini_api_key: (settings['llm_gemini_api_key'] as string) || '',
-      llm_ollama_cloud_api_key: (settings['llm_ollama_cloud_api_key'] as string) || '',
-      llm_mistral_api_key: (settings['llm_mistral_api_key'] as string) || '',
-      llm_groq_api_key: (settings['llm_groq_api_key'] as string) || '',
-      llm_custom_api_key: (settings['llm_custom_api_key'] as string) || '',
       smart_upload_confidence_threshold: parseNum(settings['smart_upload_confidence_threshold']),
       smart_upload_auto_approve_threshold: parseNum(settings['smart_upload_auto_approve_threshold']),
       smart_upload_rate_limit_rpm: parseNum(settings['smart_upload_rate_limit_rpm']),
@@ -320,28 +217,13 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
 
   const provider = form.watch('llm_provider');
   const defaultProvider = form.watch('llm_default_provider') || provider;
-  const providerConfig = LLM_PROVIDERS.find((p) => p.value === provider);
-  const apiKeyField = getApiKeyFieldForProvider(provider);
-  const apiKeyValue = form.watch(apiKeyField as keyof SmartUploadSettings) as string;
+  const endpointUrl = form.watch('llm_endpoint_url');
 
   // per-step providers (with fallback to default/global)
   const visionProviderVal = form.watch('llm_vision_provider') || defaultProvider;
   const verificationProviderVal = form.watch('llm_verification_provider') || defaultProvider;
   const headerLabelProviderVal = form.watch('llm_header_label_provider') || defaultProvider;
   const adjudicatorProviderVal = form.watch('llm_adjudicator_provider') || defaultProvider;
-
-  const visionApiKey = form.watch(
-    getApiKeyFieldForProvider(visionProviderVal) as any,
-  );
-  const verificationApiKey = form.watch(
-    getApiKeyFieldForProvider(verificationProviderVal) as any,
-  );
-  const headerApiKey = form.watch(
-    getApiKeyFieldForProvider(headerLabelProviderVal) as any,
-  );
-  const adjudicatorApiKey = form.watch(
-    getApiKeyFieldForProvider(adjudicatorProviderVal) as any,
-  );
 
   // Fetch models when provider or API key changes
   const fetchModelsFor = useCallback(
@@ -363,14 +245,6 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
         return;
       }
 
-      const keyFieldName = getApiKeyFieldForProvider(providerVal);
-      const apiKey = form.getValues(keyFieldName as keyof SmartUploadSettings) as string;
-      if (providerRequiresApiKey(providerVal as ProviderValue) && (!apiKey || apiKey === '__UNSET__')) {
-        setErr('Please enter an API key to fetch available models');
-        setModels([]);
-        return;
-      }
-
       setLoading(true);
       setErr(null);
 
@@ -379,12 +253,7 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
         const endpointValue = form.getValues('llm_endpoint_url');
         if (endpointValue) params.set('endpoint', String(endpointValue));
 
-        const headers: HeadersInit = {};
-        if (apiKey && !apiKey.startsWith('__')) {
-          headers['x-provider-api-key'] = apiKey;
-        }
-
-        const response = await fetch(`/api/admin/uploads/models?${params}`, { headers });
+        const response = await fetch(`/api/admin/uploads/models?${params}`);
 
         if (!response.ok) {
           const error = await response.json();
@@ -450,11 +319,7 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
     verificationProviderVal,
     headerLabelProviderVal,
     adjudicatorProviderVal,
-    visionApiKey,
-    verificationApiKey,
-    headerApiKey,
-    adjudicatorApiKey,
-    form.watch('llm_endpoint_url'),
+    endpointUrl,
     fetchAllModels
   ]);
 
@@ -463,23 +328,6 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
     
     const config = LLM_PROVIDERS.find((p) => p.value === value);
     if (config) {
-      // Clear other provider API keys for security
-      const allKeyFields = [
-        'llm_openai_api_key',
-        'llm_anthropic_api_key',
-        'llm_openrouter_api_key',
-        'llm_gemini_api_key',
-        'llm_ollama_cloud_api_key',
-        'llm_mistral_api_key',
-        'llm_groq_api_key',
-        'llm_custom_api_key',
-      ];
-      allKeyFields.forEach((field) => {
-        if (field !== getApiKeyFieldForProvider(value)) {
-          form.setValue(field as keyof SmartUploadSettings, '');
-        }
-      });
-
       // Set endpoint for custom provider
       if (value === 'custom') {
         form.setValue('llm_endpoint_url', '');
@@ -577,10 +425,6 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
     setTestMessage('');
     try {
       const values = form.getValues();
-      
-      // Get the API key for the selected provider
-      const keyField = getApiKeyFieldForProvider(provider);
-      const apiKey = values[keyField as keyof SmartUploadSettings] as string;
 
       const res = await fetch('/api/admin/uploads/settings/test', {
         method: 'POST',
@@ -588,7 +432,6 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
         body: JSON.stringify({
           provider: values.llm_provider,
           endpoint: values.llm_endpoint_url || '',
-          apiKey: apiKey || '',
           model: values.llm_vision_model,
         }),
       });
@@ -634,7 +477,6 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
     }
   };
 
-  const requiresApiKey = providerRequiresApiKey(provider);
   const requiresEndpoint = providerRequiresEndpoint(provider);
 
   return (
@@ -697,42 +539,6 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
                       />
                     </FormControl>
                     <FormDescription>Base URL for the custom API endpoint</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
-
-            {/* API Key (only for providers that require it) */}
-            {requiresApiKey && (
-              <FormField
-                control={form.control}
-                name={apiKeyField as keyof SmartUploadSettings}
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="flex items-center gap-2">
-                      {providerConfig?.apiKeyLabel || 'API Key'}
-                      {providerConfig?.docsUrl && (
-                        <a
-                          href={providerConfig.docsUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-primary inline-flex items-center gap-0.5 text-xs underline-offset-2 hover:underline"
-                        >
-                          Get key <ExternalLink className="h-3 w-3" />
-                        </a>
-                      )}
-                    </FormLabel>
-                    <FormControl>
-                      <SecretInput
-                        value={String(field.value || '')}
-                        onChange={field.onChange}
-                        placeholder={providerConfig?.apiKeyPlaceholder || 'Enter API key'}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      Your {provider} API key. This is stored securely and never shared.
-                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}

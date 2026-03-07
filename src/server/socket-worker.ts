@@ -22,7 +22,6 @@ import { getStandSettings } from '@/lib/stand/settings';
 
 // ─── Config ────────────────────────────────────────────────────────────────
 
-const PORT = parseInt(process.env.SOCKET_PORT || '3005', 10);
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 

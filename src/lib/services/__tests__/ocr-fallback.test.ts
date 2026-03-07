@@ -55,7 +55,7 @@ vi.mock('tesseract.js', () => ({}));
 
 // Import mocked helpers
 import { extractPdfPageHeaders } from '@/lib/services/pdf-text-extractor';
-import { renderPdfToImage, renderPdfHeaderCropBatch } from '@/lib/services/pdf-renderer';
+import { renderPdfHeaderCropBatch } from '@/lib/services/pdf-renderer';
 
 // Import module under test
 import {

@@ -57,13 +57,11 @@ import { deepCloneJSON } from '@/lib/json';
 import {
   buildHeaderLabelPrompt,
   buildPdfVisionPrompt,
-  buildVisionPrompt,
   buildVisionMetadataPrompt,
   DEFAULT_HEADER_LABEL_SYSTEM_PROMPT,
   DEFAULT_PDF_VISION_USER_PROMPT_TEMPLATE,
   DEFAULT_VISION_METADATA_ONLY_USER_PROMPT_TEMPLATE,
   DEFAULT_VISION_SYSTEM_PROMPT,
-  DEFAULT_VISION_USER_PROMPT_TEMPLATE,
   PROMPT_VERSION,
 } from '@/lib/smart-upload/prompts';
 import type {

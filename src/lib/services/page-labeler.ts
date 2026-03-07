@@ -14,7 +14,7 @@
  */
 
 import { logger } from '@/lib/logger';
-import { loadLLMConfig, type LLMRuntimeConfig } from '@/lib/llm/config-loader';
+import { loadLLMConfig } from '@/lib/llm/config-loader';
 import { SessionBudget } from '@/lib/smart-upload/budgets';
 import { buildHeaderLabelPrompt } from '@/lib/smart-upload/prompts';
 import { extractPdfPageHeaders, normalizePdfText } from '@/lib/services/pdf-text-extractor';

@@ -247,9 +247,6 @@ export async function createApiKey(input: CreateApiKeyInput): Promise<ApiKeyReco
     await setPrimaryKeyId(input.providerSlug, id);
   }
 
-  // Also sync to SystemSetting for backward compatibility (config-loader reads from there)
-  await syncPrimaryKeyToSystemSetting(input.providerSlug);
-
   const primaryId = await getPrimaryKeyId(input.providerSlug);
   return toRecord(row, primaryId === id);
 }
@@ -288,7 +285,6 @@ export async function updateApiKey(
 
   if (input.isPrimary) {
     await setPrimaryKeyId(slug, id);
-    await syncPrimaryKeyToSystemSetting(slug);
   }
 
   const primaryId = await getPrimaryKeyId(slug);
@@ -323,12 +319,11 @@ export async function deleteApiKey(id: string): Promise<void> {
     if (next) {
       await setPrimaryKeyId(slug, next.id);
     } else {
-      // No keys left — clear SystemSetting
+      // No keys left — clear the primary key tracker
       await prisma.systemSetting.deleteMany({
         where: { key: primaryKeySettingKey(slug) },
       });
     }
-    await syncPrimaryKeyToSystemSetting(slug);
   }
 }
 
@@ -403,41 +398,6 @@ export async function getFallbackApiKey(slug: LLMProviderValue): Promise<string>
   }
 }
 
-// ─── SystemSetting sync ─────────────────────────────────────
-// The existing config-loader reads API keys from SystemSetting.
-// We sync the primary key's decrypted value there for backward
-// compat. This keeps config-loader working without changes
-// until we fully migrate it.
-
-const PROVIDER_TO_SETTING_KEY: Record<string, string> = {
-  openai: 'llm_openai_api_key',
-  anthropic: 'llm_anthropic_api_key',
-  openrouter: 'llm_openrouter_api_key',
-  gemini: 'llm_gemini_api_key',
-  'ollama-cloud': 'llm_ollama_cloud_api_key',
-  mistral: 'llm_mistral_api_key',
-  groq: 'llm_groq_api_key',
-  custom: 'llm_custom_api_key',
-};
-
-async function syncPrimaryKeyToSystemSetting(slug: LLMProviderValue): Promise<void> {
-  const settingKey = PROVIDER_TO_SETTING_KEY[slug];
-  if (!settingKey) return;
-
-  try {
-    const plaintext = await getPrimaryApiKey(slug);
-    if (plaintext) {
-      await prisma.systemSetting.upsert({
-        where: { key: settingKey },
-        update: { value: plaintext, updatedBy: 'system:key-sync' },
-        create: { key: settingKey, value: plaintext, updatedBy: 'system:key-sync' },
-      });
-    }
-  } catch (err) {
-    logger.warn('Failed to sync primary key to SystemSetting', { slug, error: String(err) });
-  }
-}
-
 // ─── Migration: SystemSetting → APIKey ───────────────────────
 
 /**
@@ -447,6 +407,18 @@ async function syncPrimaryKeyToSystemSetting(slug: LLMProviderValue): Promise<vo
  */
 export async function migrateSystemSettingKeysToApiKeyTable(): Promise<void> {
   await ensureProvidersExist();
+
+  // Local map used only by this one-time migration
+  const PROVIDER_TO_SETTING_KEY: Record<string, string> = {
+    openai: 'llm_openai_api_key',
+    anthropic: 'llm_anthropic_api_key',
+    openrouter: 'llm_openrouter_api_key',
+    gemini: 'llm_gemini_api_key',
+    'ollama-cloud': 'llm_ollama_cloud_api_key',
+    mistral: 'llm_mistral_api_key',
+    groq: 'llm_groq_api_key',
+    custom: 'llm_custom_api_key',
+  };
 
   for (const [slug, settingKey] of Object.entries(PROVIDER_TO_SETTING_KEY)) {
     try {

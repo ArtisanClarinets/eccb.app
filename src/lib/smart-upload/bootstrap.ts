@@ -9,9 +9,7 @@ import { logger } from '@/lib/logger';
 import {
   SMART_UPLOAD_SETTING_KEYS,
   type ProviderValue,
-  getApiKeyFieldForProvider,
   providerRequiresApiKey,
-  maskSecrets,
   SMART_UPLOAD_SCHEMA_VERSION,
 } from './schema';
 import {
@@ -19,7 +17,8 @@ import {
   promptsNeedReset,
   PROMPT_VERSION,
 } from './prompts';
-import { LLM_PROVIDERS } from '@/lib/llm/providers';
+import { LLM_PROVIDERS, type LLMProviderValue } from '@/lib/llm/providers';
+import { getPrimaryApiKey } from '@/lib/llm/api-key-service';
 
 // =============================================================================
 // Bootstrap Configuration
@@ -73,6 +72,9 @@ const DEFAULT_NUMERIC_SETTINGS: Record<string, string> = {
   smart_upload_ocr_rate_limit_rpm: '6',
   smart_upload_llm_max_pages: '10',
   smart_upload_llm_max_header_batches: '2',
+  // LLM response caching
+  smart_upload_enable_llm_cache: 'false',
+  smart_upload_llm_cache_ttl_seconds: '86400',
 };
 
 const DEFAULT_JSON_SETTINGS: Record<string, string> = {
@@ -273,7 +275,7 @@ export async function loadSmartUploadSettingsFromDB(): Promise<{
   
   return {
     settings,
-    masked: maskSecrets(settings),
+    masked: { ...settings },
   };
 }
 
@@ -295,12 +297,11 @@ export async function isSmartUploadConfigured(): Promise<{
   
   const provider = settings.llm_provider as ProviderValue | undefined;
   
-  // Check API key for non-local providers
+  // Check API key for non-local providers (resolved from encrypted APIKey table)
   if (provider && providerRequiresApiKey(provider)) {
-    const keyField = getApiKeyFieldForProvider(provider);
-    const keyValue = settings[keyField];
-    if (!keyValue || keyValue.trim() === '') {
-      missing.push(keyField);
+    const apiKey = await getPrimaryApiKey(provider as LLMProviderValue);
+    if (!apiKey) {
+      missing.push(`api_key_${provider}`);
     }
   }
   

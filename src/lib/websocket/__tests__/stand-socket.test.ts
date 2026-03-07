@@ -7,7 +7,7 @@
  *  - handleWebSocketUpgrade when server is / isn't running
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
 
@@ -60,7 +60,6 @@ import {
   parseMessage,
   handleWebSocketUpgrade,
   HEARTBEAT_INTERVAL_MS,
-  type StandMessage,
 } from '../stand-socket';
 
 // =============================================================================

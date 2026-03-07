@@ -124,15 +124,6 @@ const DB_KEYS = [
   // Legacy keys (still honoured as fallback)
   'llm_ollama_endpoint',
   'llm_custom_base_url',
-  // API keys
-  'llm_openai_api_key',
-  'llm_anthropic_api_key',
-  'llm_openrouter_api_key',
-  'llm_gemini_api_key',
-  'llm_ollama_cloud_api_key',
-  'llm_mistral_api_key',
-  'llm_groq_api_key',
-  'llm_custom_api_key',
   // Models
   'llm_vision_model',
   'llm_verification_model',
@@ -299,34 +290,14 @@ export async function loadLLMConfig(): Promise<LLMRuntimeConfig> {
   const llmMaxPages = Number(db['smart_upload_llm_max_pages'] ?? 10);
   const llmMaxHeaderBatches = Number(db['smart_upload_llm_max_header_batches'] ?? 2);
 
-  // ── API keys — prefer encrypted APIKey table, fall back to SystemSetting ──
+  // ── API keys — encrypted APIKey table is the sole source of truth ────────
   const PROVIDER_SLUGS = [
     'openai', 'anthropic', 'openrouter', 'gemini',
     'ollama-cloud', 'mistral', 'groq', 'custom',
   ] as const;
-  const PROVIDER_DB_KEYS: Record<string, string> = {
-    openai: 'llm_openai_api_key',
-    anthropic: 'llm_anthropic_api_key',
-    openrouter: 'llm_openrouter_api_key',
-    gemini: 'llm_gemini_api_key',
-    'ollama-cloud': 'llm_ollama_cloud_api_key',
-    mistral: 'llm_mistral_api_key',
-    groq: 'llm_groq_api_key',
-    custom: 'llm_custom_api_key',
-  };
   const apiKeys: Record<string, string> = {};
   for (const slug of PROVIDER_SLUGS) {
-    try {
-      const encryptedKey = await getPrimaryApiKey(slug as LLMProviderValue);
-      if (encryptedKey) {
-        apiKeys[slug] = encryptedKey;
-        continue;
-      }
-    } catch {
-      // Encrypted table not available or decryption failed — fall back
-    }
-    // Fall back to SystemSetting (legacy plaintext)
-    apiKeys[slug] = db[PROVIDER_DB_KEYS[slug]] || '';
+    apiKeys[slug] = await getPrimaryApiKey(slug as LLMProviderValue);
   }
 
   return {

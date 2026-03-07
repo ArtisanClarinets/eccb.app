@@ -115,9 +115,9 @@ export default function SmartUploadSettingsPage() {
           </p>
         </div>
 
-        <SmartUploadSettingsForm settings={settings} />
-
         <ApiKeyManager />
+
+        <SmartUploadSettingsForm settings={settings} />
       </div>
     </div>
   );

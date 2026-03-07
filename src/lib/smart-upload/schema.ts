@@ -47,22 +47,13 @@ export const SMART_UPLOAD_SETTING_KEYS = [
   'llm_vision_model',
   'llm_verification_model',
 
-  // API Keys (one per provider)
-  'llm_openai_api_key',
-  'llm_anthropic_api_key',
-  'llm_openrouter_api_key',
-  'llm_gemini_api_key',
-  'llm_ollama_cloud_api_key',
-  'llm_mistral_api_key',
-  'llm_groq_api_key',
-  'llm_custom_api_key',
-
   // Prompts (source of truth)
   'llm_vision_system_prompt',
   'llm_verification_system_prompt',
   'llm_prompt_version',
   // User prompt templates (editable via Admin UI / settings API)
   'llm_vision_user_prompt',
+  'llm_vision_metadata_only_user_prompt',
   'llm_pdf_vision_user_prompt',
   'llm_verification_user_prompt',
   'llm_header_label_user_prompt',
@@ -99,6 +90,10 @@ export const SMART_UPLOAD_SETTING_KEYS = [
   // Enterprise: Budget system
   'smart_upload_budget_max_llm_calls_per_session',
   'smart_upload_budget_max_input_tokens_per_session',
+
+  // LLM response cache
+  'smart_upload_enable_llm_cache',
+  'smart_upload_llm_cache_ttl_seconds',
 
   // Metadata
   'smart_upload_schema_version',
@@ -178,16 +173,6 @@ export const SmartUploadSettingsSchema = z.object({
   llm_vision_model: z.string().optional(),
   llm_verification_model: z.string().optional(),
   
-  // API Keys (provider-specific, at least one must be set for non-local providers)
-  llm_openai_api_key: z.string().optional(),
-  llm_anthropic_api_key: z.string().optional(),
-  llm_openrouter_api_key: z.string().optional(),
-  llm_gemini_api_key: z.string().optional(),
-  llm_ollama_cloud_api_key: z.string().optional(),
-  llm_mistral_api_key: z.string().optional(),
-  llm_groq_api_key: z.string().optional(),
-  llm_custom_api_key: z.string().optional(),
-  
   // Prompts (optional for updates, defaults provided if missing)
   llm_vision_system_prompt: z.string().optional(),
   llm_verification_system_prompt: z.string().optional(),
@@ -195,6 +180,7 @@ export const SmartUploadSettingsSchema = z.object({
 
   // User prompt templates (optional — fall back to hardcoded defaults when absent)
   llm_vision_user_prompt: z.string().optional(),
+  llm_vision_metadata_only_user_prompt: z.string().optional(),
   llm_pdf_vision_user_prompt: z.string().optional(),
   llm_verification_user_prompt: z.string().optional(),
   llm_header_label_user_prompt: z.string().optional(),
@@ -333,6 +319,20 @@ export const SmartUploadSettingsSchema = z.object({
   // Schema version for migrations
   smart_upload_schema_version: z.string().default(SMART_UPLOAD_SCHEMA_VERSION),
 
+  // LLM response cache
+  smart_upload_enable_llm_cache: z
+    .union([z.boolean(), z.string()])
+    .transform((v) => (typeof v === 'string' ? v === 'true' : v))
+    .default(false),
+
+  smart_upload_llm_cache_ttl_seconds: z
+    .union([z.string(), z.number()])
+    .transform((v) => {
+      const num = typeof v === 'string' ? Number(v) : v;
+      return Math.max(60, isNaN(num) ? 86400 : num);
+    })
+    .default(86400),
+
   // ========================================
   // NEW: OCR-first fields (Phase 1-2)
   // ========================================
@@ -443,35 +443,13 @@ export type SmartUploadSettings = z.infer<typeof SmartUploadSettingsSchema>;
 // =============================================================================
 
 /**
- * Get the API key field name for a provider
- */
-export function getApiKeyFieldForProvider(provider?: ProviderValue | string): string {
-  if (!provider || provider === '') {
-    return '';
-  }
-  const mapping: Record<ProviderValue, string> = {
-    ollama: '',
-    'ollama-cloud': 'llm_ollama_cloud_api_key',
-    openai: 'llm_openai_api_key',
-    anthropic: 'llm_anthropic_api_key',
-    gemini: 'llm_gemini_api_key',
-    openrouter: 'llm_openrouter_api_key',
-    mistral: 'llm_mistral_api_key',
-    groq: 'llm_groq_api_key',
-    custom: 'llm_custom_api_key',
-  };
-  return mapping[provider as ProviderValue] || '';
-}
-
-/**
- * Check if a provider requires an API key
+ * Check if a provider requires an API key.
+ * API keys are managed exclusively via the APIKey/AIProvider system —
+ * this helper only answers the structural question.
  */
 export function providerRequiresApiKey(provider?: ProviderValue | string): boolean {
-  if (!provider || provider === '') {
-    return false;
-  }
-  // Local-only providers (ollama, custom with optional key) don't require keys.
-  // All cloud providers need an API key set.
+  if (!provider || provider === '') return false;
+  // Local-only providers do not need an API key in the settings store.
   return provider !== 'ollama' && provider !== 'custom';
 }
 
@@ -481,82 +459,6 @@ export function providerRequiresApiKey(provider?: ProviderValue | string): boole
 export function providerRequiresEndpoint(provider?: ProviderValue | string): boolean {
   // Custom and local Ollama endpoints need explicit URL
   return provider === 'custom' || provider === 'ollama';
-}
-
-/**
- * Validate that the API key is set for the selected provider
- */
-export function validateProviderApiKey(
-  provider?: ProviderValue | string,
-  settings: Partial<SmartUploadSettings> = {}
-): { valid: boolean; error?: string } {
-  if (!provider || !providerRequiresApiKey(provider)) {
-    return { valid: true };
-  }
-
-  const keyField = getApiKeyFieldForProvider(provider);
-  const keyValue = settings[keyField as keyof SmartUploadSettings];
-
-  if (!keyValue || (typeof keyValue === 'string' && keyValue.trim() === '')) {
-    return {
-      valid: false,
-      error: `${provider} requires an API key. Please configure ${keyField}.`,
-    };
-  }
-
-  return { valid: true };
-}
-
-/**
- * Validate API keys for all providers that may be used across different steps.
- * This ensures that when per-step providers are configured, all required keys are present.
- */
-export function validateAllProviderApiKeys(
-  settings: Partial<SmartUploadSettings>
-): { valid: boolean; errors: string[] } {
-  const errors: string[] = [];
-
-  // Collect all providers that may be used
-  const providersToCheck: ProviderValue[] = [];
-
-  // Global/default provider
-  if (settings.llm_provider) {
-    providersToCheck.push(settings.llm_provider);
-  }
-  if (settings.llm_default_provider) {
-    providersToCheck.push(settings.llm_default_provider);
-  }
-
-  // Per-step providers
-  if (settings.llm_vision_provider) {
-    providersToCheck.push(settings.llm_vision_provider);
-  }
-  if (settings.llm_verification_provider) {
-    providersToCheck.push(settings.llm_verification_provider);
-  }
-  if (settings.llm_header_label_provider) {
-    providersToCheck.push(settings.llm_header_label_provider);
-  }
-  if (settings.llm_adjudicator_provider) {
-    providersToCheck.push(settings.llm_adjudicator_provider);
-  }
-
-  // Check each unique provider
-  const checkedProviders = new Set<ProviderValue>();
-  for (const provider of providersToCheck) {
-    if (checkedProviders.has(provider)) continue;
-    checkedProviders.add(provider);
-
-    const result = validateProviderApiKey(provider, settings);
-    if (!result.valid && result.error) {
-      errors.push(result.error);
-    }
-  }
-
-  return {
-    valid: errors.length === 0,
-    errors,
-  };
 }
 
 /**
@@ -624,36 +526,8 @@ export function settingsToDbRecord(settings: SmartUploadSettings): Record<string
   return record;
 }
 
-// =============================================================================
-// Secret Key Management
-// =============================================================================
-
-export const SECRET_KEYS: readonly string[] = [
-  'llm_openai_api_key',
-  'llm_anthropic_api_key',
-  'llm_openrouter_api_key',
-  'llm_gemini_api_key',
-  'llm_ollama_cloud_api_key',
-  'llm_mistral_api_key',
-  'llm_groq_api_key',
-  'llm_custom_api_key',
-];
-
 /**
- * Mask secret values in API responses
- */
-export function maskSecrets(record: Record<string, string>): Record<string, string> {
-  const masked = { ...record };
-  for (const key of SECRET_KEYS) {
-    if (key in masked) {
-      masked[key] = masked[key] ? '__SET__' : '__UNSET__';
-    }
-  }
-  return masked;
-}
-
-/**
- * Merge new settings with existing, preserving secrets when masked
+ * Merge new settings with existing, skipping placeholder values
  */
 export function mergeSettingsPreservingSecrets(
   existing: Record<string, string>,
@@ -706,13 +580,6 @@ export function validateSmartUploadSettings(
     if (!endpointResult.valid) {
       errors.push(endpointResult.error!);
     }
-  }
-
-  // Validate ALL providers (global + per-step) for API keys
-  // This ensures when per-step providers are configured, all required keys are present
-  const allProvidersResult = validateAllProviderApiKeys(settings);
-  if (!allProvidersResult.valid) {
-    errors.push(...allProvidersResult.errors);
   }
 
   return {

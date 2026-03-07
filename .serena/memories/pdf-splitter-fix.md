@@ -43,7 +43,7 @@ function safeErrorDetails(err: unknown) {
 }
 
 function nowMs(): number {
-   
+  
   const perf = (globalThis as any)?.performance;
   if (perf?.now) return perf.now();
   return Date.now();
@@ -97,7 +97,7 @@ export async function splitPdfByPageRanges(
   }
 
   const startAll = nowMs();
-   
+  
   let sourcePdf: any | undefined;
 
   try {
@@ -261,7 +261,7 @@ export async function getPdfMetadata(
   author?: string;
   subject?: string;
 }> {
-   
+  
   let pdfDoc: any | undefined;
   try {
     const pdfData = new Uint8Array(pdfBuffer);
@@ -317,7 +317,7 @@ export async function splitPdfByCuttingInstructions(
 
   const startAll = nowMs();
 
-   
+  
   let sourcePdf: any | undefined;
 
   try {

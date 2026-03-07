@@ -4,42 +4,9 @@ import { checkUserPermission } from '@/lib/auth/permissions';
 import { logger } from '@/lib/logger';
 import { SYSTEM_CONFIG } from '@/lib/auth/permission-constants';
 import { prisma } from '@/lib/db';
-import { getApiKeyFieldForProvider } from '@/lib/smart-upload/schema';
-import { LLM_PROVIDERS } from '@/lib/llm/providers';
+import { LLM_PROVIDERS, type LLMProviderValue } from '@/lib/llm/providers';
+import { getPrimaryApiKey } from '@/lib/llm/api-key-service';
 import { validateOutboundEndpoint } from '@/lib/network/safe-endpoint';
-
-// =============================================================================
-// DB Key Loader (fallback when API key is masked on the client)
-// =============================================================================
-
-/**
- * Load a saved setting from the database.
- * Returns null if not found or not set.
- */
-async function loadSettingFromDB(key: string): Promise<string | null> {
-  try {
-    const row = await prisma.systemSetting.findUnique({ where: { key } });
-    return row?.value ?? null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Resolve the effective API key for a provider.
- * If `clientKey` is provided and not masked, use it directly.
- * Otherwise fall back to the stored key in the database.
- */
-async function resolveApiKey(provider: Provider, clientKey?: string): Promise<string | undefined> {
-  if (clientKey && !clientKey.startsWith('__')) {
-    return clientKey;
-  }
-  // Fall back to DB
-  const dbField = getApiKeyFieldForProvider(provider);
-  if (!dbField) return undefined;
-  const stored = await loadSettingFromDB(dbField);
-  return stored ?? undefined;
-}
 
 /**
  * Resolve the effective endpoint URL for a provider.
@@ -50,8 +17,10 @@ async function resolveEndpoint(provider: Provider, clientEndpoint?: string): Pro
     return clientEndpoint.trim();
   }
   // Try DB
-  const stored = await loadSettingFromDB('llm_endpoint_url');
-  if (stored && stored.trim()) return stored.trim();
+  try {
+    const row = await prisma.systemSetting.findUnique({ where: { key: 'llm_endpoint_url' } });
+    if (row?.value?.trim()) return row.value.trim();
+  } catch { /* ignore */ }
   // Fallback to provider default
   const meta = LLM_PROVIDERS.find((p) => p.value === provider);
   return meta?.defaultEndpoint || undefined;
@@ -694,7 +663,6 @@ export async function GET(request: NextRequest) {
     // Parse query parameters
     const { searchParams } = new URL(request.url);
     const provider = searchParams.get('provider') as Provider | null;
-    const clientApiKey = request.headers.get('x-provider-api-key') || undefined;
     const clientEndpoint = searchParams.get('endpoint') || undefined;
 
     // Validate required parameters
@@ -713,8 +681,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Resolve API key and endpoint (with DB fallback when client sends masked value)
-    const apiKey = await resolveApiKey(provider, clientApiKey);
+    // Resolve API key from encrypted APIKey table and endpoint
+    const apiKey = await getPrimaryApiKey(provider as LLMProviderValue);
     const endpoint = await resolveEndpoint(provider, clientEndpoint);
 
     const endpointPolicy = provider === 'ollama' || provider === 'ollama-cloud'
