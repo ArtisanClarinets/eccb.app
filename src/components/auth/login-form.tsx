@@ -19,7 +19,11 @@ export function LoginForm() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get('callbackUrl') || '/';
+  const rawCallbackUrl = searchParams.get('callbackUrl') || '/';
+  // Prevent open redirect vulnerabilities by ensuring it's a relative path on the same origin
+  const callbackUrl = rawCallbackUrl.startsWith('/') && !rawCallbackUrl.startsWith('//')
+    ? rawCallbackUrl
+    : '/';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
