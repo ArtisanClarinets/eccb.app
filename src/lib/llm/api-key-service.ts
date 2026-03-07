@@ -404,8 +404,26 @@ export async function getFallbackApiKey(slug: LLMProviderValue): Promise<string>
  * Migrate existing plaintext API keys from SystemSetting to
  * encrypted APIKey rows. Idempotent — skips providers that
  * already have keys in the APIKey table.
+ *
+ * Guarded by ENABLE_API_KEY_MIGRATION env var or SystemSetting.
+ * Set to 'true' to enable, any other value (or absent) disables
+ * to prevent accidental data manipulation in production.
  */
 export async function migrateSystemSettingKeysToApiKeyTable(): Promise<void> {
+  // Feature flag: must be explicitly enabled
+  const envFlag = process.env.ENABLE_API_KEY_MIGRATION;
+  if (envFlag !== 'true') {
+    // Check DB-level setting as secondary gate
+    const dbFlag = await prisma.systemSetting.findUnique({
+      where: { key: 'enable_api_key_migration' },
+      select: { value: true },
+    });
+    if (dbFlag?.value !== 'true') {
+      logger.info('API key migration skipped — ENABLE_API_KEY_MIGRATION not enabled');
+      return;
+    }
+  }
+
   await ensureProvidersExist();
 
   // Local map used only by this one-time migration

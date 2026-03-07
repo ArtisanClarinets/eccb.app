@@ -37,12 +37,15 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  Download,
+  ExternalLink,
   FileText,
   Maximize2,
   Minimize2,
   Minus,
   Plus,
   RefreshCw,
+  Save,
   Trash2,
   X,
   Play,
@@ -248,6 +251,7 @@ function UploadReviewClient({
   const [partZoomLevel, setPartZoomLevel] = useState(1);
   const [isPartFullscreen, setIsPartFullscreen] = useState(false);
   const [triggeringSecondPass, setTriggeringSecondPass] = useState<Set<string>>(new Set());
+  const [savingDraft, setSavingDraft] = useState(false);
 
   // Auto-fetch sessions when the component mounts
   useEffect(() => {
@@ -362,6 +366,30 @@ function UploadReviewClient({
       console.error('Failed to approve:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Handle save draft
+  const handleSaveDraft = async () => {
+    if (!editingSession) return;
+    setSavingDraft(true);
+    try {
+      const metadata = {
+        ...(editingSession.extractedMetadata || {}),
+        ...editedMetadata,
+      };
+      const response = await fetch(`/api/admin/uploads/review/${editingSession.id}/draft`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ metadata }),
+      });
+      if (response.ok) {
+        await fetchSessions();
+      }
+    } catch (error) {
+      console.error('Failed to save draft:', error);
+    } finally {
+      setSavingDraft(false);
     }
   };
 
@@ -1437,6 +1465,45 @@ function UploadReviewClient({
           )}
 
           <DialogFooter className="shrink-0">
+            <div className="flex items-center gap-2 mr-auto">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  if (editingSession) {
+                    window.open(
+                      `/api/admin/uploads/review/${editingSession.id}/original`,
+                      '_blank',
+                      'noopener,noreferrer'
+                    );
+                  }
+                }}
+              >
+                <ExternalLink className="mr-2 h-4 w-4" />
+                Open PDF
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                asChild
+              >
+                <a
+                  href={editingSession ? `/api/admin/uploads/review/${editingSession.id}/original?disposition=attachment` : '#'}
+                  download
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Download
+                </a>
+              </Button>
+            </div>
+            <Button
+              variant="outline"
+              onClick={handleSaveDraft}
+              disabled={savingDraft}
+            >
+              <Save className="mr-2 h-4 w-4" />
+              {savingDraft ? 'Saving...' : 'Save Draft'}
+            </Button>
             <Button variant="outline" onClick={closeEditDialog}>
               Cancel
             </Button>

@@ -291,13 +291,13 @@ export async function loadLLMConfig(): Promise<LLMRuntimeConfig> {
   const llmMaxHeaderBatches = Number(db['smart_upload_llm_max_header_batches'] ?? 2);
 
   // ── API keys — encrypted APIKey table is the sole source of truth ────────
-  const PROVIDER_SLUGS = [
+  const PROVIDER_SLUGS: readonly LLMProviderValue[] = [
     'openai', 'anthropic', 'openrouter', 'gemini',
     'ollama-cloud', 'mistral', 'groq', 'custom',
   ] as const;
   const apiKeys: Record<string, string> = {};
   for (const slug of PROVIDER_SLUGS) {
-    apiKeys[slug] = await getPrimaryApiKey(slug as LLMProviderValue);
+    apiKeys[slug] = await getPrimaryApiKey(slug);
   }
 
   return {

@@ -2,9 +2,9 @@
  * Smart Upload Unified Worker Entry Point
  *
  * This module creates and manages the BullMQ worker for ALL Smart Upload jobs:
- *   - smartupload.process   → main pipeline (render → vision → split)
- *   - smartupload.secondPass → verification / adjudication
- *   - smartupload.autoCommit → autonomous library commit
+ *   - smartupload_process   → main pipeline (render → vision → split)
+ *   - smartupload_secondPass → verification / adjudication
+ *   - smartupload_autoCommit → autonomous library commit
  *
  * IMPORTANT: This is the ONLY worker that consumes the SMART_UPLOAD queue.
  * Having multiple workers on the same queue with different job routing caused

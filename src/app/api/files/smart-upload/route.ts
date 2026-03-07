@@ -271,25 +271,23 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({
-      success: true,
+      success: enqueueSucceeded,
       session: {
         id: smartUploadSession.uploadSessionId,
         fileName: smartUploadSession.fileName,
         confidenceScore: smartUploadSession.confidenceScore,
         status: smartUploadSession.status,
         createdAt: smartUploadSession.createdAt,
-        parseStatus: smartUploadSession.parseStatus,
+        parseStatus: enqueueSucceeded ? smartUploadSession.parseStatus : 'PARSE_FAILED',
         secondPassStatus: smartUploadSession.secondPassStatus,
         autoApproved: smartUploadSession.autoApproved,
-        // routingDecision is determined by the worker; null until processing completes
-        routingDecision: null as RoutingDecision | null,
+        routingDecision: enqueueSucceeded ? null : ('QUEUE_ENQUEUE_FAILED' as RoutingDecision),
       },
       enqueued: enqueueSucceeded,
       message: enqueueSucceeded
         ? 'Upload successful. Processing in background — check status endpoint for progress.'
         : 'Upload saved but background processing failed to start. Please retry or contact support.',
-      note: 'File is being processed in the background. Check status endpoint for progress.',
-    });
+    }, { status: enqueueSucceeded ? 200 : 502 });
   } catch (error) {
     logger.error('Smart upload failed', { error, userId: session?.user?.id });
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
@@ -225,11 +225,14 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
   const headerLabelProviderVal = form.watch('llm_header_label_provider') || defaultProvider;
   const adjudicatorProviderVal = form.watch('llm_adjudicator_provider') || defaultProvider;
 
+  // AbortController map for cancelling in-flight model fetches per step
+  const fetchAbortRefs = useRef<Record<string, AbortController>>({});
+
   // Fetch models when provider or API key changes
   const fetchModelsFor = useCallback(
     async (
       providerVal: ProviderValue | string | undefined,
-      modelKey: string,
+      modelKey: keyof SmartUploadSettings,
       setModels: React.Dispatch<React.SetStateAction<ModelInfo[]>>,
       setLoading: (b: boolean) => void,
       setErr: (msg: string | null) => void
@@ -248,12 +251,20 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
       setLoading(true);
       setErr(null);
 
+      // Cancel any in-flight request for this model key
+      const stepKey = String(modelKey);
+      fetchAbortRefs.current[stepKey]?.abort();
+      const controller = new AbortController();
+      fetchAbortRefs.current[stepKey] = controller;
+
       try {
         const params = new URLSearchParams({ provider: String(providerVal) });
         const endpointValue = form.getValues('llm_endpoint_url');
         if (endpointValue) params.set('endpoint', String(endpointValue));
 
-        const response = await fetch(`/api/admin/uploads/models?${params}`);
+        const response = await fetch(`/api/admin/uploads/models?${params}`, {
+          signal: controller.signal,
+        });
 
         if (!response.ok) {
           const error = await response.json();
@@ -263,7 +274,7 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
 
         setModels(data.models);
 
-        const current = form.getValues(modelKey as keyof SmartUploadSettings);
+        const current = form.getValues(modelKey);
         const currentStr = String(current);
         const validModelIds = data.models.map((m) => m.id);
         if ((!current || !validModelIds.includes(currentStr)) && data.recommendedModel) {
@@ -272,9 +283,9 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
             const verificationModel =
               data.models.find((m) => !m.recommended && m.priceDisplay.includes('Free'))?.id ||
               data.recommendedModel;
-            form.setValue(modelKey as any, verificationModel);
+            form.setValue(modelKey, verificationModel);
           } else {
-            form.setValue(modelKey as any, data.recommendedModel);
+            form.setValue(modelKey, data.recommendedModel);
           }
         }
 
@@ -282,6 +293,7 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
           toast.warning(data.warning);
         }
       } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') return;
         const message = error instanceof Error ? error.message : 'Failed to fetch models';
         setErr(message);
         toast.error(message);
@@ -351,14 +363,14 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
         : step === 'headerLabel'
         ? 'llm_header_label_provider'
         : 'llm_adjudicator_provider';
-    form.setValue(key as any, value);
+    form.setValue(key as keyof SmartUploadSettings, value);
     // clear associated model so UI forces reselect
     let modelKey = '';
     if (step === 'vision') modelKey = 'llm_vision_model';
     if (step === 'verification') modelKey = 'llm_verification_model';
     if (step === 'headerLabel') modelKey = 'llm_header_label_model';
     if (step === 'adjudicator') modelKey = 'llm_adjudicator_model';
-    form.setValue(modelKey as any, '');
+    form.setValue(modelKey as keyof SmartUploadSettings, '');
   };
 
   const onSubmit = async (values: SmartUploadSettings) => {

@@ -127,7 +127,8 @@ export interface ExtractedMetadata {
 export type RoutingDecision =
   | 'auto_parse_auto_approve'
   | 'auto_parse_second_pass'
-  | 'no_parse_second_pass';
+  | 'no_parse_second_pass'
+  | 'QUEUE_ENQUEUE_FAILED';
 
 export type ParseStatus = 'NOT_PARSED' | 'PARSING' | 'PARSED' | 'PARSE_FAILED';
 
