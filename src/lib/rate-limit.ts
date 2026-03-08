@@ -66,6 +66,10 @@ interface RateLimitResult {
   retryAfter?: number;
 }
 
+function isRateLimitBypassed(): boolean {
+  return process.env.NODE_ENV !== 'production';
+}
+
 /**
  * Sliding window rate limiting using Redis
  * 
@@ -80,6 +84,19 @@ export async function rateLimit(
   key: string,
   options: RateLimitOptions = {}
 ): Promise<RateLimitResult> {
+  if (isRateLimitBypassed()) {
+    const config = options.type
+      ? RATE_LIMIT_CONFIGS[options.type]
+      : { limit: options.limit ?? 100, window: options.window ?? 60 };
+
+    return {
+      success: true,
+      limit: config.limit,
+      remaining: config.limit,
+      reset: Math.floor((Date.now() + (config.window * 1000)) / 1000),
+    };
+  }
+
   // Use predefined config if type is specified
   const config = options.type 
     ? RATE_LIMIT_CONFIGS[options.type]

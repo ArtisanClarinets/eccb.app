@@ -1,0 +1,166 @@
+{
+  "name": "ECCB Platform E2E Test Suite",
+  "version": "1.0.0",
+  "description": "Comprehensive end-to-end test coverage for the ECCB Platform",
+  "totalTests": 318,
+  "testFiles": [
+    {
+      "file": "e2e/auth.setup.ts",
+      "description": "Authentication setup and test user creation",
+      "type": "setup",
+      "tests": 3
+    },
+    {
+      "file": "e2e/auth/login.spec.ts",
+      "description": "Authentication flows including login, signup, forgot password, logout",
+      "type": "e2e",
+      "tests": 17
+    },
+    {
+      "file": "e2e/public/homepage.spec.ts",
+      "description": "Public pages including homepage, about, events, contact, gallery",
+      "type": "e2e",
+      "tests": 32
+    },
+    {
+      "file": "e2e/member/dashboard.spec.ts",
+      "description": "Member portal dashboard, music, events, profile, settings",
+      "type": "e2e",
+      "tests": 22
+    },
+    {
+      "file": "e2e/admin/users.spec.ts",
+      "description": "Admin user management, roles, dashboard",
+      "type": "e2e",
+      "tests": 12
+    },
+    {
+      "file": "e2e/admin/events.spec.ts",
+      "description": "Admin event management and attendance tracking",
+      "type": "e2e",
+      "tests": 15
+    },
+    {
+      "file": "e2e/admin/music.spec.ts",
+      "description": "Admin music library management",
+      "type": "e2e",
+      "tests": 17
+    },
+    {
+      "file": "e2e/stand/music-stand.spec.ts",
+      "description": "Music stand features including PDF viewer, annotations, audio",
+      "type": "e2e",
+      "tests": 29
+    },
+    {
+      "file": "e2e/api/health.spec.ts",
+      "description": "Health check API endpoint",
+      "type": "api",
+      "tests": 4
+    },
+    {
+      "file": "e2e/api/auth.spec.ts",
+      "description": "Authentication API endpoints",
+      "type": "api",
+      "tests": 34
+    },
+    {
+      "file": "e2e/api/events.spec.ts",
+      "description": "Events and attendance API endpoints",
+      "type": "api",
+      "tests": 23
+    },
+    {
+      "file": "e2e/api/members.spec.ts",
+      "description": "Members and profile API endpoints",
+      "type": "api",
+      "tests": 15
+    },
+    {
+      "file": "e2e/api/music.spec.ts",
+      "description": "Music library and upload API endpoints",
+      "type": "api",
+      "tests": 29
+    },
+    {
+      "file": "e2e/api/stand.spec.ts",
+      "description": "Music stand API endpoints (annotations, bookmarks, setlists)",
+      "type": "api",
+      "tests": 42
+    },
+    {
+      "file": "e2e/api/settings.spec.ts",
+      "description": "Settings, audit, and monitoring API endpoints",
+      "type": "api",
+      "tests": 14
+    },
+    {
+      "file": "e2e/api/edge-cases.spec.ts",
+      "description": "Edge cases, error handling, and security tests",
+      "type": "api",
+      "tests": 31
+    },
+    {
+      "file": "e2e/journeys/complete-user-journey.spec.ts",
+      "description": "End-to-end user journey workflows",
+      "type": "e2e",
+      "tests": 8
+    }
+  ],
+  "coverage": {
+    "authentication": {
+      "login": ["valid", "invalid", "empty", "rate_limit"],
+      "signup": ["success", "existing_email", "weak_password", "validation"],
+      "password_reset": ["request", "token_validation", "reset"],
+      "session": ["creation", "validation", "expiration", "refresh"],
+      "oauth": ["google", "callback", "error_handling"]
+    },
+    "public_pages": {
+      "homepage": ["rendering", "navigation", "responsive"],
+      "about": ["content", "navigation"],
+      "events": ["listing", "filtering", "details"],
+      "contact": ["form", "validation", "submission"],
+      "accessibility": ["aria", "headings", "alt_text", "keyboard"]
+    },
+    "member_portal": {
+      "dashboard": ["rendering", "data", "navigation"],
+      "music": ["listing", "search", "filter", "detail"],
+      "events": ["listing", "rsvp", "calendar"],
+      "profile": ["view", "edit", "avatar"],
+      "settings": ["notifications", "password", "preferences"]
+    },
+    "admin_panel": {
+      "users": ["crud", "search", "ban", "impersonate"],
+      "roles": ["view", "assign", "permissions"],
+      "events": ["crud", "assign_music", "attendance"],
+      "music": ["crud", "upload", "archive", "export"],
+      "members": ["crud", "import", "export"]
+    },
+    "music_stand": {
+      "viewer": ["render", "navigate", "zoom"],
+      "annotations": ["create", "edit", "delete", "save"],
+      "bookmarks": ["create", "navigate", "delete"],
+      "setlists": ["create", "reorder", "navigate"],
+      "audio": ["play", "sync", "controls"],
+      "metronome": ["start", "adjust", "visual"]
+    },
+    "api_endpoints": {
+      "auth": ["login", "logout", "signup", "session", "password"],
+      "events": ["crud", "rsvp", "attendance"],
+      "members": ["crud", "profile", "export"],
+      "music": ["crud", "assign", "search"],
+      "stand": ["preferences", "annotations", "bookmarks", "sync"],
+      "settings": ["get", "update", "admin"],
+      "uploads": ["smart_upload", "review", "approve"]
+    }
+  },
+  "browsers": [
+    "Chromium (Desktop)",
+    "Firefox (Desktop)",
+    "WebKit/Safari (Desktop)",
+    "Mobile Chrome (Pixel 5)",
+    "Mobile Safari (iPhone 12)",
+    "Tablet (iPad)"
+  ],
+  "estimatedDuration": "13m 30s"
+}

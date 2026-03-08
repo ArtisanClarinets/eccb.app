@@ -11,6 +11,7 @@ import {
   validateSmartUploadSettings,
   mergeSettingsPreservingSecrets,
   SMART_UPLOAD_SETTING_KEYS,
+  maskSecrets,
 } from '@/lib/smart-upload/schema';
 import { loadSmartUploadSettingsFromDB } from '@/lib/smart-upload/bootstrap';
 import { getDefaultPromptsRecord } from '@/lib/smart-upload/prompts';
@@ -100,13 +101,17 @@ export async function GET() {
       where: { key: { in: [...SMART_UPLOAD_SETTING_KEYS] } },
     });
 
+    const maskedValues = maskSecrets(
+      Object.fromEntries(rows.map((row) => [row.key, row.value ?? '']))
+    );
+
     // Convert to array format expected by frontend
     const settingsMap: Record<string, SystemSetting> = {};
     for (const row of rows) {
       settingsMap[row.key] = {
         id: row.id,
         key: row.key,
-        value: row.value ?? '',
+        value: maskedValues[row.key] ?? '',
         description: row.description,
         updatedAt: row.updatedAt,
         updatedBy: row.updatedBy,

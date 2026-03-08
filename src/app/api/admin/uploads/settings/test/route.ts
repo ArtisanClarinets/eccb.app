@@ -20,6 +20,7 @@ const testSchema = z.object({
   provider: ProviderValueSchema,
   endpoint: z.string().optional(),
   model: z.string(),
+  apiKey: z.string().optional(),
 });
 
 // =============================================================================
@@ -53,13 +54,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
     }
 
-    const { provider, endpoint, model } = parsed.data;
+    const { provider, endpoint, model, apiKey: requestApiKey } = parsed.data;
 
-    // Resolve API key from encrypted APIKey table
-    const apiKey = await getPrimaryApiKey(provider as LLMProviderValue);
+    const needsApiKey = providerRequiresApiKey(provider);
+    let apiKey = requestApiKey?.trim() || '';
+
+    if (!apiKey && needsApiKey) {
+      try {
+        apiKey = await getPrimaryApiKey(provider as LLMProviderValue);
+      } catch {
+        apiKey = '';
+      }
+    }
+
     if (providerRequiresApiKey(provider) && !apiKey) {
       return NextResponse.json(
-        { ok: false, error: `No API key configured for ${provider}. Add one via API Key Management.` },
+        { ok: false, error: `API key is required for ${provider}.` },
         { status: 400 }
       );
     }

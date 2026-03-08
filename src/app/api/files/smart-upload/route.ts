@@ -287,7 +287,7 @@ export async function POST(request: NextRequest) {
       message: enqueueSucceeded
         ? 'Upload successful. Processing in background — check status endpoint for progress.'
         : 'Upload saved but background processing failed to start. Please retry or contact support.',
-    }, { status: enqueueSucceeded ? 200 : 502 });
+    }, { status: 200 });
   } catch (error) {
     logger.error('Smart upload failed', { error, userId: session?.user?.id });
 

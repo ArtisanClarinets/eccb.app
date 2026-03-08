@@ -81,6 +81,7 @@ export function LoginForm() {
           <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
           <Input
             id="email"
+            name="email"
             type="email"
             placeholder="name@example.com"
             value={email}
@@ -102,6 +103,7 @@ export function LoginForm() {
           <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
           <Input
             id="password"
+            name="password"
             type="password"
             placeholder="••••••••"
             value={password}

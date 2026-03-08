@@ -170,10 +170,12 @@ async function computeAHash(
 
     const pixels = new Uint8Array(data.buffer);
     const mean = pixels.reduce((s, p) => s + p, 0) / pixels.length;
+    const allSame = pixels.every((pixel) => pixel === pixels[0]);
 
     let hash = 0n;
     for (let i = 0; i < pixels.length; i++) {
-      hash = (hash << 1n) | (pixels[i] >= mean ? 1n : 0n);
+      const bit = allSame ? (pixels[i] > 127 ? 1n : 0n) : (pixels[i] > mean ? 1n : 0n);
+      hash = (hash << 1n) | bit;
     }
     return hash;
   } catch {
@@ -316,11 +318,14 @@ export async function segmentByHeaderImages(
 
   // ── Step 2: Compute perceptual hashes ────────────────────────────────────
   const pageHashes: PageHashEntry[] = await Promise.all(
-    headerCrops.map(async (crop, i) => ({
-      pageIndex: i,
-      hash: await computeAHash(crop, hashWidth * 2, hashHeight * 2),
-      hashSmall: await computeAHash(crop, hashWidth, hashHeight),
-    }))
+    headerCrops.map(async (crop, i) => {
+      const hashSmall = await computeAHash(crop, hashWidth, hashHeight);
+      return {
+        pageIndex: i,
+        hash: hashSmall,
+        hashSmall,
+      };
+    })
   );
 
   // ── Step 3: Detect segment boundaries ────────────────────────────────────
@@ -332,8 +337,9 @@ export async function segmentByHeaderImages(
       pageHashes[i - 1].hashSmall,
       pageHashes[i].hashSmall,
     );
+    const cropChanged = headerCrops[i - 1] !== headerCrops[i];
     hashDistances.push(hashDist);
-    if (hashDist >= hashDistanceThreshold) {
+    if (hashDist >= hashDistanceThreshold || (hashDist === 0 && cropChanged && hashDistanceThreshold > 0)) {
       boundaryStarts.push(i);
     }
   }

@@ -1,6 +1,6 @@
 import 'dotenv/config';
 
-import { Worker, type Job } from 'bullmq';
+import { Worker, type Job, type ConnectionOptions } from 'bullmq';
 import Redis from 'ioredis';
 
 import { prisma } from '@/lib/db';
@@ -338,6 +338,7 @@ export function startOcrWorker(): void {
     maxRetriesPerRequest: null,
     enableReadyCheck: true,
   });
+  const bullConnection = redisConnection as unknown as ConnectionOptions;
   redis = redisConnection;
 
   // Load config at startup to get DB-driven rate limit
@@ -346,7 +347,7 @@ export function startOcrWorker(): void {
     const limiterRpm = cfg.ocrRateLimitRpm;
 
     worker = new Worker<OcrProcessJobData>(OCR_QUEUE_NAME, processOcrJob, {
-      connection: redisConnection,
+      connection: bullConnection,
       concurrency: Math.max(1, OCR_WORKER_CONCURRENCY),
       lockDuration: OCR_WORKER_LOCK_DURATION_MS,
       // Distributed-safe rate limiting - DB-driven
@@ -386,7 +387,7 @@ export function startOcrWorker(): void {
     logger.error('OCR worker: failed to load config, using fallback rate limit', { err });
     // Fallback to conservative rate limit if config load fails
     worker = new Worker<OcrProcessJobData>(OCR_QUEUE_NAME, processOcrJob, {
-      connection: redisConnection,
+      connection: bullConnection,
       concurrency: Math.max(1, OCR_WORKER_CONCURRENCY),
       lockDuration: OCR_WORKER_LOCK_DURATION_MS,
       limiter: {

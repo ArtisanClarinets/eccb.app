@@ -11,6 +11,8 @@ import {
   type ProviderValue,
   providerRequiresApiKey,
   SMART_UPLOAD_SCHEMA_VERSION,
+  getApiKeyFieldForProvider,
+  maskSecrets,
 } from './schema';
 import {
   getDefaultPromptsRecord,
@@ -72,9 +74,6 @@ const DEFAULT_NUMERIC_SETTINGS: Record<string, string> = {
   smart_upload_ocr_rate_limit_rpm: '6',
   smart_upload_llm_max_pages: '10',
   smart_upload_llm_max_header_batches: '2',
-  // LLM response caching
-  smart_upload_enable_llm_cache: 'false',
-  smart_upload_llm_cache_ttl_seconds: '86400',
 };
 
 const DEFAULT_JSON_SETTINGS: Record<string, string> = {
@@ -275,7 +274,7 @@ export async function loadSmartUploadSettingsFromDB(): Promise<{
   
   return {
     settings,
-    masked: { ...settings },
+    masked: maskSecrets(settings),
   };
 }
 
@@ -298,10 +297,21 @@ export async function isSmartUploadConfigured(): Promise<{
   const provider = settings.llm_provider as ProviderValue | undefined;
   
   // Check API key for non-local providers (resolved from encrypted APIKey table)
-  if (provider && providerRequiresApiKey(provider)) {
-    const apiKey = await getPrimaryApiKey(provider as LLMProviderValue);
+  if (provider && (providerRequiresApiKey(provider) || provider === 'custom')) {
+    const legacyApiKeyField = getApiKeyFieldForProvider(provider);
+    const legacyApiKey = legacyApiKeyField ? settings[legacyApiKeyField] : '';
+    let apiKey = legacyApiKey?.trim() ?? '';
+
     if (!apiKey) {
-      missing.push(`api_key_${provider}`);
+      try {
+        apiKey = await getPrimaryApiKey(provider as LLMProviderValue);
+      } catch {
+        apiKey = '';
+      }
+    }
+
+    if (!apiKey) {
+      missing.push(legacyApiKeyField || `api_key_${provider}`);
     }
   }
   

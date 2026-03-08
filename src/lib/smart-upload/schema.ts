@@ -14,6 +14,31 @@ import { PROMPT_VERSION as DEFAULT_PROMPT_VERSION } from './prompts';
 export const SMART_UPLOAD_SCHEMA_VERSION = '1.0.0';
 export const PROMPT_VERSION = DEFAULT_PROMPT_VERSION;
 
+export const SECRET_KEYS = [
+  'llm_openai_api_key',
+  'llm_anthropic_api_key',
+  'llm_openrouter_api_key',
+  'llm_gemini_api_key',
+  'llm_ollama_cloud_api_key',
+  'llm_mistral_api_key',
+  'llm_groq_api_key',
+  'llm_custom_api_key',
+] as const;
+
+type SecretKey = typeof SECRET_KEYS[number];
+
+const API_KEY_FIELD_BY_PROVIDER: Record<string, SecretKey | ''> = {
+  ollama: '',
+  'ollama-cloud': 'llm_ollama_cloud_api_key',
+  openai: 'llm_openai_api_key',
+  anthropic: 'llm_anthropic_api_key',
+  gemini: 'llm_gemini_api_key',
+  openrouter: 'llm_openrouter_api_key',
+  mistral: 'llm_mistral_api_key',
+  groq: 'llm_groq_api_key',
+  custom: 'llm_custom_api_key',
+};
+
 // =============================================================================
 // Provider-specific validation
 // =============================================================================
@@ -44,6 +69,7 @@ export const SMART_UPLOAD_SETTING_KEYS = [
   // Core settings
   'llm_provider',
   'llm_endpoint_url',
+  ...SECRET_KEYS,
   'llm_vision_model',
   'llm_verification_model',
 
@@ -165,6 +191,15 @@ const MimeTypesSchema = z.string().optional();
 export const SmartUploadSettingsSchema = z.object({
   // Provider selection (optional for incremental updates)
   llm_provider: ProviderValueSchema.or(z.literal('')).optional(),
+
+  llm_openai_api_key: z.string().optional(),
+  llm_anthropic_api_key: z.string().optional(),
+  llm_openrouter_api_key: z.string().optional(),
+  llm_gemini_api_key: z.string().optional(),
+  llm_ollama_cloud_api_key: z.string().optional(),
+  llm_mistral_api_key: z.string().optional(),
+  llm_groq_api_key: z.string().optional(),
+  llm_custom_api_key: z.string().optional(),
   
   // Endpoint (required for custom, optional for others)
   llm_endpoint_url: z.string().url('Must be a valid URL').or(z.literal('')).optional(),
@@ -449,8 +484,39 @@ export type SmartUploadSettings = z.infer<typeof SmartUploadSettingsSchema>;
  */
 export function providerRequiresApiKey(provider?: ProviderValue | string): boolean {
   if (!provider || provider === '') return false;
-  // Local-only providers do not need an API key in the settings store.
   return provider !== 'ollama' && provider !== 'custom';
+}
+
+export function getApiKeyFieldForProvider(provider?: ProviderValue | string): SecretKey | '' {
+  if (!provider) {
+    return '';
+  }
+
+  return API_KEY_FIELD_BY_PROVIDER[provider] ?? '';
+}
+
+export function validateProviderApiKey(
+  provider: ProviderValue | string | undefined,
+  settings: Record<string, string | undefined>
+): { valid: boolean; error?: string } {
+  if (!provider || (provider !== 'custom' && !providerRequiresApiKey(provider))) {
+    return { valid: true };
+  }
+
+  const field = getApiKeyFieldForProvider(provider);
+  if (!field) {
+    return { valid: true };
+  }
+
+  const value = settings[field];
+  if (typeof value !== 'string' || value.trim() === '') {
+    return {
+      valid: false,
+      error: `${provider} requires an API key (${field}).`,
+    };
+  }
+
+  return { valid: true };
 }
 
 /**
@@ -504,6 +570,20 @@ export function dbRecordToSettings(record: Record<string, string>): SmartUploadS
     llm_vision_system_prompt: record.llm_vision_system_prompt || '',
     llm_verification_system_prompt: record.llm_verification_system_prompt || '',
   });
+}
+
+export function maskSecrets(record: Record<string, string>): Record<string, string> {
+  const masked = { ...record };
+
+  for (const key of SECRET_KEYS) {
+    if (!(key in masked)) {
+      continue;
+    }
+
+    masked[key] = masked[key] === '' ? '__UNSET__' : '__SET__';
+  }
+
+  return masked;
 }
 
 /**
@@ -573,12 +653,42 @@ export function validateSmartUploadSettings(
 
   // Provider-specific validation - validate global provider endpoint
   if (settings.llm_provider) {
+    const apiKeyResult = validateProviderApiKey(
+      settings.llm_provider,
+      settings as Record<string, string | undefined>
+    );
+    if (!apiKeyResult.valid) {
+      errors.push(apiKeyResult.error!);
+    }
+
     const endpointResult = validateProviderEndpoint(
       settings.llm_provider,
       settings.llm_endpoint_url
     );
     if (!endpointResult.valid) {
       errors.push(endpointResult.error!);
+    }
+  }
+
+  const stepProviders = [
+    settings.llm_default_provider,
+    settings.llm_vision_provider,
+    settings.llm_verification_provider,
+    settings.llm_header_label_provider,
+    settings.llm_adjudicator_provider,
+  ];
+
+  for (const provider of stepProviders) {
+    if (!provider) {
+      continue;
+    }
+
+    const apiKeyResult = validateProviderApiKey(
+      provider,
+      settings as Record<string, string | undefined>
+    );
+    if (!apiKeyResult.valid) {
+      errors.push(apiKeyResult.error!);
     }
   }
 

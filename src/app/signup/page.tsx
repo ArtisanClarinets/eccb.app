@@ -54,7 +54,7 @@ export default function SignupPage() {
               <Music className="w-8 h-8 text-primary" />
             </div>
           </div>
-          <CardTitle className="text-2xl font-bold">Create an Account</CardTitle>
+          <CardTitle className="text-2xl font-bold">Create Account</CardTitle>
           <CardDescription>
             Join the Emerald Coast Community Band platform
           </CardDescription>
@@ -65,6 +65,7 @@ export default function SignupPage() {
               <Label htmlFor="name">Full Name</Label>
               <Input 
                 id="name" 
+                name="name"
                 placeholder="John Doe" 
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -75,6 +76,7 @@ export default function SignupPage() {
               <Label htmlFor="email">Email</Label>
               <Input 
                 id="email" 
+                name="email"
                 type="email" 
                 placeholder="name@example.com" 
                 value={email}
@@ -86,6 +88,7 @@ export default function SignupPage() {
               <Label htmlFor="password">Password</Label>
               <Input 
                 id="password" 
+                name="password"
                 type="password" 
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}

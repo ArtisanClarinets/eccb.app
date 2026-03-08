@@ -149,6 +149,7 @@ function VerifyEmailContentInner() {
           </p>
           <form onSubmit={handleResendVerification} className="space-y-3">
             <Input
+              name="email"
               type="email"
               placeholder="your@email.com"
               value={email}
@@ -206,6 +207,7 @@ function VerifyEmailContentInner() {
           <Label htmlFor="email">Email Address</Label>
           <Input
             id="email"
+            name="email"
             type="email"
             placeholder="name@example.com"
             value={email}

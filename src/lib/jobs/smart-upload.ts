@@ -32,9 +32,9 @@ interface SmartUploadAutoCommitData {
 // =============================================================================
 
 export const SMART_UPLOAD_JOB_NAMES = {
-  PROCESS: 'smartupload_process',
-  SECOND_PASS: 'smartupload_secondPass',
-  AUTO_COMMIT: 'smartupload_autoCommit',
+  PROCESS: 'smartupload.process',
+  SECOND_PASS: 'smartupload.secondPass',
+  AUTO_COMMIT: 'smartupload.autoCommit',
 } as const;
 
 // =============================================================================

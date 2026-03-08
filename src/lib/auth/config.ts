@@ -194,8 +194,8 @@ export const auth = betterAuth({
   },
   // Rate limiting configuration (handled at API level, but Better Auth has built-in)
   rateLimit: {
-    // Enable built-in rate limiting
-    enabled: true,
+    // Enable built-in rate limiting only in production to avoid local/E2E test pollution
+    enabled: env.NODE_ENV === 'production',
     // Window for rate limiting (in seconds)
     window: 60,
     // Max requests per window

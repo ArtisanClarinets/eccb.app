@@ -131,6 +131,27 @@ async function upsertSetting(key: string, value: string, updatedBy: string): Pro
   });
 }
 
+async function getDiscoveryApiKey(provider: 'gemini' | 'openrouter'): Promise<string | undefined> {
+  const envKey = provider === 'gemini'
+    ? process.env.GEMINI_API_KEY
+    : process.env.OPENROUTER_API_KEY;
+
+  if (envKey?.trim()) {
+    return envKey.trim();
+  }
+
+  try {
+    const dbKey = await getPrimaryApiKey(provider);
+    return dbKey.trim() || undefined;
+  } catch (error) {
+    logger.info('Provider discovery API key lookup skipped', {
+      provider,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return undefined;
+  }
+}
+
 // =============================================================================
 // Route Handler
 // =============================================================================
@@ -172,8 +193,8 @@ export async function POST(request: NextRequest) {
       if (row.value) existing[row.key] = row.value;
     }
 
-    const geminiKey = (await getPrimaryApiKey('gemini')) || undefined;
-    const openrouterKey = (await getPrimaryApiKey('openrouter')) || undefined;
+    const geminiKey = await getDiscoveryApiKey('gemini');
+    const openrouterKey = await getDiscoveryApiKey('openrouter');
     const currentProvider = existing.llm_provider;
 
     // Run all discovery checks in parallel
