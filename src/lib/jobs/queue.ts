@@ -8,7 +8,7 @@
  * - Graceful shutdown support
  */
 
-import { Queue, Worker, Job, QueueEvents, type ConnectionOptions } from 'bullmq';
+import { Queue, Worker, Job, QueueEvents } from 'bullmq';
 import Redis from 'ioredis';
 import { env } from '@/lib/env';
 import {
@@ -40,8 +40,8 @@ const createRedisConnection = (): Redis => {
 
   // guard in case a test mock returns a bare object without event emitters
   const safeOn = (event: string, handler: (...args: any[]) => void) => {
-    if (typeof (connection).on === 'function') {
-      (connection).on(event, handler);
+    if (typeof (connection as any).on === 'function') {
+      (connection as any).on(event, handler);
     }
   };
 
@@ -104,31 +104,31 @@ export function initializeQueues(): void {
   if (_queuesInitialized) return;
   _queuesInitialized = true;
 
-  const connection = getRedisConnection() as unknown as ConnectionOptions;
+  const connection = getRedisConnection() as any;
 
   // Email queue
-  queues.email = new Queue(QUEUE_NAMES.EMAIL, { connection: connection });
-  queueEvents.set(QUEUE_NAMES.EMAIL, new QueueEvents(QUEUE_NAMES.EMAIL, { connection: connection }));
+  queues.email = new Queue(QUEUE_NAMES.EMAIL, { connection: connection as any });
+  queueEvents.set(QUEUE_NAMES.EMAIL, new QueueEvents(QUEUE_NAMES.EMAIL, { connection: connection as any }));
 
   // Notification queue
-  queues.notification = new Queue(QUEUE_NAMES.NOTIFICATION, { connection: connection });
-  queueEvents.set(QUEUE_NAMES.NOTIFICATION, new QueueEvents(QUEUE_NAMES.NOTIFICATION, { connection: connection }));
+  queues.notification = new Queue(QUEUE_NAMES.NOTIFICATION, { connection: connection as any });
+  queueEvents.set(QUEUE_NAMES.NOTIFICATION, new QueueEvents(QUEUE_NAMES.NOTIFICATION, { connection: connection as any }));
 
   // Scheduled queue
-  queues.scheduled = new Queue(QUEUE_NAMES.SCHEDULED, { connection: connection });
-  queueEvents.set(QUEUE_NAMES.SCHEDULED, new QueueEvents(QUEUE_NAMES.SCHEDULED, { connection: connection }));
+  queues.scheduled = new Queue(QUEUE_NAMES.SCHEDULED, { connection: connection as any });
+  queueEvents.set(QUEUE_NAMES.SCHEDULED, new QueueEvents(QUEUE_NAMES.SCHEDULED, { connection: connection as any }));
 
   // Cleanup queue
-  queues.cleanup = new Queue(QUEUE_NAMES.CLEANUP, { connection: connection });
-  queueEvents.set(QUEUE_NAMES.CLEANUP, new QueueEvents(QUEUE_NAMES.CLEANUP, { connection: connection }));
+  queues.cleanup = new Queue(QUEUE_NAMES.CLEANUP, { connection: connection as any });
+  queueEvents.set(QUEUE_NAMES.CLEANUP, new QueueEvents(QUEUE_NAMES.CLEANUP, { connection: connection as any }));
 
   // Dead letter queue
-  queues.deadLetter = new Queue(QUEUE_NAMES.DEAD_LETTER, { connection: connection });
-  queueEvents.set(QUEUE_NAMES.DEAD_LETTER, new QueueEvents(QUEUE_NAMES.DEAD_LETTER, { connection: connection }));
+  queues.deadLetter = new Queue(QUEUE_NAMES.DEAD_LETTER, { connection: connection as any });
+  queueEvents.set(QUEUE_NAMES.DEAD_LETTER, new QueueEvents(QUEUE_NAMES.DEAD_LETTER, { connection: connection as any }));
 
   // Smart Upload queue
-  queues.smartUpload = new Queue(QUEUE_NAMES.SMART_UPLOAD, { connection: connection });
-  queueEvents.set(QUEUE_NAMES.SMART_UPLOAD, new QueueEvents(QUEUE_NAMES.SMART_UPLOAD, { connection: connection }));
+  queues.smartUpload = new Queue(QUEUE_NAMES.SMART_UPLOAD, { connection: connection as any });
+  queueEvents.set(QUEUE_NAMES.SMART_UPLOAD, new QueueEvents(QUEUE_NAMES.SMART_UPLOAD, { connection: connection as any }));
 
   logger.info('All job queues initialized');
 }
@@ -405,10 +405,10 @@ interface WorkerOptions {
  */
 export function createWorker(options: WorkerOptions): Worker {
   const { queueName, concurrency = 1, processor } = options;
-  const connection = getRedisConnection() as unknown as ConnectionOptions;
+  const connection = getRedisConnection() as any;
 
   const worker = new Worker(QUEUE_NAMES[queueName], processor, {
-    connection: connection,
+    connection: connection as any,
     concurrency,
   });
 

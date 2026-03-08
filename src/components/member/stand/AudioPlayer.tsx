@@ -167,7 +167,7 @@ export function AudioPlayer() {
             onClick={clearLoop}
             title="Clear A-B loop"
             aria-label="Clear A-B loop"
-            className="px-2 py-1 border rounded text-xs text-destructive hover:bg-destructive/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="px-2 py-1 border rounded text-xs text-destructive hover:bg-destructive/10 transition-colors"
           >
             Clear
           </button>
