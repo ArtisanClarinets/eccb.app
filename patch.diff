@@ -1,0 +1,11 @@
+<<<<<<< SEARCH
+import Redis from 'ioredis';
+=======
+import type { ConnectionOptions } from 'bullmq';
+import Redis from 'ioredis';
+>>>>>>> REPLACE
+<<<<<<< SEARCH
+  const connection = getRedisConnection();
+=======
+  const connection = getRedisConnection() as unknown as ConnectionOptions;
+>>>>>>> REPLACE

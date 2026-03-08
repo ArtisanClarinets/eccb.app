@@ -1,6 +1,6 @@
 import 'dotenv/config';
 
-import { Worker, type Job } from 'bullmq';
+import { Worker, type Job, type ConnectionOptions } from 'bullmq';
 import Redis from 'ioredis';
 
 import { prisma } from '@/lib/db';
@@ -148,7 +148,7 @@ let redis: Redis | null = null;
 
 function nowMs(): number {
    
-  const perf = (globalThis as any)?.performance;
+  const perf = (globalThis)?.performance;
   if (perf?.now) return perf.now();
   return Date.now();
 }
@@ -291,9 +291,9 @@ async function processOcrJob(job: Job<OcrProcessJobData>): Promise<void> {
   await prisma.smartUploadSession.update({
     where: { uploadSessionId: sessionId },
     data: {
-      // Prisma JSON types are strict; cast to `any` since we know the
-      // object is JSON-serializable and validated elsewhere.
-      extractedMetadata: updatedExtracted as any,
+      // Prisma JSON types are strict
+      // Use standard Prisma type import if needed, or intermediate cast to unknown
+      extractedMetadata: updatedExtracted as unknown as import('@prisma/client').Prisma.InputJsonValue,
       confidenceScore: Math.round(ocrMeta.confidence),
       // Mark provenance: not an LLM run
       llmProvider: session.llmProvider || 'ocr-fallback',
@@ -338,7 +338,7 @@ export function startOcrWorker(): void {
     maxRetriesPerRequest: null,
     enableReadyCheck: true,
   });
-  redis = redisConnection as any;
+  redis = redisConnection;
 
   // Load config at startup to get DB-driven rate limit
   // This uses smart_upload_ocr_rate_limit_rpm from DB settings
@@ -346,7 +346,7 @@ export function startOcrWorker(): void {
     const limiterRpm = cfg.ocrRateLimitRpm;
 
     worker = new Worker<OcrProcessJobData>(OCR_QUEUE_NAME, processOcrJob, {
-      connection: redisConnection as any,
+      connection: redisConnection as unknown as ConnectionOptions,
       concurrency: Math.max(1, OCR_WORKER_CONCURRENCY),
       lockDuration: OCR_WORKER_LOCK_DURATION_MS,
       // Distributed-safe rate limiting - DB-driven
@@ -386,7 +386,7 @@ export function startOcrWorker(): void {
     logger.error('OCR worker: failed to load config, using fallback rate limit', { err });
     // Fallback to conservative rate limit if config load fails
     worker = new Worker<OcrProcessJobData>(OCR_QUEUE_NAME, processOcrJob, {
-      connection: redisConnection as any,
+      connection: redisConnection as unknown as ConnectionOptions,
       concurrency: Math.max(1, OCR_WORKER_CONCURRENCY),
       lockDuration: OCR_WORKER_LOCK_DURATION_MS,
       limiter: {
