@@ -16,6 +16,7 @@ import type { LLMRuntimeConfig } from '@/lib/llm/config-loader';
 import { getProviderMeta } from '@/lib/llm/providers';
 import type { LabeledDocument } from '@/lib/llm/types';
 import { splitPdfByCuttingInstructions } from '@/lib/services/pdf-splitter';
+import { getAuthoritativePdfPageCount } from '@/lib/services/pdf-source';
 import { buildGapInstructions, validateAndNormalizeInstructions, sanitizeCuttingInstructionsForSplit } from '@/lib/services/cutting-instructions';
 import { queueSmartUploadAutoCommit } from '@/lib/jobs/smart-upload';
 import { evaluateQualityGates, isForbiddenLabel } from '@/lib/smart-upload/quality-gates';
@@ -62,9 +63,10 @@ async function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
 }
 
 async function convertAllPdfPagesToImages(pdfBuffer: Buffer): Promise<string[]> {
-  const { PDFDocument } = await import('pdf-lib');
-  const pdfDoc = await PDFDocument.load(pdfBuffer, { ignoreEncryption: true });
-  const totalPages = pdfDoc.getPageCount();
+  const totalPages = await getAuthoritativePdfPageCount(pdfBuffer);
+  if (!totalPages || totalPages <= 0) {
+    throw new Error('Unable to determine page count for second-pass rendering');
+  }
   const pagesToProcess = Math.min(totalPages, MAX_PDF_PAGES_FOR_LLM);
 
   logger.info('Converting PDF pages to images', { totalPages, pagesToProcess });

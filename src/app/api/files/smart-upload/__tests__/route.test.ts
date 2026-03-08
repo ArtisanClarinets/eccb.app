@@ -282,7 +282,7 @@ describe('Smart Upload API Route', () => {
       expect(body.existingSession?.status).toBe('PENDING_REVIEW');
     });
 
-    it('returns 409 with pending_session reason for APPROVED sessions', async () => {
+    it('returns 409 with approved_session reason for APPROVED sessions', async () => {
       vi.mocked(prisma.musicFile.findFirst).mockResolvedValue(null);
       vi.mocked(prisma.smartUploadSession.findFirst).mockResolvedValue({
         uploadSessionId: 'existing-session',
@@ -296,6 +296,8 @@ describe('Smart Upload API Route', () => {
 
       expect(response.status).toBe(409);
       expect(body.duplicate).toBe(true);
+      expect(body.reason).toBe('approved_session');
+      expect(body.existingSession?.reviewUrl).toContain('/admin/uploads/review');
     });
 
     it('allows re-upload when existing session is REJECTED', async () => {

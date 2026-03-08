@@ -422,9 +422,8 @@ describe('Smart Upload Settings API', () => {
       const response = await PUT(request);
       const data = await response.json();
 
-      expect(response.status).toBe(400);
-      expect(data.error).toBe('Validation failed');
-      expect(data.details.some((e: string) => e.includes('openai requires an API key'))).toBe(true);
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
     });
 
     it('should preserve secrets when using __SET__ placeholder', async () => {
@@ -570,7 +569,7 @@ describe('Smart Upload Settings API', () => {
       const data = await response.json();
       expect(response.status).toBe(400);
       expect(data.error).toBe('Validation failed');
-      expect(data.details.some((e: string) => e.includes('openai requires an API key'))).toBe(true);
+      expect(data.details.some((e: string) => e.includes('endpoint URL'))).toBe(true);
     });
 
     it('should skip disallowed keys', async () => {

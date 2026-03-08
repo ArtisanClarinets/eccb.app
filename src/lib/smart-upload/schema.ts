@@ -14,7 +14,7 @@ import { PROMPT_VERSION as DEFAULT_PROMPT_VERSION } from './prompts';
 export const SMART_UPLOAD_SCHEMA_VERSION = '1.0.0';
 export const PROMPT_VERSION = DEFAULT_PROMPT_VERSION;
 
-export const SECRET_KEYS = [
+const LEGACY_SECRET_KEYS = [
   'llm_openai_api_key',
   'llm_anthropic_api_key',
   'llm_openrouter_api_key',
@@ -25,9 +25,11 @@ export const SECRET_KEYS = [
   'llm_custom_api_key',
 ] as const;
 
-type SecretKey = typeof SECRET_KEYS[number];
+type LegacySecretKey = typeof LEGACY_SECRET_KEYS[number];
 
-const API_KEY_FIELD_BY_PROVIDER: Record<string, SecretKey | ''> = {
+export const SECRET_KEYS = LEGACY_SECRET_KEYS;
+
+const LEGACY_API_KEY_FIELD_BY_PROVIDER: Record<string, LegacySecretKey | ''> = {
   ollama: '',
   'ollama-cloud': 'llm_ollama_cloud_api_key',
   openai: 'llm_openai_api_key',
@@ -69,7 +71,6 @@ export const SMART_UPLOAD_SETTING_KEYS = [
   // Core settings
   'llm_provider',
   'llm_endpoint_url',
-  ...SECRET_KEYS,
   'llm_vision_model',
   'llm_verification_model',
 
@@ -192,14 +193,6 @@ export const SmartUploadSettingsSchema = z.object({
   // Provider selection (optional for incremental updates)
   llm_provider: ProviderValueSchema.or(z.literal('')).optional(),
 
-  llm_openai_api_key: z.string().optional(),
-  llm_anthropic_api_key: z.string().optional(),
-  llm_openrouter_api_key: z.string().optional(),
-  llm_gemini_api_key: z.string().optional(),
-  llm_ollama_cloud_api_key: z.string().optional(),
-  llm_mistral_api_key: z.string().optional(),
-  llm_groq_api_key: z.string().optional(),
-  llm_custom_api_key: z.string().optional(),
   
   // Endpoint (required for custom, optional for others)
   llm_endpoint_url: z.string().url('Must be a valid URL').or(z.literal('')).optional(),
@@ -487,35 +480,20 @@ export function providerRequiresApiKey(provider?: ProviderValue | string): boole
   return provider !== 'ollama' && provider !== 'custom';
 }
 
-export function getApiKeyFieldForProvider(provider?: ProviderValue | string): SecretKey | '' {
-  if (!provider) {
-    return '';
-  }
-
-  return API_KEY_FIELD_BY_PROVIDER[provider] ?? '';
+export function getApiKeyFieldForProvider(provider?: ProviderValue | string): LegacySecretKey | '' {
+  if (!provider) return '';
+  return LEGACY_API_KEY_FIELD_BY_PROVIDER[provider] ?? '';
 }
 
 export function validateProviderApiKey(
   provider: ProviderValue | string | undefined,
-  settings: Record<string, string | undefined>
+  _settings?: Record<string, string | undefined>,
 ): { valid: boolean; error?: string } {
   if (!provider || (provider !== 'custom' && !providerRequiresApiKey(provider))) {
     return { valid: true };
   }
 
-  const field = getApiKeyFieldForProvider(provider);
-  if (!field) {
-    return { valid: true };
-  }
-
-  const value = settings[field];
-  if (typeof value !== 'string' || value.trim() === '') {
-    return {
-      valid: false,
-      error: `${provider} requires an API key (${field}).`,
-    };
-  }
-
+  // Provider secrets are resolved at runtime via API key service only.
   return { valid: true };
 }
 
@@ -574,15 +552,10 @@ export function dbRecordToSettings(record: Record<string, string>): SmartUploadS
 
 export function maskSecrets(record: Record<string, string>): Record<string, string> {
   const masked = { ...record };
-
-  for (const key of SECRET_KEYS) {
-    if (!(key in masked)) {
-      continue;
-    }
-
+  for (const key of LEGACY_SECRET_KEYS) {
+    if (!(key in masked)) continue;
     masked[key] = masked[key] === '' ? '__UNSET__' : '__SET__';
   }
-
   return masked;
 }
 
@@ -655,7 +628,6 @@ export function validateSmartUploadSettings(
   if (settings.llm_provider) {
     const apiKeyResult = validateProviderApiKey(
       settings.llm_provider,
-      settings as Record<string, string | undefined>
     );
     if (!apiKeyResult.valid) {
       errors.push(apiKeyResult.error!);
@@ -685,7 +657,6 @@ export function validateSmartUploadSettings(
 
     const apiKeyResult = validateProviderApiKey(
       provider,
-      settings as Record<string, string | undefined>
     );
     if (!apiKeyResult.valid) {
       errors.push(apiKeyResult.error!);
