@@ -1082,7 +1082,7 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
                       min={0}
                       max={100}
                       step={1}
-                      className="flex h-9 w-36 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      className="flex h-9 w-full max-w-xs rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                       value={field.value as number ?? 95}
                       onChange={(e) => field.onChange(Number(e.target.value))}
                     />

@@ -19,7 +19,7 @@ interface SystemSetting {
 
 function LoadingState() {
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="space-y-6 w-full max-w-3xl lg:max-w-4xl xl:max-w-5xl">
       <div className="space-y-2">
         <Skeleton className="h-10 w-64" />
         <Skeleton className="h-4 w-96" />
@@ -87,7 +87,7 @@ export default function SmartUploadSettingsPage() {
 
   if (loading) {
     return (
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-8 max-w-[calc(100%-2rem)]">
         <LoadingState />
       </div>
     );
@@ -95,7 +95,7 @@ export default function SmartUploadSettingsPage() {
 
   if (error) {
     return (
-      <div className="container mx-auto px-4 py-8 max-w-3xl">
+      <div className="container mx-auto px-4 py-8 max-w-[calc(100%-2rem)]">
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Error</AlertTitle>
@@ -106,8 +106,8 @@ export default function SmartUploadSettingsPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="space-y-6 max-w-3xl">
+    <div className="container mx-auto px-4 py-8 max-w-[calc(100%-2rem)]">
+      <div className="space-y-6 w-full max-w-3xl lg:max-w-4xl xl:max-w-5xl">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Smart Upload Settings</h1>
           <p className="text-muted-foreground mt-1">
