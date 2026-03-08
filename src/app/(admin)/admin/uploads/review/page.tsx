@@ -263,9 +263,7 @@ function UploadReviewClient({
   const fetchSessions = async () => {
     setLoading(true);
     try {
-      console.log('[REVIEW] Fetching sessions...');
       const response = await fetch('/api/admin/uploads/review?status=PENDING_REVIEW');
-      console.log('[REVIEW] Response status:', response.status);
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -274,13 +272,10 @@ function UploadReviewClient({
       }
 
       const data = await response.json();
-      console.log('[REVIEW] Response data:', data);
-      console.log('[REVIEW] Sessions count:', data.sessions?.length);
 
       if (data.sessions) {
         setSessions(data.sessions);
         setStats(data.stats);
-        console.log('[REVIEW] Sessions set:', data.sessions.length);
       } else if (data.error) {
         console.error('[REVIEW] API returned error:', data.error);
       }
@@ -291,25 +286,38 @@ function UploadReviewClient({
     }
   };
 
-  // Auto-refresh: poll every 3 s so table stays current while jobs run
+  // Fallback polling: low-frequency refresh in case SSE is interrupted
   useEffect(() => {
-    const POLL_INTERVAL = 3000;
-    const id = setInterval(() => { void fetchSessions(); }, POLL_INTERVAL);
+    const POLL_INTERVAL = 30000;
+    const id = setInterval(() => {
+      void fetchSessions();
+    }, POLL_INTERVAL);
     return () => clearInterval(id);
   }, []);
 
-  // SSE: instantly refresh when any upload job completes
+  // SSE is the primary refresh path for queue/session updates
   useEffect(() => {
     const es = new EventSource('/api/admin/uploads/events');
+    let sseRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+
     es.onmessage = (e) => {
       try {
-        const parsed = JSON.parse(e.data as string) as { type: string };
-        if (parsed.type === 'completed') void fetchSessions();
+        const parsed = JSON.parse(e.data as string) as { type?: string };
+        if (parsed.type === 'progress' || parsed.type === 'completed' || parsed.type === 'failed') {
+          if (sseRefreshTimer) clearTimeout(sseRefreshTimer);
+          sseRefreshTimer = setTimeout(() => {
+            void fetchSessions();
+          }, 500);
+        }
       } catch {
         // ignore malformed events
       }
     };
-    return () => es.close();
+
+    return () => {
+      if (sseRefreshTimer) clearTimeout(sseRefreshTimer);
+      es.close();
+    };
   }, []);
 
   // Handle select all

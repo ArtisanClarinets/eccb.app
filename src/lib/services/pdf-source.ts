@@ -6,6 +6,23 @@ export interface PdfOpenResult {
   pageCount: number;
 }
 
+
+function normalizePageCountCandidate(value: number | null | undefined): number | null {
+  if (typeof value !== 'number') return null;
+  if (!Number.isFinite(value) || value <= 0) return null;
+  return Math.floor(value);
+}
+
+export function selectAuthoritativePageCount(
+  ...candidates: Array<number | null | undefined>
+): number | null {
+  for (const candidate of candidates) {
+    const normalized = normalizePageCountCandidate(candidate);
+    if (normalized !== null) return normalized;
+  }
+  return null;
+}
+
 function asError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
 }

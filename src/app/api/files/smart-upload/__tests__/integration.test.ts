@@ -510,7 +510,7 @@ describe('Smart Upload Integration Tests', () => {
       });
 
       const uploadResponse = await POST(buildUploadRequest('Stars and Stripes Forever.pdf'));
-      expect(uploadResponse.status).toBe(200);
+      expect(uploadResponse.status).toBe(202);
 
       const uploadBody = await uploadResponse.json();
       expect(uploadBody.success).toBe(true);
@@ -674,7 +674,7 @@ describe('Smart Upload Integration Tests', () => {
       });
 
       const uploadResponse = await POST(buildUploadRequest('OCR Test Score.pdf'));
-      expect(uploadResponse.status).toBe(200);
+      expect(uploadResponse.status).toBe(202);
 
       // Verify no LLM was called (LLM call count remains 0)
       const createCall = mockPrisma.smartUploadSession.create.mock.calls[0]?.[0];
@@ -721,7 +721,7 @@ describe('Smart Upload Integration Tests', () => {
       });
 
       const uploadResponse = await POST(buildUploadRequest('Vision Test Score.pdf'));
-      expect(uploadResponse.status).toBe(200);
+      expect(uploadResponse.status).toBe(202);
     });
 
     it('should queue second-pass for borderline confidence scores', async () => {
@@ -759,7 +759,7 @@ describe('Smart Upload Integration Tests', () => {
       });
 
       const uploadResponse = await POST(buildUploadRequest('Borderline Score.pdf'));
-      expect(uploadResponse.status).toBe(200);
+      expect(uploadResponse.status).toBe(202);
 
       // Verify second-pass was queued
       const body = await uploadResponse.json();
@@ -968,7 +968,7 @@ describe('Smart Upload Integration Tests', () => {
       const response = await POST(buildUploadRequest('Queue Fail Test.pdf'));
 
       // Should return success but with enqueued: false
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(503);
       const body = await response.json();
       expect(body.enqueued).toBe(false);
       expect(body.message).toContain('background processing failed');
@@ -1093,7 +1093,7 @@ describe('Smart Upload Integration Tests', () => {
       });
 
       const response1 = await POST(buildUploadRequest('Race Condition.pdf'));
-      expect(response1.status).toBe(200);
+      expect(response1.status).toBe(202);
 
       // Second upload: should detect the first session as duplicate
       mockPrisma.smartUploadSession.findFirst.mockResolvedValue({
@@ -1123,7 +1123,7 @@ describe('Smart Upload Integration Tests', () => {
       });
 
       const response1 = await POST(buildUploadRequest('User1 Score.pdf'));
-      expect(response1.status).toBe(200);
+      expect(response1.status).toBe(202);
 
       // User 2 uploads different file
       mockGetSession.mockResolvedValue({
@@ -1139,7 +1139,7 @@ describe('Smart Upload Integration Tests', () => {
       });
 
       const response2 = await POST(buildUploadRequest('User2 Score.pdf'));
-      expect(response2.status).toBe(200);
+      expect(response2.status).toBe(202);
 
       // Verify sessions are isolated
       const body1 = await response1.json();
@@ -1623,7 +1623,7 @@ describe('Smart Upload Integration Tests', () => {
         });
 
         const response = await POST(buildUploadRequest(filename));
-        expect(response.status).toBe(200);
+        expect(response.status).toBe(202);
       }
     });
 

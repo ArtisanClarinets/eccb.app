@@ -499,7 +499,7 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Brain className="h-5 w-5 text-primary" />
-              LLM Provider
+              Provider Routing
             </CardTitle>
             <CardDescription>
               Choose the AI provider for metadata extraction. Using a local Ollama instance is

@@ -393,40 +393,10 @@ describe('validateProviderApiKey', () => {
     expect(result.error).toBeUndefined();
   });
 
-  it('should return invalid when API key is missing for cloud providers', () => {
-    const result = validateProviderApiKey('openai', {});
-    expect(result.valid).toBe(false);
-    expect(result.error).toContain('openai requires an API key');
-  });
-
-  it('should return invalid when API key is empty string', () => {
-    const result = validateProviderApiKey('openai', { llm_openai_api_key: '' });
-    expect(result.valid).toBe(false);
-  });
-
-  it('should return invalid when API key is whitespace only', () => {
-    const result = validateProviderApiKey('openai', { llm_openai_api_key: '   ' });
-    expect(result.valid).toBe(false);
-  });
-
-  it('should return valid when API key is present', () => {
-    const result = validateProviderApiKey('openai', { llm_openai_api_key: 'sk-test' });
-    expect(result.valid).toBe(true);
-  });
-
-  it('should check correct API key field for each provider', () => {
-    const testCases = [
-      { provider: 'anthropic', key: 'llm_anthropic_api_key', value: 'sk-ant-test' },
-      { provider: 'gemini', key: 'llm_gemini_api_key', value: 'AIza-test' },
-      { provider: 'openrouter', key: 'llm_openrouter_api_key', value: 'sk-or-test' },
-      { provider: 'custom', key: 'llm_custom_api_key', value: 'custom-key' },
-    ] as const;
-
-    for (const { provider, key, value } of testCases) {
-      const settings = { [key]: value };
-      const result = validateProviderApiKey(provider as any, settings);
-      expect(result.valid).toBe(true);
-    }
+  it('validates provider key requirements through API key service, not settings payload', () => {
+    expect(validateProviderApiKey('openai').valid).toBe(true);
+    expect(validateProviderApiKey('anthropic').valid).toBe(true);
+    expect(validateProviderApiKey('custom').valid).toBe(true);
   });
 });
 
@@ -653,8 +623,7 @@ describe('validateSmartUploadSettings', () => {
 
     const result = validateSmartUploadSettings(settings);
 
-    expect(result.valid).toBe(false);
-    expect(result.errors.some(e => e.includes('openai requires an API key'))).toBe(true);
+    expect(result.valid).toBe(true);
   });
 
   it('should include endpoint validation errors for custom provider', () => {
@@ -770,7 +739,7 @@ describe('settingsToDbRecord', () => {
     const record = settingsToDbRecord(settings);
 
     expect(record.llm_provider).toBe('openai');
-    expect(record.llm_openai_api_key).toBe('sk-secret');
+    expect(record.llm_openai_api_key).toBeUndefined();
   });
 
   it('should stringify object values', () => {

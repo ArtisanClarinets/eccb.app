@@ -39,6 +39,7 @@ export async function GET(
         commitError: true,
         requiresHumanReview: true,
         fileName: true,
+        storageKey: true,
         fileSize: true,
         extractedMetadata: true,
         parsedParts: true,
@@ -79,6 +80,10 @@ export async function GET(
         reviewReasons: session.requiresHumanReview ? ['requires_human_review'] : [],
         duplicateFlags: {
           sourceSha256Present: Boolean((session.extractedMetadata as Record<string, unknown> | null)?.sourceSha256),
+        },
+        preview: {
+          originalAvailable: Boolean(session.storageKey),
+          partPreviewAvailable: Array.isArray(session.parsedParts) && session.parsedParts.length > 0,
         },
       },
     });

@@ -29,7 +29,7 @@ import {
   buildGapInstructions,
 } from '@/lib/services/cutting-instructions';
 import { splitPdfByCuttingInstructions, validatePdfBuffer } from '@/lib/services/pdf-splitter';
-import { getAuthoritativePdfPageCount } from '@/lib/services/pdf-source';
+import { getAuthoritativePdfPageCount, selectAuthoritativePageCount } from '@/lib/services/pdf-source';
 import { extractPdfPageHeaders } from '@/lib/services/pdf-text-extractor';
 import { detectPartBoundaries } from '@/lib/services/part-boundary-detector';
 import { extractOcrFallbackMetadata } from '@/lib/services/ocr-fallback';
@@ -582,7 +582,11 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
 
   // Determine canonical page count from validation + centralized parser before any downstream logic.
   const authoritativePageCount = (await getAuthoritativePdfPageCount(pdfBuffer)) ?? null;
-  const initialTotalPages = validation.pageCount ?? authoritativePageCount ?? 0;
+  const initialTotalPages =
+    selectAuthoritativePageCount(
+      authoritativePageCount,
+      validation.pageCount,
+    ) ?? 0;
 
   // -----------------------------------------------------------------
   // Text layer detection (deterministic segmentation when available)
@@ -616,6 +620,7 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
 
   let deterministicInstructions: CuttingInstruction[] | null = null;
   let deterministicConfidence = 0;
+  let deterministicSegmentationResult: ReturnType<typeof detectPartBoundaries> | null = null;
   /** Per-page labels collected during segmentation (1-indexed page → label text) */
   const pageLabels: Record<number, string> = {};
 
@@ -642,6 +647,7 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
 
     const segResult = detectPartBoundaries(pageHeaderResult.pageHeaders, totalPages, true);
     if (segResult.segments.length > 1 || segResult.segmentationConfidence >= 60) {
+      deterministicSegmentationResult = segResult;
       deterministicInstructions = segResult.cuttingInstructions;
       deterministicConfidence = segResult.segmentationConfidence;
       // Persist per-page header text for Review UI
@@ -717,6 +723,10 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
           cropHeightFraction: 0.2,
           enableOcr: true,
         },
+        authoritativeTextSegmentation:
+          deterministicSegmentationResult && deterministicConfidence >= llmConfig.skipParseThreshold
+            ? deterministicSegmentationResult
+            : undefined,
       });
 
       const labelerDuration = Date.now() - labelerStart;

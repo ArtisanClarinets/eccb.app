@@ -70,7 +70,15 @@ export async function GET(request: NextRequest) {
           type: 'progress',
           jobId,
           timestamp: new Date().toISOString(),
-          data: progressData,
+          data: {
+            ...progressData,
+            sessionId: progressData.sessionId ?? null,
+            stage: progressData.step ?? 'processing',
+            percent: progressData.percent ?? 0,
+            status: 'in_progress',
+            failureCode: null,
+            failureStage: null,
+          },
         };
 
         try {
@@ -104,7 +112,15 @@ export async function GET(request: NextRequest) {
           type: 'completed',
           jobId,
           timestamp: new Date().toISOString(),
-          data: result,
+          data: {
+            ...result,
+            sessionId: result.sessionId ?? null,
+            stage: 'complete',
+            percent: 100,
+            status: 'completed',
+            failureCode: null,
+            failureStage: null,
+          },
         };
 
         try {
@@ -125,9 +141,13 @@ export async function GET(request: NextRequest) {
           jobId,
           timestamp: new Date().toISOString(),
           data: {
+            sessionId: jobId.includes('_') ? jobId.split('_').slice(-1)[0] : null,
             error: failedReason ?? 'Job failed',
             stage: 'worker',
-            code: 'JOB_FAILED',
+            percent: 100,
+            status: 'failed',
+            failureCode: 'JOB_FAILED',
+            failureStage: 'worker',
           },
         };
 
