@@ -127,7 +127,7 @@ export function Metronome() {
 
       <button
         onClick={handleStartStop}
-        className="w-full mb-3 px-3 py-1.5 bg-primary text-primary-foreground rounded text-sm font-medium"
+        className="w-full mb-3 px-3 py-1.5 bg-primary text-primary-foreground rounded text-sm font-medium hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 transition-colors"
         aria-label={running ? 'Stop metronome' : 'Start metronome'}
       >
         {running ? 'Stop' : 'Start'}

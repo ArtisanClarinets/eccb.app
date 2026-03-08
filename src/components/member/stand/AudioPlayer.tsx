@@ -121,7 +121,7 @@ export function AudioPlayer() {
         <select
           value={currentLink.id}
           onChange={(e) => selectAudioLink(e.target.value)}
-          className="w-full border rounded px-1 py-0.5 bg-background mb-2 text-xs"
+          className="w-full border rounded px-1 py-0.5 bg-background mb-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {audioLinks.map((l) => (
             <option key={l.id} value={l.id}>
@@ -150,7 +150,7 @@ export function AudioPlayer() {
           onClick={setA}
           title="Set loop start"
           aria-label="Set loop start"
-          className="flex-1 px-2 py-1 border rounded text-xs hover:bg-muted transition-colors"
+          className="flex-1 px-2 py-1 border rounded text-xs hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
         >
           {audioLoopStart !== null ? `A: ${fmtTime(audioLoopStart)}` : 'Set A'}
         </button>
@@ -158,7 +158,7 @@ export function AudioPlayer() {
           onClick={setB}
           title="Set loop end"
           aria-label="Set loop end"
-          className="flex-1 px-2 py-1 border rounded text-xs hover:bg-muted transition-colors"
+          className="flex-1 px-2 py-1 border rounded text-xs hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
         >
           {audioLoopEnd !== null ? `B: ${fmtTime(audioLoopEnd)}` : 'Set B'}
         </button>

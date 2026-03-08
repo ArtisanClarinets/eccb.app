@@ -39,6 +39,7 @@ export function PitchPipe() {
             body: JSON.stringify({ pitchPipeSettings: { instrument: e.target.value } }),
           }).catch(console.error);
         }}
+        className="w-full border rounded px-1 py-0.5 bg-background mb-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         {['sine', 'square', 'triangle', 'sawtooth'].map((i) => (
           <option key={i} value={i}>
@@ -48,7 +49,7 @@ export function PitchPipe() {
       </select>
       <div className="grid grid-cols-6 gap-1 mt-2">
         {notes.map((n) => (
-          <button key={n.name} onClick={() => playTone(n.freq)} className="p-1 border" aria-label={`Play note ${n.name}`}>
+          <button key={n.name} onClick={() => playTone(n.freq)} className="p-1 border rounded hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors" aria-label={`Play note ${n.name}`}>
             {n.name}
           </button>
         ))}

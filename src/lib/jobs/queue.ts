@@ -107,28 +107,28 @@ export function initializeQueues(): void {
   const connection = getRedisConnection() as any;
 
   // Email queue
-  queues.email = new Queue(QUEUE_NAMES.EMAIL, { connection });
-  queueEvents.set(QUEUE_NAMES.EMAIL, new QueueEvents(QUEUE_NAMES.EMAIL, { connection }));
+  queues.email = new Queue(QUEUE_NAMES.EMAIL, { connection: connection as any });
+  queueEvents.set(QUEUE_NAMES.EMAIL, new QueueEvents(QUEUE_NAMES.EMAIL, { connection: connection as any }));
 
   // Notification queue
-  queues.notification = new Queue(QUEUE_NAMES.NOTIFICATION, { connection });
-  queueEvents.set(QUEUE_NAMES.NOTIFICATION, new QueueEvents(QUEUE_NAMES.NOTIFICATION, { connection }));
+  queues.notification = new Queue(QUEUE_NAMES.NOTIFICATION, { connection: connection as any });
+  queueEvents.set(QUEUE_NAMES.NOTIFICATION, new QueueEvents(QUEUE_NAMES.NOTIFICATION, { connection: connection as any }));
 
   // Scheduled queue
-  queues.scheduled = new Queue(QUEUE_NAMES.SCHEDULED, { connection });
-  queueEvents.set(QUEUE_NAMES.SCHEDULED, new QueueEvents(QUEUE_NAMES.SCHEDULED, { connection }));
+  queues.scheduled = new Queue(QUEUE_NAMES.SCHEDULED, { connection: connection as any });
+  queueEvents.set(QUEUE_NAMES.SCHEDULED, new QueueEvents(QUEUE_NAMES.SCHEDULED, { connection: connection as any }));
 
   // Cleanup queue
-  queues.cleanup = new Queue(QUEUE_NAMES.CLEANUP, { connection });
-  queueEvents.set(QUEUE_NAMES.CLEANUP, new QueueEvents(QUEUE_NAMES.CLEANUP, { connection }));
+  queues.cleanup = new Queue(QUEUE_NAMES.CLEANUP, { connection: connection as any });
+  queueEvents.set(QUEUE_NAMES.CLEANUP, new QueueEvents(QUEUE_NAMES.CLEANUP, { connection: connection as any }));
 
   // Dead letter queue
-  queues.deadLetter = new Queue(QUEUE_NAMES.DEAD_LETTER, { connection });
-  queueEvents.set(QUEUE_NAMES.DEAD_LETTER, new QueueEvents(QUEUE_NAMES.DEAD_LETTER, { connection }));
+  queues.deadLetter = new Queue(QUEUE_NAMES.DEAD_LETTER, { connection: connection as any });
+  queueEvents.set(QUEUE_NAMES.DEAD_LETTER, new QueueEvents(QUEUE_NAMES.DEAD_LETTER, { connection: connection as any }));
 
   // Smart Upload queue
-  queues.smartUpload = new Queue(QUEUE_NAMES.SMART_UPLOAD, { connection });
-  queueEvents.set(QUEUE_NAMES.SMART_UPLOAD, new QueueEvents(QUEUE_NAMES.SMART_UPLOAD, { connection }));
+  queues.smartUpload = new Queue(QUEUE_NAMES.SMART_UPLOAD, { connection: connection as any });
+  queueEvents.set(QUEUE_NAMES.SMART_UPLOAD, new QueueEvents(QUEUE_NAMES.SMART_UPLOAD, { connection: connection as any }));
 
   logger.info('All job queues initialized');
 }
@@ -408,7 +408,7 @@ export function createWorker(options: WorkerOptions): Worker {
   const connection = getRedisConnection() as any;
 
   const worker = new Worker(QUEUE_NAMES[queueName], processor, {
-    connection,
+    connection: connection as any,
     concurrency,
   });
 
