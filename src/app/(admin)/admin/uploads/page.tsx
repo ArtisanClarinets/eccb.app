@@ -45,12 +45,19 @@ interface UploadResult {
   partsCount: number;
 }
 
+interface UploadConflictContext {
+  reviewUrl?: string;
+  statusUrl?: string;
+  libraryUrl?: string;
+}
+
 interface UploadItem {
   id: string;
   file: File;
   phase: UploadPhase;
   progress: number;
   error?: string;
+  conflict?: UploadConflictContext;
   result?: UploadResult;
 }
 
@@ -215,6 +222,7 @@ async function processUpload(
 
   if (!response.ok) {
     let errMsg = `Server error ${response.status}`;
+    let conflict: UploadConflictContext | undefined;
     try {
       const errBody = await response.json() as {
         error?: string;
@@ -223,13 +231,19 @@ async function processUpload(
       };
       if (errBody.duplicate && errBody.message) {
         errMsg = errBody.message;
+        const duplicateBody = errBody as { existingSession?: { reviewUrl?: string; statusUrl?: string }; existingPiece?: { libraryUrl?: string } };
+        conflict = {
+          reviewUrl: duplicateBody.existingSession?.reviewUrl,
+          statusUrl: duplicateBody.existingSession?.statusUrl,
+          libraryUrl: duplicateBody.existingPiece?.libraryUrl,
+        };
       } else if (typeof errBody?.error === 'string') {
         errMsg = errBody.error;
       }
     } catch {
       // ignore parse errors
     }
-    onProgress(id, { phase: 'error', progress: 0, error: errMsg });
+    onProgress(id, { phase: 'error', progress: 0, error: errMsg, conflict });
     return;
   }
 
@@ -263,7 +277,7 @@ async function processUpload(
   }
 
   const sessionId = body.session.id;
-  onProgress(id, { phase: 'extracting', progress: 30 });
+  onProgress(id, { phase: 'extracting', progress: 30, conflict: undefined });
 
   // Subscribe to SSE for real-time processing progress
   await new Promise<void>((resolve) => {
@@ -716,6 +730,20 @@ function UploadItemRow({
 
         {item.phase === 'error' && item.error && (
           <p className="text-xs text-red-600 mt-1">{item.error}</p>
+        )}
+        {item.phase === 'error' && item.conflict && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {item.conflict.reviewUrl && (
+              <Button variant="outline" size="sm" asChild>
+                <Link href={item.conflict.reviewUrl}>Open Existing Review</Link>
+              </Button>
+            )}
+            {item.conflict.libraryUrl && (
+              <Button variant="outline" size="sm" asChild>
+                <Link href={item.conflict.libraryUrl}>Open Library Entry</Link>
+              </Button>
+            )}
+          </div>
         )}
 
         {item.phase === 'done' && item.result && (

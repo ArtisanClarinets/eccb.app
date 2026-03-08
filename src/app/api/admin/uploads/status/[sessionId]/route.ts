@@ -35,6 +35,8 @@ export async function GET(
         secondPassStatus: true,
         confidenceScore: true,
         routingDecision: true,
+        commitStatus: true,
+        commitError: true,
         requiresHumanReview: true,
         fileName: true,
         fileSize: true,
@@ -42,6 +44,7 @@ export async function GET(
         parsedParts: true,
         cuttingInstructions: true,
         autoApproved: true,
+        ocrTextChars: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -54,7 +57,31 @@ export async function GET(
       );
     }
 
-    return NextResponse.json({ session });
+    const progressStep =
+      session.commitStatus === 'COMPLETE'
+        ? 'commit_complete'
+        : session.secondPassStatus === 'QUEUED' || session.secondPassStatus === 'RUNNING'
+          ? 'second_pass'
+          : session.parseStatus === 'PARSE_COMPLETED'
+            ? 'parse_complete'
+            : 'processing';
+
+    return NextResponse.json({
+      session,
+      workflow: {
+        parseStatus: session.parseStatus,
+        ocrStatus: session.ocrTextChars && session.ocrTextChars > 0 ? 'COMPLETED' : 'NOT_USED',
+        secondPassStatus: session.secondPassStatus,
+        commitStatus: session.commitStatus,
+        failureCode: session.commitError ? 'COMMIT_FAILED' : null,
+        failureStage: session.commitError ? 'commit' : null,
+        progressStep,
+        reviewReasons: session.requiresHumanReview ? ['requires_human_review'] : [],
+        duplicateFlags: {
+          sourceSha256Present: Boolean((session.extractedMetadata as Record<string, unknown> | null)?.sourceSha256),
+        },
+      },
+    });
   } catch (error) {
     logger.error('Error fetching upload status', { error });
     return NextResponse.json(

@@ -150,6 +150,16 @@ describe('Smart Upload Queue', () => {
         removeOnFail: false,
       });
     });
+
+    it('uses safe custom job ids without colon delimiters', async () => {
+      const processJob = await queueSmartUploadProcess('session-safe', 'file-safe');
+      const secondPassJob = await queueSmartUploadSecondPass('session-safe');
+
+      expect((processJob.opts as { jobId?: string })?.jobId).toBe('smartupload_process_session-safe');
+      expect((secondPassJob.opts as { jobId?: string })?.jobId).toBe('smartupload_secondPass_session-safe');
+      expect((processJob.opts as { jobId?: string })?.jobId).not.toContain(':');
+      expect((secondPassJob.opts as { jobId?: string })?.jobId).not.toContain(':');
+    });
   });
 
   describe('Queue Configuration', () => {
