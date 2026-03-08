@@ -346,7 +346,7 @@ export function startOcrWorker(): void {
     const limiterRpm = cfg.ocrRateLimitRpm;
 
     worker = new Worker<OcrProcessJobData>(OCR_QUEUE_NAME, processOcrJob, {
-      connection: redisConnection,
+      connection: redisConnection as any,
       concurrency: Math.max(1, OCR_WORKER_CONCURRENCY),
       lockDuration: OCR_WORKER_LOCK_DURATION_MS,
       // Distributed-safe rate limiting - DB-driven
@@ -386,7 +386,7 @@ export function startOcrWorker(): void {
     logger.error('OCR worker: failed to load config, using fallback rate limit', { err });
     // Fallback to conservative rate limit if config load fails
     worker = new Worker<OcrProcessJobData>(OCR_QUEUE_NAME, processOcrJob, {
-      connection: redisConnection,
+      connection: redisConnection as any,
       concurrency: Math.max(1, OCR_WORKER_CONCURRENCY),
       lockDuration: OCR_WORKER_LOCK_DURATION_MS,
       limiter: {
