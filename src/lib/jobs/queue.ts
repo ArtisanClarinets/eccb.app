@@ -104,7 +104,7 @@ export function initializeQueues(): void {
   if (_queuesInitialized) return;
   _queuesInitialized = true;
 
-  const connection = getRedisConnection();
+  const connection = getRedisConnection() as any;
 
   // Email queue
   queues.email = new Queue(QUEUE_NAMES.EMAIL, { connection });
@@ -405,7 +405,7 @@ interface WorkerOptions {
  */
 export function createWorker(options: WorkerOptions): Worker {
   const { queueName, concurrency = 1, processor } = options;
-  const connection = getRedisConnection();
+  const connection = getRedisConnection() as any;
 
   const worker = new Worker(QUEUE_NAMES[queueName], processor, {
     connection,
