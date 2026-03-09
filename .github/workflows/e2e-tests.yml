@@ -62,6 +62,8 @@ jobs:
           echo "NEXT_PUBLIC_APP_URL=http://localhost:3000" >> .env
           echo "STORAGE_DRIVER=LOCAL" >> .env
           echo "NODE_ENV=test" >> .env
+          echo "SUPER_ADMIN_EMAIL=admin@eccb.org" >> .env
+          echo "SUPER_ADMIN_PASSWORD=some-secure-test-password-123!" >> .env
 
       - name: Generate Prisma client
         run: npm run db:generate
@@ -160,6 +162,8 @@ jobs:
           echo "NEXT_PUBLIC_APP_URL=http://localhost:3000" >> .env
           echo "STORAGE_DRIVER=LOCAL" >> .env
           echo "NODE_ENV=test" >> .env
+          echo "SUPER_ADMIN_EMAIL=admin@eccb.org" >> .env
+          echo "SUPER_ADMIN_PASSWORD=some-secure-test-password-123!" >> .env
 
       - name: Generate Prisma client
         run: npm run db:generate
@@ -226,6 +230,8 @@ jobs:
           echo "NEXT_PUBLIC_APP_URL=http://localhost:3000" >> .env
           echo "STORAGE_DRIVER=LOCAL" >> .env
           echo "NODE_ENV=test" >> .env
+          echo "SUPER_ADMIN_EMAIL=admin@eccb.org" >> .env
+          echo "SUPER_ADMIN_PASSWORD=some-secure-test-password-123!" >> .env
 
       - name: Generate Prisma client
         run: npm run db:generate
