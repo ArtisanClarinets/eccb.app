@@ -56,7 +56,8 @@ jobs:
         run: |
           echo "DATABASE_URL=mysql://root:root@localhost:3306/eccb_test" >> .env
           echo "REDIS_URL=redis://localhost:6379" >> .env
-          echo "BETTER_AUTH_SECRET=test-secret-key-for-e2e-tests" >> .env
+          echo "AUTH_SECRET=test-secret-key-for-e2e-tests-minimum-32-chars" >> .env
+          echo "BETTER_AUTH_SECRET=test-secret-key-for-e2e-tests-minimum-32-chars" >> .env
           echo "BETTER_AUTH_URL=http://localhost:3000" >> .env
           echo "NEXT_PUBLIC_APP_URL=http://localhost:3000" >> .env
           echo "STORAGE_DRIVER=LOCAL" >> .env
@@ -153,7 +154,8 @@ jobs:
         run: |
           echo "DATABASE_URL=mysql://root:root@localhost:3306/eccb_test" >> .env
           echo "REDIS_URL=redis://localhost:6379" >> .env
-          echo "BETTER_AUTH_SECRET=test-secret-key-for-e2e-tests" >> .env
+          echo "AUTH_SECRET=test-secret-key-for-e2e-tests-minimum-32-chars" >> .env
+          echo "BETTER_AUTH_SECRET=test-secret-key-for-e2e-tests-minimum-32-chars" >> .env
           echo "BETTER_AUTH_URL=http://localhost:3000" >> .env
           echo "NEXT_PUBLIC_APP_URL=http://localhost:3000" >> .env
           echo "STORAGE_DRIVER=LOCAL" >> .env
@@ -218,7 +220,8 @@ jobs:
         run: |
           echo "DATABASE_URL=mysql://root:root@localhost:3306/eccb_test" >> .env
           echo "REDIS_URL=redis://localhost:6379" >> .env
-          echo "BETTER_AUTH_SECRET=test-secret-key-for-e2e-tests" >> .env
+          echo "AUTH_SECRET=test-secret-key-for-e2e-tests-minimum-32-chars" >> .env
+          echo "BETTER_AUTH_SECRET=test-secret-key-for-e2e-tests-minimum-32-chars" >> .env
           echo "BETTER_AUTH_URL=http://localhost:3000" >> .env
           echo "NEXT_PUBLIC_APP_URL=http://localhost:3000" >> .env
           echo "STORAGE_DRIVER=LOCAL" >> .env
