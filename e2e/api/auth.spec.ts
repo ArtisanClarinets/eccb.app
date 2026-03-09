@@ -225,7 +225,7 @@ test.describe('Auth API', () => {
       expect(body).toHaveProperty('queues');
     });
 
-    test('should access admin monitoring endpoint', async ({ request }) => {
+    test('should access admin monitoring endpoint', async ({ request: _request }) => {
       const response = await fetch(`${BASE_URL}/api/admin/monitoring`, {
         headers: {
           cookie: ADMIN_COOKIE_HEADER,

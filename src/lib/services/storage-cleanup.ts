@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/db';
-import { deleteFile } from '@/lib/services/storage';
+import { deleteFile, getS3Client } from '@/lib/services/storage';
 import { logger } from '@/lib/logger';
+import { ListObjectsV2Command, DeleteObjectsCommand } from '@aws-sdk/client-s3';
 import fs from 'fs/promises';
 import path from 'path';
 import { env } from '@/lib/env';
@@ -168,8 +169,38 @@ export async function softDeleteMusicFile(
  */
 export async function findOrphanedFiles(): Promise<OrphanedFile[]> {
   if (env.STORAGE_DRIVER === 'S3') {
-    logger.warn('Orphaned file detection not implemented for S3');
-    return [];
+    const client = getS3Client();
+    const bucket = env.S3_BUCKET_NAME!;
+    const orphanedFiles: OrphanedFile[] = [];
+
+    const dbFiles = await prisma.musicFile.findMany({ select: { storageKey: true } });
+    const dbKeys = new Set(dbFiles.map(f => f.storageKey));
+
+    let continuationToken: string | undefined;
+    do {
+      const response = await client.send(new ListObjectsV2Command({
+        Bucket: bucket,
+        ContinuationToken: continuationToken,
+      }));
+
+      for (const obj of response.Contents ?? []) {
+        if (obj.Key && !dbKeys.has(obj.Key)) {
+          orphanedFiles.push({
+            storageKey: obj.Key,
+            size: obj.Size ?? 0,
+            lastModified: obj.LastModified ?? new Date(),
+          });
+        }
+      }
+
+      continuationToken = response.NextContinuationToken;
+    } while (continuationToken);
+
+    logger.info('S3 orphaned file scan complete', {
+      totalDbFiles: dbKeys.size,
+      orphanedCount: orphanedFiles.length,
+    });
+    return orphanedFiles;
   }
   
   const orphanedFiles: OrphanedFile[] = [];
@@ -343,8 +374,45 @@ export async function getStorageStats(): Promise<StorageStats> {
  */
 export async function cleanupTempFiles(): Promise<number> {
   if (env.STORAGE_DRIVER === 'S3') {
-    logger.warn('Temp file cleanup not implemented for S3');
-    return 0;
+    const client = getS3Client();
+    const bucket = env.S3_BUCKET_NAME!;
+    const toDelete: { Key: string }[] = [];
+
+    let continuationToken: string | undefined;
+    do {
+      const response = await client.send(new ListObjectsV2Command({
+        Bucket: bucket,
+        ContinuationToken: continuationToken,
+      }));
+
+      for (const obj of response.Contents ?? []) {
+        if (obj.Key?.includes('.tmp.')) {
+          toDelete.push({ Key: obj.Key });
+        }
+      }
+
+      continuationToken = response.NextContinuationToken;
+    } while (continuationToken);
+
+    if (toDelete.length === 0) {
+      logger.info('No S3 temp files to clean up');
+      return 0;
+    }
+
+    // S3 batch delete — max 1000 per request
+    const BATCH_SIZE = 1000;
+    let deletedCount = 0;
+    for (let i = 0; i < toDelete.length; i += BATCH_SIZE) {
+      const batch = toDelete.slice(i, i + BATCH_SIZE);
+      await client.send(new DeleteObjectsCommand({
+        Bucket: bucket,
+        Delete: { Objects: batch },
+      }));
+      deletedCount += batch.length;
+    }
+
+    logger.info('S3 temp file cleanup complete', { deletedCount });
+    return deletedCount;
   }
   
   const storagePath = path.resolve(env.LOCAL_STORAGE_PATH);

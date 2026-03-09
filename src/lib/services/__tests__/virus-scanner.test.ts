@@ -34,21 +34,21 @@ describe('VirusScanner', () => {
     expect(result.clean).toBe(true);
   });
 
-  it('should log warning and return clean when scanning is enabled but implementation missing', async () => {
+  it('should reject file (fail-closed) when scanning is enabled but ClamAV is unavailable', async () => {
     env.ENABLE_VIRUS_SCAN = true;
     
     const result = await scanner.scan(Buffer.from('test'));
     
-    expect(result.clean).toBe(true);
-    expect(result.message).toContain('implementation missing');
+    expect(result.clean).toBe(false);
+    expect(result.message).toContain('unavailable');
     
-    // Verify logger was called
+    // Verify logger.error was called
     const { logger } = await import('@/lib/logger');
-    expect(logger.info).toHaveBeenCalledWith(
-      'Virus scanning enabled but not implemented', 
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('unavailable'),
       expect.objectContaining({
         clamavHost: 'localhost',
-        clamavPort: 3310
+        clamavPort: 3310,
       })
     );
   });

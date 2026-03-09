@@ -26,7 +26,7 @@ const ADMIN_COOKIE_HEADER = getCookieHeader('e2e/.auth/admin.json');
 
 test.describe('Events API', () => {
   test.describe('Public Events', () => {
-    test('should get public events list', async ({ request }) => {
+    test('should get public events list', async ({ request: _request }) => {
       const response = await fetchStatus('/api/events');
       
       // Events API might be public or protected

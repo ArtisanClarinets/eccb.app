@@ -45,12 +45,6 @@ interface UploadResult {
   partsCount: number;
 }
 
-interface UploadConflictContext {
-  reviewUrl?: string;
-  statusUrl?: string;
-  libraryUrl?: string;
-}
-
 interface UploadItem {
   id: string;
   file: File;
@@ -254,7 +248,6 @@ async function processUpload(
           reviewUrl: duplicateBody.existingSession?.reviewUrl,
           statusUrl: duplicateBody.existingSession?.statusUrl,
           libraryUrl: duplicateBody.existingPiece?.libraryUrl,
-        };
         };
       } else if (typeof errBody?.error === 'string') {
         errMsg = errBody.error;

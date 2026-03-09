@@ -35,7 +35,7 @@ export interface DownloadResult {
 
 let _s3Client: S3Client | null = null;
 
-function getS3Client(): S3Client {
+export function getS3Client(): S3Client {
   if (_s3Client) return _s3Client;
   
   if (!env.S3_ENDPOINT || !env.S3_ACCESS_KEY_ID || !env.S3_SECRET_ACCESS_KEY) {

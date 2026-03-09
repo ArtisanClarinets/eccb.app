@@ -31,7 +31,6 @@ import {
 import { splitPdfByCuttingInstructions, validatePdfBuffer } from '@/lib/services/pdf-splitter';
 import { getAuthoritativePdfPageCount, selectAuthoritativePageCount } from '@/lib/services/pdf-source';
 import { extractPdfPageHeaders } from '@/lib/services/pdf-text-extractor';
-import { getPdfSourceInfo } from '@/lib/services/pdf-source';
 import { detectPartBoundaries } from '@/lib/services/part-boundary-detector';
 import { extractOcrFallbackMetadata } from '@/lib/services/ocr-fallback';
 import { segmentByHeaderImages, preprocessForOcr as _preprocessForOcr } from '@/lib/services/header-image-segmentation';
@@ -124,16 +123,11 @@ async function samplePdfPages(
   pdfBuffer: Buffer,
   cacheTag?: string,
 ): Promise<{ images: string[]; totalPages: number; sampledIndices: number[] }> {
-<<<<<<< HEAD
-  const sourceInfo = await getPdfSourceInfo(pdfBuffer);
-  const totalPages = sourceInfo.pageCount;
-=======
   const totalPages = (await getAuthoritativePdfPageCount(pdfBuffer)) ?? 0;
 
   if (totalPages <= 0) {
     throw new Error('Unable to sample PDF pages: authoritative page count unavailable');
   }
->>>>>>> e900d331a35fb62bf4f8d9410cd0f4d8fc719bf7
 
   let indices: number[];
   if (totalPages <= MAX_SAMPLED_PAGES) {
@@ -586,24 +580,6 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
     return { status: 'parse_failed', sessionId };
   }
 
-<<<<<<< HEAD
-  // Get total page count from validated buffer (should exist since valid).
-  const totalPages = validation.pageCount;
-  if (!totalPages || totalPages <= 0) {
-    logger.error('PDF page count could not be determined', {
-      sessionId,
-      pageCount: validation.pageCount,
-      validationError: validation.error,
-    });
-    await prisma.smartUploadSession.update({
-      where: { uploadSessionId: sessionId },
-      data: {
-        parseStatus: 'PARSE_FAILED',
-      },
-    });
-    return { status: 'parse_failed', sessionId };
-  }
-=======
   // Determine canonical page count from validation + centralized parser before any downstream logic.
   const authoritativePageCount = (await getAuthoritativePdfPageCount(pdfBuffer)) ?? null;
   const initialTotalPages =
@@ -611,7 +587,6 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
       authoritativePageCount,
       validation.pageCount,
     ) ?? 0;
->>>>>>> e900d331a35fb62bf4f8d9410cd0f4d8fc719bf7
 
   // -----------------------------------------------------------------
   // Text layer detection (deterministic segmentation when available)

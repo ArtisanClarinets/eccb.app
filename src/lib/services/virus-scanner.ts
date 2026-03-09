@@ -110,13 +110,15 @@ export class VirusScanner {
 
       throw new Error(`Unexpected ClamAV response: ${response || 'empty response'}`);
     } catch (_error) {
-      // ClamAV is not available — scanning is enabled but implementation is not
-      // connected. Return clean with a warning rather than blocking uploads.
-      logger.info('Virus scanning enabled but not implemented', {
+      // ClamAV is configured but unavailable (connection failed / timed out).
+      // Fail closed: reject the file rather than allowing unscanned content
+      // through, since the operator explicitly enabled virus scanning.
+      logger.error('ClamAV unavailable — rejecting file (fail-closed)', {
         clamavHost: env.CLAMAV_HOST,
         clamavPort: env.CLAMAV_PORT,
+        error: _error instanceof Error ? _error.message : String(_error),
       });
-      return { clean: true, message: 'Virus scanning enabled but implementation missing — file not scanned' };
+      return { clean: false, message: 'Virus scanner unavailable; file rejected. Check ClamAV connectivity.' };
     }
   }
 }

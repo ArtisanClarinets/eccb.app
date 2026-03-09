@@ -193,7 +193,6 @@ describe('Smart Upload Queue', () => {
       expect((processJob.opts as { jobId?: string })?.jobId).not.toContain(':');
       expect((secondPassJob.opts as { jobId?: string })?.jobId).not.toContain(':');
     });
-    });
   });
 
   describe('Queue Configuration', () => {

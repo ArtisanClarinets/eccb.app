@@ -68,7 +68,9 @@ const CSP_DIRECTIVES = [
   "style-src 'self' 'unsafe-inline'",                 // Tailwind requires unsafe-inline
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
-  "connect-src 'self' https:",
+  "connect-src 'self' wss:",
+  "worker-src 'self' blob:",
+  "object-src 'none'",
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",

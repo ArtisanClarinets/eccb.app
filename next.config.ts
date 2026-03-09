@@ -67,7 +67,7 @@ const nextConfig: NextConfig = {
       // Prevent clickjacking
       {
         key: 'X-Frame-Options',
-        value: 'SAMEORIGIN',
+        value: 'DENY',
       },
       // Enable XSS filter in browsers
       {
@@ -101,9 +101,9 @@ const nextConfig: NextConfig = {
           "style-src 'self' 'unsafe-inline'",
           "img-src 'self' data: blob: https:",
           "font-src 'self' data:",
-          "connect-src 'self' https://va.vercel-scripts.com",
+          "connect-src 'self' wss: https://va.vercel-scripts.com",
           "worker-src 'self' blob:",
-          "frame-ancestors 'self'",
+          "frame-ancestors 'none'",
           "base-uri 'self'",
           "form-action 'self'",
           "object-src 'none'",

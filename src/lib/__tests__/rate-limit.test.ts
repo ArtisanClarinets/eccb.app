@@ -125,8 +125,6 @@ describe('createRateLimitKey', () => {
 });
 
 describe('rateLimit', () => {
-  let originalNodeEnv: string | undefined;
-
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubEnv('NODE_ENV', 'production'); // enforce real rate limit logic

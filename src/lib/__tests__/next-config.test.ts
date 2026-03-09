@@ -79,7 +79,7 @@ describe('Security Headers Configuration', () => {
       (h) => h.key === 'X-Frame-Options'
     );
 
-    expect(frameHeader?.value).toBe('SAMEORIGIN');
+    expect(frameHeader?.value).toBe('DENY');
   });
 
   it('should set X-XSS-Protection correctly', async () => {
@@ -134,7 +134,7 @@ describe('Security Headers Configuration', () => {
     expect(cspHeader?.value).toContain("script-src 'self'");
     expect(cspHeader?.value).toContain("style-src 'self'");
     expect(cspHeader?.value).toContain("img-src 'self'");
-    expect(cspHeader?.value).toContain("frame-ancestors 'self'");
+    expect(cspHeader?.value).toContain("frame-ancestors 'none'");
     expect(cspHeader?.value).toContain("object-src 'none'");
   });
 
