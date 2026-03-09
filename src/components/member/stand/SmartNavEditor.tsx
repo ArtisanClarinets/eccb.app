@@ -259,7 +259,7 @@ export function SmartNavEditor() {
         {visibleLinks.map((link) => (
           <div
             key={link.id}
-            className="absolute border-2 border-amber-400/70 bg-amber-400/10 hover:bg-amber-400/20 transition-colors rounded group"
+            className="absolute border-2 border-amber-400/70 bg-amber-400/10 hover:bg-amber-400/20 transition-colors rounded group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
             style={{ ...rectToStyle({ x1: link.fromX, y1: link.fromY, x2: link.toX, y2: link.toY }), pointerEvents: 'auto' }}
             onClick={() => handleHotspotClick(link)}
             role="button"
@@ -276,7 +276,7 @@ export function SmartNavEditor() {
             {/* Delete button (only in edit mode) */}
             {editMode && (
               <button
-                className="absolute -top-2 -right-2 w-4 h-4 bg-destructive text-destructive-foreground text-xs rounded-full flex items-center justify-center leading-none"
+                className="absolute -top-2 -right-2 w-4 h-4 bg-destructive text-destructive-foreground text-xs rounded-full flex items-center justify-center leading-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
                 onClick={(e) => { e.stopPropagation(); handleDelete(link.id); }}
                 style={{ pointerEvents: 'auto' }}
                 title="Delete hotspot"
@@ -292,7 +292,7 @@ export function SmartNavEditor() {
       {/* Edit mode toggle button — directors only */}
       {canEdit && (
         <button
-          className={`absolute bottom-12 right-2 z-30 px-2 py-1 text-xs rounded shadow border transition-colors ${
+          className={`absolute bottom-12 right-2 z-30 px-2 py-1 text-xs rounded shadow border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 ${
             editMode
               ? 'bg-primary text-primary-foreground border-primary'
               : 'bg-card text-foreground border-border hover:bg-muted'
@@ -326,7 +326,7 @@ export function SmartNavEditor() {
                 value={formLabel}
                 onChange={(e) => setFormLabel(e.target.value)}
                 placeholder="e.g. D.C. al Fine"
-                className="w-full border rounded px-2 py-1 bg-background"
+                className="w-full border rounded px-2 py-1 bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
             </label>
 
@@ -335,7 +335,7 @@ export function SmartNavEditor() {
               <select
                 value={formDestPieceIdx}
                 onChange={(e) => setFormDestPieceIdx(Number(e.target.value))}
-                className="w-full border rounded px-2 py-1 bg-background"
+                className="w-full border rounded px-2 py-1 bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 {pieces.map((p, i) => (
                   <option key={p.id} value={i}>
@@ -352,14 +352,14 @@ export function SmartNavEditor() {
                 min={1}
                 value={formDestPage}
                 onChange={(e) => setFormDestPage(Math.max(1, Number(e.target.value)))}
-                className="w-full border rounded px-2 py-1 bg-background"
+                className="w-full border rounded px-2 py-1 bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
             </label>
 
             <div className="flex gap-2 justify-end pt-2">
               <button
                 onClick={() => { setDialogOpen(false); setPendingLink(null); setDrawRect(null); }}
-                className="px-3 py-1.5 text-sm border rounded hover:bg-muted transition-colors"
+                className="px-3 py-1.5 text-sm border rounded hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
                 aria-label="Cancel"
               >
                 Cancel
@@ -367,7 +367,7 @@ export function SmartNavEditor() {
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors disabled:opacity-50"
+                className="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
                 aria-label="Save hotspot"
               >
                 {saving ? 'Saving…' : 'Save hotspot'}
