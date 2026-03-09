@@ -80,6 +80,15 @@ const FORBIDDEN_LABEL_STRINGS = new Set([
   'na',
   'unknown',
   'undefined',
+  // Common false-positive text extracted from score body or title pages
+  'untitled',
+  'anonymous',
+  'instrument',
+  'part',
+  'score',
+  'page',
+  'copyright',
+  'all rights reserved',
 ]);
 
 /** Patterns to identify part-change boundaries in header text */
@@ -268,7 +277,16 @@ export function normaliseLabelFromHeader(
 
   const normalized = normalizeInstrumentLabel(text);
   if (normalized.instrument && normalized.instrument.toLowerCase() !== 'unknown') {
-    return { label: normalized.instrument, confidence: 65 };
+    // Guard against body-text false positives: if the matched instrument name
+    // is much shorter than the source text, the text is likely a sentence
+    // mentioning an instrument rather than an actual part header.
+    // Only accept the fallback when the instrument name occupies ≥ 35 % of the
+    // source text length OR the source text is short enough to plausibly be a
+    // standalone header (≤ 40 characters).
+    const lengthRatio = normalized.instrument.length / text.length;
+    if (lengthRatio >= 0.35 || text.length <= 40) {
+      return { label: normalized.instrument, confidence: 65 };
+    }
   }
 
   return null;
@@ -337,12 +355,17 @@ export function detectPartBoundaries(
   // Step 1: Assign labels to each page
   let pageLabels = buildInitialPageLabels(normalizedPageHeaders);
 
-  // Step 2: Fill unlabelled pages by propagating from previous labelled pages
+  // Step 2: Fill unlabelled pages by propagating from previous labelled pages.
+  // Only propagate from labels with confidence ≥ 70 — low-confidence labels
+  // (e.g. fallback body-text matches at confidence 65) are too uncertain to
+  // spread across adjacent pages and would inflate coverage artificially.
   let lastLabel = '';
+  let lastLabelConfidence = 0;
   for (let i = 0; i < pageLabels.length; i++) {
     if (pageLabels[i].label) {
       lastLabel = pageLabels[i].label;
-    } else if (lastLabel) {
+      lastLabelConfidence = pageLabels[i].confidence;
+    } else if (lastLabel && lastLabelConfidence >= 70) {
       pageLabels[i] = { ...pageLabels[i], label: lastLabel, confidence: 40 };
     }
   }
@@ -350,15 +373,19 @@ export function detectPartBoundaries(
   // Step 3: Smooth blips
   pageLabels = smoothBlips(pageLabels);
 
-  // Step 4: Fill any remaining unlabelled pages (before first label)
-  const firstLabelled = pageLabels.find((pageLabel) => pageLabel.label);
+  // Step 4: Fill any remaining unlabelled pages (before first label).
+  // Only backfill when the first confident label is known (≥ 70) — otherwise
+  // a single low-confidence page would silently brand all front-matter pages.
+  const firstLabelled = pageLabels.find(
+    (pageLabel) => pageLabel.label && pageLabel.confidence >= 70,
+  );
   if (firstLabelled) {
     for (let i = 0; i < pageLabels.length; i++) {
       if (!pageLabels[i].label) {
         pageLabels[i] = {
           ...pageLabels[i],
           label: firstLabelled.label,
-          confidence: 30,
+          confidence: 25,
         };
       } else {
         break;

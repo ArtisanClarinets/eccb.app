@@ -88,8 +88,12 @@ export async function startSmartUploadProcessorWorker(): Promise<void> {
             );
         }
       } catch (error) {
-        // Best-effort cleanup of temporary files on failure
-        if (sessionId) {
+        // Only destroy temp files on the FINAL attempt to preserve idempotency
+        // on retries: a subsequent attempt may need to re-download sampled parts
+        // that were uploaded to storage during the failing attempt.
+        const maxAttempts = job.opts?.attempts ?? 1;
+        const isFinalAttempt = job.attemptsMade >= maxAttempts - 1;
+        if (sessionId && isFinalAttempt) {
           try {
             await cleanupSmartUploadTempFiles(sessionId);
           } catch (cleanupErr) {

@@ -176,6 +176,27 @@ describe('Smart Upload Bootstrap', () => {
       );
     });
 
+    it('should migrate deprecated gemma verification model when present', async () => {
+      mockPrismaSystemSettingFindMany.mockResolvedValue([
+        { key: 'llm_verification_model', value: 'google/gemma-3-27b-it:free' },
+      ]);
+
+      const result = await bootstrapSmartUploadSettings();
+
+      expect(result.actions).toContain(
+        'migrated deprecated verification model to vision-capable default'
+      );
+      expect(mockPrismaSystemSettingUpsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { key: 'llm_verification_model' },
+          create: expect.objectContaining({
+            key: 'llm_verification_model',
+            value: 'meta-llama/llama-3.2-11b-vision-instruct:free',
+          }),
+        })
+      );
+    });
+
     it('should not overwrite existing values but create migration bridges', async () => {
       // Existing values should be preserved
       mockPrismaSystemSettingFindMany.mockResolvedValue([
@@ -359,6 +380,7 @@ describe('Smart Upload Bootstrap', () => {
         { key: 'smart_upload_ocr_rate_limit_rpm', value: '6' },
         { key: 'smart_upload_llm_max_pages', value: '10' },
         { key: 'smart_upload_llm_max_header_batches', value: '2' },
+        { key: 'smart_upload_second_pass_max_images', value: '0' },
         // Per-step LLM providers
         { key: 'llm_default_provider', value: 'google' },
         { key: 'llm_vision_provider', value: 'google' },

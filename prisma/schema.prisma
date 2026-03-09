@@ -21,20 +21,20 @@ model User {
   banned            Boolean            @default(false)
   banReason         String?
   banExpires        DateTime?
+  annotations       Annotation[]
   announcements     Announcement[]
   auditLogs         AuditLog[]
   emailLogs         EmailLog[]
   member            Member?
-  notifications     UserNotification[]
-  customPermissions UserPermission[]
-  roles             UserRole[]
-  accounts          Account[]
-  sessions          Session[]
-  annotations       Annotation[]
-  userPreferences   UserPreferences?
   practiceLogs      PracticeLog[]
   standBookmarks    StandBookmark[]
   standSetlists     StandSetlist[]
+  notifications     UserNotification[]
+  customPermissions UserPermission[]
+  userPreferences   UserPreferences?
+  roles             UserRole[]
+  accounts          Account[]
+  sessions          Session[]
 
   @@index([email])
   @@index([deletedAt])
@@ -171,16 +171,16 @@ model Member {
   emergencyPhone   String?
   emergencyEmail   String?
   notes            String?
-  isSubstitute     Boolean            @default(false)
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
   deletedAt        DateTime?
+  isSubstitute     Boolean            @default(false)
   attendance       Attendance[]
+  carpoolEntries   CarpoolEntry[]
   user             User?              @relation(fields: [userId], references: [id])
   instruments      MemberInstrument[]
   sections         MemberSection[]
   musicAssignments MusicAssignment[]
-  carpoolEntries   CarpoolEntry[]
   sectionMessages  SectionMessage[]
 
   @@index([status])
@@ -215,36 +215,31 @@ model MemberInstrument {
   @@index([instrumentId])
 }
 
-// ====================================
-// Section Board
-// ====================================
-
 model SectionMessage {
-  id         String   @id @default(cuid())
-  sectionId  String
-  memberId   String
-  content    String   @db.LongText
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  
-  section    Section  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
-  member     Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
-  
+  id        String   @id @default(cuid())
+  sectionId String
+  memberId  String
+  content   String   @db.LongText
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  member    Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  section   Section  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
   @@index([sectionId])
   @@index([memberId])
   @@index([createdAt])
 }
 
 model Section {
-  id          String          @id @default(cuid())
-  name        String          @unique
+  id          String           @id @default(cuid())
+  name        String           @unique
   description String?
-  sortOrder   Int             @default(0)
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  sortOrder   Int              @default(0)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  annotations Annotation[]
   members     MemberSection[]
   messages    SectionMessage[]
-  annotations Annotation[]
 
   @@index([sortOrder])
 }
@@ -264,46 +259,46 @@ model MemberSection {
 }
 
 model MusicPiece {
-  id                 String            @id @default(cuid())
-  title              String
-  subtitle           String?
-  composerId         String?
-  arrangerId         String?
-  publisherId        String?
-  difficulty         MusicDifficulty?
-  duration           Int?
-  genre              String?
-  style              String?
-  instrumentation    String?
-  tags               String?           @db.LongText
-  catalogNumber      String?           @unique
-  notes              String?
-  performanceHistory String?
-  isArchived         Boolean           @default(false)
-  confidenceScore    Int?
-  source            String?
-  workFingerprintHash String?          @unique(map: "MusicPiece_workFingerprintHash_key") @db.Char(64)
-  ensembleType       String?
-  keySignature       String?
-  timeSignature      String?
-  tempo              String?
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
-  deletedAt          DateTime?
-  eventMusic         EventMusic[]
-  assignments        MusicAssignment[]
-  files              MusicFile[]
-  parts              MusicPart[]
-  arranger           Person?           @relation("ArrangerPieces", fields: [arrangerId], references: [id])
-  composer           Person?           @relation("ComposerPieces", fields: [composerId], references: [id])
-  publisher          Publisher?        @relation(fields: [publisherId], references: [id])
-  annotations        Annotation[]
-  navigationLinksFrom NavigationLink[] @relation("NavigationLinksFrom")
-  navigationLinksTo   NavigationLink[] @relation("NavigationLinksTo")
-  audioLinks        AudioLink[]
-  practiceLogs      PracticeLog[]
-  standBookmarks    StandBookmark[]
-  setlistItems      StandSetlistItem[]
+  id                  String             @id @default(cuid())
+  title               String
+  subtitle            String?
+  composerId          String?
+  arrangerId          String?
+  publisherId         String?
+  difficulty          MusicDifficulty?
+  duration            Int?
+  genre               String?
+  style               String?
+  instrumentation     String?
+  tags                String?            @db.LongText
+  catalogNumber       String?            @unique
+  notes               String?
+  performanceHistory  String?
+  isArchived          Boolean            @default(false)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  deletedAt           DateTime?
+  confidenceScore     Int?
+  source              String?
+  ensembleType        String?
+  keySignature        String?
+  tempo               String?
+  timeSignature       String?
+  workFingerprintHash String?            @unique @db.Char(64)
+  annotations         Annotation[]
+  audioLinks          AudioLink[]
+  eventMusic          EventMusic[]
+  assignments         MusicAssignment[]
+  files               MusicFile[]
+  parts               MusicPart[]
+  arranger            Person?            @relation("ArrangerPieces", fields: [arrangerId], references: [id])
+  composer            Person?            @relation("ComposerPieces", fields: [composerId], references: [id])
+  publisher           Publisher?         @relation(fields: [publisherId], references: [id])
+  navigationLinksFrom NavigationLink[]   @relation("NavigationLinksFrom")
+  navigationLinksTo   NavigationLink[]   @relation("NavigationLinksTo")
+  practiceLogs        PracticeLog[]
+  standBookmarks      StandBookmark[]
+  setlistItems        StandSetlistItem[]
 
   @@index([title])
   @@index([composerId])
@@ -315,42 +310,42 @@ model MusicPiece {
 }
 
 model MusicFile {
-  id                String             @id @default(cuid())
-  pieceId           String
-  fileName          String
-  fileType          FileType
-  fileSize          Int
-  mimeType          String
-  storageKey        String
-  storageUrl        String?
-  version           Int                @default(1)
-  description       String?
-  isPublic          Boolean            @default(false)
-  isArchived        Boolean            @default(false)
-  uploadedAt        DateTime           @default(now())
-  uploadedBy        String?
-  contentHash       String?
-  extractedMetadata String?            @db.LongText
-  ocrText           String?            @db.Text
-  originalUploadId  String?
-  source            String?
-  pageCount         Int?
-  partLabel         String?
-  instrumentName    String?
-  section           String?
-  partNumber        Int?
+  id                  String             @id @default(cuid())
+  pieceId             String
+  fileName            String
+  fileType            FileType
+  fileSize            Int
+  mimeType            String
+  storageKey          String
+  storageUrl          String?
+  version             Int                @default(1)
+  description         String?
+  isPublic            Boolean            @default(false)
+  isArchived          Boolean            @default(false)
+  uploadedAt          DateTime           @default(now())
+  uploadedBy          String?
+  contentHash         String?
+  extractedMetadata   String?            @db.LongText
+  ocrText             String?            @db.Text
+  originalUploadId    String?
+  source              String?
+  instrumentName      String?
+  pageCount           Int?
+  partLabel           String?
+  partNumber          Int?
+  section             String?
   /// Stable identity fingerprint for PART records (piece + canonical part identity).
-  partFingerprintHash String?         @db.Char(64)
-  downloads         FileDownload[]
-  piece             MusicPiece         @relation(fields: [pieceId], references: [id], onDelete: Cascade)
-  versions          MusicFileVersion[]
-  parts             MusicPart[]
+  partFingerprintHash String?            @db.Char(64)
+  downloads           FileDownload[]
+  piece               MusicPiece         @relation(fields: [pieceId], references: [id], onDelete: Cascade)
+  versions            MusicFileVersion[]
+  parts               MusicPart[]
 
+  @@unique([pieceId, fileType, partFingerprintHash])
   @@index([pieceId])
   @@index([fileType])
   @@index([contentHash])
   @@index([partFingerprintHash])
-  @@unique([pieceId, fileType, partFingerprintHash], map: "MusicFile_pieceId_fileType_partFingerprintHash_key")
 }
 
 model MusicFileVersion {
@@ -371,85 +366,68 @@ model MusicFileVersion {
   @@index([uploadedAt])
 }
 
-// ====================================
-// Smart Upload Session
-// ====================================
-
-enum SmartUploadStatus {
-  PENDING_REVIEW
-  APPROVED
-  REJECTED
-}
-
-enum SmartUploadSessionCommitStatus {
-  NOT_STARTED
-  IN_PROGRESS
-  COMPLETE
-  FAILED
-}
-
 model SmartUploadSession {
-  id                 String           @id @default(cuid())
-  uploadSessionId    String           @unique
-  fileName           String
-  fileSize           Int
-  mimeType           String
-  storageKey         String
-  extractedMetadata  Json?
-  confidenceScore    Int?
-  status             SmartUploadStatus @default(PENDING_REVIEW)
-  uploadedBy         String
-  reviewedBy         String?
-  reviewedAt         DateTime?
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
-  parsedParts        Json?
-  parseStatus        String?
-  secondPassStatus   String?
-  secondPassResult   Json?
-  autoApproved       Boolean          @default(false)
-  routingDecision    String?
-  cuttingInstructions Json?
-  llmProvider        String?
-  llmVisionModel     String?
-  llmVerifyModel     String?
-  llmModelParams     Json?
-  llmPromptVersion   String?
-  tempFiles          Json?
-  firstPassRaw       String?          @db.LongText
-  secondPassRaw      String?          @db.LongText
-  adjudicatorStatus  String?
-  adjudicatorResult  Json?
-  adjudicatorRaw     String?          @db.LongText
-  finalConfidence    Int?
-  requiresHumanReview Boolean          @default(false)
+  id                  String                          @id @default(cuid())
+  uploadSessionId     String                          @unique
+  fileName            String
+  fileSize            Int
+  mimeType            String
+  storageKey          String
+  extractedMetadata   String?                         @db.LongText
+  confidenceScore     Int?
+  status              SmartUploadStatus               @default(PENDING_REVIEW)
+  uploadedBy          String
+  reviewedBy          String?
+  reviewedAt          DateTime?
+  createdAt           DateTime                        @default(now())
+  updatedAt           DateTime                        @updatedAt
+  autoApproved        Boolean                         @default(false)
+  cuttingInstructions String?                         @db.LongText
+  firstPassRaw        String?                         @db.LongText
+  llmModelParams      String?                         @db.LongText
+  llmProvider         String?
+  llmVerifyModel      String?
+  llmVisionModel      String?
+  parseStatus         String?
+  parsedParts         String?                         @db.LongText
+  secondPassRaw       String?                         @db.LongText
+  secondPassResult    String?                         @db.LongText
+  secondPassStatus    String?
+  tempFiles           String?                         @db.LongText
+  routingDecision     String?
+  llmPromptVersion    String?
+  adjudicatorRaw      String?                         @db.LongText
+  adjudicatorResult   String?                         @db.LongText
+  adjudicatorStatus   String?
+  finalConfidence     Int?
   llmAdjudicatorModel String?
-  /// SHA-256 of the original uploaded PDF bytes (hex). Used for fast exact-duplicate detection.
-  sourceSha256       String?          @db.Char(64)
-  /// JSON array of strategy attempts: [{strategy, confidence, failureReasons, durationMs, timestamp}]
-  strategyHistory    Json?
+  requiresHumanReview Boolean                         @default(false)
   /// Total LLM calls consumed by this session (persisted so retries don't reset the budget).
-  llmCallCount       Int              @default(0)
+  llmCallCount        Int                             @default(0)
+  /// SHA-256 of the original uploaded PDF bytes (hex). Used for fast exact-duplicate detection.
+  sourceSha256        String?                         @db.Char(64)
+  /// JSON array of strategy attempts: [{strategy, confidence, failureReasons, durationMs, timestamp}]
+  strategyHistory     String?                         @db.LongText
   /// OCR engine used: tesseract, ocrmypdf, vision_api, native
-  ocrEngineUsed     String?
+  ocrEngineUsed       String?
   /// OCR mode used: header, full, both
-  ocrModeUsed       String?
+  ocrModeUsed         String?
   /// Raw OCR text extracted from PDF (for debugging/provenance). Only stored if smart_upload_store_raw_ocr_text is enabled.
-  rawOcrText        String?           @db.LongText
+  rawOcrText          String?                         @db.LongText
   /// Character count of raw OCR text (for quick validation)
-  ocrTextChars      Int?
-  /// Commit lifecycle status for idempotent ingest tracking
-  commitStatus      SmartUploadSessionCommitStatus? @default(NOT_STARTED)
+  ocrTextChars        Int?
   /// Number of commit attempts for this session.
-  commitAttempts    Int               @default(0)
+  commitAttempts      Int                             @default(0)
   /// Timestamp when commit completed successfully.
-  committedAt       DateTime?
+  committedAt         DateTime?
   /// Committed MusicPiece id (if commit completed).
-  committedPieceId  String?
+  committedPieceId    String?
   /// Committed primary MusicFile id (if commit completed).
-  committedFileId   String?
+  committedFileId     String?
   /// Last commit error message (sanitized).
-  commitError       String?           @db.Text
+  commitError         String?                         @db.Text
+  /// Commit lifecycle status for idempotent ingest tracking
+  commitStatus        SmartUploadSessionCommitStatus? @default(NOT_STARTED)
 
   @@index([uploadSessionId])
   @@index([status])
@@ -460,34 +438,33 @@ model SmartUploadSession {
   @@index([commitStatus])
   @@index([committedPieceId])
   @@index([committedFileId])
-  // Unique constraint for active uploads (commitStatus != COMPLETE) enforced via generated column
   @@index([sourceSha256, commitStatus])
 }
 
 model MusicPart {
-  id           String     @id @default(cuid())
-  pieceId      String
-  instrumentId String
-  partName     String
-  fileId       String?
-  isOptional   Boolean    @default(false)
-  notes        String?
-  section      String?
-  partNumber   Int?
-  partLabel    String?
-  transposition String?
-  pageCount    Int?
-  storageKey   String?
+  id                  String     @id @default(cuid())
+  pieceId             String
+  instrumentId        String
+  partName            String
+  fileId              String?
+  isOptional          Boolean    @default(false)
+  notes               String?
+  pageCount           Int?
+  partLabel           String?
+  partNumber          Int?
+  section             String?
+  storageKey          String?
+  transposition       String?
   /// Stable identity fingerprint for dedupe across retries/re-segmentation.
-  partFingerprintHash String? @db.Char(64)
-  file         MusicFile? @relation(fields: [fileId], references: [id])
-  instrument   Instrument @relation(fields: [instrumentId], references: [id])
-  piece        MusicPiece @relation(fields: [pieceId], references: [id], onDelete: Cascade)
+  partFingerprintHash String?    @db.Char(64)
+  file                MusicFile? @relation(fields: [fileId], references: [id])
+  instrument          Instrument @relation(fields: [instrumentId], references: [id])
+  piece               MusicPiece @relation(fields: [pieceId], references: [id], onDelete: Cascade)
 
+  @@unique([pieceId, partFingerprintHash])
   @@index([pieceId])
   @@index([instrumentId])
   @@index([partFingerprintHash])
-  @@unique([pieceId, partFingerprintHash], map: "MusicPart_pieceId_partFingerprintHash_key")
   @@index([fileId], map: "MusicPart_fileId_fkey")
 }
 
@@ -548,7 +525,7 @@ model MusicAssignment {
 }
 
 model MusicAssignmentHistory {
-  id           String           @id @default(cuid())
+  id           String          @id @default(cuid())
   assignmentId String
   action       String
   fromStatus   String?
@@ -577,60 +554,46 @@ model FileDownload {
   @@index([downloadedAt])
 }
 
-// ====================================
-// Carpool
-// ====================================
-
-enum CarpoolType {
-  OFFER
-  REQUEST
-}
-
 model CarpoolEntry {
-  id         String      @id @default(cuid())
-  eventId    String
-  memberId   String
-  type       CarpoolType
-  seats      Int?
-  location   String?
-  notes      String?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-  
-  event   Event   @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  member  Member  @relation(fields: [memberId], references: [id], onDelete: Cascade)
-  
+  id        String      @id @default(cuid())
+  eventId   String
+  memberId  String
+  type      CarpoolType
+  seats     Int?
+  location  String?
+  notes     String?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  event     Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  member    Member      @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
   @@unique([eventId, memberId])
   @@index([eventId])
   @@index([memberId])
 }
 
-// ====================================
-// Event Models
-// ====================================
-
 model Event {
-  id           String       @id @default(cuid())
-  title        String
-  description  String?
-  type         EventType
-  startTime    DateTime
-  endTime      DateTime
-  location     String?
-  venueId      String?
-  callTime     DateTime?
-  dressCode    String?
-  programOrder String?      @db.LongText
-  isCancelled  Boolean      @default(false)
-  isPublished  Boolean      @default(false)
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-  deletedAt    DateTime?
-  attendance   Attendance[]
-  venue        Venue?       @relation(fields: [venueId], references: [id])
-  music        EventMusic[]
-  notes        EventNote[]
+  id             String         @id @default(cuid())
+  title          String
+  description    String?
+  type           EventType
+  startTime      DateTime
+  endTime        DateTime
+  location       String?
+  venueId        String?
+  callTime       DateTime?
+  dressCode      String?
+  programOrder   String?        @db.LongText
+  isCancelled    Boolean        @default(false)
+  isPublished    Boolean        @default(false)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  deletedAt      DateTime?
+  attendance     Attendance[]
   carpoolEntries CarpoolEntry[]
+  venue          Venue?         @relation(fields: [venueId], references: [id])
+  music          EventMusic[]
+  notes          EventNote[]
 
   @@index([type])
   @@index([startTime])
@@ -1102,23 +1065,19 @@ model SmartUploadSetting {
   @@index([key])
 }
 
-// ====================================
-// Stand Features - Digital Music Stand
-// ====================================
-
 model Annotation {
   id         String          @id @default(cuid())
   musicId    String
   page       Int
   layer      AnnotationLayer
-  strokeData Json
+  strokeData String          @db.LongText
   userId     String
-  sectionId  String?
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
+  sectionId  String?
   music      MusicPiece      @relation(fields: [musicId], references: [id], onDelete: Cascade)
-  user       User            @relation(fields: [userId], references: [id])
   section    Section?        @relation(fields: [sectionId], references: [id])
+  user       User            @relation(fields: [userId], references: [id])
 
   @@index([musicId])
   @@index([userId])
@@ -1128,25 +1087,19 @@ model Annotation {
   @@index([musicId, userId, page])
 }
 
-enum AnnotationLayer {
-  PERSONAL
-  SECTION
-  DIRECTOR
-}
-
 model NavigationLink {
-  id        String     @id @default(cuid())
+  id        String      @id @default(cuid())
   musicId   String
-  fromPage  Int        @default(1)
   fromX     Float
   fromY     Float
-  toPage    Int        @default(1)
-  toMusicId String?
   toX       Float
   toY       Float
   label     String?
-  createdAt DateTime   @default(now())
-  music     MusicPiece @relation("NavigationLinksFrom", fields: [musicId], references: [id], onDelete: Cascade)
+  createdAt DateTime    @default(now())
+  fromPage  Int         @default(1)
+  toPage    Int         @default(1)
+  toMusicId String?
+  music     MusicPiece  @relation("NavigationLinksFrom", fields: [musicId], references: [id], onDelete: Cascade)
   toMusic   MusicPiece? @relation("NavigationLinksTo", fields: [toMusicId], references: [id])
 
   @@index([musicId])
@@ -1182,9 +1135,9 @@ model UserPreferences {
   id                String   @id @default(cuid())
   userId            String   @unique
   nightMode         Boolean  @default(false)
-  metronomeSettings Json?
-  midiMappings      Json?
-  otherSettings     Json?
+  metronomeSettings String?  @db.LongText
+  midiMappings      String?  @db.LongText
+  otherSettings     String?  @db.LongText
   updatedAt         DateTime @updatedAt
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -1200,8 +1153,8 @@ model PracticeLog {
   notes           String?    @db.Text
   practicedAt     DateTime   @default(now())
   createdAt       DateTime   @default(now())
-  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   piece           MusicPiece @relation(fields: [pieceId], references: [id], onDelete: Cascade)
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([pieceId])
@@ -1215,8 +1168,8 @@ model StandBookmark {
   pieceId   String
   sortOrder Int        @default(0)
   createdAt DateTime   @default(now())
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   piece     MusicPiece @relation(fields: [pieceId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, pieceId])
   @@index([userId])
@@ -1243,8 +1196,8 @@ model StandSetlistItem {
   pieceId   String
   sortOrder Int          @default(0)
   notes     String?
-  setlist   StandSetlist @relation(fields: [setlistId], references: [id], onDelete: Cascade)
   piece     MusicPiece   @relation(fields: [pieceId], references: [id], onDelete: Cascade)
+  setlist   StandSetlist @relation(fields: [setlistId], references: [id], onDelete: Cascade)
 
   @@unique([setlistId, pieceId])
   @@index([setlistId])
@@ -1273,6 +1226,30 @@ model TaskModelConfig {
   @@index([modelId])
   @@index([primaryProviderId])
   @@index([taskType])
+}
+
+enum SmartUploadStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum SmartUploadSessionCommitStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETE
+  FAILED
+}
+
+enum CarpoolType {
+  OFFER
+  REQUEST
+}
+
+enum AnnotationLayer {
+  PERSONAL
+  SECTION
+  DIRECTOR
 }
 
 enum RoleType {

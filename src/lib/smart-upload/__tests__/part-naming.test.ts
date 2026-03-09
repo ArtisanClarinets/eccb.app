@@ -178,8 +178,26 @@ describe('buildPartStorageSlug', () => {
     expect(result).not.toContain(')');
   });
 
-  it('truncates at 150 chars', () => {
+  it('truncates base at 120 chars (not 150) to leave room for suffix', () => {
     const longName = 'A'.repeat(200);
-    expect(buildPartStorageSlug(longName).length).toBe(150);
+    expect(buildPartStorageSlug(longName).length).toBe(120);
+  });
+
+  it('appends _p{N} suffix when partNumber opt is given', () => {
+    expect(buildPartStorageSlug('Bb Clarinet', { partNumber: 3 })).toBe('Bb_Clarinet_p3');
+  });
+
+  it('appends _pg{start}-{end} suffix when pageRange opt is given', () => {
+    expect(buildPartStorageSlug('Trumpet', { pageRange: [5, 8] })).toBe('Trumpet_pg5-8');
+  });
+
+  it('appends both suffixes when both opts are given', () => {
+    expect(buildPartStorageSlug('Bb Clarinet', { partNumber: 2, pageRange: [9, 14] })).toBe('Bb_Clarinet_p2_pg9-14');
+  });
+
+  it('produces distinct slugs for parts with same name but different numbers', () => {
+    const slug1 = buildPartStorageSlug('Bb Clarinet', { partNumber: 1, pageRange: [1, 4] });
+    const slug2 = buildPartStorageSlug('Bb Clarinet', { partNumber: 2, pageRange: [5, 8] });
+    expect(slug1).not.toBe(slug2);
   });
 });

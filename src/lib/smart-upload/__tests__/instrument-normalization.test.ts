@@ -863,10 +863,10 @@ describe('buildPartStorageSlug', () => {
     expect(result).not.toContain('__');
   });
 
-  it('truncates at 150 characters', () => {
+  it('truncates base at 120 characters', () => {
     const longName = 'A'.repeat(200);
     const result = buildPartStorageSlug(longName);
-    expect(result.length).toBe(150);
+    expect(result.length).toBe(120);
   });
 
   it('does not add extension', () => {

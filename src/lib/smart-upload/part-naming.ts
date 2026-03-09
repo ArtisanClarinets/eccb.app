@@ -181,12 +181,29 @@ export function buildPartFilename(displayName: string): string {
 /**
  * Build a storage-safe key segment (no spaces, limited chars).
  * Used for S3/MinIO object keys.
+ *
+ * Pass `partNumber` and/or `pageRange` to guarantee uniqueness when multiple
+ * parts share the same display name (e.g. two "Bb Clarinet" parts in different
+ * ranges). Without them, two parts with identical names would produce the same
+ * object key and the second upload would silently overwrite the first.
  */
-export function buildPartStorageSlug(displayName: string): string {
-  return displayName
+export function buildPartStorageSlug(
+  displayName: string,
+  opts?: { partNumber?: number; pageRange?: [number, number] },
+): string {
+  const base = displayName
     .trim()
     .replace(/[^a-zA-Z0-9\-_ ]/g, '')
     .replace(/\s+/g, '_')
     .replace(/_{2,}/g, '_')
-    .slice(0, 150);
+    .slice(0, 120); // shortened to leave room for the suffix
+
+  const parts: string[] = [base];
+  if (opts?.partNumber != null) {
+    parts.push(`p${opts.partNumber}`);
+  }
+  if (opts?.pageRange != null) {
+    parts.push(`pg${opts.pageRange[0]}-${opts.pageRange[1]}`);
+  }
+  return parts.join('_');
 }

@@ -1,10 +1,18 @@
 import { createRequire } from 'module';
 import * as fs from 'fs';
 import * as nodePath from 'path';
+import { pathToFileURL } from 'url';
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { createCanvas } from '@napi-rs/canvas';
 import sharp from 'sharp';
 import { logger } from '@/lib/logger';
+
+// Turbopack compatibility for server-side PDF rendering.
+// Allocate an absolute file:// URL for the fake worker, avoiding dynamic
+// import issues that cause preview 500s.
+const PDFJS_DIR = resolvePdfJsDistDir();
+const WORKER_FILE = nodePath.join(PDFJS_DIR, 'legacy', 'build', 'pdf.worker.mjs');
+pdfjsLib.GlobalWorkerOptions.workerSrc = pathToFileURL(WORKER_FILE).href;
 
 // ---------------------------------------------------------------------------
 // Server-side (Node.js) pdfjs configuration.

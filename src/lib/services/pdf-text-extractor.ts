@@ -28,6 +28,14 @@ import * as fs from 'fs';
 import * as nodePath from 'path';
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { logger } from '@/lib/logger';
+import { pathToFileURL } from 'url';
+
+// Turbopack compatibility fix: ensure pdfjs can load its fake worker on the server.
+// Without this, dynamic import relative to import.meta.url fails and previews return
+// 500 errors.  See discussion in pdfjs_turbopack_fix.md in repo memory.
+const PDFJS_DIST_DIR_ABS = resolvePdfJsDistDir();
+const WORKER_PATH = nodePath.join(PDFJS_DIST_DIR_ABS, 'legacy', 'build', 'pdf.worker.mjs');
+pdfjsLib.GlobalWorkerOptions.workerSrc = pathToFileURL(WORKER_PATH).href;
 
 // =============================================================================
 // Types
@@ -231,6 +239,9 @@ function isTextContentItem(item: unknown): item is PdfJsTextItemLike {
 /**
  * Normalize text extracted from PDF to remove control characters and collapse whitespace.
  * This is intentionally conservative so downstream parsing behavior stays stable.
+ *
+ * NOTE: punctuation and symbol characters are preserved; callers should perform
+ * additional gibberish detection (alphanumeric density) if needed.
  */
 export function normalizePdfText(text: string): string {
   if (!text) return '';
@@ -245,6 +256,18 @@ export function normalizePdfText(text: string): string {
     .replace(/[ \t]+/g, ' ')
     .replace(/\s*\n\s*/g, ' ')
     .trim();
+}
+
+/**
+ * Return true if the given text (after normalization) contains fewer than 30%
+ * alphanumeric characters.  Used to detect "gibberish" extracted from music
+ * font layers so we can force OCR fallback rather than trusting nonsense.
+ */
+export function isGibberishText(text: string): boolean {
+  const norm = normalizePdfText(text);
+  if (norm.length === 0) return false;
+  const alphaNumCount = (norm.match(/[a-zA-Z0-9]/g) || []).length;
+  return alphaNumCount / norm.length < 0.3;
 }
 
 function extractHeaderTextFromItems(items: ReadonlyArray<unknown>, pageHeight: number): string {
@@ -452,7 +475,12 @@ export async function extractPdfPageHeaders(
         const normalizedHeaderText = normalizePdfText(
           extractHeaderTextFromItems(textContent.items, pageHeight)
         );
-        const hasText = normalizedFullText.length >= normalizedMinMeaningfulChars;
+        // discard pages whose text is mostly non-alphanumeric (gibberish/musical glyphs)
+        const alphaNumCount = (normalizedFullText.match(/[a-zA-Z0-9]/g) || []).length;
+        const isGibberish =
+          normalizedFullText.length > 0 &&
+          alphaNumCount / normalizedFullText.length < 0.3;
+        const hasText = !isGibberish && normalizedFullText.length >= normalizedMinMeaningfulChars;
 
         if (hasText) {
           pagesWithText += 1;

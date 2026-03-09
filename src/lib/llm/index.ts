@@ -27,6 +27,23 @@ import {
   type VisionResponse,
 } from './types';
 
+// --- Error Classes ---
+
+/**
+ * Thrown when the LLM API returns a non-retryable error (e.g. 400 Bad Request,
+ * 401 Unauthorized, 403 Forbidden, 404 Not Found, 422 Unprocessable Entity).
+ * The catch block in the retry loop must re-throw this immediately without
+ * re-queuing the request, so quota and temp-file state are not burned.
+ */
+export class LlmNonRetryableError extends Error {
+  readonly status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'LlmNonRetryableError';
+    this.status = status;
+  }
+}
+
 // --- Constants ---
 const MAX_RETRIES = 3;
 const RETRY_BASE_MS = 1000;
@@ -172,20 +189,27 @@ export async function callVisionModel(
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => '');
-        if ((response.status === 429 || response.status >= 500) && attempt < MAX_RETRIES) {
-          const wait = RETRY_BASE_MS * 2 ** (attempt - 1);
-          logger.warn('LLM call failed, retrying...', {
-            provider: config.llm_provider,
-            model: config.llm_vision_model,
-            endpoint: safeUrl,
-            status: response.status,
-            attempt,
-            wait,
-          });
-          await new Promise((r) => setTimeout(r, wait));
-          continue;
+        // Retryable conditions: 429 (rate limit) or 500+ server errors.
+        if (response.status === 429 || response.status >= 500) {
+          if (attempt < MAX_RETRIES) {
+            const wait = RETRY_BASE_MS * 2 ** (attempt - 1);
+            logger.warn('LLM call failed, retrying...', {
+              provider: config.llm_provider,
+              model: config.llm_vision_model,
+              endpoint: safeUrl,
+              status: response.status,
+              attempt,
+              wait,
+            });
+            await new Promise((r) => setTimeout(r, wait));
+            continue;
+          }
+          // Retries exhausted; throw generic error so caller can inspect status.
+          throw new Error(
+            `LLM API request failed after ${MAX_RETRIES} attempts: ${response.status} ${errorText.slice(0, 300)}`
+          );
         }
-        // Log diagnostic details for non-retryable errors (4xx) to aid debugging
+        // At this point it's a non-retryable client error (4xx except 429)
         logger.error('LLM API non-retryable error', {
           provider: config.llm_provider,
           model: config.llm_vision_model,
@@ -193,7 +217,10 @@ export async function callVisionModel(
           status: response.status,
           errorBody: errorText.slice(0, 500),
         });
-        throw new Error(`LLM API request failed: ${response.status} ${errorText.slice(0, 300)}`);
+        throw new LlmNonRetryableError(
+          `LLM API request failed: ${response.status} ${errorText.slice(0, 300)}`,
+          response.status,
+        );
       }
 
       const jsonResponse = await response.json();
@@ -232,6 +259,10 @@ export async function callVisionModel(
       return result;
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
+      // Non-retryable API errors (4xx except 429) must propagate immediately.
+      if (lastError instanceof LlmNonRetryableError) {
+        throw lastError;
+      }
       if (lastError.name === 'AbortError') {
         throw new Error(`LLM call timed out after ${REQUEST_TIMEOUT_MS / 1000} seconds`);
       }

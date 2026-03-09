@@ -4,6 +4,12 @@ import * as nodePath from 'path';
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { PDFDocument } from 'pdf-lib';
 import { logger } from '@/lib/logger';
+import { pathToFileURL } from 'url';
+
+// Turbopack worker fix: point pdfjs fake worker at absolute URL
+const PDFJS_DIST_DIR_ABS = resolvePdfJsDistDir();
+const WORKER_PATH = nodePath.join(PDFJS_DIST_DIR_ABS, 'legacy', 'build', 'pdf.worker.mjs');
+pdfjsLib.GlobalWorkerOptions.workerSrc = pathToFileURL(WORKER_PATH).href;
 
 export interface PdfSourceInfo {
   pageCount: number;

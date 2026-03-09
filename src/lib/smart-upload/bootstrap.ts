@@ -74,6 +74,7 @@ const DEFAULT_NUMERIC_SETTINGS: Record<string, string> = {
   smart_upload_ocr_rate_limit_rpm: '6',
   smart_upload_llm_max_pages: '10',
   smart_upload_llm_max_header_batches: '2',
+  smart_upload_second_pass_max_images: '0',
 };
 
 const DEFAULT_JSON_SETTINGS: Record<string, string> = {
@@ -147,6 +148,20 @@ export async function bootstrapSmartUploadSettings(
     // 6. Initialize models for the selected provider if missing
     const provider = (existingSettings.llm_provider || 'ollama') as ProviderValue;
     const providerMeta = LLM_PROVIDERS.find((p) => p.value === provider);
+
+    // 7. Repair deprecated verification model values that were cached prior
+    // to our metadata fix.  This is a no-op in most environments but ensures
+    // new installations also self-heal without a manual DB migration.
+    const deprecated = 'google/gemma-3-27b-it:free';
+    const visionDefault = 'meta-llama/llama-3.2-11b-vision-instruct:free';
+    if (
+      existingSettings.llm_verification_model === deprecated ||
+      existingSettings.smart_upload_verification_model === deprecated
+    ) {
+      await upsertSetting('llm_verification_model', visionDefault, options.updatedBy);
+      await upsertSetting('smart_upload_verification_model', visionDefault, options.updatedBy);
+      actions.push('migrated deprecated verification model to vision-capable default');
+    }
     
     if (providerMeta) {
       if (!existingSettings.llm_vision_model) {

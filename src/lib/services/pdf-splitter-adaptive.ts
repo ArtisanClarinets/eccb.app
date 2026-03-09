@@ -116,6 +116,7 @@ async function imageBasedEngine(params: ImageEngineHandlerParams): Promise<{
     // Set up worker if needed (in Node.js environment)
     if (typeof GlobalWorkerOptions !== 'undefined' && !GlobalWorkerOptions.workerSrc) {
       try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
         GlobalWorkerOptions.workerSrc = require('pdfjs-dist/build/pdf.worker');
       } catch {
         // Worker setup optional for rendering

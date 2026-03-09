@@ -71,3 +71,28 @@ describe('getDefaultEndpointForProvider', () => {
     }
   });
 });
+
+describe('maxImagesPerRequest', () => {
+  it('groq has maxImagesPerRequest of 1 (single-image vision models)', () => {
+    const groq = getProviderMeta('groq');
+    expect(groq?.maxImagesPerRequest).toBe(1);
+  });
+
+  it('openrouter has maxImagesPerRequest of 20 (conservative free-tier cap)', () => {
+    const or = getProviderMeta('openrouter');
+    expect(or?.maxImagesPerRequest).toBe(20);
+  });
+
+  it('openai has no maxImagesPerRequest (undefined = no cap)', () => {
+    const openai = getProviderMeta('openai');
+    expect(openai?.maxImagesPerRequest).toBeUndefined();
+  });
+
+  it('openrouter defaultVerificationModel is a vision-capable model', () => {
+    const or = getProviderMeta('openrouter');
+    // Must NOT be google/gemma-3-27b-it (text-only — caused the 400 failure)
+    expect(or?.defaultVerificationModel).not.toBe('google/gemma-3-27b-it:free');
+    // Current value is the llama vision instruct model
+    expect(or?.defaultVerificationModel).toContain('vision');
+  });
+});

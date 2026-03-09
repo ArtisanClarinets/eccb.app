@@ -33,6 +33,12 @@ export interface ProviderMeta {
   docsUrl: string;
   /** Whether this provider accepts native PDF document input */
   supportsPdfInput: boolean;
+  /**
+   * Maximum number of images that can be sent in a single request.
+   * Undefined means no hard provider-level limit (model determines the cap).
+   * Second-pass workers clamp their page-image count to this value when set.
+   */
+  maxImagesPerRequest?: number;
 }
 
 export const LLM_PROVIDERS: ProviderMeta[] = [
@@ -108,11 +114,14 @@ export const LLM_PROVIDERS: ProviderMeta[] = [
     requiresApiKey: true,
     defaultEndpoint: 'https://openrouter.ai/api/v1',
     defaultVisionModel: 'google/gemini-2.0-flash-exp:free',
-    defaultVerificationModel: 'google/gemma-3-27b-it:free',
+    // gemma-3-27b-it is text-only; use a free vision-capable model for verification
+    defaultVerificationModel: 'meta-llama/llama-3.2-11b-vision-instruct:free',
     apiKeyLabel: 'OpenRouter API Key',
     apiKeyPlaceholder: 'sk-or-...',
     docsUrl: 'https://openrouter.ai/keys',
     supportsPdfInput: false,
+    // Conservative cap for free-tier OpenRouter vision models (varies per model)
+    maxImagesPerRequest: 20,
   },
   {
     value: 'mistral',
@@ -141,6 +150,8 @@ export const LLM_PROVIDERS: ProviderMeta[] = [
     apiKeyPlaceholder: 'gsk_...',
     docsUrl: 'https://console.groq.com/keys',
     supportsPdfInput: false,
+    // Groq vision models (llama-3.2-*-vision-*) accept only 1 image per request
+    maxImagesPerRequest: 1,
   },
   {
     value: 'custom',

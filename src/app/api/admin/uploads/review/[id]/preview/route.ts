@@ -114,6 +114,14 @@ export async function GET(
     );
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
+    // pdfjs throws "Page index X out of range" when request is out of bounds.
+    if (err.message.includes('out of range')) {
+      logger.warn('PDF preview page out of range', { message: err.message });
+      return NextResponse.json(
+        { error: 'Page out of range', detail: err.message },
+        { status: 400 }
+      );
+    }
     logger.error('Failed to generate PDF preview', { error: err.message });
     return NextResponse.json(
       { error: 'Failed to generate preview', detail: err.message },

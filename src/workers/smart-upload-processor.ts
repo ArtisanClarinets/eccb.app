@@ -1461,7 +1461,10 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
     for (const result of splitResults) {
       const normalised = normalizeInstrumentLabel(result.instruction.instrument);
       const displayName = `${smartSession.fileName.replace(/\.pdf$/i, '')} ${normalised.instrument}`;
-      const slug = buildPartStorageSlug(displayName);
+      const slug = buildPartStorageSlug(displayName, {
+        partNumber: result.instruction.partNumber,
+        pageRange: result.instruction.pageRange,
+      });
       const partStorageKey = `smart-upload/${sessionId}/parts/${slug}.pdf`;
       const partFileName = buildPartFilename(displayName);
 
@@ -1630,7 +1633,10 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
             for (const result of altSplitResults) {
               const normalised = normalizeInstrumentLabel(result.instruction.instrument);
               const displayName = `${smartSession.fileName.replace(/\.pdf$/i, '')} ${normalised.instrument}`;
-              const slug = buildPartStorageSlug(displayName);
+              const slug = buildPartStorageSlug(displayName, {
+                partNumber: result.instruction.partNumber,
+                pageRange: result.instruction.pageRange,
+              });
               const partStorageKey = `smart-upload/${sessionId}/parts/heal/${slug}.pdf`;
               const partFileName = buildPartFilename(displayName);
 

@@ -166,6 +166,7 @@ export interface SmartUploadJobProgress {
 export type SmartUploadStep =
   | 'starting'
   | 'downloading'
+  | 'scanning'
   | 'rendering'
   | 'analyzing'
   | 'validating'

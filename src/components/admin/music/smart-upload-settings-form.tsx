@@ -210,6 +210,7 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
       smart_upload_ocr_rate_limit_rpm: parseNum(settings['smart_upload_ocr_rate_limit_rpm']),
       smart_upload_llm_max_pages: parseNum(settings['smart_upload_llm_max_pages']),
       smart_upload_llm_max_header_batches: parseNum(settings['smart_upload_llm_max_header_batches']),
+      smart_upload_second_pass_max_images: parseNum(settings['smart_upload_second_pass_max_images']),
       smart_upload_ocr_engine: (settings['smart_upload_ocr_engine'] as OcrEngineValue) || '' as OcrEngineValue,
       smart_upload_ocr_mode: (settings['smart_upload_ocr_mode'] as OcrModeValue) || '' as OcrModeValue,
     },
@@ -1363,6 +1364,30 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
                   </FormControl>
                   <FormDescription className="text-xs">
                     Limit for header-label LLM batching.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="smart_upload_second_pass_max_images"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Max Images per Second-Pass Request</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={200}
+                      {...field}
+                      value={field.value}
+                      onChange={(e) => field.onChange(Number(e.target.value))}
+                    />
+                  </FormControl>
+                  <FormDescription className="text-xs">
+                    Maximum images sent to the LLM in a single second-pass request.
+                    0 = use the provider-level cap (recommended).
                   </FormDescription>
                   <FormMessage />
                 </FormItem>

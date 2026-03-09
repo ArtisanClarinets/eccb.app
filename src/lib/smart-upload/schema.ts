@@ -168,6 +168,8 @@ export const SMART_UPLOAD_SETTING_KEYS = [
   'llm_header_label_model_params',
   // Adjudicator model params (JSON)
   'llm_adjudicator_model_params',
+  // Second-pass image cap override
+  'smart_upload_second_pass_max_images',
 ] as const;
 
 export type SmartUploadSettingKey = typeof SMART_UPLOAD_SETTING_KEYS[number];
@@ -435,6 +437,15 @@ export const SmartUploadSettingsSchema = z.object({
       return Math.max(1, isNaN(num) ? 2 : Math.min(10, num));
     })
     .default(2),
+
+  // Maximum images per second-pass LLM request (0 = use provider-level cap)
+  smart_upload_second_pass_max_images: z
+    .union([z.string(), z.number()])
+    .transform((v) => {
+      const num = typeof v === 'string' ? Number(v) : v;
+      return Math.max(0, isNaN(num) ? 0 : Math.min(200, Math.round(num)));
+    })
+    .default(0),
 
   // ========================================
   // NEW: Per-step LLM provider/model keys

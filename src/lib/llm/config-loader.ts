@@ -81,6 +81,10 @@ export interface LLMRuntimeConfig {
   llmMaxPages: number;
   /** Maximum header-label batches per document */
   llmMaxHeaderBatches: number;
+  /** Maximum images to send in a single second-pass LLM request.
+   *  0 = use the provider-level maxImagesPerRequest cap from providers.ts.
+   *  Admins can lower this to reduce cost or raise it for high-capacity deployments. */
+  secondPassMaxImages: number;
   /** Minimum OCR confidence (0-100) to accept OCR-derived metadata without LLM fallback. */
   ocrConfidenceThreshold: number;
   /** Maximum LLM calls allowed per upload session. 0 = unlimited. */
@@ -151,6 +155,7 @@ const DB_KEYS = [
   'smart_upload_ocr_rate_limit_rpm',
   'smart_upload_llm_max_pages',
   'smart_upload_llm_max_header_batches',
+  'smart_upload_second_pass_max_images',
   // Legacy OCR settings
   'smart_upload_local_ocr_enabled',
   'smart_upload_ocr_confidence_threshold',
@@ -289,6 +294,7 @@ export async function loadLLMConfig(): Promise<LLMRuntimeConfig> {
   const ocrRateLimitRpm = Number(db['smart_upload_ocr_rate_limit_rpm'] ?? 6);
   const llmMaxPages = Number(db['smart_upload_llm_max_pages'] ?? 10);
   const llmMaxHeaderBatches = Number(db['smart_upload_llm_max_header_batches'] ?? 2);
+  const secondPassMaxImages = Math.max(0, parseInt(db['smart_upload_second_pass_max_images'] ?? '0', 10));
 
   // ── API keys — encrypted APIKey table is the sole source of truth ────────
   const PROVIDER_SLUGS: readonly LLMProviderValue[] = [
@@ -403,6 +409,7 @@ export async function loadLLMConfig(): Promise<LLMRuntimeConfig> {
     ocrRateLimitRpm,
     llmMaxPages,
     llmMaxHeaderBatches,
+    secondPassMaxImages,
   };
 }
 

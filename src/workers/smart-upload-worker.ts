@@ -62,17 +62,51 @@ async function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
-async function convertAllPdfPagesToImages(pdfBuffer: Buffer): Promise<string[]> {
+async function convertAllPdfPagesToImages(
+  pdfBuffer: Buffer,
+  maxImages = MAX_PDF_PAGES_FOR_LLM,
+): Promise<string[]> {
   const totalPages = await getAuthoritativePdfPageCount(pdfBuffer);
   if (!totalPages || totalPages <= 0) {
     throw new Error('Unable to determine page count for second-pass rendering');
   }
-  const pagesToProcess = Math.min(totalPages, MAX_PDF_PAGES_FOR_LLM);
 
-  logger.info('Converting PDF pages to images', { totalPages, pagesToProcess });
+  // Clamp to the caller-supplied cap (provider-aware max images per request)
+  const effectiveMax = Math.min(totalPages, maxImages);
 
-  const pageIndices = Array.from({ length: pagesToProcess }, (_, i) => i);
+  let pageIndices: number[];
+  if (totalPages <= effectiveMax) {
+    pageIndices = Array.from({ length: totalPages }, (_, i) => i);
+  } else {
+    // Sample evenly across the document so representative headers/labels are included
+    pageIndices = sampleEvenlySpaced(totalPages, effectiveMax);
+    logger.warn('Second-pass rendering: sampling pages due to provider image limit', {
+      totalPages,
+      maxImages,
+      effectiveMax,
+      sampledCount: pageIndices.length,
+    });
+  }
+
+  logger.info('Converting PDF pages to images', { totalPages, pagesToProcess: pageIndices.length });
   return renderPdfPageBatch(pdfBuffer, pageIndices);
+}
+
+/**
+ * Return `count` evenly-spaced 0-based page indices from a document of
+ * `totalPages` pages, always including the first and last page so that
+ * title headers and back-matter are captured.
+ */
+function sampleEvenlySpaced(totalPages: number, count: number): number[] {
+  if (count <= 0) return [];
+  if (count >= totalPages) return Array.from({ length: totalPages }, (_, i) => i);
+  if (count === 1) return [0];
+  const indices = new Set<number>([0, totalPages - 1]);
+  const step = (totalPages - 1) / (count - 1);
+  for (let i = 1; i < count - 1; i++) {
+    indices.add(Math.round(i * step));
+  }
+  return [...indices].sort((a, b) => a - b).slice(0, count);
 }
 
 // Token bucket rate limiter for LLM calls
@@ -492,7 +526,11 @@ async function finalizeSmartUploadSession(
       const newParsedParts: ParsedPartRecord[] = [];
       const tempFiles: string[] = [];
       for (const part of splitResults) {
-        const slug = buildPartStorageSlug(part.instruction.partName) || `part_${part.instruction.partNumber ?? 0}`;
+        const slug =
+          buildPartStorageSlug(part.instruction.partName, {
+            partNumber: part.instruction.partNumber,
+            pageRange: part.instruction.pageRange,
+          }) || `part_${part.instruction.partNumber ?? 0}`;
         const partStorageKey = `smart-upload/${sessionId}/parts/${slug}.pdf`;
         await uploadFile(partStorageKey, part.buffer, {
           contentType: 'application/pdf',
@@ -521,7 +559,11 @@ async function finalizeSmartUploadSession(
       );
       const newParsedParts: ParsedPartRecord[] = [];
       for (const part of splitResults) {
-        const slug = buildPartStorageSlug(part.instruction.partName) || `part_${part.instruction.partNumber ?? 0}`;
+        const slug =
+          buildPartStorageSlug(part.instruction.partName, {
+            partNumber: part.instruction.partNumber,
+            pageRange: part.instruction.pageRange,
+          }) || `part_${part.instruction.partNumber ?? 0}`;
         const partStorageKey = `smart-upload/${sessionId}/parts/${slug}.pdf`;
         await uploadFile(partStorageKey, part.buffer, {
           contentType: 'application/pdf',
@@ -681,15 +723,39 @@ async function processSecondPass(job: Job<SmartUploadSecondPassJobData>): Promis
       };
       await progress('rendering', 35, 'PDF prepared for AI analysis (native mode)');
     } else {
-      // ── Image mode: render every page ────────────────────────────────────
+      // ── Image mode: render every page (clamped to provider capability) ───
       const { PDFDocument: PDFDoc } = await import('pdf-lib');
       const tmpDoc = await PDFDoc.load(originalPdfBuffer);
       const totalPageCount = tmpDoc.getPageCount();
-      const allPageIndices = Array.from(
-        { length: Math.min(totalPageCount, MAX_PDF_PAGES_FOR_LLM) },
-        (_, i) => i,
+
+      // Respect per-provider image limit so that models like Groq vision
+      // (1 image) or low-limit free OpenRouter models don't receive more
+      // images than they support, which would cause a non-retryable 400.
+      // Admins can also cap this via the DB setting smart_upload_second_pass_max_images.
+      const providerImageCap = providerMeta?.maxImagesPerRequest ?? MAX_PDF_PAGES_FOR_LLM;
+      const configuredMaxImages = llmConfig.secondPassMaxImages; // 0 = not overridden
+      const effectiveMaxImages = Math.min(
+        MAX_PDF_PAGES_FOR_LLM,
+        providerImageCap,
+        configuredMaxImages > 0 ? configuredMaxImages : Infinity,
       );
-      originalPageImages = await renderPdfPageBatch(originalPdfBuffer, allPageIndices, {
+
+      if (totalPageCount > effectiveMaxImages) {
+        logger.warn('Second pass: total pages exceed provider image cap — sampling', {
+          sessionId,
+          totalPageCount,
+          effectiveMaxImages,
+          provider: llmConfig.provider,
+          providerImageCap,
+        });
+      }
+
+      const pageIndices =
+        totalPageCount <= effectiveMaxImages
+          ? Array.from({ length: totalPageCount }, (_, i) => i)
+          : sampleEvenlySpaced(totalPageCount, effectiveMaxImages);
+
+      originalPageImages = await renderPdfPageBatch(originalPdfBuffer, pageIndices, {
         scale: 2,
         maxWidth: 1024,
         quality: 85,

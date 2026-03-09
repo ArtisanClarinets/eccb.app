@@ -283,6 +283,45 @@ describe('SmartUploadSettingsSchema', () => {
         expect(result.data.smart_upload_max_file_size_mb).toBe(500);
       }
     });
+
+    it('should default smart_upload_second_pass_max_images to 0', () => {
+      const result = SmartUploadSettingsSchema.safeParse(validSettings);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.smart_upload_second_pass_max_images).toBe(0);
+      }
+    });
+
+    it('should clamp smart_upload_second_pass_max_images to 0-200 range', () => {
+      const resultHigh = SmartUploadSettingsSchema.safeParse({
+        ...validSettings,
+        smart_upload_second_pass_max_images: 500,
+      });
+      expect(resultHigh.success).toBe(true);
+      if (resultHigh.success) {
+        expect(resultHigh.data.smart_upload_second_pass_max_images).toBe(200);
+      }
+
+      const resultNeg = SmartUploadSettingsSchema.safeParse({
+        ...validSettings,
+        smart_upload_second_pass_max_images: -5,
+      });
+      expect(resultNeg.success).toBe(true);
+      if (resultNeg.success) {
+        expect(resultNeg.data.smart_upload_second_pass_max_images).toBe(0);
+      }
+    });
+
+    it('should accept string value for smart_upload_second_pass_max_images', () => {
+      const result = SmartUploadSettingsSchema.safeParse({
+        ...validSettings,
+        smart_upload_second_pass_max_images: '32',
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.smart_upload_second_pass_max_images).toBe(32);
+      }
+    });
   });
 
   describe('boolean field handling', () => {

@@ -153,6 +153,13 @@ export async function GET(
     );
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
+    if (err.message.includes('out of range')) {
+      logger.warn('Part PDF preview page out of range', { message: err.message });
+      return NextResponse.json(
+        { error: 'Page out of range', detail: err.message },
+        { status: 400 }
+      );
+    }
     logger.error('Failed to generate part PDF preview', { error: err.message });
     return NextResponse.json(
       { error: 'Failed to generate preview', detail: err.message },
