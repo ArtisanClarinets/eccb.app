@@ -51,6 +51,12 @@ interface UploadItem {
   phase: UploadPhase;
   progress: number;
   error?: string;
+  conflict?: {
+    message: string;
+    reviewQueuePath?: string;
+    resumeSessionPath?: string;
+    viewPiecePath?: string;
+  };
   result?: UploadResult;
 }
 
@@ -209,27 +215,40 @@ async function processUpload(
       phase: 'error',
       progress: 0,
       error: 'Network error — check your connection.',
+      conflict: undefined,
     });
     return;
   }
 
   if (!response.ok) {
     let errMsg = `Server error ${response.status}`;
+    let conflict: UploadItem['conflict'];
     try {
       const errBody = await response.json() as {
         error?: string;
         duplicate?: boolean;
         message?: string;
+        actions?: {
+          reviewQueuePath?: string;
+          resumeSessionPath?: string;
+          viewPiecePath?: string;
+        };
       };
       if (errBody.duplicate && errBody.message) {
         errMsg = errBody.message;
+        conflict = {
+          message: errBody.message,
+          reviewQueuePath: errBody.actions?.reviewQueuePath,
+          resumeSessionPath: errBody.actions?.resumeSessionPath,
+          viewPiecePath: errBody.actions?.viewPiecePath,
+        };
       } else if (typeof errBody?.error === 'string') {
         errMsg = errBody.error;
       }
     } catch {
       // ignore parse errors
     }
-    onProgress(id, { phase: 'error', progress: 0, error: errMsg });
+    onProgress(id, { phase: 'error', progress: 0, error: errMsg, conflict });
     return;
   }
 
@@ -254,13 +273,14 @@ async function processUpload(
   }
 
   if (!body.success || !body.session) {
-    onProgress(id, {
-      phase: 'error',
-      progress: 0,
-      error: body.error ?? 'Unexpected response format.',
-    });
-    return;
-  }
+  onProgress(id, {
+    phase: 'error',
+    progress: 0,
+    error: body.error ?? 'Unexpected response format.',
+    conflict: undefined,
+  });
+  return;
+}
 
   const sessionId = body.session.id;
   onProgress(id, { phase: 'extracting', progress: 30 });
@@ -412,7 +432,9 @@ export default function SmartMusicUploadPage() {
     setIsProcessing(true);
     // Reset any errored items
     pending.forEach(it => {
-      if (it.phase === 'error') updateItem(it.id, { phase: 'idle', error: undefined });
+      if (it.phase === 'error') {
+        updateItem(it.id, { phase: 'idle', error: undefined, conflict: undefined });
+      }
     });
 
     // Process concurrently (max 3 at a time)
@@ -707,7 +729,7 @@ function UploadItemRow({
           {formatFileSize(item.file.size)}
         </p>
 
-        {isActive && (
+            {isActive && (
           <Progress
             value={phaseProgress(item.phase)}
             className="mt-2 h-1.5"
@@ -715,7 +737,28 @@ function UploadItemRow({
         )}
 
         {item.phase === 'error' && item.error && (
-          <p className="text-xs text-red-600 mt-1">{item.error}</p>
+          <div className="mt-1 space-y-2">
+            <p className="text-xs text-red-600">{item.error}</p>
+            {item.conflict && (
+              <div className="flex flex-wrap gap-2">
+                {item.conflict.resumeSessionPath && (
+                  <Button size="sm" variant="outline" asChild>
+                    <Link href={item.conflict.resumeSessionPath}>Open Existing Session</Link>
+                  </Button>
+                )}
+                {item.conflict.viewPiecePath && (
+                  <Button size="sm" variant="outline" asChild>
+                    <Link href={item.conflict.viewPiecePath}>Open Existing Piece</Link>
+                  </Button>
+                )}
+                {item.conflict.reviewQueuePath && (
+                  <Button size="sm" variant="ghost" asChild>
+                    <Link href={item.conflict.reviewQueuePath}>Go To Review Queue</Link>
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
         )}
 
         {item.phase === 'done' && item.result && (

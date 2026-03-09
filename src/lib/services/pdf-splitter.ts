@@ -14,6 +14,7 @@
 
 import { PDFDocument } from 'pdf-lib';
 import { logger } from '@/lib/logger';
+import { getPdfSourceInfo } from '@/lib/services/pdf-source';
 
 import type { CuttingInstruction } from '@/types/smart-upload';
 
@@ -219,34 +220,19 @@ export async function validatePdfBuffer(pdfBuffer: Buffer): Promise<{
   pageCount?: number;
   error?: string;
 }> {
-  // First, check for basic PDF magic bytes
-  const magicBytes = pdfBuffer.slice(0, 5).toString('utf8');
-  if (!magicBytes.startsWith('%PDF')) {
-    return {
-      valid: false,
-      error: 'Not a valid PDF file (missing magic bytes)',
-    };
-  }
-
-  let pdfDoc: any | undefined;
   try {
-    const pdfData = new Uint8Array(pdfBuffer);
-    pdfDoc = await PDFDocument.load(pdfData, { ignoreEncryption: true });
+    const sourceInfo = await getPdfSourceInfo(pdfBuffer);
     return {
       valid: true,
-      pageCount: pdfDoc.getPageCount(),
+      pageCount: sourceInfo.pageCount,
     };
   } catch (error) {
     const err = asError(error);
-    // Log the error but still consider the PDF valid - it might be readable by other tools
     logger.warn('PDF parsing warning', { error: err.message });
     return {
-      valid: true,
-      pageCount: 0, // We can't determine page count if parsing failed
+      valid: false,
       error: err.message,
     };
-  } finally {
-    await cleanupPdfDoc(pdfDoc);
   }
 }
 
@@ -261,14 +247,13 @@ export async function getPdfMetadata(
   author?: string;
   subject?: string;
 }> {
-   
-  let pdfDoc: any | undefined;
   try {
+    const sourceInfo = await getPdfSourceInfo(pdfBuffer);
     const pdfData = new Uint8Array(pdfBuffer);
-    pdfDoc = await PDFDocument.load(pdfData, { ignoreEncryption: true });
+    const pdfDoc = await PDFDocument.load(pdfData, { ignoreEncryption: true });
 
     return {
-      pageCount: pdfDoc.getPageCount(),
+      pageCount: sourceInfo.pageCount,
       title: pdfDoc.getTitle(),
       author: pdfDoc.getAuthor(),
       subject: pdfDoc.getSubject(),
@@ -279,8 +264,6 @@ export async function getPdfMetadata(
     return {
       pageCount: 0,
     };
-  } finally {
-    await cleanupPdfDoc(pdfDoc);
   }
 }
 

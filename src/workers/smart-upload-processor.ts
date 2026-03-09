@@ -17,7 +17,6 @@
  */
 
 import { Job } from 'bullmq';
-import { PDFDocument } from 'pdf-lib';
 import { prisma } from '@/lib/db';
 import { downloadFile, uploadFile } from '@/lib/services/storage';
 import { renderPdfHeaderCropBatch, renderPdfPageBatch, clearRenderCache } from '@/lib/services/pdf-renderer';
@@ -31,6 +30,7 @@ import {
 } from '@/lib/services/cutting-instructions';
 import { splitPdfByCuttingInstructions, validatePdfBuffer } from '@/lib/services/pdf-splitter';
 import { extractPdfPageHeaders } from '@/lib/services/pdf-text-extractor';
+import { getPdfSourceInfo } from '@/lib/services/pdf-source';
 import { detectPartBoundaries } from '@/lib/services/part-boundary-detector';
 import { extractOcrFallbackMetadata } from '@/lib/services/ocr-fallback';
 import { segmentByHeaderImages, preprocessForOcr as _preprocessForOcr } from '@/lib/services/header-image-segmentation';
@@ -123,8 +123,8 @@ async function samplePdfPages(
   pdfBuffer: Buffer,
   cacheTag?: string,
 ): Promise<{ images: string[]; totalPages: number; sampledIndices: number[] }> {
-  const pdfDoc = await PDFDocument.load(pdfBuffer, { ignoreEncryption: true });
-  const totalPages = pdfDoc.getPageCount();
+  const sourceInfo = await getPdfSourceInfo(pdfBuffer);
+  const totalPages = sourceInfo.pageCount;
 
   let indices: number[];
   if (totalPages <= MAX_SAMPLED_PAGES) {
@@ -578,7 +578,21 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
   }
 
   // Get total page count from validated buffer (should exist since valid).
-  const totalPages = validation.pageCount ?? 0;
+  const totalPages = validation.pageCount;
+  if (!totalPages || totalPages <= 0) {
+    logger.error('PDF page count could not be determined', {
+      sessionId,
+      pageCount: validation.pageCount,
+      validationError: validation.error,
+    });
+    await prisma.smartUploadSession.update({
+      where: { uploadSessionId: sessionId },
+      data: {
+        parseStatus: 'PARSE_FAILED',
+      },
+    });
+    return { status: 'parse_failed', sessionId };
+  }
 
   // -----------------------------------------------------------------
   // Text layer detection (deterministic segmentation when available)

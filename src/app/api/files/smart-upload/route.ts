@@ -166,10 +166,16 @@ export async function POST(request: NextRequest) {
         {
           success: false,
           duplicate: true,
+          conflictType: 'committed_duplicate',
+          code: 'SMART_UPLOAD_DUPLICATE_COMMITTED',
           reason: 'exact_duplicate',
           existingPiece: {
             id: existingMusicFile.pieceId,
             title: existingMusicFile.piece?.title,
+          },
+          actions: {
+            viewPiecePath: `/admin/music/library/${existingMusicFile.pieceId}`,
+            reviewQueuePath: '/admin/uploads/review',
           },
           message: `This file has already been imported as "${existingMusicFile.piece?.title ?? 'Unknown'}". Importing it again would create a duplicate.`,
         },
@@ -189,12 +195,18 @@ export async function POST(request: NextRequest) {
         {
           success: false,
           duplicate: true,
+          conflictType: 'existing_session',
+          code: 'SMART_UPLOAD_DUPLICATE_SESSION',
           reason: 'pending_session',
           existingSession: {
             id: existingSession.uploadSessionId,
             status: existingSession.status,
             fileName: existingSession.fileName,
             createdAt: existingSession.createdAt,
+          },
+          actions: {
+            resumeSessionPath: `/admin/uploads/review?sessionId=${existingSession.uploadSessionId}`,
+            reviewQueuePath: '/admin/uploads/review',
           },
           message: `This exact file was already uploaded on ${existingSession.createdAt.toISOString().slice(0, 10)} and is ${existingSession.status === 'PENDING_REVIEW' ? 'pending review' : 'already approved'}. Re-use the existing session rather than uploading again.`,
         },

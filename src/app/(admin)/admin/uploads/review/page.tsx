@@ -252,65 +252,67 @@ function UploadReviewClient({
   const [isPartFullscreen, setIsPartFullscreen] = useState(false);
   const [triggeringSecondPass, setTriggeringSecondPass] = useState<Set<string>>(new Set());
   const [savingDraft, setSavingDraft] = useState(false);
-
-  // Auto-fetch sessions when the component mounts
-  useEffect(() => {
-    fetchSessions();
-     
-  }, []);
+  const [sseConnected, setSseConnected] = useState(false);
 
   // Fetch sessions from API
-  const fetchSessions = async () => {
+  const fetchSessions = useCallback(async () => {
     setLoading(true);
     try {
-      console.log('[REVIEW] Fetching sessions...');
       const response = await fetch('/api/admin/uploads/review?status=PENDING_REVIEW');
-      console.log('[REVIEW] Response status:', response.status);
 
       if (!response.ok) {
-        const errorData = await response.json();
-        console.error('[REVIEW] API error:', errorData);
         return;
       }
 
       const data = await response.json();
-      console.log('[REVIEW] Response data:', data);
-      console.log('[REVIEW] Sessions count:', data.sessions?.length);
 
       if (data.sessions) {
         setSessions(data.sessions);
         setStats(data.stats);
-        console.log('[REVIEW] Sessions set:', data.sessions.length);
-      } else if (data.error) {
-        console.error('[REVIEW] API returned error:', data.error);
       }
-    } catch (error) {
-      console.error('[REVIEW] Fetch failed:', error);
+    } catch {
+      // no-op
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  // Auto-refresh: poll every 3 s so table stays current while jobs run
+  // Auto-fetch sessions when the component mounts
   useEffect(() => {
-    const POLL_INTERVAL = 3000;
+    void fetchSessions();
+  }, [fetchSessions]);
+
+  // Fallback poll only when SSE is disconnected
+  useEffect(() => {
+    if (sseConnected) return;
+    const POLL_INTERVAL = 15000;
     const id = setInterval(() => { void fetchSessions(); }, POLL_INTERVAL);
     return () => clearInterval(id);
-  }, []);
+  }, [fetchSessions, sseConnected]);
 
   // SSE: instantly refresh when any upload job completes
   useEffect(() => {
     const es = new EventSource('/api/admin/uploads/events');
+    es.onopen = () => setSseConnected(true);
     es.onmessage = (e) => {
       try {
         const parsed = JSON.parse(e.data as string) as { type: string };
-        if (parsed.type === 'completed') void fetchSessions();
+        if (parsed.type === 'progress' || parsed.type === 'completed' || parsed.type === 'failed') {
+          void fetchSessions();
+        }
       } catch {
         // ignore malformed events
       }
     };
-    return () => es.close();
-  }, []);
+    es.onerror = () => {
+      setSseConnected(false);
+      es.close();
+    };
+    return () => {
+      setSseConnected(false);
+      es.close();
+    };
+  }, [fetchSessions]);
 
   // Handle select all
   const handleSelectAll = (checked: boolean) => {

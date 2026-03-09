@@ -4,6 +4,21 @@ import { requirePermission } from '@/lib/auth/permissions';
 import { MUSIC_VIEW_ALL } from '@/lib/auth/permission-constants';
 import { logger } from '@/lib/logger';
 
+function deriveWorkflowStage(
+  parseStatus: string | null,
+  secondPassStatus: string | null,
+  status: string
+): string {
+  if (status === 'APPROVED') return 'approved';
+  if (status === 'REJECTED') return 'rejected';
+  if (parseStatus === 'PARSE_FAILED') return 'parse_failed';
+  if (secondPassStatus === 'FAILED') return 'second_pass_failed';
+  if (secondPassStatus === 'IN_PROGRESS' || secondPassStatus === 'QUEUED') return 'second_pass';
+  if (parseStatus === 'PARSING') return 'parsing';
+  if (parseStatus === 'PARSED') return 'parsed_pending_review';
+  return 'queued';
+}
+
 /**
  * GET /api/admin/uploads/status/[sessionId]
  *
@@ -54,7 +69,15 @@ export async function GET(
       );
     }
 
-    return NextResponse.json({ session });
+    const workflow = {
+      stage: deriveWorkflowStage(session.parseStatus, session.secondPassStatus, session.status),
+      requiresHumanReview: Boolean(session.requiresHumanReview),
+      parseFailed: session.parseStatus === 'PARSE_FAILED',
+      secondPassFailed: session.secondPassStatus === 'FAILED',
+      completed: session.status === 'APPROVED' || session.status === 'REJECTED',
+    };
+
+    return NextResponse.json({ session, workflow });
   } catch (error) {
     logger.error('Error fetching upload status', { error });
     return NextResponse.json(

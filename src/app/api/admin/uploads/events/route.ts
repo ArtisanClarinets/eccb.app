@@ -124,7 +124,10 @@ export async function GET(request: NextRequest) {
           type: 'failed',
           jobId,
           timestamp: new Date().toISOString(),
-          error: failedReason,
+          data: {
+            stage: 'failed',
+            error: failedReason,
+          },
         };
 
         try {

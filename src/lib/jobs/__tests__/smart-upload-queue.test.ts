@@ -1,7 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import type { Job } from 'bullmq';
 import { initializeQueues, closeQueues } from '../queue';
-import { queueSmartUploadProcess, queueSmartUploadSecondPass } from '../smart-upload';
+import {
+  queueSmartUploadAutoCommit,
+  queueSmartUploadProcess,
+  queueSmartUploadSecondPass,
+} from '../smart-upload';
 import { QUEUE_NAMES } from '../definitions';
 
 // Mock Redis and BullMQ
@@ -114,6 +118,15 @@ describe('Smart Upload Queue', () => {
         removeOnFail: false,
       });
     });
+
+    it('should use underscore-safe deterministic process job IDs', async () => {
+      const sessionId = 'session:alpha:001';
+      const job = await queueSmartUploadProcess(sessionId, 'file-456');
+      const opts = job.opts as { jobId?: string };
+
+      expect(opts.jobId).toBe(`smartupload_process_${sessionId}`);
+      expect(opts.jobId).not.toContain('smartupload.process');
+    });
   });
 
   describe('queueSmartUploadSecondPass', () => {
@@ -149,6 +162,26 @@ describe('Smart Upload Queue', () => {
         removeOnComplete: 100,
         removeOnFail: false,
       });
+    });
+
+    it('should use underscore-safe deterministic second-pass job IDs', async () => {
+      const sessionId = 'session:beta:002';
+      const job = await queueSmartUploadSecondPass(sessionId);
+      const opts = job.opts as { jobId?: string };
+
+      expect(opts.jobId).toBe(`smartupload_secondPass_${sessionId}`);
+      expect(opts.jobId).not.toContain('smartupload.secondPass');
+    });
+  });
+
+  describe('queueSmartUploadAutoCommit', () => {
+    it('should use underscore-safe deterministic auto-commit job IDs', async () => {
+      const sessionId = 'session:gamma:003';
+      const job = await queueSmartUploadAutoCommit(sessionId);
+      const opts = job.opts as { jobId?: string };
+
+      expect(opts.jobId).toBe(`smartupload_autoCommit_${sessionId}`);
+      expect(opts.jobId).not.toContain('smartupload.autoCommit');
     });
   });
 
