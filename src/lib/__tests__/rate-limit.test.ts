@@ -125,16 +125,13 @@ describe('createRateLimitKey', () => {
 });
 
 describe('rateLimit', () => {
-  let originalNodeEnv: string | undefined;
-
   beforeEach(() => {
     vi.clearAllMocks();
-    originalNodeEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = 'production'; // enforce real rate limit logic
+    vi.stubEnv('NODE_ENV', 'production'); // enforce real rate limit logic
   });
 
   afterEach(() => {
-    process.env.NODE_ENV = originalNodeEnv;
+    vi.unstubAllEnvs();
   });
 
   it('should allow requests within limit', async () => {
