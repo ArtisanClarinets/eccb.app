@@ -230,38 +230,43 @@ export async function markPartsPickedUp(
   
   try {
     const now = new Date();
-    const results = [];
+    const results: string[] = [];
 
-    for (const assignmentId of assignmentIds) {
-      const assignment = await prisma.musicAssignment.findUnique({
-        where: { id: assignmentId },
-      });
+    // ⚡ Bolt: Batch database operations to prevent N+1 queries
+    const assignments = await prisma.musicAssignment.findMany({
+      where: {
+        id: { in: assignmentIds },
+        status: AssignmentStatus.ASSIGNED,
+      },
+      select: { id: true },
+    });
 
-      if (!assignment || assignment.status !== AssignmentStatus.ASSIGNED) {
-        continue;
-      }
+    const validAssignmentIds = assignments.map(a => a.id);
+    results.push(...validAssignmentIds);
 
-      await prisma.musicAssignment.update({
-        where: { id: assignmentId },
-        data: {
-          status: AssignmentStatus.PICKED_UP,
-          pickedUpAt: now,
-          pickedUpBy: pickedUpBy || session.user.id,
-        },
-      });
+    const operations = validAssignmentIds.flatMap((assignmentId) => {
+      return [
+        prisma.musicAssignment.update({
+          where: { id: assignmentId },
+          data: {
+            status: AssignmentStatus.PICKED_UP,
+            pickedUpAt: now,
+            pickedUpBy: pickedUpBy || session.user.id,
+          },
+        }),
+        prisma.musicAssignmentHistory.create({
+          data: {
+            assignmentId,
+            action: 'PICKED_UP',
+            fromStatus: AssignmentStatus.ASSIGNED,
+            toStatus: AssignmentStatus.PICKED_UP,
+            performedBy: session.user.id,
+          },
+        }),
+      ];
+    });
 
-      await prisma.musicAssignmentHistory.create({
-        data: {
-          assignmentId,
-          action: 'PICKED_UP',
-          fromStatus: AssignmentStatus.ASSIGNED,
-          toStatus: AssignmentStatus.PICKED_UP,
-          performedBy: session.user.id,
-        },
-      });
-
-      results.push(assignmentId);
-    }
+    await prisma.$transaction(operations);
 
     await auditLog({
       action: 'music.parts.picked_up',
