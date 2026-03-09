@@ -110,6 +110,12 @@ export interface PageLabelerOptions {
     /** Enable OCR on segments */
     enableOcr?: boolean;
   };
+  /**
+   * Authoritative text-layer segmentation from upstream processor.
+   * When provided with adequate confidence, page-labeler must not override it
+   * with weaker probe strategies.
+   */
+  authoritativeTextSegmentation?: SegmentationResult;
 }
 
 // =============================================================================
@@ -295,9 +301,39 @@ export async function labelPages(options: PageLabelerOptions): Promise<PageLabel
     enableLlm = true,
     textOptions,
     ocrOptions,
+    authoritativeTextSegmentation,
   } = options;
 
   const diagnostics: StrategyDiagnostic[] = [];
+
+  if (
+    authoritativeTextSegmentation &&
+    authoritativeTextSegmentation.segmentationConfidence >= MIN_STRATEGY_CONFIDENCE &&
+    authoritativeTextSegmentation.cuttingInstructions.length > 0
+  ) {
+    const authoritative = convertSegmentationResult(authoritativeTextSegmentation, 'text');
+    diagnostics.push({
+      strategy: 'text',
+      durationMs: 0,
+      success: true,
+      pagesProcessed: authoritativeTextSegmentation.pageLabels.length,
+      labelsExtracted: Object.keys(authoritative.pageLabels).length,
+      reason: 'used upstream authoritative segmentation',
+    });
+
+    return {
+      cuttingInstructions: authoritative.cuttingInstructions,
+      pageLabels: authoritative.pageLabels,
+      confidence: authoritativeTextSegmentation.segmentationConfidence,
+      strategyUsed: 'text',
+      diagnostics: {
+        strategies: diagnostics,
+        totalDurationMs: nowMs() - startMs,
+        budgetRemaining: maxLlmCallsPerSession,
+        budgetLimit: maxLlmCallsPerSession,
+      },
+    };
+  }
 
   // Initialize budget tracking
   const budget = new SessionBudget(sessionId, {
@@ -380,7 +416,7 @@ export async function labelPages(options: PageLabelerOptions): Promise<PageLabel
       diagnostics: {
         strategies: diagnostics,
         totalDurationMs: nowMs() - startMs,
-        budgetRemaining: budget.getRemaining().remainingCalls,
+        budgetRemaining: maxLlmCallsPerSession,
         budgetLimit: maxLlmCallsPerSession,
       },
     };
@@ -444,7 +480,7 @@ export async function labelPages(options: PageLabelerOptions): Promise<PageLabel
       diagnostics: {
         strategies: diagnostics,
         totalDurationMs: nowMs() - startMs,
-        budgetRemaining: budget.getRemaining().remainingCalls,
+        budgetRemaining: maxLlmCallsPerSession,
         budgetLimit: maxLlmCallsPerSession,
       },
     };

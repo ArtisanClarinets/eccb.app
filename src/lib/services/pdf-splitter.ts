@@ -14,7 +14,7 @@
 
 import { PDFDocument } from 'pdf-lib';
 import { logger } from '@/lib/logger';
-import { getPdfSourceInfo } from '@/lib/services/pdf-source';
+import { getPdfSourceInfo, getAuthoritativePdfPageCount } from '@/lib/services/pdf-source';
 
 import type { CuttingInstruction } from '@/types/smart-upload';
 
@@ -229,9 +229,11 @@ export async function validatePdfBuffer(pdfBuffer: Buffer): Promise<{
   } catch (error) {
     const err = asError(error);
     logger.warn('PDF parsing warning', { error: err.message });
+    const fallbackPageCount = await getAuthoritativePdfPageCount(pdfBuffer);
     return {
-      valid: false,
-      error: err.message,
+      valid: fallbackPageCount !== null,
+      pageCount: fallbackPageCount ?? undefined,
+      error: fallbackPageCount === null ? err.message : undefined,
     };
   }
 }

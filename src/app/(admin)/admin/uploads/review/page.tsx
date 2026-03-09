@@ -269,6 +269,8 @@ function UploadReviewClient({
       if (data.sessions) {
         setSessions(data.sessions);
         setStats(data.stats);
+      } else if (data.error) {
+        console.error('[REVIEW] API returned error:', data.error);
       }
     } catch {
       // no-op
@@ -290,25 +292,33 @@ function UploadReviewClient({
     return () => clearInterval(id);
   }, [fetchSessions, sseConnected]);
 
-  // SSE: instantly refresh when any upload job completes
+  // SSE is the primary refresh path for queue/session updates
   useEffect(() => {
     const es = new EventSource('/api/admin/uploads/events');
     es.onopen = () => setSseConnected(true);
+    let sseRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+
     es.onmessage = (e) => {
       try {
-        const parsed = JSON.parse(e.data as string) as { type: string };
+        const parsed = JSON.parse(e.data as string) as { type?: string };
         if (parsed.type === 'progress' || parsed.type === 'completed' || parsed.type === 'failed') {
-          void fetchSessions();
+          if (sseRefreshTimer) clearTimeout(sseRefreshTimer);
+          sseRefreshTimer = setTimeout(() => {
+            void fetchSessions();
+          }, 500);
         }
       } catch {
         // ignore malformed events
       }
     };
+
     es.onerror = () => {
       setSseConnected(false);
       es.close();
     };
+
     return () => {
+      if (sseRefreshTimer) clearTimeout(sseRefreshTimer);
       setSseConnected(false);
       es.close();
     };
