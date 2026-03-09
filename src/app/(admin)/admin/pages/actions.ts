@@ -6,17 +6,18 @@ import { requirePermission } from '@/lib/auth/guards';
 import { auditLog } from '@/lib/services/audit';
 import { invalidatePageCache, invalidateAnnouncementCache } from '@/lib/cache';
 import { z } from 'zod';
-import { ContentStatus, Prisma, AnnouncementType, AnnouncementAudience } from '@prisma/client';
+import { ContentStatus, AnnouncementType, AnnouncementAudience } from '@prisma/client';
 import {
   CMS_EDIT,
   CMS_DELETE,
   ANNOUNCEMENT_CREATE,
 } from '@/lib/auth/permission-constants';
+import { normalizePageContent } from '@/lib/cms/page-content';
 
 const pageSchema = z.object({
   title: z.string().min(1, 'Title is required'),
   slug: z.string().min(1, 'URL slug is required').regex(/^[a-z0-9-]+$/, 'Slug can only contain lowercase letters, numbers, and hyphens'),
-  content: z.any().optional(),
+  content: z.string().optional(),
   rawMarkdown: z.string().optional(),
   description: z.string().optional(),
   status: z.enum(['DRAFT', 'SCHEDULED', 'PUBLISHED', 'ARCHIVED']),
@@ -30,18 +31,13 @@ export async function createPage(formData: FormData) {
   const session = await requirePermission(CMS_EDIT);
 
   try {
-    const contentStr = formData.get('content') as string || '{}';
-    let contentJson: Prisma.InputJsonValue;
-    try {
-      contentJson = JSON.parse(contentStr);
-    } catch {
-      contentJson = { text: contentStr };
-    }
+    const contentStr = (formData.get('content') as string) || '';
+    const normalizedContent = normalizePageContent(contentStr).body;
 
     const data = {
       title: formData.get('title') as string,
       slug: formData.get('slug') as string,
-      content: contentJson,
+      content: normalizedContent,
       rawMarkdown: formData.get('rawMarkdown') as string || undefined,
       description: formData.get('description') as string || undefined,
       status: (formData.get('status') as string) || 'DRAFT',
@@ -66,7 +62,7 @@ export async function createPage(formData: FormData) {
       data: {
         title: validated.title,
         slug: validated.slug,
-        content: validated.content || {},
+        content: validated.content || '',
         rawMarkdown: validated.rawMarkdown,
         description: validated.description,
         status: validated.status as ContentStatus,
@@ -106,18 +102,13 @@ export async function updatePage(id: string, formData: FormData) {
   const session = await requirePermission(CMS_EDIT);
 
   try {
-    const contentStr = formData.get('content') as string || '{}';
-    let contentJson: Prisma.InputJsonValue;
-    try {
-      contentJson = JSON.parse(contentStr);
-    } catch {
-      contentJson = { text: contentStr };
-    }
+    const contentStr = (formData.get('content') as string) || '';
+    const normalizedContent = normalizePageContent(contentStr).body;
 
     const data = {
       title: formData.get('title') as string,
       slug: formData.get('slug') as string,
-      content: contentJson,
+      content: normalizedContent,
       rawMarkdown: formData.get('rawMarkdown') as string || undefined,
       description: formData.get('description') as string || undefined,
       status: formData.get('status') as string,
@@ -150,7 +141,7 @@ export async function updatePage(id: string, formData: FormData) {
       data: {
         title: validated.title,
         slug: validated.slug,
-        content: validated.content || {},
+        content: validated.content || '',
         rawMarkdown: validated.rawMarkdown,
         description: validated.description,
         status: validated.status as ContentStatus,

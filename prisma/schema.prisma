@@ -707,7 +707,7 @@ model Page {
   slug            String        @unique
   description     String?
   content         String        @db.LongText
-  rawMarkdown     String?
+  rawMarkdown     String?       @db.LongText
   metaTitle       String?
   metaDescription String?
   metaKeywords    String?       @db.LongText

@@ -9,7 +9,7 @@ import { CMS_EDIT, CMS_PUBLISH } from '@/lib/auth/permission-constants';
 const pageSchema = z.object({
   title: z.string().min(1),
   slug: z.string().min(1),
-  content: z.string(), // JSON string
+  content: z.string(),
   status: z.enum(['DRAFT', 'PUBLISHED', 'SCHEDULED', 'ARCHIVED']),
 });
 
