@@ -75,6 +75,23 @@ function asError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
 }
 
+async function getPageCountViaPdfJs(pdfBuffer: Buffer): Promise<number | null> {
+  const loadingTask = pdfjsLib.getDocument({
+    data: new Uint8Array(pdfBuffer),
+    stopAtErrors: false,
+    isEvalSupported: false,
+    useSystemFonts: false,
+    verbosity: 0,
+  });
+
+  try {
+    const pdf = await loadingTask.promise;
+    return selectAuthoritativePageCount(pdf.numPages);
+  } finally {
+    await loadingTask.destroy();
+  }
+}
+
 export async function openPdfDocument(pdfBuffer: Buffer): Promise<PdfOpenResult> {
   const pdfDoc = await PDFDocument.load(new Uint8Array(pdfBuffer), {
     ignoreEncryption: true,
@@ -85,12 +102,25 @@ export async function openPdfDocument(pdfBuffer: Buffer): Promise<PdfOpenResult>
   };
 }
 
-export async function getAuthoritativePdfPageCount(pdfBuffer: Buffer): Promise<number | null> {
+export async function getAuthoritativePdfPageCount(
+  pdfBuffer: Buffer,
+): Promise<number | null> {
   try {
     const { pageCount } = await openPdfDocument(pdfBuffer);
-    return pageCount > 0 ? pageCount : null;
+    const normalized = selectAuthoritativePageCount(pageCount);
+    if (normalized !== null) {
+      return normalized;
+    }
   } catch (error) {
-    logger.warn('Unable to resolve PDF page count from centralized parser', {
+    logger.warn('pdf-source: pdf-lib page count failed, trying pdfjs fallback', {
+      error: asError(error).message,
+    });
+  }
+
+  try {
+    return await getPageCountViaPdfJs(pdfBuffer);
+  } catch (error) {
+    logger.warn('pdf-source: pdfjs page count fallback failed', {
       error: asError(error).message,
     });
     return null;

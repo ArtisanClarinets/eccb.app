@@ -21,6 +21,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { ArrowLeft, ExternalLink, Trash2 } from 'lucide-react';
+import { normalizePageContent } from '@/lib/cms/page-content';
 
 interface EditPageProps {
   params: Promise<{ id: string }>;
@@ -60,7 +61,7 @@ export default async function EditPagePage({ params }: EditPageProps) {
 
   // Parse content for the form
   // Page.content is a String per Prisma schema
-  const contentText = page.content || '';
+  const contentText = normalizePageContent(page.content).body;
 
   return (
     <div className="space-y-6">

@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { Loader2, Save, Eye, FileText, Settings } from 'lucide-react';
+import { normalizePageContent } from '@/lib/cms/page-content';
 
 const pageSchema = z.object({
   title: z.string().min(1, 'Title is required'),
@@ -37,7 +38,7 @@ const pageSchema = z.object({
 type PageFormData = z.infer<typeof pageSchema>;
 
 interface PageFormProps {
-  initialData?: Partial<PageFormData> & { id?: string; content?: any };
+  initialData?: Partial<PageFormData> & { id?: string; content?: string | null };
   onSubmit: (formData: FormData) => Promise<{ success: boolean; error?: string; pageId?: string }>;
   isEdit?: boolean;
 }
@@ -59,19 +60,7 @@ export function PageForm({
   const [activeTab, setActiveTab] = useState('content');
   const [previewContent, setPreviewContent] = useState('');
   
-  // Parse initial content
-  const getInitialContent = () => {
-    if (initialData?.content) {
-      if (typeof initialData.content === 'string') {
-        return initialData.content;
-      }
-      if (typeof initialData.content === 'object' && initialData.content.text) {
-        return initialData.content.text;
-      }
-      return JSON.stringify(initialData.content, null, 2);
-    }
-    return '';
-  };
+  const normalizedInitialContent = normalizePageContent(initialData?.content ?? '');
 
   const {
     register,
@@ -85,7 +74,7 @@ export function PageForm({
       title: initialData?.title || '',
       slug: initialData?.slug || '',
       description: initialData?.description || '',
-      content: getInitialContent(),
+      content: normalizedInitialContent.body,
       rawMarkdown: initialData?.rawMarkdown || '',
       status: initialData?.status || 'DRAFT',
       metaTitle: initialData?.metaTitle || '',
@@ -119,10 +108,6 @@ export function PageForm({
           formData.append(key, String(value));
         }
       });
-
-      // Store content as JSON
-      const contentObj = { text: data.content, type: 'markdown' };
-      formData.set('content', JSON.stringify(contentObj));
 
       const result = await onSubmit(formData);
 
