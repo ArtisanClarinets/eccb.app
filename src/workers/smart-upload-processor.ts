@@ -17,7 +17,6 @@
  */
 
 import { Job } from 'bullmq';
-import { PDFDocument } from 'pdf-lib';
 import { prisma } from '@/lib/db';
 import { downloadFile, uploadFile } from '@/lib/services/storage';
 import { renderPdfHeaderCropBatch, renderPdfPageBatch, clearRenderCache } from '@/lib/services/pdf-renderer';
@@ -30,6 +29,7 @@ import {
   buildGapInstructions,
 } from '@/lib/services/cutting-instructions';
 import { splitPdfByCuttingInstructions, validatePdfBuffer } from '@/lib/services/pdf-splitter';
+import { getAuthoritativePdfPageCount, selectAuthoritativePageCount } from '@/lib/services/pdf-source';
 import { extractPdfPageHeaders } from '@/lib/services/pdf-text-extractor';
 import { detectPartBoundaries } from '@/lib/services/part-boundary-detector';
 import { extractOcrFallbackMetadata } from '@/lib/services/ocr-fallback';
@@ -123,8 +123,11 @@ async function samplePdfPages(
   pdfBuffer: Buffer,
   cacheTag?: string,
 ): Promise<{ images: string[]; totalPages: number; sampledIndices: number[] }> {
-  const pdfDoc = await PDFDocument.load(pdfBuffer, { ignoreEncryption: true });
-  const totalPages = pdfDoc.getPageCount();
+  const totalPages = (await getAuthoritativePdfPageCount(pdfBuffer)) ?? 0;
+
+  if (totalPages <= 0) {
+    throw new Error('Unable to sample PDF pages: authoritative page count unavailable');
+  }
 
   let indices: number[];
   if (totalPages <= MAX_SAMPLED_PAGES) {
@@ -577,8 +580,13 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
     return { status: 'parse_failed', sessionId };
   }
 
-  // Get total page count from validated buffer (should exist since valid).
-  const totalPages = validation.pageCount ?? 0;
+  // Determine canonical page count from validation + centralized parser before any downstream logic.
+  const authoritativePageCount = (await getAuthoritativePdfPageCount(pdfBuffer)) ?? null;
+  const initialTotalPages =
+    selectAuthoritativePageCount(
+      authoritativePageCount,
+      validation.pageCount,
+    ) ?? 0;
 
   // -----------------------------------------------------------------
   // Text layer detection (deterministic segmentation when available)
@@ -587,11 +595,32 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
 
   const pageHeaderResult = await extractPdfPageHeaders(
     pdfBuffer,
-    { maxPages: totalPages }
+    { maxPages: initialTotalPages > 0 ? initialTotalPages : undefined }
   );
+
+  const totalPages =
+    initialTotalPages > 0
+      ? initialTotalPages
+      : (pageHeaderResult.totalPages ?? 0);
+
+  if (totalPages <= 0) {
+    logger.error('Smart upload could not determine authoritative PDF page count', {
+      sessionId,
+      validationPageCount: validation.pageCount,
+      textExtractorPageCount: pageHeaderResult.totalPages,
+    });
+    await prisma.smartUploadSession.update({
+      where: { uploadSessionId: sessionId },
+      data: {
+        parseStatus: 'PARSE_FAILED',
+      },
+    });
+    return { status: 'parse_failed', sessionId };
+  }
 
   let deterministicInstructions: CuttingInstruction[] | null = null;
   let deterministicConfidence = 0;
+  let deterministicSegmentationResult: ReturnType<typeof detectPartBoundaries> | null = null;
   /** Per-page labels collected during segmentation (1-indexed page → label text) */
   const pageLabels: Record<number, string> = {};
 
@@ -618,6 +647,7 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
 
     const segResult = detectPartBoundaries(pageHeaderResult.pageHeaders, totalPages, true);
     if (segResult.segments.length > 1 || segResult.segmentationConfidence >= 60) {
+      deterministicSegmentationResult = segResult;
       deterministicInstructions = segResult.cuttingInstructions;
       deterministicConfidence = segResult.segmentationConfidence;
       // Persist per-page header text for Review UI
@@ -693,6 +723,10 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
           cropHeightFraction: 0.2,
           enableOcr: true,
         },
+        authoritativeTextSegmentation:
+          deterministicSegmentationResult && deterministicConfidence >= llmConfig.skipParseThreshold
+            ? deterministicSegmentationResult
+            : undefined,
       });
 
       const labelerDuration = Date.now() - labelerStart;

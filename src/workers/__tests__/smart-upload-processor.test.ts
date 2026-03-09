@@ -111,6 +111,17 @@ vi.mock('@/lib/services/part-boundary-detector', () => ({
   detectPartBoundaries: vi.fn().mockReturnValue([]),
 }));
 
+
+vi.mock('@/lib/services/pdf-source', () => ({
+  getAuthoritativePdfPageCount: vi.fn().mockResolvedValue(3),
+  selectAuthoritativePageCount: vi.fn((...values: Array<number | null | undefined>) => {
+    for (const value of values) {
+      if (typeof value === 'number' && Number.isFinite(value) && value > 0) return value;
+    }
+    return null;
+  }),
+}));
+
 vi.mock('@/lib/services/pdf-splitter', () => ({
   splitPdfByCuttingInstructions: vi.fn().mockResolvedValue([]),
   validatePdfBuffer: vi.fn().mockResolvedValue({ valid: true, pageCount: 3 }),

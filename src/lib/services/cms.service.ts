@@ -9,6 +9,7 @@ import {
   cacheKeys,
   CACHE_CONFIG,
 } from '@/lib/cache';
+import { normalizePageContent } from '@/lib/cms/page-content';
 
 export interface CreatePageData {
   slug: string;
@@ -25,7 +26,7 @@ interface CachedPageData {
   id: string;
   slug: string;
   title: string;
-  content: unknown;
+  content: string;
   rawMarkdown: string | null;
   description: string | null;
   status: string;
@@ -75,7 +76,7 @@ export class CmsService {
           id: page.id,
           slug: page.slug,
           title: page.title,
-          content: page.content,
+          content: normalizePageContent(page.content).body,
           rawMarkdown: page.rawMarkdown,
           description: page.description,
           status: page.status,
@@ -97,11 +98,20 @@ export class CmsService {
     }
     
     // For unpublished pages (admin use), don't cache
-    return prisma.page.findFirst({
+    const page = await prisma.page.findFirst({
       where: {
         slug,
       },
-    }) as Promise<CachedPageData | null>;
+    });
+
+    if (!page) {
+      return null;
+    }
+
+    return {
+      ...page,
+      content: normalizePageContent(page.content).body,
+    } as CachedPageData;
   }
 
   /**

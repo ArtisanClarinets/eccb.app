@@ -170,6 +170,7 @@ export async function POST(request: NextRequest) {
           existingPiece: {
             id: existingMusicFile.pieceId,
             title: existingMusicFile.piece?.title,
+            libraryUrl: `/admin/music/library/${existingMusicFile.pieceId}`,
           },
           message: `This file has already been imported as "${existingMusicFile.piece?.title ?? 'Unknown'}". Importing it again would create a duplicate.`,
         },
@@ -189,14 +190,16 @@ export async function POST(request: NextRequest) {
         {
           success: false,
           duplicate: true,
-          reason: 'pending_session',
+          reason: existingSession.status === 'APPROVED' ? 'approved_session' : 'pending_session',
           existingSession: {
             id: existingSession.uploadSessionId,
             status: existingSession.status,
             fileName: existingSession.fileName,
             createdAt: existingSession.createdAt,
+            reviewUrl: `/admin/uploads/review?sessionId=${existingSession.uploadSessionId}`,
+            statusUrl: `/api/admin/uploads/status/${existingSession.uploadSessionId}`,
           },
-          message: `This exact file was already uploaded on ${existingSession.createdAt.toISOString().slice(0, 10)} and is ${existingSession.status === 'PENDING_REVIEW' ? 'pending review' : 'already approved'}. Re-use the existing session rather than uploading again.`,
+          message: `This exact file was already uploaded on ${existingSession.createdAt.toISOString().slice(0, 10)} and is ${existingSession.status === 'PENDING_REVIEW' ? 'pending review' : 'already approved'}. Open the existing session instead of uploading again.`,
         },
         { status: 409 }
       );
@@ -285,9 +288,9 @@ export async function POST(request: NextRequest) {
       },
       enqueued: enqueueSucceeded,
       message: enqueueSucceeded
-        ? 'Upload successful. Processing in background — check status endpoint for progress.'
+        ? 'Upload accepted and queued for background processing.'
         : 'Upload saved but background processing failed to start. Please retry or contact support.',
-    }, { status: 200 });
+    }, { status: enqueueSucceeded ? 202 : 503 });
   } catch (error) {
     logger.error('Smart upload failed', { error, userId: session?.user?.id });
 

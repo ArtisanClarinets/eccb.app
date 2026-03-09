@@ -14,6 +14,7 @@
 
 import { PDFDocument } from 'pdf-lib';
 import { logger } from '@/lib/logger';
+import { getAuthoritativePdfPageCount } from '@/lib/services/pdf-source';
 
 import type { CuttingInstruction } from '@/types/smart-upload';
 
@@ -232,18 +233,20 @@ export async function validatePdfBuffer(pdfBuffer: Buffer): Promise<{
   try {
     const pdfData = new Uint8Array(pdfBuffer);
     pdfDoc = await PDFDocument.load(pdfData, { ignoreEncryption: true });
+    const pageCount = pdfDoc.getPageCount();
     return {
       valid: true,
-      pageCount: pdfDoc.getPageCount(),
+      pageCount,
     };
   } catch (error) {
     const err = asError(error);
-    // Log the error but still consider the PDF valid - it might be readable by other tools
+    // Log the error but still consider the PDF valid if a centralized parser can recover page count.
     logger.warn('PDF parsing warning', { error: err.message });
+    const fallbackPageCount = await getAuthoritativePdfPageCount(pdfBuffer);
     return {
-      valid: true,
-      pageCount: 0, // We can't determine page count if parsing failed
-      error: err.message,
+      valid: fallbackPageCount !== null,
+      pageCount: fallbackPageCount ?? undefined,
+      error: fallbackPageCount === null ? err.message : undefined,
     };
   } finally {
     await cleanupPdfDoc(pdfDoc);
