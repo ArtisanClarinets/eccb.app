@@ -56,14 +56,14 @@ jobs:
         run: |
           echo "DATABASE_URL=mysql://root:root@localhost:3306/eccb_test" >> .env
           echo "REDIS_URL=redis://localhost:6379" >> .env
-          echo "AUTH_SECRET=test-secret-key-for-e2e-tests-minimum-32-chars" >> .env
-          echo "SUPER_ADMIN_PASSWORD=your-secure-admin-password" >> .env
-          echo "SUPER_ADMIN_EMAIL=admin@eccb.org" >> .env
-          echo "BETTER_AUTH_SECRET=test-secret-key-for-e2e-tests-minimum-32-chars" >> .env
+          echo "AUTH_SECRET=test-secret-key-for-e2e-tests-that-is-long-enough" >> .env
+          echo "BETTER_AUTH_SECRET=test-secret-key-for-e2e-tests-that-is-long-enough" >> .env
           echo "BETTER_AUTH_URL=http://localhost:3000" >> .env
           echo "NEXT_PUBLIC_APP_URL=http://localhost:3000" >> .env
           echo "STORAGE_DRIVER=LOCAL" >> .env
           echo "NODE_ENV=test" >> .env
+          echo "SUPER_ADMIN_EMAIL=admin@eccb.org" >> .env
+          echo "SUPER_ADMIN_PASSWORD=some-secure-test-password-123!" >> .env
 
       - name: Generate Prisma client
         run: npm run db:generate
@@ -156,14 +156,14 @@ jobs:
         run: |
           echo "DATABASE_URL=mysql://root:root@localhost:3306/eccb_test" >> .env
           echo "REDIS_URL=redis://localhost:6379" >> .env
-          echo "AUTH_SECRET=test-secret-key-for-e2e-tests-minimum-32-chars" >> .env
-          echo "SUPER_ADMIN_PASSWORD=your-secure-admin-password" >> .env
-          echo "SUPER_ADMIN_EMAIL=admin@eccb.org" >> .env
-          echo "BETTER_AUTH_SECRET=test-secret-key-for-e2e-tests-minimum-32-chars" >> .env
+          echo "AUTH_SECRET=test-secret-key-for-e2e-tests-that-is-long-enough" >> .env
+          echo "BETTER_AUTH_SECRET=test-secret-key-for-e2e-tests-that-is-long-enough" >> .env
           echo "BETTER_AUTH_URL=http://localhost:3000" >> .env
           echo "NEXT_PUBLIC_APP_URL=http://localhost:3000" >> .env
           echo "STORAGE_DRIVER=LOCAL" >> .env
           echo "NODE_ENV=test" >> .env
+          echo "SUPER_ADMIN_EMAIL=admin@eccb.org" >> .env
+          echo "SUPER_ADMIN_PASSWORD=some-secure-test-password-123!" >> .env
 
       - name: Generate Prisma client
         run: npm run db:generate
@@ -224,14 +224,14 @@ jobs:
         run: |
           echo "DATABASE_URL=mysql://root:root@localhost:3306/eccb_test" >> .env
           echo "REDIS_URL=redis://localhost:6379" >> .env
-          echo "AUTH_SECRET=test-secret-key-for-e2e-tests-minimum-32-chars" >> .env
-          echo "SUPER_ADMIN_PASSWORD=your-secure-admin-password" >> .env
-          echo "SUPER_ADMIN_EMAIL=admin@eccb.org" >> .env
-          echo "BETTER_AUTH_SECRET=test-secret-key-for-e2e-tests-minimum-32-chars" >> .env
+          echo "AUTH_SECRET=test-secret-key-for-e2e-tests-that-is-long-enough" >> .env
+          echo "BETTER_AUTH_SECRET=test-secret-key-for-e2e-tests-that-is-long-enough" >> .env
           echo "BETTER_AUTH_URL=http://localhost:3000" >> .env
           echo "NEXT_PUBLIC_APP_URL=http://localhost:3000" >> .env
           echo "STORAGE_DRIVER=LOCAL" >> .env
           echo "NODE_ENV=test" >> .env
+          echo "SUPER_ADMIN_EMAIL=admin@eccb.org" >> .env
+          echo "SUPER_ADMIN_PASSWORD=some-secure-test-password-123!" >> .env
 
       - name: Generate Prisma client
         run: npm run db:generate
