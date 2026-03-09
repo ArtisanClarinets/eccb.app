@@ -46,12 +46,32 @@ export interface QualityGateResult {
 // =============================================================================
 
 const FORBIDDEN_LABELS = new Set([
-  'null', 'none', 'n/a', 'na', 'unknown', 'undefined', '',
-  'untitled', 'blank', 'cover', 'placeholder',
+  'null',
+  'none',
+  'n/a',
+  'na',
+  'unknown',
+  'undefined',
+  '',
+  'untitled',
+  'blank',
+  'cover',
+  'placeholder',
 ]);
 
 const SCORE_SECTIONS = new Set([
-  'Score', 'score', 'FULL_SCORE', 'CONDUCTOR_SCORE', 'CONDENSED_SCORE',
+  'Score',
+  'score',
+  'FULL_SCORE',
+  'CONDUCTOR_SCORE',
+  'CONDENSED_SCORE',
+]);
+
+const SCORE_INSTRUMENT_HINTS = new Set([
+  'full score',
+  'conductor score',
+  'condensed score',
+  'score',
 ]);
 
 const DEFAULT_SEG_CONFIDENCE_THRESHOLD = 70;
@@ -71,14 +91,153 @@ function isBlankOrSpacerPart(
   instrument: string | undefined | null,
   partName: string | undefined | null,
 ): boolean {
-  const pn = (partName ?? '').trim().toLowerCase();
+  const instrumentNorm = (instrument ?? '').trim().toLowerCase();
+  const partNameNorm = (partName ?? '').trim().toLowerCase();
+
   return (
-    pn.includes('blank') ||
-    pn.includes('spacer') ||
-    pn.includes('separator') ||
-    pn === 'blank pages' ||
-    pn === 'blank page'
+    instrumentNorm.includes('blank') ||
+    instrumentNorm.includes('spacer') ||
+    instrumentNorm.includes('separator') ||
+    partNameNorm.includes('blank') ||
+    partNameNorm.includes('spacer') ||
+    partNameNorm.includes('separator') ||
+    partNameNorm === 'blank pages' ||
+    partNameNorm === 'blank page'
   );
+}
+
+function isScoreLikePart(part: ParsedPartRecord): boolean {
+  const section = (part.section ?? '').trim();
+  const instrument = (part.instrument ?? '').trim().toLowerCase();
+  const partName = (part.partName ?? '').trim().toLowerCase();
+
+  return (
+    SCORE_SECTIONS.has(section) ||
+    SCORE_INSTRUMENT_HINTS.has(instrument) ||
+    SCORE_INSTRUMENT_HINTS.has(partName)
+  );
+}
+
+function clampConfidence(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function dedupeReasons(reasons: string[]): string[] {
+  return [...new Set(reasons)];
+}
+
+type NormalizedPageRange = {
+  start: number;
+  end: number;
+  indexing: 'one' | 'zero';
+};
+
+function normalizePageRange(
+  pageRange: unknown,
+  totalPages: number,
+): NormalizedPageRange | null {
+  if (
+    !Array.isArray(pageRange) ||
+    pageRange.length < 2 ||
+    typeof pageRange[0] !== 'number' ||
+    typeof pageRange[1] !== 'number' ||
+    !Number.isFinite(pageRange[0]) ||
+    !Number.isFinite(pageRange[1])
+  ) {
+    return null;
+  }
+
+  const rawStart = Math.trunc(pageRange[0]);
+  const rawEnd = Math.trunc(pageRange[1]);
+
+  if (rawStart > rawEnd) {
+    return null;
+  }
+
+  // Heuristic:
+  // - [1..N] => one-indexed
+  // - [0..N-1] => zero-indexed
+  // - mixed / impossible => null
+  if (rawStart >= 1 && rawEnd <= totalPages) {
+    return { start: rawStart, end: rawEnd, indexing: 'one' };
+  }
+
+  if (rawStart >= 0 && rawEnd <= totalPages - 1) {
+    return { start: rawStart + 1, end: rawEnd + 1, indexing: 'zero' };
+  }
+
+  return null;
+}
+
+function findCoverageIssues(
+  cuttingInstructions: NonNullable<ExtractedMetadata['cuttingInstructions']>,
+  totalPages: number,
+): {
+  invalidRangeReason?: string;
+  overlapReason?: string;
+  uncoveredReason?: string;
+} {
+  if (totalPages <= 0 || cuttingInstructions.length === 0) {
+    return {};
+  }
+
+  const coverage = new Array<number>(totalPages + 1).fill(0); // 1-indexed coverage
+  let sawZeroIndexed = false;
+  let sawOneIndexed = false;
+
+  for (const instruction of cuttingInstructions) {
+    const normalized = normalizePageRange(instruction.pageRange, totalPages);
+
+    if (!normalized) {
+      return {
+        invalidRangeReason: `Cutting instruction "${instruction.partName}" has invalid or out-of-bounds pageRange`,
+      };
+    }
+
+    if (normalized.indexing === 'zero') sawZeroIndexed = true;
+    if (normalized.indexing === 'one') sawOneIndexed = true;
+
+    for (let page = normalized.start; page <= normalized.end; page++) {
+      coverage[page] += 1;
+    }
+  }
+
+  if (sawZeroIndexed && sawOneIndexed) {
+    return {
+      invalidRangeReason: 'Cutting instructions contain mixed page indexing (0-indexed and 1-indexed)',
+    };
+  }
+
+  const overlappingPages: number[] = [];
+  const uncoveredPages: number[] = [];
+
+  for (let page = 1; page <= totalPages; page++) {
+    if (coverage[page] > 1) overlappingPages.push(page);
+    if (coverage[page] === 0) uncoveredPages.push(page);
+  }
+
+  const result: {
+    invalidRangeReason?: string;
+    overlapReason?: string;
+    uncoveredReason?: string;
+  } = {};
+
+  if (overlappingPages.length > 0) {
+    result.overlapReason =
+      overlappingPages.length <= 5
+        ? `${overlappingPages.length} page(s) covered more than once: [${overlappingPages.join(', ')}]`
+        : `${overlappingPages.length} pages covered more than once (overlap detected)`;
+  }
+
+  if (uncoveredPages.length > 0) {
+    result.uncoveredReason =
+      uncoveredPages.length <= 5
+        ? `${uncoveredPages.length} page(s) not covered by cutting instructions: [${uncoveredPages.join(', ')}]`
+        : `${uncoveredPages.length} pages not covered by cutting instructions (of ${totalPages} total)`;
+  }
+
+  return result;
 }
 
 // =============================================================================
@@ -89,7 +248,7 @@ function isBlankOrSpacerPart(
  * Evaluate all quality gates. Returns whether any gate failed, why, and the
  * computed finalConfidence.
  *
- * This is the **single source of truth** for auto-commit eligibility checks;
+ * This is the single source of truth for auto-commit eligibility checks;
  * both first-pass and second-pass workers call this function.
  */
 export function evaluateQualityGates(input: QualityGateInput): QualityGateResult {
@@ -103,13 +262,13 @@ export function evaluateQualityGates(input: QualityGateInput): QualityGateResult
   } = input;
 
   const reasons: string[] = [];
+  const cuttingInstructions = metadata.cuttingInstructions ?? [];
 
   // ── Gate 1: No part with a forbidden instrument or partName ──────────────
-  // Exception: blank/spacer pages legitimately have no instrument.
   const nullPart = parsedParts.find(
-    (p) =>
-      !isBlankOrSpacerPart(p.instrument, p.partName) &&
-      (isForbiddenLabel(p.instrument) || isForbiddenLabel(p.partName)),
+    (part) =>
+      !isBlankOrSpacerPart(part.instrument, part.partName) &&
+      (isForbiddenLabel(part.instrument) || isForbiddenLabel(part.partName)),
   );
   if (nullPart) {
     reasons.push(
@@ -118,11 +277,10 @@ export function evaluateQualityGates(input: QualityGateInput): QualityGateResult
   }
 
   // ── Gate 1b: Cutting instructions must also have valid labels ────────────
-  const cuttingInstructions = metadata.cuttingInstructions ?? [];
   const forbiddenCut = cuttingInstructions.find(
-    (ci) =>
-      !isBlankOrSpacerPart(ci.instrument, ci.partName) &&
-      (isForbiddenLabel(ci.instrument) || isForbiddenLabel(ci.partName)),
+    (instruction) =>
+      !isBlankOrSpacerPart(instruction.instrument, instruction.partName) &&
+      (isForbiddenLabel(instruction.instrument) || isForbiddenLabel(instruction.partName)),
   );
   if (forbiddenCut) {
     reasons.push(
@@ -132,11 +290,7 @@ export function evaluateQualityGates(input: QualityGateInput): QualityGateResult
 
   // ── Gate 1c: Every cutting instruction must have a valid pageRange ───────
   const missingRange = cuttingInstructions.find(
-    (ci) =>
-      !Array.isArray(ci.pageRange) ||
-      ci.pageRange.length < 2 ||
-      typeof ci.pageRange[0] !== 'number' ||
-      typeof ci.pageRange[1] !== 'number',
+    (instruction) => normalizePageRange(instruction.pageRange, totalPages) === null,
   );
   if (missingRange) {
     reasons.push(
@@ -146,7 +300,7 @@ export function evaluateQualityGates(input: QualityGateInput): QualityGateResult
 
   // ── Gate 2: No non-score PART that exceeds maxPagesPerPart ───────────────
   const oversizedPart = parsedParts.find(
-    (p) => !SCORE_SECTIONS.has(p.section) && p.pageCount > maxPagesPerPart,
+    (part) => !isScoreLikePart(part) && part.pageCount > maxPagesPerPart,
   );
   if (oversizedPart) {
     reasons.push(
@@ -162,36 +316,10 @@ export function evaluateQualityGates(input: QualityGateInput): QualityGateResult
     );
   }
 
-  // ── Gate 5: Page coverage — all pages should be covered by cutting instructions
-  if (cuttingInstructions.length > 0 && !missingRange) {
-    const coveredPages = new Set<number>();
-    for (const ci of cuttingInstructions) {
-      if (Array.isArray(ci.pageRange) && ci.pageRange.length >= 2) {
-        for (let p = ci.pageRange[0]; p <= ci.pageRange[1]; p++) {
-          coveredPages.add(p);
-        }
-      }
-    }
-    // Check for uncovered pages (1-indexed)
-    const uncovered: number[] = [];
-    for (let p = 1; p <= totalPages; p++) {
-      if (!coveredPages.has(p)) uncovered.push(p);
-    }
-    if (uncovered.length > 0 && uncovered.length <= 5) {
-      // A small number of uncovered pages is suspicious
-      reasons.push(
-        `${uncovered.length} page(s) not covered by cutting instructions: [${uncovered.join(', ')}]`,
-      );
-    } else if (uncovered.length > 5) {
-      reasons.push(
-        `${uncovered.length} pages not covered by cutting instructions (of ${totalPages} total)`,
-      );
-    }
-  }
-
   // ── Gate 4: segmentationConfidence below threshold ───────────────────────
   if (
     typeof segmentationConfidence === 'number' &&
+    Number.isFinite(segmentationConfidence) &&
     segmentationConfidence < segmentationConfidenceThreshold
   ) {
     reasons.push(
@@ -199,16 +327,41 @@ export function evaluateQualityGates(input: QualityGateInput): QualityGateResult
     );
   }
 
+  // ── Gate 5: Page coverage and overlap checks ─────────────────────────────
+  if (cuttingInstructions.length > 0 && !missingRange) {
+    const coverageIssues = findCoverageIssues(cuttingInstructions, totalPages);
+
+    if (coverageIssues.invalidRangeReason) {
+      reasons.push(coverageIssues.invalidRangeReason);
+    }
+    if (coverageIssues.overlapReason) {
+      reasons.push(coverageIssues.overlapReason);
+    }
+    if (coverageIssues.uncoveredReason) {
+      reasons.push(coverageIssues.uncoveredReason);
+    }
+  }
+
+  // ── Gate 6: If we have cutting instructions, splitting should have produced parts ──
+  if (cuttingInstructions.length > 0 && parsedParts.length === 0) {
+    reasons.push('Cutting instructions exist but no parsed parts were produced');
+  }
+
   // ── Compute finalConfidence ──────────────────────────────────────────────
-  const extractionConfidence = metadata.confidenceScore ?? 0;
+  const extractionConfidence = clampConfidence(metadata.confidenceScore ?? 0);
+  const normalizedSegmentationConfidence =
+    typeof segmentationConfidence === 'number' && Number.isFinite(segmentationConfidence)
+      ? clampConfidence(segmentationConfidence)
+      : undefined;
+
   const finalConfidence =
-    typeof segmentationConfidence === 'number'
-      ? Math.min(extractionConfidence, segmentationConfidence)
+    typeof normalizedSegmentationConfidence === 'number'
+      ? Math.min(extractionConfidence, normalizedSegmentationConfidence)
       : extractionConfidence;
 
   return {
     failed: reasons.length > 0,
-    reasons,
+    reasons: dedupeReasons(reasons),
     finalConfidence,
   };
 }

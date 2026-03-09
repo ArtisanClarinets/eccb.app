@@ -98,6 +98,34 @@ interface SmartUploadSession {
   secondPassStatus: SecondPassStatus | null;
   autoApproved: boolean;
   cuttingInstructions: CuttingInstruction[] | null;
+  exceptionQueue?: {
+    kind: string;
+    summary: string;
+    original: {
+      fileName: string;
+      storageKey: string;
+      links: {
+        previewPath: string;
+        openPath: string;
+        downloadPath: string;
+      };
+    };
+    parts: Array<ParsedPartRecord & {
+      links: {
+        previewPath: string;
+        openPath: string;
+        downloadPath: string;
+      };
+    }>;
+    provenance: {
+      sourceSha256?: string | null;
+      rawOcrTextAvailable?: boolean;
+      ocrEngineUsed?: string | null;
+      ocrTextChars?: number | null;
+      llmFallbackReasons?: string[];
+      strategyHistoryCount?: number;
+    };
+  };
 }
 
 interface Stats {
@@ -179,6 +207,21 @@ function getSecondPassStatusBadge(secondPassStatus: SecondPassStatus | null): Re
       );
     default:
       return null;
+  }
+}
+
+function formatExceptionKind(kind: string | undefined): string {
+  switch (kind) {
+    case 'parse_failure':
+      return 'Parse Failure';
+    case 'second_pass_failure':
+      return '2nd Pass Failure';
+    case 'human_review_required':
+      return 'Human Review';
+    case 'low_confidence':
+      return 'Low Confidence';
+    default:
+      return 'Review Pending';
   }
 }
 
@@ -872,18 +915,28 @@ function UploadReviewClient({
                           : 'N/A'}
                       </Badge>
                     </TableCell>
-                    <TableCell>
-                      <div className="flex flex-col gap-1">
-                        {getParseStatusBadge(session.parseStatus)}
-                        {getSecondPassStatusBadge(session.secondPassStatus)}
-                        {session.autoApproved && (
-                          <Badge className="bg-green-50 text-green-600 text-xs">
-                            <Check className="mr-1 h-3 w-3" />
-                            Auto ✓
-                          </Badge>
-                        )}
-                      </div>
-                    </TableCell>
+                     <TableCell>
+                       <div className="flex flex-col gap-1">
+                          {getParseStatusBadge(session.parseStatus)}
+                          {getSecondPassStatusBadge(session.secondPassStatus)}
+                          {session.exceptionQueue && (
+                            <Badge className="bg-slate-100 text-slate-700 text-xs">
+                              {formatExceptionKind(session.exceptionQueue.kind)}
+                            </Badge>
+                          )}
+                          {session.autoApproved && (
+                            <Badge className="bg-green-50 text-green-600 text-xs">
+                              <Check className="mr-1 h-3 w-3" />
+                              Auto ✓
+                            </Badge>
+                          )}
+                          {session.exceptionQueue?.summary && (
+                            <p className="max-w-xs text-xs text-muted-foreground">
+                              {session.exceptionQueue.summary}
+                            </p>
+                          )}
+                        </div>
+                      </TableCell>
                     <TableCell>
                       <div className="text-sm text-muted-foreground">
                         {formatDate(session.createdAt)}
@@ -972,6 +1025,22 @@ function UploadReviewClient({
                   <div className="flex items-center justify-between">
                     <h4 className="text-sm font-semibold">PDF Preview</h4>
                     <div className="flex items-center gap-2">
+                      {editingSession.exceptionQueue?.original && (
+                        <>
+                          <Button variant="outline" size="sm" asChild>
+                            <a href={editingSession.exceptionQueue.original.links.openPath} target="_blank" rel="noreferrer">
+                              <ExternalLink className="mr-1 h-4 w-4" />
+                              Open Original
+                            </a>
+                          </Button>
+                          <Button variant="outline" size="sm" asChild>
+                            <a href={editingSession.exceptionQueue.original.links.downloadPath}>
+                              <Download className="mr-1 h-4 w-4" />
+                              Download Original
+                            </a>
+                          </Button>
+                        </>
+                      )}
                       {/* Page Navigation */}
                       <Button
                         variant="outline"
@@ -1100,6 +1169,29 @@ function UploadReviewClient({
                             Part: {selectedPart.partName} ({selectedPart.instrument})
                           </h4>
                           <div className="flex items-center gap-2">
+                            {editingSession.exceptionQueue?.parts && (
+                              (() => {
+                                const selectedPartLinks = editingSession.exceptionQueue?.parts.find(
+                                  (part) => part.storageKey === selectedPart.storageKey
+                                )?.links;
+                                return selectedPartLinks ? (
+                                  <>
+                                    <Button variant="outline" size="sm" asChild>
+                                      <a href={selectedPartLinks.openPath} target="_blank" rel="noreferrer">
+                                        <ExternalLink className="mr-1 h-4 w-4" />
+                                        Open Part
+                                      </a>
+                                    </Button>
+                                    <Button variant="outline" size="sm" asChild>
+                                      <a href={selectedPartLinks.downloadPath}>
+                                        <Download className="mr-1 h-4 w-4" />
+                                        Download Part
+                                      </a>
+                                    </Button>
+                                  </>
+                                ) : null;
+                              })()
+                            )}
                             {/* Page Navigation */}
                             <Button
                               variant="outline"
@@ -1212,6 +1304,37 @@ function UploadReviewClient({
                     </span>
                   )}
               </div>
+
+              {editingSession.exceptionQueue && (
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="rounded-lg border bg-muted/30 p-4">
+                    <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+                      <AlertCircle className="h-4 w-4 text-amber-600" />
+                      Exception Queue
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      {editingSession.exceptionQueue.summary}
+                    </p>
+                    <div className="mt-3 text-xs text-muted-foreground">
+                      Type: {formatExceptionKind(editingSession.exceptionQueue.kind)}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border bg-muted/30 p-4">
+                    <div className="mb-2 text-sm font-medium">Provenance</div>
+                    <div className="space-y-1 text-xs text-muted-foreground">
+                      <div>OCR engine: {editingSession.exceptionQueue.provenance.ocrEngineUsed || 'none recorded'}</div>
+                      <div>OCR chars: {editingSession.exceptionQueue.provenance.ocrTextChars ?? 0}</div>
+                      <div>Raw OCR text: {editingSession.exceptionQueue.provenance.rawOcrTextAvailable ? 'available' : 'not stored'}</div>
+                      <div>Strategy attempts: {editingSession.exceptionQueue.provenance.strategyHistoryCount ?? 0}</div>
+                      {editingSession.exceptionQueue.provenance.llmFallbackReasons && editingSession.exceptionQueue.provenance.llmFallbackReasons.length > 0 && (
+                        <div>
+                          LLM fallback: {editingSession.exceptionQueue.provenance.llmFallbackReasons.join('; ')}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Gap Warning */}
               {editingSession.cuttingInstructions?.some(inst => (inst.partNumber ?? 0) >= 9900) && (

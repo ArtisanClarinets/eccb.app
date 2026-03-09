@@ -34,12 +34,161 @@ export interface ValidationResult {
   overlaps?: Array<{ part1: string; part2: string; overlap: [number, number] }>;
 }
 
+const VALID_SECTIONS = new Set<CuttingInstruction['section']>([
+  'Woodwinds',
+  'Brass',
+  'Percussion',
+  'Strings',
+  'Keyboard',
+  'Vocals',
+  'Other',
+  'Score',
+]);
+
+const VALID_TRANSPOSITIONS = new Set<CuttingInstruction['transposition']>([
+  'Bb',
+  'Eb',
+  'F',
+  'C',
+  'D',
+  'G',
+  'A',
+]);
+
+const VALID_CHAIRS = new Set<NonNullable<CuttingInstruction['chair']>>([
+  '1st',
+  '2nd',
+  '3rd',
+  '4th',
+  'Aux',
+  'Solo',
+]);
+
+const VALID_PART_TYPES = new Set<NonNullable<CuttingInstruction['partType']>>([
+  'PART',
+  'FULL_SCORE',
+  'CONDUCTOR_SCORE',
+  'CONDENSED_SCORE',
+]);
+
 export function toZeroIndexed(range: [number, number]): [number, number] {
   return [Math.max(0, range[0] - 1), Math.max(0, range[1] - 1)];
 }
 
 export function toOneIndexed(range: [number, number]): [number, number] {
   return [range[0] + 1, range[1] + 1];
+}
+
+function isFiniteInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value);
+}
+
+function normalizePartName(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizeInstrument(value: unknown): string {
+  return typeof value === 'string' && value.trim() ? value.trim() : 'Unknown';
+}
+
+function normalizeSection(value: unknown): CuttingInstruction['section'] {
+  return typeof value === 'string' && VALID_SECTIONS.has(value as CuttingInstruction['section'])
+    ? (value as CuttingInstruction['section'])
+    : 'Other';
+}
+
+function normalizeTransposition(value: unknown): CuttingInstruction['transposition'] {
+  return typeof value === 'string' && VALID_TRANSPOSITIONS.has(value as CuttingInstruction['transposition'])
+    ? (value as CuttingInstruction['transposition'])
+    : 'C';
+}
+
+function normalizePartNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function normalizeChair(value: unknown): CuttingInstruction['chair'] | undefined {
+  if (value === null) return null;
+  return typeof value === 'string' && VALID_CHAIRS.has(value as NonNullable<CuttingInstruction['chair']>)
+    ? (value as NonNullable<CuttingInstruction['chair']>)
+    : undefined;
+}
+
+function normalizePartType(value: unknown): CuttingInstruction['partType'] | undefined {
+  return typeof value === 'string' && VALID_PART_TYPES.has(value as NonNullable<CuttingInstruction['partType']>)
+    ? (value as NonNullable<CuttingInstruction['partType']>)
+    : undefined;
+}
+
+function normalizeLabelConfidence(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function buildOriginalMetadata(instruction: Record<string, unknown>): Partial<CuttingInstruction> {
+  const metadata: Partial<CuttingInstruction> = {
+    instrument: normalizeInstrument(instruction.instrument),
+    section: normalizeSection(instruction.section),
+    transposition: normalizeTransposition(instruction.transposition),
+    partNumber: normalizePartNumber(instruction.partNumber),
+  };
+
+  const chair = normalizeChair(instruction.chair);
+  if (chair !== undefined) metadata.chair = chair;
+
+  const partType = normalizePartType(instruction.partType);
+  if (partType !== undefined) metadata.partType = partType;
+
+  const labelConfidence = normalizeLabelConfidence(instruction.labelConfidence);
+  if (labelConfidence !== undefined) metadata.labelConfidence = labelConfidence;
+
+  return metadata;
+}
+
+function parsePageRange(
+  instruction: Record<string, unknown>,
+  index: number,
+  partName: string,
+  errors: string[],
+): { pageStart: number; pageEnd: number } | null {
+  if ('pageRange' in instruction && Array.isArray(instruction.pageRange) && instruction.pageRange.length >= 2) {
+    const start = instruction.pageRange[0];
+    const end = instruction.pageRange[1];
+
+    if (!isFiniteInteger(start)) {
+      errors.push(`Instruction ${index} (${partName}): pageRange[0] must be a finite integer`);
+      return null;
+    }
+
+    if (!isFiniteInteger(end)) {
+      errors.push(`Instruction ${index} (${partName}): pageRange[1] must be a finite integer`);
+      return null;
+    }
+
+    return { pageStart: start, pageEnd: end };
+  }
+
+  if ('pageStart' in instruction && 'pageEnd' in instruction) {
+    if (!isFiniteInteger(instruction.pageStart)) {
+      errors.push(`Instruction ${index} (${partName}): pageStart must be an integer`);
+      return null;
+    }
+
+    if (!isFiniteInteger(instruction.pageEnd)) {
+      errors.push(`Instruction ${index} (${partName}): pageEnd must be an integer`);
+      return null;
+    }
+
+    return {
+      pageStart: instruction.pageStart,
+      pageEnd: instruction.pageEnd,
+    };
+  }
+
+  errors.push(`Instruction ${index} (${partName}): Missing pageRange or pageStart/pageEnd`);
+  return null;
 }
 
 /**
@@ -53,7 +202,7 @@ export function toOneIndexed(range: [number, number]): [number, number] {
 export function validateAndNormalizeInstructions(
   rawInstructions: unknown[],
   totalPages: number,
-  options: ValidationOptions = {}
+  options: ValidationOptions = {},
 ): ValidationResult {
   const warnings: string[] = [];
   const errors: string[] = [];
@@ -100,79 +249,28 @@ export function validateAndNormalizeInstructions(
 
     const instruction = raw as Record<string, unknown>;
 
-    // Validate partName
-    if (!('partName' in instruction) || typeof instruction.partName !== 'string') {
+    if (!('partName' in instruction)) {
       errors.push(`Instruction ${i}: Missing or invalid partName`);
       continue;
     }
 
-    const partName = instruction.partName.trim();
-    if (partName.length === 0) {
+    const partName = normalizePartName(instruction.partName);
+    if (!partName) {
       errors.push(`Instruction ${i}: partName cannot be empty`);
       continue;
     }
 
-    // Validate pageRange (preferred) or pageStart/pageEnd
-    let pageStart: number;
-    let pageEnd: number;
-
-    if ('pageRange' in instruction && Array.isArray(instruction.pageRange) && instruction.pageRange.length >= 2) {
-      // Use pageRange if available
-      const start = instruction.pageRange[0];
-      const end = instruction.pageRange[1];
-
-      if (typeof start !== 'number' || !Number.isFinite(start) || !Number.isInteger(start)) {
-        errors.push(`Instruction ${i} (${partName}): pageRange[0] must be a finite integer`);
-        continue;
-      }
-
-      if (typeof end !== 'number' || !Number.isFinite(end) || !Number.isInteger(end)) {
-        errors.push(`Instruction ${i} (${partName}): pageRange[1] must be a finite integer`);
-        continue;
-      }
-
-      pageStart = start;
-      pageEnd = end;
-    } else if ('pageStart' in instruction && 'pageEnd' in instruction) {
-      // Fall back to pageStart/pageEnd
-      if (typeof instruction.pageStart !== 'number' || !Number.isInteger(instruction.pageStart)) {
-        errors.push(`Instruction ${i} (${partName}): pageStart must be an integer`);
-        continue;
-      }
-      if (typeof instruction.pageEnd !== 'number' || !Number.isInteger(instruction.pageEnd)) {
-        errors.push(`Instruction ${i} (${partName}): pageEnd must be an integer`);
-        continue;
-      }
-      pageStart = instruction.pageStart;
-      pageEnd = instruction.pageEnd;
-    } else {
-      errors.push(`Instruction ${i} (${partName}): Missing pageRange or pageStart/pageEnd`);
+    const parsedRange = parsePageRange(instruction, i, partName, errors);
+    if (!parsedRange) {
       continue;
     }
 
     normalizedInstructions.push({
       partName,
-      pageStart,
-      pageEnd,
+      pageStart: parsedRange.pageStart,
+      pageEnd: parsedRange.pageEnd,
       originalIndex: i,
-      originalMetadata: {
-        instrument:
-          typeof instruction.instrument === 'string' && instruction.instrument.trim()
-            ? instruction.instrument
-            : 'Unknown',
-        section:
-          typeof instruction.section === 'string'
-            ? (instruction.section as CuttingInstruction['section'])
-            : 'Other',
-        transposition:
-          typeof instruction.transposition === 'string'
-            ? (instruction.transposition as CuttingInstruction['transposition'])
-            : 'C',
-        partNumber:
-          typeof instruction.partNumber === 'number' && Number.isFinite(instruction.partNumber)
-            ? instruction.partNumber
-            : undefined,
-      },
+      originalMetadata: buildOriginalMetadata(instruction),
     });
   }
 
@@ -201,30 +299,31 @@ export function validateAndNormalizeInstructions(
   for (const instruction of processedInstructions) {
     if (instruction.pageStart > instruction.pageEnd) {
       errors.push(
-        `Part "${instruction.partName}": pageStart (${instruction.pageStart}) cannot be greater than pageEnd (${instruction.pageEnd})`
+        `Part "${instruction.partName}": pageStart (${instruction.pageStart}) cannot be greater than pageEnd (${instruction.pageEnd})`,
       );
     }
   }
 
   // Step 5: Detect overlaps
-  const overlaps = detectOverlaps(processedInstructions);
+  let overlaps = detectOverlaps(processedInstructions);
   if (overlaps.length > 0) {
     if (!options.allowOverlaps && !options.autoFixOverlaps) {
       for (const overlap of overlaps) {
         errors.push(
-          `Overlap detected between "${overlap.part1}" and "${overlap.part2}" on pages ${overlap.overlap[0]}-${overlap.overlap[1]}`
+          `Overlap detected between "${overlap.part1}" and "${overlap.part2}" on pages ${overlap.overlap[0]}-${overlap.overlap[1]}`,
         );
       }
     } else {
       for (const overlap of overlaps) {
         warnings.push(
-          `Overlap detected between "${overlap.part1}" and "${overlap.part2}" on pages ${overlap.overlap[0]}-${overlap.overlap[1]}`
+          `Overlap detected between "${overlap.part1}" and "${overlap.part2}" on pages ${overlap.overlap[0]}-${overlap.overlap[1]}`,
         );
       }
     }
 
     if (options.autoFixOverlaps) {
       processedInstructions = splitOverlappingRanges(processedInstructions);
+      overlaps = detectOverlaps(processedInstructions);
       warnings.push('Auto-fixed overlapping ranges');
     }
   }
@@ -235,9 +334,7 @@ export function validateAndNormalizeInstructions(
     gaps = detectGaps(processedInstructions, totalPages);
     if (gaps.length > 0) {
       for (const gap of gaps) {
-        warnings.push(
-          `Gap detected: pages ${gap.start}-${gap.end} are not covered by any part`
-        );
+        warnings.push(`Gap detected: pages ${gap.start}-${gap.end} are not covered by any part`);
       }
     }
   }
@@ -255,14 +352,27 @@ export function validateAndNormalizeInstructions(
 
   const finalInstructions: CuttingInstruction[] = processedInstructions.map((processed, idx) => {
     const original = processed.originalMetadata;
-    return {
+
+    const instruction: CuttingInstruction = {
       instrument: original?.instrument ?? 'Unknown',
       partName: processed.partName,
-      section: (original?.section ?? 'Other') as CuttingInstruction['section'],
-      transposition: (original?.transposition ?? 'C') as CuttingInstruction['transposition'],
+      section: normalizeSection(original?.section),
+      transposition: normalizeTransposition(original?.transposition),
       partNumber: original?.partNumber ?? idx + 1,
       pageRange: [processed.pageStart, processed.pageEnd] as [number, number],
     };
+
+    if (original?.chair !== undefined) {
+      instruction.chair = normalizeChair(original.chair) ?? undefined;
+    }
+    if (original?.partType !== undefined) {
+      instruction.partType = normalizePartType(original.partType);
+    }
+    if (original?.labelConfidence !== undefined) {
+      instruction.labelConfidence = normalizeLabelConfidence(original.labelConfidence);
+    }
+
+    return instruction;
   });
 
   return {
@@ -287,6 +397,7 @@ function convertOneToZeroIndexed(instructions: NormalizedInstruction[]): Normali
       instruction.pageStart,
       instruction.pageEnd,
     ] as [number, number]);
+
     return {
       ...instruction,
       pageStart,
@@ -304,12 +415,12 @@ function convertOneToZeroIndexed(instructions: NormalizedInstruction[]): Normali
  */
 function clampRanges(
   instructions: NormalizedInstruction[],
-  totalPages: number
+  totalPages: number,
 ): NormalizedInstruction[] {
-  return instructions.map(i => ({
-    ...i,
-    pageStart: Math.max(0, Math.min(i.pageStart, totalPages - 1)),
-    pageEnd: Math.max(0, Math.min(i.pageEnd, totalPages - 1)),
+  return instructions.map((instruction) => ({
+    ...instruction,
+    pageStart: Math.max(0, Math.min(instruction.pageStart, totalPages - 1)),
+    pageEnd: Math.max(0, Math.min(instruction.pageEnd, totalPages - 1)),
   }));
 }
 
@@ -320,7 +431,7 @@ function clampRanges(
  * @returns Array of overlapping part pairs with overlap ranges
  */
 export function detectOverlaps(
-  instructions: NormalizedInstruction[]
+  instructions: NormalizedInstruction[],
 ): Array<{ part1: string; part2: string; overlap: [number, number] }> {
   const overlaps: Array<{ part1: string; part2: string; overlap: [number, number] }> = [];
 
@@ -329,7 +440,6 @@ export function detectOverlaps(
       const a = instructions[i];
       const b = instructions[j];
 
-      // Check if ranges overlap
       const overlapStart = Math.max(a.pageStart, b.pageStart);
       const overlapEnd = Math.min(a.pageEnd, b.pageEnd);
 
@@ -355,16 +465,13 @@ export function detectOverlaps(
  */
 export function detectGaps(
   instructions: NormalizedInstruction[],
-  totalPages: number
+  totalPages: number,
 ): Array<{ start: number; end: number }> {
   if (instructions.length === 0) {
-    // No instructions means all pages are a gap
     return totalPages > 0 ? [{ start: 0, end: totalPages - 1 }] : [];
   }
 
   const gaps: Array<{ start: number; end: number }> = [];
-
-  // Create a coverage array to track which pages are covered
   const covered = new Array(totalPages).fill(false);
 
   for (const instruction of instructions) {
@@ -375,22 +482,18 @@ export function detectGaps(
     }
   }
 
-  // Find consecutive uncovered pages
   let gapStart: number | null = null;
   for (let i = 0; i < totalPages; i++) {
     if (!covered[i]) {
       if (gapStart === null) {
         gapStart = i;
       }
-    } else {
-      if (gapStart !== null) {
-        gaps.push({ start: gapStart, end: i - 1 });
-        gapStart = null;
-      }
+    } else if (gapStart !== null) {
+      gaps.push({ start: gapStart, end: i - 1 });
+      gapStart = null;
     }
   }
 
-  // Handle gap at the end
   if (gapStart !== null) {
     gaps.push({ start: gapStart, end: totalPages - 1 });
   }
@@ -414,9 +517,9 @@ export function generateUniqueFilename(
   partName: string,
   pageStart: number,
   pageEnd: number,
-  index: number
+  index: number,
 ): string {
-  // Sanitize partName: allow alphanumeric, spaces, &, _, and -
+  // Preserve existing filename behavior exactly for current tests/callers.
   const sanitized = partName.replace(/[^a-zA-Z0-9\s&_-]/g, '').trim();
   return `${sanitized}__p${pageStart}-${pageEnd}_${index}.pdf`;
 }
@@ -437,38 +540,32 @@ export function splitOverlappingRanges(instructions: NormalizedInstruction[]): N
     return [...instructions];
   }
 
-  // Sort by pageStart, then by original index for stable ordering
   const sorted = instructions
-    .map((inst, originalIndex) => ({ ...inst, originalIndex }))
-    .sort((a, b) => a.pageStart - b.pageStart || a.originalIndex - b.originalIndex);
+    .map((instruction, sortOrdinal) => ({ instruction, sortOrdinal }))
+    .sort((a, b) => {
+      if (a.instruction.pageStart !== b.instruction.pageStart) {
+        return a.instruction.pageStart - b.instruction.pageStart;
+      }
+      return a.sortOrdinal - b.sortOrdinal;
+    });
 
   const result: NormalizedInstruction[] = [];
 
   for (let i = 0; i < sorted.length; i++) {
-    const current = sorted[i];
-    const next = sorted[i + 1];
+    const current = sorted[i].instruction;
+    const next = sorted[i + 1]?.instruction;
 
-    // Helper to strip internal metadata before pushing
-    const stripIndex = (obj: NormalizedInstruction & { originalIndex?: number }) => {
-      const { originalIndex: _originalIndex, ...rest } = obj;
-      return rest;
-    };
-
-    // Only check against the immediate next part in sorted order
     if (next && current.pageEnd >= next.pageStart) {
-      // Overlap detected with next instruction
-      // Truncate current so it ends before next starts
       const adjustedEnd = next.pageStart - 1;
+
       if (adjustedEnd >= current.pageStart) {
         result.push({
-          ...stripIndex(current),
+          ...current,
           pageEnd: adjustedEnd,
         });
       }
-      // If adjusted end < start, this part would have no pages, so skip it
     } else {
-      // No overlap with immediate successor, keep as-is
-      result.push(stripIndex(current));
+      result.push({ ...current });
     }
   }
 
@@ -496,31 +593,47 @@ export function buildGapInstructions(
   totalPages: number,
 ): CuttingInstruction[] {
   const covered = new Set<number>();
-  for (const inst of instructions) {
-    // pageRange is 0-indexed after validation
-    for (let p = inst.pageRange[0]; p <= inst.pageRange[1]; p++) covered.add(p);
+
+  for (const instruction of instructions) {
+    if (
+      !Array.isArray(instruction.pageRange) ||
+      instruction.pageRange.length < 2 ||
+      !isFiniteInteger(instruction.pageRange[0]) ||
+      !isFiniteInteger(instruction.pageRange[1])
+    ) {
+      continue;
+    }
+
+    const start = Math.max(0, instruction.pageRange[0]);
+    const end = Math.min(totalPages - 1, instruction.pageRange[1]);
+
+    for (let page = start; page <= end; page++) {
+      covered.add(page);
+    }
   }
 
   const gaps: Array<[number, number]> = [];
   let gapStart: number | null = null;
-  // Iterate 0-indexed
-  for (let p = 0; p < totalPages; p++) {
-    if (!covered.has(p)) {
-      if (gapStart === null) gapStart = p;
+
+  for (let page = 0; page < totalPages; page++) {
+    if (!covered.has(page)) {
+      if (gapStart === null) gapStart = page;
     } else if (gapStart !== null) {
-      gaps.push([gapStart, p - 1]);
+      gaps.push([gapStart, page - 1]);
       gapStart = null;
     }
   }
-  if (gapStart !== null) gaps.push([gapStart, totalPages - 1]);
 
-  return gaps.map(([start, end], i) => ({
-    // Display pages using 1-based labels for readability
+  if (gapStart !== null) {
+    gaps.push([gapStart, totalPages - 1]);
+  }
+
+  return gaps.map(([start, end], index) => ({
     partName: `Unlabelled Pages ${start + 1}-${end + 1}`,
     instrument: 'Unknown',
     section: 'Other' as const,
     transposition: 'C' as const,
-    partNumber: 9900 + i,
+    partNumber: 9900 + index,
     pageRange: [start, end] as [number, number],
   }));
 }
@@ -536,18 +649,20 @@ export function sanitizeCuttingInstructionsForSplit(
   const valid: CuttingInstruction[] = [];
   const invalid: string[] = [];
 
-  for (const ci of instructions) {
+  for (const instruction of instructions) {
     if (
-      Array.isArray(ci.pageRange) &&
-      ci.pageRange.length >= 2 &&
-      typeof ci.pageRange[0] === 'number' &&
-      typeof ci.pageRange[1] === 'number' &&
-      Number.isFinite(ci.pageRange[0]) &&
-      Number.isFinite(ci.pageRange[1])
+      Array.isArray(instruction.pageRange) &&
+      instruction.pageRange.length >= 2 &&
+      typeof instruction.pageRange[0] === 'number' &&
+      typeof instruction.pageRange[1] === 'number' &&
+      Number.isFinite(instruction.pageRange[0]) &&
+      Number.isFinite(instruction.pageRange[1]) &&
+      Number.isInteger(instruction.pageRange[0]) &&
+      Number.isInteger(instruction.pageRange[1])
     ) {
-      valid.push(ci);
+      valid.push(instruction);
     } else {
-      invalid.push(ci.partName || 'unnamed');
+      invalid.push(instruction.partName || 'unnamed');
     }
   }
 

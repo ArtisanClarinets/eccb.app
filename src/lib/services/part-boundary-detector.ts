@@ -1,10 +1,10 @@
-/**
+ /**
  * Part Boundary Detector Service
  *
  * Deterministically segments a multi-part PDF into per-instrument parts
  * by analysing page header labels.
  *
- * Algorithm (unchanged):
+ * Algorithm (preserved):
  *  1. Normalise header text → canonical instrument label
  *  2. Smooth "blips" (single-page label changes likely due to OCR artifacts)
  *  3. Group consecutive pages with the same label into segments
@@ -65,49 +65,22 @@ export interface SegmentationResult {
 }
 
 // =============================================================================
-// Utilities
+// Constants
 // =============================================================================
 
-function nowMs(): number {
-   
-  const perf = (globalThis as any)?.performance;
-  if (perf?.now) return perf.now();
-  return Date.now();
-}
-
-function safeInt(n: unknown, fallback: number): number {
-  if (typeof n !== 'number' || !Number.isFinite(n)) return fallback;
-  return Math.trunc(n);
-}
-
-function safeString(s: unknown): string {
-  return typeof s === 'string' ? s : '';
-}
-
-function _safeErrorDetails(err: unknown) {
-  const e = err instanceof Error ? err : new Error(String(err));
-  return { errorMessage: e.message, errorName: e.name, errorStack: e.stack };
-}
-
-/**
- * Prevent accidental logging of raw header text. For diagnostics, log lengths only.
- */
-function headerDiagnostics(headerText: string) {
-  return {
-    headerChars: headerText.length,
-    headerPreviewPresent: headerText.length > 0,
-  };
-}
+const UNKNOWN_PART_LABEL = 'Unknown Part';
+const FRONT_MATTER_MAX_PAGES = 2;
 
 // Labels that must never be treated as real instrument/part names.
 // They can appear when an LLM returns a sentinel string instead of null JSON.
-const FORBIDDEN_LABEL_STRINGS = new Set(['null', 'none', 'n/a', 'na', 'unknown', 'undefined']);
-
-/** Returns true when a string should be treated as an absent label. */
-function isForbiddenLabel(s: string): boolean {
-  return FORBIDDEN_LABEL_STRINGS.has(s.trim().toLowerCase());
-}
-
+const FORBIDDEN_LABEL_STRINGS = new Set([
+  'null',
+  'none',
+  'n/a',
+  'na',
+  'unknown',
+  'undefined',
+]);
 
 /** Patterns to identify part-change boundaries in header text */
 const PART_PATTERNS: Array<{ pattern: RegExp; template: string }> = [
@@ -165,6 +138,111 @@ const PART_PATTERNS: Array<{ pattern: RegExp; template: string }> = [
 ];
 
 // =============================================================================
+// Utilities
+// =============================================================================
+
+function nowMs(): number {
+  const perf = (globalThis as { performance?: { now(): number } }).performance;
+  if (perf?.now) return perf.now();
+  return Date.now();
+}
+
+function safeInt(value: unknown, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  return Math.trunc(value);
+}
+
+function safeString(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
+/**
+ * Prevent accidental logging of raw header text. For diagnostics, log lengths only.
+ */
+function headerDiagnostics(headerText: string) {
+  return {
+    headerChars: headerText.length,
+    headerPreviewPresent: headerText.length > 0,
+  };
+}
+
+/** Returns true when a string should be treated as an absent label. */
+function isForbiddenLabel(value: string): boolean {
+  return FORBIDDEN_LABEL_STRINGS.has(value.trim().toLowerCase());
+}
+
+function clampPageIndex(pageIndex: number, totalPages: number): number {
+  if (totalPages <= 0) return 0;
+  return Math.max(0, Math.min(totalPages - 1, pageIndex));
+}
+
+function buildEmptyResult(fromTextLayer: boolean): SegmentationResult {
+  return {
+    pageLabels: [],
+    segments: [],
+    cuttingInstructions: [],
+    segmentationConfidence: 0,
+    fromTextLayer,
+    segmentBoundaries: [],
+    perPageConfidence: [],
+  };
+}
+
+function choosePreferredHeader(existing: PageHeader, incoming: PageHeader): PageHeader {
+  const existingScore =
+    (existing.hasText ? 1000 : 0) +
+    safeString(existing.headerText).length * 2 +
+    safeString(existing.fullText).length;
+
+  const incomingScore =
+    (incoming.hasText ? 1000 : 0) +
+    safeString(incoming.headerText).length * 2 +
+    safeString(incoming.fullText).length;
+
+  return incomingScore > existingScore ? incoming : existing;
+}
+
+function normalizePageHeaders(pageHeaders: PageHeader[], totalPages: number): PageHeader[] {
+  const byIndex = new Map<number, PageHeader>();
+
+  for (const header of pageHeaders) {
+    const rawIndex = safeInt(header.pageIndex, 0);
+    const pageIndex = totalPages > 0 ? clampPageIndex(rawIndex, totalPages) : Math.max(0, rawIndex);
+
+    const normalizedHeader: PageHeader = {
+      pageIndex,
+      headerText: safeString(header.headerText),
+      fullText: safeString(header.fullText),
+      hasText: Boolean(header.hasText),
+    };
+
+    const existing = byIndex.get(pageIndex);
+    byIndex.set(
+      pageIndex,
+      existing ? choosePreferredHeader(existing, normalizedHeader) : normalizedHeader,
+    );
+  }
+
+  return [...byIndex.values()].sort((a, b) => a.pageIndex - b.pageIndex);
+}
+
+function buildInitialPageLabels(pageHeaders: PageHeader[]): PageLabel[] {
+  return pageHeaders.map((header) => {
+    const headerText = safeString(header.headerText);
+    const fullText = safeString(header.fullText);
+    const candidateText = headerText || fullText;
+    const result = normaliseLabelFromHeader(candidateText);
+
+    return {
+      pageIndex: safeInt(header.pageIndex, 0),
+      label: result?.label ?? '',
+      rawHeader: headerText,
+      confidence: result?.confidence ?? 0,
+    };
+  });
+}
+
+// =============================================================================
 // Label Normalisation
 // =============================================================================
 
@@ -172,22 +250,19 @@ const PART_PATTERNS: Array<{ pattern: RegExp; template: string }> = [
  * Normalise a raw header text string into a canonical instrument label.
  * Returns null if no recognisable instrument is found.
  *
- * LOGIC UNCHANGED.
+ * LOGIC PRESERVED.
  */
 export function normaliseLabelFromHeader(
-  headerText: string
+  headerText: string,
 ): { label: string; confidence: number } | null {
   const text = headerText.trim();
   if (!text || text.length < 3) return null;
 
-  // Never accept LLM sentinel strings as real instrument labels.
   if (isForbiddenLabel(text)) return null;
 
   for (const { pattern, template } of PART_PATTERNS) {
     if (pattern.test(text)) {
-      // Higher confidence for longer matches (more specific patterns appear first)
-      const confidence = 80;
-      return { label: template, confidence };
+      return { label: template, confidence: 80 };
     }
   }
 
@@ -208,7 +283,7 @@ export function normaliseLabelFromHeader(
  * or title page spillover. A blip is a different label for exactly 1 page
  * surrounded by the same label on both sides.
  *
- * LOGIC UNCHANGED.
+ * LOGIC PRESERVED.
  */
 function smoothBlips(labels: PageLabel[]): PageLabel[] {
   if (labels.length <= 2) return labels;
@@ -220,9 +295,14 @@ function smoothBlips(labels: PageLabel[]): PageLabel[] {
     const next = smoothed[i + 1];
 
     if (prev.label === next.label && curr.label !== prev.label) {
-      smoothed[i] = { ...curr, label: prev.label, confidence: Math.min(curr.confidence, 60) };
+      smoothed[i] = {
+        ...curr,
+        label: prev.label,
+        confidence: Math.min(curr.confidence, 60),
+      };
     }
   }
+
   return smoothed;
 }
 
@@ -234,49 +314,28 @@ function smoothBlips(labels: PageLabel[]): PageLabel[] {
  * Segment pages into parts from page header labels.
  * Input comes from either PDF text extraction or LLM header OCR.
  *
- * LOGIC UNCHANGED.
+ * LOGIC PRESERVED.
  */
 export function detectPartBoundaries(
   pageHeaders: PageHeader[],
   totalPages: number,
-  fromTextLayer: boolean
+  fromTextLayer: boolean,
 ): SegmentationResult {
-  const start = nowMs();
-
+  const startMs = nowMs();
   const safeTotalPages = Math.max(0, safeInt(totalPages, 0));
+  const normalizedPageHeaders = normalizePageHeaders(pageHeaders, safeTotalPages);
 
-  if (pageHeaders.length === 0) {
+  if (normalizedPageHeaders.length === 0) {
     logger.info('Part boundary detection skipped (no headers)', {
       totalPages: safeTotalPages,
       fromTextLayer,
     });
 
-    return {
-      pageLabels: [],
-      segments: [],
-      cuttingInstructions: [],
-      segmentationConfidence: 0,
-      fromTextLayer,
-      segmentBoundaries: [],
-      perPageConfidence: [],
-    };
+    return buildEmptyResult(fromTextLayer);
   }
 
   // Step 1: Assign labels to each page
-  let pageLabels: PageLabel[] = pageHeaders.map((header) => {
-    const headerText = safeString(header.headerText);
-    const fullText = safeString(header.fullText);
-    const candidateText = headerText || fullText;
-
-    const result = normaliseLabelFromHeader(candidateText);
-
-    return {
-      pageIndex: safeInt(header.pageIndex, 0),
-      label: result?.label ?? '',
-      rawHeader: headerText, // returned for internal use / UI (do not log)
-      confidence: result?.confidence ?? 0,
-    };
-  });
+  let pageLabels = buildInitialPageLabels(normalizedPageHeaders);
 
   // Step 2: Fill unlabelled pages by propagating from previous labelled pages
   let lastLabel = '';
@@ -292,26 +351,30 @@ export function detectPartBoundaries(
   pageLabels = smoothBlips(pageLabels);
 
   // Step 4: Fill any remaining unlabelled pages (before first label)
-  const firstLabelled = pageLabels.find((p) => p.label);
+  const firstLabelled = pageLabels.find((pageLabel) => pageLabel.label);
   if (firstLabelled) {
     for (let i = 0; i < pageLabels.length; i++) {
       if (!pageLabels[i].label) {
-        pageLabels[i] = { ...pageLabels[i], label: firstLabelled.label, confidence: 30 };
+        pageLabels[i] = {
+          ...pageLabels[i],
+          label: firstLabelled.label,
+          confidence: 30,
+        };
       } else {
         break;
       }
     }
   }
 
-  // Step 5: Add any pages not in pageHeaders with unknown labels.
+  // Step 5: Add any pages not present in pageHeaders with unknown labels.
   // Do not propagate labels into pages that were never analyzed.
-  const coveredIndices = new Set(pageLabels.map((p) => p.pageIndex));
-  if (safeTotalPages > pageHeaders.length) {
-    for (let i = 0; i < safeTotalPages; i++) {
-      if (!coveredIndices.has(i)) {
+  const coveredIndices = new Set(pageLabels.map((pageLabel) => pageLabel.pageIndex));
+  if (safeTotalPages > 0 && coveredIndices.size < safeTotalPages) {
+    for (let pageIndex = 0; pageIndex < safeTotalPages; pageIndex++) {
+      if (!coveredIndices.has(pageIndex)) {
         pageLabels.push({
-          pageIndex: i,
-          label: 'Unknown Part',
+          pageIndex,
+          label: UNKNOWN_PART_LABEL,
           rawHeader: '',
           confidence: 0,
         });
@@ -324,66 +387,67 @@ export function detectPartBoundaries(
   // Step 6: Group consecutive pages with the same label into segments
   const segments: PartSegment[] = [];
   if (pageLabels.length > 0) {
-    let segStart = 0;
-    let currentLabel = pageLabels[0].label || 'Unknown Part';
+    let segmentStartIndex = 0;
+    let currentLabel = pageLabels[0].label || UNKNOWN_PART_LABEL;
 
     for (let i = 1; i <= pageLabels.length; i++) {
       const nextLabel = i < pageLabels.length ? pageLabels[i].label : null;
-      if (nextLabel !== currentLabel || i === pageLabels.length) {
+
+      if (i === pageLabels.length || nextLabel !== currentLabel) {
+        const pageStart = pageLabels[segmentStartIndex].pageIndex;
+        const pageEnd = pageLabels[i - 1].pageIndex;
+
         segments.push({
           label: currentLabel,
-          pageStart: pageLabels[segStart].pageIndex,
-          pageEnd: pageLabels[i - 1].pageIndex,
-          pageCount: i - segStart,
+          pageStart,
+          pageEnd,
+          pageCount: Math.max(0, pageEnd - pageStart + 1),
         });
-        segStart = i;
+
+        segmentStartIndex = i;
         currentLabel = nextLabel ?? '';
       }
     }
   }
 
   // Step 7: Build 0-indexed cutting instructions
-  // Minor optimization: avoid repeated normalizeInstrumentLabel calls for same label.
-  const normCache = new Map<string, ReturnType<typeof normalizeInstrumentLabel>>();
-  const getNorm = (label: string) => {
-    const existing = normCache.get(label);
-    if (existing) return existing;
-    const norm = normalizeInstrumentLabel(label);
-    normCache.set(label, norm);
-    return norm;
+  const normalizationCache = new Map<string, ReturnType<typeof normalizeInstrumentLabel>>();
+  const getNormalizedInstrument = (label: string) => {
+    const cached = normalizationCache.get(label);
+    if (cached) return cached;
+
+    const normalized = normalizeInstrumentLabel(label);
+    normalizationCache.set(label, normalized);
+    return normalized;
   };
 
-  const cuttingInstructions: CuttingInstruction[] = segments.map((seg, idx) => {
-    const norm = getNorm(seg.label);
+  const cuttingInstructions: CuttingInstruction[] = segments.map((segment, index) => {
+    const normalized = getNormalizedInstrument(segment.label);
+
     return {
-      partName: seg.label,
-      instrument: seg.label,
-      section: norm.section,
-      transposition: norm.transposition,
-      partNumber: idx + 1,
-      pageRange: [seg.pageStart, seg.pageEnd] as [number, number],
+      partName: segment.label,
+      instrument: segment.label,
+      section: normalized.section,
+      transposition: normalized.transposition,
+      partNumber: index + 1,
+      pageRange: [segment.pageStart, segment.pageEnd] as [number, number],
     };
   });
 
   // Step 8: Calculate overall confidence
-  // Weighted approach: pages with higher individual confidence contribute more
-  // to the overall score. Front-matter pages (first 1-2 pages with low confidence)
-  // are treated leniently — they shouldn't tank the whole score.
-  const FRONT_MATTER_MAX_PAGES = 2;
-
   let weightedSum = 0;
   let weightedCount = 0;
 
   for (let i = 0; i < pageLabels.length; i++) {
-    const pl = pageLabels[i];
-    const isFrontMatter = i < FRONT_MATTER_MAX_PAGES && pl.confidence < 50;
+    const pageLabel = pageLabels[i];
+    const isFrontMatter = i < FRONT_MATTER_MAX_PAGES && pageLabel.confidence < 50;
 
     if (isFrontMatter) {
-      // Front matter gets a generous floor — it's expected to lack instrument labels
-      weightedSum += Math.max(pl.confidence, 50);
+      weightedSum += Math.max(pageLabel.confidence, 50);
     } else {
-      weightedSum += pl.confidence;
+      weightedSum += pageLabel.confidence;
     }
+
     weightedCount++;
   }
 
@@ -396,10 +460,10 @@ export function detectPartBoundaries(
     end: segment.pageEnd,
   }));
 
-  const perPageConfidence = pageLabels.map((label) => ({
-    pageIndex: label.pageIndex,
-    confidence: label.confidence,
-    label: label.label,
+  const perPageConfidence = pageLabels.map((pageLabel) => ({
+    pageIndex: pageLabel.pageIndex,
+    confidence: pageLabel.confidence,
+    label: pageLabel.label,
   }));
 
   logger.info('Part boundary detection complete', {
@@ -407,18 +471,21 @@ export function detectPartBoundaries(
     segments: segments.length,
     segmentationConfidence,
     fromTextLayer,
-    durationMs: Math.round(nowMs() - start),
-    // no header text logged
+    durationMs: Math.round(nowMs() - startMs),
   });
 
-  // Optional debug-only details at debug level (still no raw header content)
   logger.debug('Part boundary detection diagnostics', {
     totalPages: safeTotalPages,
     fromTextLayer,
     pageCountLabeled: pageLabels.length,
-    labelledHighConfidence: pageLabels.filter((p) => p.confidence >= 70).length,
+    labelledHighConfidence: pageLabels.filter((pageLabel) => pageLabel.confidence >= 70).length,
     firstPageDiag: pageLabels[0]
-      ? { pageIndex: pageLabels[0].pageIndex, label: pageLabels[0].label, confidence: pageLabels[0].confidence, ...headerDiagnostics(pageLabels[0].rawHeader) }
+      ? {
+          pageIndex: pageLabels[0].pageIndex,
+          label: pageLabels[0].label,
+          confidence: pageLabels[0].confidence,
+          ...headerDiagnostics(pageLabels[0].rawHeader),
+        }
       : undefined,
     lastPageDiag: pageLabels[pageLabels.length - 1]
       ? {

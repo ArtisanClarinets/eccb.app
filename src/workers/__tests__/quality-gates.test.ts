@@ -478,6 +478,7 @@ describe('Auto-commit Quality Gates (DoD §1.5)', () => {
         { instrument: 'Clarinet', partName: 'Clarinet', section: 'Woodwinds' as const, transposition: 'Bb' as const, partNumber: 1, pageRange: [0, 3] },
       ],
       segmentationConfidence: 65,
+      pageLabels: [],
     } as any);
 
     const { extractPdfPageHeaders } = await import('@/lib/services/pdf-text-extractor');

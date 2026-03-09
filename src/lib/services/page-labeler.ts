@@ -126,6 +126,7 @@ const DEFAULT_MAX_LLM_PAGES = 20;
 const DEFAULT_MAX_HEADER_BATCHES = 5;
 const DEFAULT_MAX_LLM_CALLS = 10;
 const MIN_PAGES_FOR_LLM = 3;
+const MIN_RENDERED_HEADER_BASE64_CHARS = 200;
 
 /** Minimum confidence to consider a strategy successful */
 const MIN_STRATEGY_CONFIDENCE = 30;
@@ -138,14 +139,27 @@ const MIN_TEXT_LABELS = 2;
 // =============================================================================
 
 function nowMs(): number {
-  const perf = (globalThis as any)?.performance;
+  const perf = (globalThis as { performance?: { now(): number } }).performance;
   if (perf?.now) return perf.now();
   return Date.now();
 }
 
+function elapsedMs(startMs: number): number {
+  return Math.max(1, Math.round(nowMs() - startMs));
+}
+
+function asError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+function clampConfidence(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
 function convertSegmentationResult(
   result: SegmentationResult,
-  source: PageLabelSource
+  source: PageLabelSource,
 ): { pageLabels: Record<number, PageLabel>; cuttingInstructions: CuttingInstruction[]; confidence: number } {
   const pageLabels: Record<number, PageLabel> = {};
   const confidenceValues: number[] = [];
@@ -154,10 +168,10 @@ function convertSegmentationResult(
     const pageNum = pageLabel.pageIndex + 1; // Convert to 1-indexed
     pageLabels[pageNum] = {
       label: pageLabel.label || 'Unknown',
-      confidence: pageLabel.confidence,
+      confidence: clampConfidence(pageLabel.confidence),
       source,
     };
-    confidenceValues.push(pageLabel.confidence);
+    confidenceValues.push(clampConfidence(pageLabel.confidence));
   }
 
   const avgConfidence = confidenceValues.length > 0
@@ -173,35 +187,28 @@ function convertSegmentationResult(
 
 function convertHeaderImageResult(
   result: HeaderImageSegmentationResult,
-  source: PageLabelSource
+  source: PageLabelSource,
 ): { pageLabels: Record<number, PageLabel>; cuttingInstructions: CuttingInstruction[]; confidence: number } {
   const pageLabels: Record<number, PageLabel> = {};
 
   // Use result.confidence as the authoritative segmentation quality score.
   // diag.ocrConfidence reflects per-segment text recognition quality — it may be 0
   // for auto-labeled segments (e.g., "Part 1") even when the perceptual-hash
-  // boundary detection was highly reliable.  Averaging those zeros collapses the
+  // boundary detection was highly reliable. Averaging those zeros collapses the
   // overall confidence to 0, which is incorrect.
-  const baseConfidence = result.confidence;
+  const baseConfidence = clampConfidence(result.confidence);
 
   for (const diag of result.diagnostics) {
-    // Per-page label confidence:
-    //   • When OCR recognised text with confidence > 0, blend it with baseConfidence
-    //     so the page label reflects both signal sources.
-    //   • When OCR confidence is 0 (auto-label "Part N"), fall back to baseConfidence
-    //     as a floor — never let it collapse to 0 unless the entire segmentation failed.
     const perPageConfidence = diag.ocrConfidence > 0
-      ? Math.max(diag.ocrConfidence, Math.min(baseConfidence, 60))
+      ? Math.max(clampConfidence(diag.ocrConfidence), Math.min(baseConfidence, 60))
       : Math.max(baseConfidence, 40);
 
-    // Expand labels to cover EVERY page in the segment (pageStart..pageEnd inclusive),
-    // using 1-indexed page numbers (page-labeler contract).
-    // The previous code only labelled pageStart, leaving all interior pages unlabelled.
+    // Expand labels to cover every page in the segment.
     for (let page0 = diag.pageStart; page0 <= diag.pageEnd; page0++) {
       const pageNum = page0 + 1; // 0-indexed → 1-indexed
       pageLabels[pageNum] = {
         label: diag.label || 'Unknown',
-        confidence: perPageConfidence,
+        confidence: clampConfidence(perPageConfidence),
         source,
       };
     }
@@ -210,66 +217,86 @@ function convertHeaderImageResult(
   return {
     pageLabels,
     cuttingInstructions: result.cuttingInstructions,
-    // Return result.confidence directly — never average ocrConfidence values,
-    // which may all be 0 for valid segments without OCR text.
     confidence: baseConfidence,
   };
 }
 
 function buildFallbackCuttingInstructions(
   pageLabels: Record<number, PageLabel>,
-  totalPages: number
+  totalPages: number,
 ): CuttingInstruction[] {
-  // Group consecutive pages with same label
+  const safeTotalPages = Math.max(0, totalPages);
+
   const sortedPages = Object.keys(pageLabels)
     .map(Number)
+    .filter((pageNum) => Number.isFinite(pageNum))
     .sort((a, b) => a - b);
 
   if (sortedPages.length === 0) {
-    // No labels at all - create single part
     return [{
       partName: 'Full Score',
       instrument: 'Full Score',
       section: 'Other',
       transposition: 'C',
       partNumber: 1,
-      pageRange: [0, totalPages - 1],
+      pageRange: [0, Math.max(0, safeTotalPages - 1)],
     }];
   }
 
-  const segments: Array<{ start: number; end: number; label: string; confidence: number }> = [];
+  const segments: Array<{ start: number; end: number; label: string }> = [];
   let currentStart = sortedPages[0];
   let currentLabel = pageLabels[sortedPages[0]].label;
-  let currentConfidence = pageLabels[sortedPages[0]].confidence;
 
   for (let i = 1; i <= sortedPages.length; i++) {
     const pageNum = sortedPages[i];
-    const label = pageNum ? pageLabels[pageNum].label : null;
+    const nextLabel = pageNum ? pageLabels[pageNum].label : null;
 
-    if (i === sortedPages.length || label !== currentLabel) {
+    if (i === sortedPages.length || nextLabel !== currentLabel) {
       segments.push({
         start: currentStart - 1, // Convert to 0-indexed
-        end: (i === sortedPages.length ? totalPages : sortedPages[i - 1]) - 1,
+        end: (i === sortedPages.length ? safeTotalPages : sortedPages[i - 1]) - 1,
         label: currentLabel,
-        confidence: currentConfidence,
       });
 
       if (i < sortedPages.length) {
         currentStart = sortedPages[i];
         currentLabel = pageLabels[sortedPages[i]].label;
-        currentConfidence = pageLabels[sortedPages[i]].confidence;
       }
     }
   }
 
-  return segments.map((seg, idx) => ({
-    partName: seg.label,
-    instrument: seg.label,
+  return segments.map((segment, index) => ({
+    partName: segment.label,
+    instrument: segment.label,
     section: 'Other' as const,
     transposition: 'C' as const,
-    partNumber: idx + 1,
-    pageRange: [seg.start, seg.end] as [number, number],
+    partNumber: index + 1,
+    pageRange: [segment.start, segment.end] as [number, number],
   }));
+}
+
+function buildResult(params: {
+  cuttingInstructions: CuttingInstruction[];
+  pageLabels: Record<number, PageLabel>;
+  confidence: number;
+  strategyUsed: LabelingStrategy;
+  diagnostics: StrategyDiagnostic[];
+  totalDurationMs: number;
+  budgetRemaining: number;
+  budgetLimit: number;
+}): PageLabelerResult {
+  return {
+    cuttingInstructions: params.cuttingInstructions,
+    pageLabels: params.pageLabels,
+    confidence: params.confidence,
+    strategyUsed: params.strategyUsed,
+    diagnostics: {
+      strategies: params.diagnostics,
+      totalDurationMs: Math.max(1, params.totalDurationMs),
+      budgetRemaining: params.budgetRemaining,
+      budgetLimit: params.budgetLimit,
+    },
+  };
 }
 
 // =============================================================================
@@ -312,30 +339,28 @@ export async function labelPages(options: PageLabelerOptions): Promise<PageLabel
     authoritativeTextSegmentation.cuttingInstructions.length > 0
   ) {
     const authoritative = convertSegmentationResult(authoritativeTextSegmentation, 'text');
+
     diagnostics.push({
       strategy: 'text',
-      durationMs: 0,
+      durationMs: 1,
       success: true,
       pagesProcessed: authoritativeTextSegmentation.pageLabels.length,
       labelsExtracted: Object.keys(authoritative.pageLabels).length,
       reason: 'used upstream authoritative segmentation',
     });
 
-    return {
+    return buildResult({
       cuttingInstructions: authoritative.cuttingInstructions,
       pageLabels: authoritative.pageLabels,
-      confidence: authoritativeTextSegmentation.segmentationConfidence,
+      confidence: clampConfidence(authoritativeTextSegmentation.segmentationConfidence),
       strategyUsed: 'text',
-      diagnostics: {
-        strategies: diagnostics,
-        totalDurationMs: nowMs() - startMs,
-        budgetRemaining: maxLlmCallsPerSession,
-        budgetLimit: maxLlmCallsPerSession,
-      },
-    };
+      diagnostics,
+      totalDurationMs: elapsedMs(startMs),
+      budgetRemaining: maxLlmCallsPerSession,
+      budgetLimit: maxLlmCallsPerSession,
+    });
   }
 
-  // Initialize budget tracking
   const budget = new SessionBudget(sessionId, {
     maxLlmCalls: maxLlmCallsPerSession,
     maxInputTokens: 100000,
@@ -359,7 +384,7 @@ export async function labelPages(options: PageLabelerOptions): Promise<PageLabel
   let textReason: string | undefined;
 
   try {
-    const maxProbe = textOptions?.maxProbePages || Math.min(totalPages, 10);
+    const maxProbe = textOptions?.maxProbePages ?? Math.min(totalPages, 10);
     const earlyStop = textOptions?.earlyStopConsecutivePages;
 
     const extractionResult = await extractPdfPageHeaders(pdfBuffer, {
@@ -371,10 +396,10 @@ export async function labelPages(options: PageLabelerOptions): Promise<PageLabel
       textResult = detectPartBoundaries(
         extractionResult.pageHeaders,
         extractionResult.totalPages,
-        true // from text layer
+        true,
       );
 
-      const labelsCount = textResult.pageLabels.filter(p => p.label).length;
+      const labelsCount = textResult.pageLabels.filter((pageLabel) => Boolean(pageLabel.label)).length;
       if (labelsCount >= MIN_TEXT_LABELS && textResult.segmentationConfidence >= MIN_STRATEGY_CONFIDENCE) {
         textSuccess = true;
       } else {
@@ -383,43 +408,41 @@ export async function labelPages(options: PageLabelerOptions): Promise<PageLabel
     } else {
       textReason = 'no text layer detected';
     }
-  } catch (err) {
-    textReason = `error: ${err instanceof Error ? err.message : String(err)}`;
-    logger.warn('page-labeler: text-layer strategy failed', { reason: textReason });
+  } catch (error) {
+    textReason = `error: ${asError(error).message}`;
+    logger.warn('page-labeler: text-layer strategy failed', {
+      reason: textReason,
+    });
   }
 
-  const textDurationMs = nowMs() - textStartMs;
   diagnostics.push({
     strategy: 'text',
-    durationMs: textDurationMs,
+    durationMs: elapsedMs(textStartMs),
     success: textSuccess,
     pagesProcessed: textResult?.pageLabels.length || 0,
-    labelsExtracted: textResult?.pageLabels.filter(p => p.label).length || 0,
+    labelsExtracted: textResult?.pageLabels.filter((pageLabel) => Boolean(pageLabel.label)).length || 0,
     reason: textReason,
   });
 
-  // If text strategy succeeded, return immediately
   if (textSuccess && textResult) {
     const { pageLabels, cuttingInstructions, confidence } = convertSegmentationResult(textResult, 'text');
 
     logger.info('page-labeler: text strategy succeeded', {
       labelsExtracted: Object.keys(pageLabels).length,
       confidence,
-      durationMs: nowMs() - startMs,
+      durationMs: elapsedMs(startMs),
     });
 
-    return {
+    return buildResult({
       cuttingInstructions,
       pageLabels,
       confidence,
       strategyUsed: 'text',
-      diagnostics: {
-        strategies: diagnostics,
-        totalDurationMs: nowMs() - startMs,
-        budgetRemaining: maxLlmCallsPerSession,
-        budgetLimit: maxLlmCallsPerSession,
-      },
-    };
+      diagnostics,
+      totalDurationMs: elapsedMs(startMs),
+      budgetRemaining: maxLlmCallsPerSession,
+      budgetLimit: maxLlmCallsPerSession,
+    });
   }
 
   // Strategy 2: OCR segmentation
@@ -444,55 +467,52 @@ export async function labelPages(options: PageLabelerOptions): Promise<PageLabel
       } else {
         ocrReason = `low confidence (${ocrResult.confidence}) or single segment`;
       }
-    } catch (err) {
-      ocrReason = `error: ${err instanceof Error ? err.message : String(err)}`;
-      logger.warn('page-labeler: OCR strategy failed', { reason: ocrReason });
+    } catch (error) {
+      ocrReason = `error: ${asError(error).message}`;
+      logger.warn('page-labeler: OCR strategy failed', {
+        reason: ocrReason,
+      });
     }
   } else {
     ocrReason = 'OCR disabled';
   }
 
-  const ocrDurationMs = nowMs() - ocrStartMs;
   diagnostics.push({
     strategy: 'ocr',
-    durationMs: ocrDurationMs,
+    durationMs: elapsedMs(ocrStartMs),
     success: ocrSuccess,
     pagesProcessed: ocrResult?.segmentCount || 0,
-    labelsExtracted: ocrResult?.diagnostics.filter(d => d.label).length || 0,
+    labelsExtracted: ocrResult?.diagnostics.filter((diag) => Boolean(diag.label)).length || 0,
     reason: ocrReason,
   });
 
-  // If OCR strategy succeeded, return
   if (ocrSuccess && ocrResult) {
     const { pageLabels, cuttingInstructions, confidence } = convertHeaderImageResult(ocrResult, 'ocr');
 
     logger.info('page-labeler: OCR strategy succeeded', {
       labelsExtracted: Object.keys(pageLabels).length,
       confidence,
-      durationMs: nowMs() - startMs,
+      durationMs: elapsedMs(startMs),
     });
 
-    return {
+    return buildResult({
       cuttingInstructions,
       pageLabels,
       confidence,
       strategyUsed: 'ocr',
-      diagnostics: {
-        strategies: diagnostics,
-        totalDurationMs: nowMs() - startMs,
-        budgetRemaining: maxLlmCallsPerSession,
-        budgetLimit: maxLlmCallsPerSession,
-      },
-    };
+      diagnostics,
+      totalDurationMs: elapsedMs(startMs),
+      budgetRemaining: maxLlmCallsPerSession,
+      budgetLimit: maxLlmCallsPerSession,
+    });
   }
 
-  // Strategy 3: LLM fallback (last resort with budget limits)
+  // Strategy 3: LLM fallback
   const llmStartMs = nowMs();
   let llmSuccess = false;
   let llmReason: string | undefined;
   const llmPageLabels: Record<number, PageLabel> = {};
 
-  // Check budget before attempting LLM
   if (!enableLlm) {
     llmReason = 'LLM disabled';
   } else if (totalPages < MIN_PAGES_FOR_LLM) {
@@ -501,22 +521,20 @@ export async function labelPages(options: PageLabelerOptions): Promise<PageLabel
     llmReason = 'budget exhausted';
   } else {
     try {
-      // Load LLM config for provider/model settings
       const llmConfig = await loadLLMConfig();
+      const adapterConfig = runtimeToAdapterConfig(llmConfig);
 
       const maxPagesToProcess = Math.min(totalPages, maxLLmPages);
       const pagesToLabel: number[] = [];
 
-      // Sample pages evenly across the document
       const step = Math.max(1, Math.floor(maxPagesToProcess / maxHeaderBatches));
       for (let i = 0; i < maxPagesToProcess && pagesToLabel.length < maxHeaderBatches; i += step) {
-        pagesToLabel.push(i + 1); // 1-indexed
+        pagesToLabel.push(i + 1);
       }
 
-      // Batch-render header crops for all sampled pages up-front.
-      // renderPdfHeaderCropBatch expects 0-indexed page numbers.
-      const pageIndices0 = pagesToLabel.map(p => p - 1);
+      const pageIndices0 = pagesToLabel.map((pageNum) => pageNum - 1);
       let headerCrops: string[] = new Array(pagesToLabel.length).fill('');
+
       try {
         headerCrops = await renderPdfHeaderCropBatch(pdfBuffer, pageIndices0, {
           scale: 2,
@@ -532,9 +550,6 @@ export async function labelPages(options: PageLabelerOptions): Promise<PageLabel
         });
       }
 
-      // Convert runtime config to adapter config once (shared across all LLM calls)
-      const adapterConfig = runtimeToAdapterConfig(llmConfig);
-
       for (let i = 0; i < pagesToLabel.length; i++) {
         const pageNum = pagesToLabel[i];
         const imageBase64 = headerCrops[i] || '';
@@ -544,22 +559,16 @@ export async function labelPages(options: PageLabelerOptions): Promise<PageLabel
           break;
         }
 
-        // Skip pages where rendering produced an empty or placeholder result.
-        // The placeholder PNG is ~100 bytes base64-encoded; real renders are much larger.
-        if (imageBase64.length < 200) {
+        if (imageBase64.length < MIN_RENDERED_HEADER_BASE64_CHARS) {
           logger.warn('page-labeler: skipping LLM call — header crop render unavailable', { pageNum });
           continue;
         }
 
-        budget.record(1000);
-
-        // Build prompt for this page
         const prompt = buildHeaderLabelPrompt(
           llmConfig.headerLabelUserPrompt || '',
-          { pageNumbers: [pageNum] }
+          { pageNumbers: [pageNum] },
         );
 
-        // Invoke LLM with the rendered header crop image
         const response = await callVisionModel(
           adapterConfig,
           [{ mimeType: 'image/png', base64Data: imageBase64, label: `Page ${pageNum} header` }],
@@ -568,17 +577,22 @@ export async function labelPages(options: PageLabelerOptions): Promise<PageLabel
             system: llmConfig.headerLabelPrompt,
             modelParams: llmConfig.headerLabelModelParams,
             maxTokens: 500,
-          }
+          },
         );
 
-        // Parse response for label
+        budget.record(
+          (response as { usage?: { inputTokens?: number; promptTokens?: number } })?.usage?.inputTokens
+          ?? (response as { usage?: { inputTokens?: number; promptTokens?: number } })?.usage?.promptTokens
+          ?? 1000,
+        );
+
         const text = response.content || '';
         const normalizedLabel = normalizePdfText(text);
 
         if (normalizedLabel && normalizedLabel.length > 0) {
           llmPageLabels[pageNum] = {
-            label: normalizedLabel.slice(0, 100), // Truncate long labels
-            confidence: 50, // LLM confidence is uncertain
+            label: normalizedLabel.slice(0, 100),
+            confidence: 50,
             source: 'llm',
           };
         }
@@ -590,58 +604,52 @@ export async function labelPages(options: PageLabelerOptions): Promise<PageLabel
       } else {
         llmReason = `insufficient labels extracted (${labelsCount})`;
       }
-    } catch (err) {
-      llmReason = `error: ${err instanceof Error ? err.message : String(err)}`;
-      logger.warn('page-labeler: LLM strategy failed', { reason: llmReason });
+    } catch (error) {
+      llmReason = `error: ${asError(error).message}`;
+      logger.warn('page-labeler: LLM strategy failed', {
+        reason: llmReason,
+      });
     }
   }
 
-  const llmDurationMs = nowMs() - llmStartMs;
   diagnostics.push({
     strategy: 'llm',
-    durationMs: llmDurationMs,
+    durationMs: elapsedMs(llmStartMs),
     success: llmSuccess,
     pagesProcessed: Object.keys(llmPageLabels).length,
     labelsExtracted: Object.keys(llmPageLabels).length,
     reason: llmReason,
   });
 
-  // Determine final result
+  // Determine final result.
+  // Repo contract:
+  // - first successful strategy returns early above
+  // - here we only select best-effort leftovers
+  // - generic fallback remains "hybrid"
   let finalPageLabels: Record<number, PageLabel>;
   let finalStrategy: LabelingStrategy;
   let finalConfidence: number;
 
   if (textResult) {
-    // Fall back to text results even if not fully successful
     const { pageLabels, confidence } = convertSegmentationResult(textResult, 'text');
     finalPageLabels = pageLabels;
     finalStrategy = 'text';
     finalConfidence = confidence;
   } else if (ocrResult) {
-    // Fall back to OCR results
     const { pageLabels, confidence } = convertHeaderImageResult(ocrResult, 'ocr');
     finalPageLabels = pageLabels;
     finalStrategy = 'ocr';
     finalConfidence = confidence;
   } else if (llmSuccess && Object.keys(llmPageLabels).length > 0) {
-    // Use LLM results
     finalPageLabels = llmPageLabels;
     finalStrategy = 'llm';
     finalConfidence = 50;
   } else {
-    // Last resort: generate generic labels
     finalPageLabels = {};
     finalStrategy = 'hybrid';
     finalConfidence = 0;
   }
 
-  // If multiple strategies contributed, mark as hybrid
-  const strategyCount = diagnostics.filter(d => d.success).length;
-  if (strategyCount > 1) {
-    finalStrategy = 'hybrid';
-  }
-
-  // Generate cutting instructions
   const cuttingInstructions = buildFallbackCuttingInstructions(finalPageLabels, totalPages);
 
   logger.info('page-labeler: orchestration complete', {
@@ -649,19 +657,17 @@ export async function labelPages(options: PageLabelerOptions): Promise<PageLabel
     labelsExtracted: Object.keys(finalPageLabels).length,
     confidence: finalConfidence,
     cuttingInstructionsCount: cuttingInstructions.length,
-    durationMs: nowMs() - startMs,
+    durationMs: elapsedMs(startMs),
   });
 
-  return {
+  return buildResult({
     cuttingInstructions,
     pageLabels: finalPageLabels,
     confidence: finalConfidence,
     strategyUsed: finalStrategy,
-    diagnostics: {
-      strategies: diagnostics,
-      totalDurationMs: nowMs() - startMs,
-      budgetRemaining: budget.getRemaining().remainingCalls,
-      budgetLimit: maxLlmCallsPerSession,
-    },
-  };
+    diagnostics,
+    totalDurationMs: elapsedMs(startMs),
+    budgetRemaining: budget.getRemaining().remainingCalls,
+    budgetLimit: maxLlmCallsPerSession,
+  });
 }

@@ -20,6 +20,7 @@
     "test:run": "tsx scripts/assert-no-skipped-tests.ts && vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest watch",
+    "test:smart-upload:fixtures": "tsx scripts/test-smart-upload-fixtures.ts",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:debug": "playwright test --debug",

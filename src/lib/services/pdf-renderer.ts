@@ -1,3 +1,4 @@
+import { createRequire } from 'module';
 import * as fs from 'fs';
 import * as nodePath from 'path';
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
@@ -12,14 +13,10 @@ import { logger } from '@/lib/logger';
 // synchronously on the main thread ("FakeWorker" / in-process mode)
 // instead of spawning a web-worker. This is the correct mode for
 // server-side rendering where neither a DOM nor a SharedArrayBuffer worker
-// is available (pdfjs-dist v5 compatibility).
+// is available.
 //
-// Canvas backend: pdfjs-dist v5 ships a built-in NodeCanvasFactory that
-// uses @napi-rs/canvas automatically when running under Node.js. We use
-// the same package for all canvas operations in this module so that the
-// objects passed between our code and pdfjs's internal rendering pipeline
-// are the same types — avoiding the "Image or Canvas expected" TypeError
-// that occurs when mixing node-canvas (canvas) and @napi-rs/canvas objects.
+// Canvas backend: pdfjs-dist uses a Node-compatible canvas path under Node.js.
+// This module uses @napi-rs/canvas consistently so canvas objects are not mixed.
 //
 // Notes:
 // - This module intentionally avoids logging any PDF bytes or sensitive content.
@@ -38,137 +35,274 @@ export interface RenderOptions {
   cacheTag?: string;
 }
 
+export interface HeaderCropBatchOptions extends Omit<RenderOptions, 'pageIndex'> {
+  cropHeightFraction?: number;
+}
+
+export interface PageImageWithInfo {
+  imageBase64: string;
+  totalPages: number;
+  mimeType: string;
+  effective: {
+    scale: number;
+    wasClamped: boolean;
+    width: number;
+    height: number;
+  };
+}
+
+type PdfGetDocumentParams = Parameters<typeof pdfjsLib.getDocument>[0];
+
+interface PdfJsViewportLike {
+  width: number;
+  height: number;
+}
+
+interface PdfJsRenderTaskLike {
+  promise: Promise<unknown>;
+}
+
+interface PdfJsPageLike {
+  getViewport(params: { scale: number }): PdfJsViewportLike;
+  render(params: Record<string, unknown>): PdfJsRenderTaskLike;
+  cleanup?: () => void | Promise<void>;
+}
+
+interface PdfJsDocumentLike {
+  numPages: number;
+  getPage(pageNumber: number): Promise<PdfJsPageLike>;
+  cleanup?: () => void | Promise<void>;
+  destroy?: () => void | Promise<void>;
+}
+
+interface PdfJsLoadingTaskLike<TDocument> {
+  promise: Promise<TDocument>;
+  destroy?: () => void | Promise<void>;
+  onPassword?: ((updatePassword: (password: string) => void, reason: number) => void) | null;
+}
+
+interface RenderedPagePng {
+  rawPngBuffer: Buffer;
+  totalPages: number;
+  effective: {
+    scale: number;
+    wasClamped: boolean;
+    width: number;
+    height: number;
+  };
+}
+
+interface CachedPageInfo {
+  totalPages: number;
+  mimeType: string;
+  effective: {
+    scale: number;
+    wasClamped: boolean;
+    width: number;
+    height: number;
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Node.js filesystem-backed CMap and standard font data factories.
 //
-// pdfjs-dist ships CMap tables (.bcmap) and standard font fallbacks (.pfb)
-// inside the package but does NOT export its internal NodeCMapReaderFactory.
-// Node.js built-in fetch also does NOT support file:// URLs (as of Node 18/20),
-// so we cannot use the `cMapUrl` / `standardFontDataUrl` string options.
-//
-// Without these factories, pdfjs falls back to DOM-based font loading which
-// fails silently on the server, producing scrambled / garbled glyphs —
-// especially pronounced in sheet music PDFs that use CIDFonts with CMaps.
+// pdfjs-dist ships CMap tables (.bcmap) and standard font fallbacks in-package.
+// Using filesystem-backed factories keeps rendering deterministic on the server
+// and prevents garbled glyphs in CMap-heavy sheet music PDFs.
 // ---------------------------------------------------------------------------
 
-// Next.js always starts with cwd=project root, so this resolves correctly
-// in both `next dev` and `next start` (standalone mode mounts node_modules).
-const PDFJS_DIST_DIR = nodePath.join(process.cwd(), 'node_modules', 'pdfjs-dist');
-const CMAP_DIR   = nodePath.join(PDFJS_DIST_DIR, 'cmaps');
-const FONTS_DIR  = nodePath.join(PDFJS_DIST_DIR, 'standard_fonts');
+const require = createRequire(import.meta.url);
 
-/**
- * Reads pdfjs CMap files directly from the pdfjs-dist package on disk.
- * The BCMap (.bcmap) packed binary format is tried first; raw .cmap falls back.
- */
+function resolvePdfJsDistDir(): string {
+  try {
+    const pdfJsEntry = require.resolve('pdfjs-dist/legacy/build/pdf.mjs');
+    return nodePath.resolve(nodePath.dirname(pdfJsEntry), '..', '..');
+  } catch {
+    return nodePath.join(process.cwd(), 'node_modules', 'pdfjs-dist');
+  }
+}
+
+const PDFJS_DIST_DIR = resolvePdfJsDistDir();
+const CMAP_DIR = nodePath.join(PDFJS_DIST_DIR, 'cmaps');
+const FONTS_DIR = nodePath.join(PDFJS_DIST_DIR, 'standard_fonts');
+
 class NodeFsCMapReaderFactory {
   fetch({ name }: { name: string }): Promise<{ cMapData: Uint8Array; isCompressed: boolean }> {
     const bcmapPath = nodePath.join(CMAP_DIR, `${name}.bcmap`);
-    const cmapPath  = nodePath.join(CMAP_DIR, name);
+    const cmapPath = nodePath.join(CMAP_DIR, name);
 
     if (fs.existsSync(bcmapPath)) {
       const data = fs.readFileSync(bcmapPath);
       return Promise.resolve({ cMapData: new Uint8Array(data), isCompressed: true });
     }
+
     if (fs.existsSync(cmapPath)) {
       const data = fs.readFileSync(cmapPath);
       return Promise.resolve({ cMapData: new Uint8Array(data), isCompressed: false });
     }
+
     return Promise.reject(new Error(`CMap not found: ${name}`));
   }
 }
 
-/**
- * Reads pdfjs standard font fallback files (.pfb) from the pdfjs-dist
- * package on disk so that PDFs without embedded fonts still render legibly.
- */
 class NodeFsStandardFontDataFactory {
   fetch({ filename }: { filename: string }): Promise<Uint8Array> {
     const fontPath = nodePath.join(FONTS_DIR, filename);
+
     if (fs.existsSync(fontPath)) {
       const data = fs.readFileSync(fontPath);
       return Promise.resolve(new Uint8Array(data));
     }
+
     return Promise.reject(new Error(`Standard font not found: ${filename}`));
   }
 }
 
 /**
  * Maximum total canvas pixels we will allocate for a single page render.
- * At A3 landscape (14×11") @ 72 dpi × scale 6 = 6048×4536 = 27.4 M px — well under limit.
  * Prevents OOM crashes for huge-format PDFs rendered at high scale.
  */
 const MAX_CANVAS_PIXELS = 40_000_000;
 
-// Minimal 100×100 white PNG used as a placeholder for pages that fail to render
+/** Minimal 100×100 white PNG used as a placeholder for pages that fail to render */
 const PLACEHOLDER_IMAGE =
   'iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAYAAABw4pVUAAAADUlEQVR42u3BMQEAAADCoPVPbQhfoAAAAOA1v9QJZX6z/sIAAAAASUVORK5CYII=';
 
-type PdfGetDocumentParams = Parameters<typeof pdfjsLib.getDocument>[0];
+// ---------------------------------------------------------------------------
+// In-process render cache
+//
+// Keyed by `${cacheTag}:${pageIndex}:${scale}:${maxWidth}:${format}:${quality}`.
+// The processor fills `cacheTag` with the session-id so different sessions
+// never collide. Call `clearRenderCache(tag)` at the end of a pipeline run
+// to free memory.
+// ---------------------------------------------------------------------------
+
+/** Cache key → base64 image string */
+const renderCache = new Map<string, string>();
+
+/** Cache key → metadata needed by renderPdfPageToImageWithInfo */
+const renderInfoCache = new Map<string, CachedPageInfo>();
+
+function cacheKey(
+  tag: string,
+  pageIndex: number,
+  scale: number,
+  maxWidth: number,
+  format: string,
+  quality: number,
+  variant: string = 'full',
+): string {
+  return `${tag}:${pageIndex}:${scale}:${maxWidth}:${format}:${quality}:${variant}`;
+}
 
 function asError(err: unknown): Error {
   return err instanceof Error ? err : new Error(String(err));
 }
 
 function safeErrorDetails(err: unknown) {
-  const e = asError(err);
+  const error = asError(err);
   return {
-    errorMessage: e.message,
-    errorName: e.name,
-    // Keep stack for server logs; do not include any PDF data.
-    errorStack: e.stack,
+    errorMessage: error.message,
+    errorName: error.name,
+    errorStack: error.stack,
   };
 }
 
 function nowMs(): number {
-  // High-resolution timing where available
-   
-  const perf = (globalThis as any)?.performance;
+  const perf = (globalThis as { performance?: { now(): number } }).performance;
   if (perf?.now) return perf.now();
   return Date.now();
 }
 
+function normalizeFormat(format: RenderOptions['format']): 'png' | 'jpeg' {
+  return format === 'jpeg' ? 'jpeg' : 'png';
+}
 
-async function openPdfDocument(pdfBuffer: Buffer) {
-  // pdfjs-dist requires Uint8Array, not Buffer
+function normalizeQuality(value: unknown, fallback: number): number {
+  const normalized = typeof value === 'number' ? value : fallback;
+  if (!Number.isFinite(normalized)) return fallback;
+  return Math.min(100, Math.max(1, Math.round(normalized)));
+}
+
+function normalizeMaxWidth(value: unknown, fallback: number): number {
+  const normalized = typeof value === 'number' ? value : fallback;
+  if (!Number.isFinite(normalized)) return fallback;
+  return Math.max(1, Math.round(normalized));
+}
+
+function normalizeScale(value: unknown, fallback: number): number {
+  const normalized = typeof value === 'number' ? value : fallback;
+  if (!Number.isFinite(normalized)) return fallback;
+  return normalized <= 0 ? fallback : normalized;
+}
+
+function normalizePageIndex(value: unknown, fallback = 0): number {
+  const normalized = typeof value === 'number' ? value : fallback;
+  if (!Number.isFinite(normalized)) return fallback;
+  return Math.trunc(normalized);
+}
+
+function normalizeCropHeightFraction(value: unknown, fallback = 0.2): number {
+  const normalized = typeof value === 'number' ? value : fallback;
+  if (!Number.isFinite(normalized)) return fallback;
+  return Math.min(0.8, Math.max(0.05, normalized));
+}
+
+/**
+ * Clear cached render results.
+ * Call with a `tag` to clear only that session's entries,
+ * or with no arguments to flush the entire cache.
+ */
+export function clearRenderCache(tag?: string): void {
+  if (!tag) {
+    renderCache.clear();
+    renderInfoCache.clear();
+    return;
+  }
+
+  const prefix = `${tag}:`;
+  for (const key of renderCache.keys()) {
+    if (key.startsWith(prefix)) {
+      renderCache.delete(key);
+    }
+  }
+
+  for (const key of renderInfoCache.keys()) {
+    if (key.startsWith(prefix)) {
+      renderInfoCache.delete(key);
+    }
+  }
+}
+
+async function openPdfDocument(pdfBuffer: Buffer): Promise<{
+  loadingTask: PdfJsLoadingTaskLike<PdfJsDocumentLike>;
+  pdfDocument: PdfJsDocumentLike;
+}> {
   const pdfData = new Uint8Array(pdfBuffer);
 
-  // pdfjs-dist v5 automatically selects its built-in NodeCanvasFactory
-  // (backed by @napi-rs/canvas) when running in Node.js. Do not pass a
-  // custom canvasFactory — mixing canvas package types causes
-  // "Image or Canvas expected" errors in ctx.drawImage() calls.
   const loadingTask = pdfjsLib.getDocument({
     data: pdfData,
     disableWorker: true,
-    // Supply filesystem-backed font/CMap factories so pdfjs can decode CIDFonts
-    // and standard font fallbacks without needing a DOM or network access.
-    // Without these, sheet music PDFs (which rely heavily on CMaps for their
-    // notation character encodings) render as scrambled/garbled glyphs.
     CMapReaderFactory: NodeFsCMapReaderFactory,
     StandardFontDataFactory: NodeFsStandardFontDataFactory,
     cMapPacked: true,
     useSystemFonts: false,
     isEvalSupported: false,
-  } as unknown as PdfGetDocumentParams);
+  } as unknown as PdfGetDocumentParams) as unknown as PdfJsLoadingTaskLike<PdfJsDocumentLike>;
 
-  // Handle encrypted PDFs by providing an empty password.
-  // pdfjs will emit a 'password' event if the PDF is encrypted and requires a password.
-  // By providing an empty string password callback, we allow pdfjs to attempt rendering
-  // with restricted permissions (e.g., printing/copying disabled but content visible).
-  loadingTask.onPassword = () => '';
+  // Allow pdf.js to attempt opening restricted/encrypted PDFs with an empty password.
+  loadingTask.onPassword = (updatePassword) => {
+    updatePassword('');
+  };
 
   const pdfDocument = await loadingTask.promise;
-
   return { loadingTask, pdfDocument };
 }
 
 async function cleanupPdfDocument(
-   
-  loadingTask: any,
-   
-  pdfDocument: any
+  loadingTask: PdfJsLoadingTaskLike<PdfJsDocumentLike> | undefined,
+  pdfDocument: PdfJsDocumentLike | undefined,
 ) {
-  // pdfjs APIs differ slightly across versions; guard calls defensively.
   try {
     if (pdfDocument && typeof pdfDocument.cleanup === 'function') {
       await pdfDocument.cleanup();
@@ -194,47 +328,35 @@ async function cleanupPdfDocument(
   }
 }
 
-function normalizeFormat(format: RenderOptions['format']): 'png' | 'jpeg' {
-  return format === 'jpeg' ? 'jpeg' : 'png';
-}
-
-function normalizeQuality(q: unknown, fallback: number): number {
-  const n = typeof q === 'number' ? q : fallback;
-  if (!Number.isFinite(n)) return fallback;
-  // Keep behavior stable; clamp only to avoid invalid encoder states.
-  return Math.min(100, Math.max(1, Math.round(n)));
-}
-
-function normalizeMaxWidth(w: unknown, fallback: number): number {
-  const n = typeof w === 'number' ? w : fallback;
-  if (!Number.isFinite(n)) return fallback;
-  return Math.max(1, Math.round(n));
-}
-
-function normalizeScale(s: unknown, fallback: number): number {
-  const n = typeof s === 'number' ? s : fallback;
-  if (!Number.isFinite(n)) return fallback;
-  // Prevent invalid viewport scale. Avoid aggressive clamping to preserve output.
-  return n <= 0 ? fallback : n;
+async function cleanupPdfPage(page: PdfJsPageLike | undefined) {
+  try {
+    if (page && typeof page.cleanup === 'function') {
+      await page.cleanup();
+    }
+  } catch {
+    // best-effort cleanup only
+  }
 }
 
 /**
  * Compute a pdfjs viewport for a page at the requested scale, clamped so that
- * the resulting canvas stays under MAX_CANVAS_PIXELS.  Returns the (possibly
- * reduced) viewport and a flag indicating whether clamping was applied.
+ * the resulting canvas stays under MAX_CANVAS_PIXELS.
  */
 function computeClampedViewport(
-  page: any,
-  scale: number
-): { viewport: any; wasClamped: boolean; effectiveScale: number } {
+  page: PdfJsPageLike,
+  scale: number,
+): { viewport: PdfJsViewportLike; wasClamped: boolean; effectiveScale: number } {
   const viewport = page.getViewport({ scale });
-  const rawW = Math.floor(viewport.width);
-  const rawH = Math.floor(viewport.height);
-  if (rawW * rawH <= MAX_CANVAS_PIXELS) {
+  const rawWidth = Math.floor(viewport.width);
+  const rawHeight = Math.floor(viewport.height);
+
+  if (rawWidth * rawHeight <= MAX_CANVAS_PIXELS) {
     return { viewport, wasClamped: false, effectiveScale: scale };
   }
-  const shrink = Math.sqrt(MAX_CANVAS_PIXELS / (rawW * rawH));
+
+  const shrink = Math.sqrt(MAX_CANVAS_PIXELS / (rawWidth * rawHeight));
   const effectiveScale = scale * shrink;
+
   return {
     viewport: page.getViewport({ scale: effectiveScale }),
     wasClamped: true,
@@ -242,46 +364,139 @@ function computeClampedViewport(
   };
 }
 
-// ---------------------------------------------------------------------------
-// In-process render cache
-//
-// Keyed by `${cacheTag}:${pageIndex}:${scale}:${maxWidth}:${format}:${quality}`.
-// The processor fills `cacheTag` with the session-id so different sessions
-// never collide.  Call `clearRenderCache(tag)` at the end of a pipeline run
-// to free memory.
-// ---------------------------------------------------------------------------
-
-/** Cache key → base64 image string */
-const renderCache = new Map<string, string>();
-
-function cacheKey(
-  tag: string,
+async function renderPageToRawPng(
+  pdfDocument: PdfJsDocumentLike,
   pageIndex: number,
-  scale: number,
-  maxWidth: number,
-  format: string,
-  quality: number,
-  variant: string = 'full',
-): string {
-  return `${tag}:${pageIndex}:${scale}:${maxWidth}:${format}:${quality}:${variant}`;
+  requestedScale: number,
+  logContext: string,
+): Promise<RenderedPagePng> {
+  const totalPages = pdfDocument.numPages;
+
+  if (pageIndex < 0 || pageIndex >= totalPages) {
+    throw new Error(
+      `Page index ${pageIndex} out of range. PDF has ${totalPages} page(s) (0-${totalPages - 1}).`,
+    );
+  }
+
+  let page: PdfJsPageLike | undefined;
+
+  try {
+    page = await pdfDocument.getPage(pageIndex + 1);
+    const { viewport, wasClamped, effectiveScale } = computeClampedViewport(page, requestedScale);
+
+    const canvasWidth = Math.floor(viewport.width);
+    const canvasHeight = Math.floor(viewport.height);
+
+    if (wasClamped) {
+      logger.warn(`${logContext}: scale clamped to avoid OOM`, {
+        pageIndex,
+        requestedScale,
+        effectiveScale,
+        canvasWidth,
+        canvasHeight,
+      });
+    }
+
+    const canvas = createCanvas(canvasWidth, canvasHeight);
+    const context = canvas.getContext('2d');
+
+    await page.render({
+      canvasContext: context as unknown as CanvasRenderingContext2D,
+      viewport,
+      canvas: canvas as unknown as HTMLCanvasElement,
+    }).promise;
+
+    const rawPngBuffer = canvas.toBuffer('image/png');
+
+    return {
+      rawPngBuffer,
+      totalPages,
+      effective: {
+        scale: effectiveScale,
+        wasClamped,
+        width: canvasWidth,
+        height: canvasHeight,
+      },
+    };
+  } finally {
+    await cleanupPdfPage(page);
+  }
 }
 
-/**
- * Clear cached render results.
- * Call with a `tag` to clear only that session's entries,
- * or with no arguments to flush the entire cache.
- */
-export function clearRenderCache(tag?: string): void {
-  if (!tag) {
-    renderCache.clear();
-    return;
-  }
-  const prefix = `${tag}:`;
-  for (const key of renderCache.keys()) {
-    if (key.startsWith(prefix)) {
-      renderCache.delete(key);
+async function encodeRenderedImage(
+  rawPngBuffer: Buffer,
+  options: {
+    canvasWidth: number;
+    format: 'png' | 'jpeg';
+    maxWidth: number;
+    quality: number;
+    jpeg444?: boolean;
+  },
+): Promise<Buffer> {
+  const { canvasWidth, format, maxWidth, quality, jpeg444 = false } = options;
+
+  if (canvasWidth > maxWidth) {
+    const resized = sharp(rawPngBuffer).resize({ width: maxWidth, fit: 'inside' });
+
+    if (format === 'jpeg') {
+      return resized
+        .toFormat('jpeg', jpeg444
+          ? { quality, chromaSubsampling: '4:4:4', mozjpeg: true }
+          : { quality })
+        .toBuffer();
     }
+
+    return resized.toBuffer();
   }
+
+  if (format === 'jpeg') {
+    return sharp(rawPngBuffer)
+      .toFormat('jpeg', jpeg444
+        ? { quality, chromaSubsampling: '4:4:4', mozjpeg: true }
+        : { quality })
+      .toBuffer();
+  }
+
+  return rawPngBuffer;
+}
+
+async function extractHeaderCrop(
+  rawPngBuffer: Buffer,
+  options: {
+    cropHeightFraction: number;
+    format: 'png' | 'jpeg';
+    maxWidth: number;
+    quality: number;
+  },
+): Promise<Buffer> {
+  const { cropHeightFraction, format, maxWidth, quality } = options;
+
+  const metadata = await sharp(rawPngBuffer).metadata();
+  const width = metadata.width ?? 0;
+  const height = metadata.height ?? 0;
+
+  if (width <= 0 || height <= 0) {
+    throw new Error('Unable to determine rendered image dimensions for header crop');
+  }
+
+  const cropHeight = Math.max(1, Math.floor(height * cropHeightFraction));
+
+  let headerBuffer = await sharp(rawPngBuffer)
+    .extract({ left: 0, top: 0, width, height: cropHeight })
+    .toBuffer();
+
+  if (width > maxWidth) {
+    headerBuffer = await sharp(headerBuffer)
+      .resize({ width: maxWidth, fit: 'inside' })
+      .toFormat(format, { quality })
+      .toBuffer();
+  } else if (format === 'jpeg') {
+    headerBuffer = await sharp(headerBuffer)
+      .toFormat('jpeg', { quality })
+      .toBuffer();
+  }
+
+  return headerBuffer;
 }
 
 /**
@@ -289,7 +504,7 @@ export function clearRenderCache(tag?: string): void {
  */
 export async function renderPdfToImage(
   pdfBuffer: Buffer,
-  options: RenderOptions = {}
+  options: RenderOptions = {},
 ): Promise<string> {
   const {
     pageIndex = 0,
@@ -299,91 +514,44 @@ export async function renderPdfToImage(
     scale = 2,
   } = options;
 
+  const idx = normalizePageIndex(pageIndex, 0);
   const fmt = normalizeFormat(format);
   const q = normalizeQuality(quality, 85);
   const mw = normalizeMaxWidth(maxWidth, 1024);
   const sc = normalizeScale(scale, 2);
 
   const start = nowMs();
-
-   
-  let loadingTask: any | undefined;
-   
-  let pdfDocument: any | undefined;
+  let loadingTask: PdfJsLoadingTaskLike<PdfJsDocumentLike> | undefined;
+  let pdfDocument: PdfJsDocumentLike | undefined;
 
   try {
     ({ loadingTask, pdfDocument } = await openPdfDocument(pdfBuffer));
 
-    const numPages: number = pdfDocument.numPages;
-    if (pageIndex < 0 || pageIndex >= numPages) {
-      throw new Error(
-        `Page index ${pageIndex} out of range. PDF has ${numPages} page(s) (0-${numPages - 1}).`
-      );
-    }
-
-    const page = await pdfDocument.getPage(pageIndex + 1);
-    const { viewport, wasClamped, effectiveScale } = computeClampedViewport(page, sc);
-
-    const canvasWidth  = Math.floor(viewport.width);
-    const canvasHeight = Math.floor(viewport.height);
-
-    if (wasClamped) {
-      logger.warn('pdf-renderer: scale clamped to avoid OOM', {
-        pageIndex, requestedScale: sc, effectiveScale, canvasWidth, canvasHeight,
-      });
-    }
-
-    const canvas  = createCanvas(canvasWidth, canvasHeight);
-    const context = canvas.getContext('2d');
-
-    await page.render({
-      canvasContext: context as unknown as CanvasRenderingContext2D,
-      viewport,
-      canvas: canvas as unknown as HTMLCanvasElement,
-    }).promise;
-
-    // Release page resources where supported (best-effort)
-    try {
-      if (typeof page.cleanup === 'function') page.cleanup();
-    } catch {
-      // ignore
-    }
-
-    let imageBuffer: Buffer;
-    const rawBuffer = canvas.toBuffer('image/png');
-
-    if (canvasWidth > mw) {
-      imageBuffer = await sharp(rawBuffer)
-        .resize({ width: mw, fit: 'inside' })
-        .toFormat(fmt, { quality: q })
-        .toBuffer();
-    } else {
-      if (fmt === 'jpeg') {
-        imageBuffer = await sharp(rawBuffer).toFormat('jpeg', { quality: q }).toBuffer();
-      } else {
-        imageBuffer = rawBuffer;
-      }
-    }
-
-    const durationMs = Math.round(nowMs() - start);
-    logger.debug('Rendered PDF page to image', {
-      pageIndex,
+    const rendered = await renderPageToRawPng(pdfDocument, idx, sc, 'pdf-renderer');
+    const imageBuffer = await encodeRenderedImage(rendered.rawPngBuffer, {
+      canvasWidth: rendered.effective.width,
       format: fmt,
-      scale: sc,
-      effectiveScale,
       maxWidth: mw,
       quality: q,
-      durationMs,
-      canvasWidth,
-      canvasHeight,
+    });
+
+    logger.debug('Rendered PDF page to image', {
+      pageIndex: idx,
+      format: fmt,
+      scale: sc,
+      effectiveScale: rendered.effective.scale,
+      maxWidth: mw,
+      quality: q,
+      durationMs: Math.round(nowMs() - start),
+      canvasWidth: rendered.effective.width,
+      canvasHeight: rendered.effective.height,
     });
 
     return imageBuffer.toString('base64');
   } catch (error) {
-    const details = safeErrorDetails(error);
     logger.error('Failed to render PDF to image', {
-      ...details,
-      pageIndex,
+      ...safeErrorDetails(error),
+      pageIndex: idx,
       format: fmt,
       scale: sc,
       maxWidth: mw,
@@ -407,7 +575,7 @@ export async function renderPdfToImage(
 export async function renderPdfPageBatch(
   pdfBuffer: Buffer,
   pageIndices: number[],
-  options: Omit<RenderOptions, 'pageIndex'> = {}
+  options: Omit<RenderOptions, 'pageIndex'> = {},
 ): Promise<string[]> {
   const { scale = 2, maxWidth = 1024, quality = 85, format = 'png', cacheTag } = options;
 
@@ -416,15 +584,21 @@ export async function renderPdfPageBatch(
   const mw = normalizeMaxWidth(maxWidth, 1024);
   const sc = normalizeScale(scale, 2);
 
+  if (pageIndices.length === 0) {
+    return [];
+  }
+
   const start = nowMs();
 
-  // Check cache first — return early if all pages are cached
   if (cacheTag) {
     const allCached: string[] = [];
     let miss = false;
+
     for (const idxRaw of pageIndices) {
-      const key = cacheKey(cacheTag, idxRaw, sc, mw, fmt, q, 'full');
+      const idx = normalizePageIndex(idxRaw, -1);
+      const key = cacheKey(cacheTag, idx, sc, mw, fmt, q, 'full');
       const cached = renderCache.get(key);
+
       if (cached) {
         allCached.push(cached);
       } else {
@@ -432,6 +606,7 @@ export async function renderPdfPageBatch(
         break;
       }
     }
+
     if (!miss) {
       logger.debug('renderPdfPageBatch: served entirely from cache', {
         cacheTag,
@@ -441,19 +616,17 @@ export async function renderPdfPageBatch(
     }
   }
 
-   
-  let loadingTask: any | undefined;
-   
-  let pdfDocument: any | undefined;
+  let loadingTask: PdfJsLoadingTaskLike<PdfJsDocumentLike> | undefined;
+  let pdfDocument: PdfJsDocumentLike | undefined;
 
   try {
     ({ loadingTask, pdfDocument } = await openPdfDocument(pdfBuffer));
 
-    const numPages: number = pdfDocument.numPages;
+    const numPages = pdfDocument.numPages;
     const results: string[] = [];
 
     for (const idxRaw of pageIndices) {
-      const idx = Number.isFinite(idxRaw) ? Math.trunc(idxRaw) : -1;
+      const idx = normalizePageIndex(idxRaw, -1);
 
       if (idx < 0 || idx >= numPages) {
         logger.warn('renderPdfPageBatch: page index out of bounds; using placeholder', {
@@ -465,7 +638,6 @@ export async function renderPdfPageBatch(
         continue;
       }
 
-      // Per-page cache check
       if (cacheTag) {
         const key = cacheKey(cacheTag, idx, sc, mw, fmt, q, 'full');
         const cached = renderCache.get(key);
@@ -477,72 +649,36 @@ export async function renderPdfPageBatch(
 
       try {
         const pageStart = nowMs();
+        const rendered = await renderPageToRawPng(pdfDocument, idx, sc, 'renderPdfPageBatch');
+        const imageBuffer = await encodeRenderedImage(rendered.rawPngBuffer, {
+          canvasWidth: rendered.effective.width,
+          format: fmt,
+          maxWidth: mw,
+          quality: q,
+        });
 
-        const page = await pdfDocument.getPage(idx + 1);
-        const { viewport: batchViewport, wasClamped: batchClamped, effectiveScale: batchEffScale } = computeClampedViewport(page, sc);
-        const canvasWidth  = Math.floor(batchViewport.width);
-        const canvasHeight = Math.floor(batchViewport.height);
+        const imageBase64 = imageBuffer.toString('base64');
 
-        if (batchClamped) {
-          logger.warn('renderPdfPageBatch: scale clamped to avoid OOM', {
-            idx, requestedScale: sc, effectiveScale: batchEffScale, canvasWidth, canvasHeight,
-          });
-        }
-
-        const canvas = createCanvas(canvasWidth, canvasHeight);
-        const context = canvas.getContext('2d');
-
-        await page.render({
-          canvasContext: context as unknown as CanvasRenderingContext2D,
-          viewport: batchViewport,
-          canvas: canvas as unknown as HTMLCanvasElement,
-        }).promise;
-
-        // Release page resources where supported (best-effort)
-        try {
-          if (typeof page.cleanup === 'function') page.cleanup();
-        } catch {
-          // ignore
-        }
-
-        const rawBuffer = canvas.toBuffer('image/png');
-
-        let imageBuffer: Buffer;
-        if (canvasWidth > mw) {
-          imageBuffer = await sharp(rawBuffer)
-            .resize({ width: mw, fit: 'inside' })
-            .toFormat(fmt, { quality: q })
-            .toBuffer();
-        } else if (fmt === 'jpeg') {
-          imageBuffer = await sharp(rawBuffer).toFormat('jpeg', { quality: q }).toBuffer();
-        } else {
-          imageBuffer = rawBuffer;
-        }
-
-        const b64 = imageBuffer.toString('base64');
-
-        // Store in cache if tag provided
         if (cacheTag) {
-          renderCache.set(cacheKey(cacheTag, idx, sc, mw, fmt, q, 'full'), b64);
+          renderCache.set(cacheKey(cacheTag, idx, sc, mw, fmt, q, 'full'), imageBase64);
         }
 
-        results.push(b64);
+        results.push(imageBase64);
 
         logger.debug('renderPdfPageBatch: rendered page', {
           idx,
           durationMs: Math.round(nowMs() - pageStart),
-          canvasWidth,
-          canvasHeight,
+          canvasWidth: rendered.effective.width,
+          canvasHeight: rendered.effective.height,
           format: fmt,
           scale: sc,
           maxWidth: mw,
           quality: q,
         });
-      } catch (err) {
-        const details = safeErrorDetails(err);
+      } catch (error) {
         logger.warn('renderPdfPageBatch: failed to render page; using placeholder', {
           idx,
-          ...details,
+          ...safeErrorDetails(error),
         });
         results.push(PLACEHOLDER_IMAGE);
       }
@@ -550,7 +686,7 @@ export async function renderPdfPageBatch(
 
     logger.info('renderPdfPageBatch: completed', {
       requestedCount: pageIndices.length,
-      returnedCount: pageIndices.length,
+      returnedCount: results.length,
       durationMs: Math.round(nowMs() - start),
       format: fmt,
       scale: sc,
@@ -564,10 +700,6 @@ export async function renderPdfPageBatch(
   }
 }
 
-export interface HeaderCropBatchOptions extends Omit<RenderOptions, 'pageIndex'> {
-  cropHeightFraction?: number;
-}
-
 /**
  * Render top-of-page header crops in batch for scanned/image PDFs.
  *
@@ -576,7 +708,7 @@ export interface HeaderCropBatchOptions extends Omit<RenderOptions, 'pageIndex'>
 export async function renderPdfHeaderCropBatch(
   pdfBuffer: Buffer,
   pageIndices: number[],
-  options: HeaderCropBatchOptions = {}
+  options: HeaderCropBatchOptions = {},
 ): Promise<string[]> {
   const {
     scale = 2,
@@ -591,25 +723,25 @@ export async function renderPdfHeaderCropBatch(
   const q = normalizeQuality(quality, 85);
   const mw = normalizeMaxWidth(maxWidth, 1024);
   const sc = normalizeScale(scale, 2);
-
-  const safeCropHeightFraction = Math.min(0.8, Math.max(0.05, cropHeightFraction));
+  const safeCropHeightFraction = normalizeCropHeightFraction(cropHeightFraction, 0.2);
   const variant = `header-${safeCropHeightFraction}`;
 
-  const start = nowMs();
+  if (pageIndices.length === 0) {
+    return [];
+  }
 
-   
-  let loadingTask: any | undefined;
-   
-  let pdfDocument: any | undefined;
+  const start = nowMs();
+  let loadingTask: PdfJsLoadingTaskLike<PdfJsDocumentLike> | undefined;
+  let pdfDocument: PdfJsDocumentLike | undefined;
 
   try {
     ({ loadingTask, pdfDocument } = await openPdfDocument(pdfBuffer));
 
-    const numPages: number = pdfDocument.numPages;
+    const numPages = pdfDocument.numPages;
     const results: string[] = [];
 
     for (const idxRaw of pageIndices) {
-      const idx = Number.isFinite(idxRaw) ? Math.trunc(idxRaw) : -1;
+      const idx = normalizePageIndex(idxRaw, -1);
 
       if (idx < 0 || idx >= numPages) {
         logger.warn('renderPdfHeaderCropBatch: page index out of bounds; using placeholder', {
@@ -621,7 +753,6 @@ export async function renderPdfHeaderCropBatch(
         continue;
       }
 
-      // Per-page header crop cache check
       if (cacheTag) {
         const key = cacheKey(cacheTag, idx, sc, mw, fmt, q, variant);
         const cached = renderCache.get(key);
@@ -633,83 +764,37 @@ export async function renderPdfHeaderCropBatch(
 
       try {
         const pageStart = nowMs();
+        const rendered = await renderPageToRawPng(pdfDocument, idx, sc, 'renderPdfHeaderCropBatch');
+        const headerBuffer = await extractHeaderCrop(rendered.rawPngBuffer, {
+          cropHeightFraction: safeCropHeightFraction,
+          format: fmt,
+          maxWidth: mw,
+          quality: q,
+        });
 
-        const page = await pdfDocument.getPage(idx + 1);
-        const { viewport: cropViewport, wasClamped: cropClamped, effectiveScale: cropEffScale } = computeClampedViewport(page, sc);
-        const canvasWidth  = Math.floor(cropViewport.width);
-        const canvasHeight = Math.floor(cropViewport.height);
+        const headerBase64 = headerBuffer.toString('base64');
 
-        if (cropClamped) {
-          logger.warn('renderPdfHeaderCropBatch: scale clamped to avoid OOM', {
-            idx, requestedScale: sc, effectiveScale: cropEffScale, canvasWidth, canvasHeight,
-          });
-        }
-
-        const canvas = createCanvas(canvasWidth, canvasHeight);
-        const context = canvas.getContext('2d');
-
-        await page.render({
-          canvasContext: context as unknown as CanvasRenderingContext2D,
-          viewport: cropViewport,
-          canvas: canvas as unknown as HTMLCanvasElement,
-        }).promise;
-
-        // Release page resources where supported (best-effort)
-        try {
-          if (typeof page.cleanup === 'function') page.cleanup();
-        } catch {
-          // ignore
-        }
-
-        const rawBuffer = canvas.toBuffer('image/png');
-
-        // Use sharp metadata to confirm dimensions, but fall back to viewport if missing
-        const metadata = await sharp(rawBuffer).metadata();
-        const width = metadata.width ?? canvasWidth;
-        const height = metadata.height ?? canvasHeight;
-        const cropHeight = Math.max(1, Math.floor(height * safeCropHeightFraction));
-
-        let headerBuffer = await sharp(rawBuffer)
-          .extract({ left: 0, top: 0, width, height: cropHeight })
-          .toBuffer();
-
-        if (width > mw) {
-          headerBuffer = await sharp(headerBuffer)
-            .resize({ width: mw, fit: 'inside' })
-            .toFormat(fmt, { quality: q })
-            .toBuffer();
-        } else if (fmt === 'jpeg') {
-          headerBuffer = await sharp(headerBuffer).toFormat('jpeg', { quality: q }).toBuffer();
-        } else if (fmt === 'png') {
-          // Keep as-is (already png)
-        }
-
-        const headerB64 = headerBuffer.toString('base64');
-
-        // Store in cache if tag provided
         if (cacheTag) {
-          renderCache.set(cacheKey(cacheTag, idx, sc, mw, fmt, q, variant), headerB64);
+          renderCache.set(cacheKey(cacheTag, idx, sc, mw, fmt, q, variant), headerBase64);
         }
 
-        results.push(headerB64);
+        results.push(headerBase64);
 
         logger.debug('renderPdfHeaderCropBatch: rendered header crop', {
           idx,
           durationMs: Math.round(nowMs() - pageStart),
-          pageWidth: width,
-          pageHeight: height,
-          cropHeight,
+          pageWidth: rendered.effective.width,
+          pageHeight: rendered.effective.height,
           cropHeightFraction: safeCropHeightFraction,
           format: fmt,
           scale: sc,
           maxWidth: mw,
           quality: q,
         });
-      } catch (err) {
-        const details = safeErrorDetails(err);
+      } catch (error) {
         logger.warn('renderPdfHeaderCropBatch: failed to render header crop; using placeholder', {
           idx,
-          ...details,
+          ...safeErrorDetails(error),
         });
         results.push(PLACEHOLDER_IMAGE);
       }
@@ -717,7 +802,7 @@ export async function renderPdfHeaderCropBatch(
 
     logger.info('renderPdfHeaderCropBatch: completed', {
       requestedCount: pageIndices.length,
-      returnedCount: pageIndices.length,
+      returnedCount: results.length,
       durationMs: Math.round(nowMs() - start),
       cropHeightFraction: safeCropHeightFraction,
       format: fmt,
@@ -737,34 +822,22 @@ export async function renderPdfHeaderCropBatch(
 //
 // Single-page render that returns the image base64, MIME type, total page
 // count, and effective render dimensions — all from a single pdfjs document
-// open.  This eliminates the double-parse that was required when callers used
-// pdf-lib only for page-count and pdfjs for rendering.
+// open. This eliminates the double-parse that was required when callers used
+// separate libraries for page-count and rendering.
 //
-// Supports the same in-process renderCache as renderPdfPageBatch.
+// Supports the same in-process render cache as renderPdfPageBatch.
 // ---------------------------------------------------------------------------
-
-export interface PageImageWithInfo {
-  imageBase64: string;
-  totalPages: number;
-  mimeType: string;
-  effective: {
-    scale: number;
-    wasClamped: boolean;
-    width: number;
-    height: number;
-  };
-}
 
 /**
  * Render a single PDF page and return image data together with total page
  * count so callers never need to open the PDF twice.
  *
- * Sheet-music safe JPEG options (chromaSubsampling '4:4:4', mozjpeg encoder)
- * are automatically applied when format='jpeg' to minimise line-art artefacts.
+ * Sheet-music safe JPEG options (4:4:4 chroma + mozjpeg) are automatically
+ * applied when format='jpeg' to minimise line-art artefacts.
  */
 export async function renderPdfPageToImageWithInfo(
   pdfBuffer: Buffer,
-  options: RenderOptions = {}
+  options: RenderOptions = {},
 ): Promise<PageImageWithInfo> {
   const {
     pageIndex = 0,
@@ -775,134 +848,84 @@ export async function renderPdfPageToImageWithInfo(
     cacheTag,
   } = options;
 
+  const idx = normalizePageIndex(pageIndex, 0);
   const fmt = normalizeFormat(format);
-  const q   = normalizeQuality(quality, 92);
-  const mw  = normalizeMaxWidth(maxWidth, 2000);
-  const sc  = normalizeScale(scale, 3);
-
+  const q = normalizeQuality(quality, 92);
+  const mw = normalizeMaxWidth(maxWidth, 2000);
+  const sc = normalizeScale(scale, 3);
   const mimeType = fmt === 'jpeg' ? 'image/jpeg' : 'image/png';
+  const key = cacheTag ? cacheKey(cacheTag, idx, sc, mw, fmt, q, 'full') : null;
 
   const start = nowMs();
-
-   
-  let loadingTask: any | undefined;
-   
-  let pdfDocument: any | undefined;
+  let loadingTask: PdfJsLoadingTaskLike<PdfJsDocumentLike> | undefined;
+  let pdfDocument: PdfJsDocumentLike | undefined;
 
   try {
-    ({ loadingTask, pdfDocument } = await openPdfDocument(pdfBuffer));
+    if (key) {
+      const cachedImage = renderCache.get(key);
+      const cachedInfo = renderInfoCache.get(key);
 
-    const totalPages: number = pdfDocument.numPages;
+      if (cachedImage && cachedInfo) {
+        logger.debug('renderPdfPageToImageWithInfo: serving from cache', {
+          cacheTag,
+          pageIndex: idx,
+        });
 
-    // Validate page index
-    if (pageIndex < 0 || pageIndex >= totalPages) {
-      throw new Error(
-        `Page index ${pageIndex} out of range. PDF has ${totalPages} page(s) (0-${totalPages - 1}).`
-      );
-    }
-
-    // Serve from cache when available (after totalPages is known)
-    if (cacheTag) {
-      const key = cacheKey(cacheTag, pageIndex, sc, mw, fmt, q, 'full');
-      const cached = renderCache.get(key);
-      if (cached) {
-        logger.debug('renderPdfPageToImageWithInfo: serving from cache', { cacheTag, pageIndex });
         return {
-          imageBase64: cached,
-          totalPages,
-          mimeType,
-          effective: { scale: sc, wasClamped: false, width: mw, height: 0 },
+          imageBase64: cachedImage,
+          totalPages: cachedInfo.totalPages,
+          mimeType: cachedInfo.mimeType,
+          effective: cachedInfo.effective,
         };
       }
     }
 
-    const page = await pdfDocument.getPage(pageIndex + 1);
-    const { viewport, wasClamped, effectiveScale } = computeClampedViewport(page, sc);
+    ({ loadingTask, pdfDocument } = await openPdfDocument(pdfBuffer));
 
-    const canvasWidth  = Math.floor(viewport.width);
-    const canvasHeight = Math.floor(viewport.height);
-
-    if (wasClamped) {
-      logger.warn('renderPdfPageToImageWithInfo: scale clamped to avoid OOM', {
-        pageIndex, requestedScale: sc, effectiveScale, canvasWidth, canvasHeight,
-      });
-    }
-
-    const canvas  = createCanvas(canvasWidth, canvasHeight);
-    const context = canvas.getContext('2d');
-
-    await page.render({
-      canvasContext: context as unknown as CanvasRenderingContext2D,
-      viewport,
-      canvas: canvas as unknown as HTMLCanvasElement,
-    }).promise;
-
-    try {
-      if (typeof page.cleanup === 'function') page.cleanup();
-    } catch { /* best-effort */ }
-
-    const rawBuffer = canvas.toBuffer('image/png');
-
-    let imageBuffer: Buffer;
-
-    if (canvasWidth > mw) {
-      // Resize first, then encode into target format
-      const resized = await sharp(rawBuffer).resize({ width: mw, fit: 'inside' }).toBuffer();
-      if (fmt === 'jpeg') {
-        imageBuffer = await sharp(resized)
-          .toFormat('jpeg', { quality: q, chromaSubsampling: '4:4:4', mozjpeg: true })
-          .toBuffer();
-      } else {
-        imageBuffer = resized; // PNG from sharp resize keeps lossless
-      }
-    } else {
-      if (fmt === 'jpeg') {
-        imageBuffer = await sharp(rawBuffer)
-          .toFormat('jpeg', { quality: q, chromaSubsampling: '4:4:4', mozjpeg: true })
-          .toBuffer();
-      } else {
-        imageBuffer = rawBuffer; // Lossless PNG directly from canvas
-      }
-    }
+    const rendered = await renderPageToRawPng(pdfDocument, idx, sc, 'renderPdfPageToImageWithInfo');
+    const imageBuffer = await encodeRenderedImage(rendered.rawPngBuffer, {
+      canvasWidth: rendered.effective.width,
+      format: fmt,
+      maxWidth: mw,
+      quality: q,
+      jpeg444: true,
+    });
 
     const imageBase64 = imageBuffer.toString('base64');
 
-    // Populate cache
-    if (cacheTag) {
-      renderCache.set(cacheKey(cacheTag, pageIndex, sc, mw, fmt, q, 'full'), imageBase64);
+    if (key) {
+      renderCache.set(key, imageBase64);
+      renderInfoCache.set(key, {
+        totalPages: rendered.totalPages,
+        mimeType,
+        effective: rendered.effective,
+      });
     }
 
-    const durationMs = Math.round(nowMs() - start);
     logger.debug('renderPdfPageToImageWithInfo: completed', {
-      pageIndex,
-      totalPages,
+      pageIndex: idx,
+      totalPages: rendered.totalPages,
       format: fmt,
       scale: sc,
-      effectiveScale,
+      effectiveScale: rendered.effective.scale,
       maxWidth: mw,
       quality: q,
-      wasClamped,
-      durationMs,
-      canvasWidth,
-      canvasHeight,
+      wasClamped: rendered.effective.wasClamped,
+      durationMs: Math.round(nowMs() - start),
+      canvasWidth: rendered.effective.width,
+      canvasHeight: rendered.effective.height,
     });
 
     return {
       imageBase64,
-      totalPages,
+      totalPages: rendered.totalPages,
       mimeType,
-      effective: {
-        scale: effectiveScale,
-        wasClamped,
-        width: canvasWidth,
-        height: canvasHeight,
-      },
+      effective: rendered.effective,
     };
   } catch (error) {
-    const details = safeErrorDetails(error);
     logger.error('renderPdfPageToImageWithInfo: failed', {
-      ...details,
-      pageIndex,
+      ...safeErrorDetails(error),
+      pageIndex: idx,
       format: fmt,
       scale: sc,
       maxWidth: mw,

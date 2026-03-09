@@ -94,6 +94,39 @@ export interface RoutingSignals {
 }
 
 // =============================================================================
+// Helpers
+// =============================================================================
+
+function clampFraction(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(1, value));
+}
+
+function clampConfidence(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function dedupeReasons(reasons: string[]): string[] {
+  return [...new Set(reasons)];
+}
+
+/**
+ * Effective confidence is the true confidence floor for automation.
+ * If segmentation confidence exists, it constrains the outcome.
+ */
+function getEffectiveConfidence(signals: RoutingSignals): number {
+  const metadataConfidence = clampConfidence(signals.metadataConfidence);
+
+  if (signals.segmentationConfidence === null || signals.segmentationConfidence === undefined) {
+    return metadataConfidence;
+  }
+
+  const segmentationConfidence = clampConfidence(signals.segmentationConfidence);
+  return Math.min(metadataConfidence, segmentationConfidence);
+}
+
+// =============================================================================
 // Policy Engine
 // =============================================================================
 
@@ -102,71 +135,93 @@ export interface RoutingSignals {
  */
 export function determineRoute(
   signals: RoutingSignals,
-  thresholds: PolicyThresholds = DEFAULT_THRESHOLDS
+  thresholds: PolicyThresholds = DEFAULT_THRESHOLDS,
 ): RoutingResult {
   const reasons: string[] = [];
 
+  const normalizedSignals: RoutingSignals = {
+    ...signals,
+    textCoverage: clampFraction(signals.textCoverage),
+    metadataConfidence: clampConfidence(signals.metadataConfidence),
+    segmentationConfidence:
+      signals.segmentationConfidence === null || signals.segmentationConfidence === undefined
+        ? null
+        : clampConfidence(signals.segmentationConfidence),
+    validPartCount: Math.max(0, Math.trunc(signals.validPartCount)),
+  };
+
   // ── Terminal / already-committed guard ─────────────────────────────
   if (
-    signals.workflowStatus === 'APPROVED' ||
-    signals.workflowStatus === 'COMMITTED' ||
-    signals.workflowStatus === 'REJECTED'
+    normalizedSignals.workflowStatus === 'APPROVED' ||
+    normalizedSignals.workflowStatus === 'COMMITTED' ||
+    normalizedSignals.workflowStatus === 'REJECTED'
   ) {
-    return { route: 'EXCEPTION_REVIEW', reasons: ['Session is in a terminal state'] };
+    return {
+      route: 'EXCEPTION_REVIEW',
+      reasons: ['Session is in a terminal state'],
+    };
   }
 
   // ── Explicit human review flag ────────────────────────────────────
-  if (signals.requiresHumanReview) {
+  if (normalizedSignals.requiresHumanReview) {
     reasons.push('Session explicitly flagged for human review');
     return { route: 'EXCEPTION_REVIEW', reasons };
   }
 
   // ── OCR needed? ───────────────────────────────────────────────────
   if (
-    signals.textCoverage < thresholds.minTextCoverage &&
-    signals.ocrStatus === 'NOT_NEEDED'
+    normalizedSignals.textCoverage < thresholds.minTextCoverage &&
+    normalizedSignals.ocrStatus === 'NOT_NEEDED'
   ) {
+    const percentCoverage = (normalizedSignals.textCoverage * 100).toFixed(0);
+    const minRequired = (thresholds.minTextCoverage * 100).toFixed(0);
     reasons.push(
-      `Text coverage (${(signals.textCoverage * 100).toFixed(0)}%) ` +
-      `below threshold (${(thresholds.minTextCoverage * 100).toFixed(0)}%)`
+      `[TEXT_COVERAGE_LOW] Extractable text on ${percentCoverage}% of pages, below minimum ${minRequired}%`,
     );
     return { route: 'OCR_REQUIRED', reasons };
   }
 
-  // OCR in progress — caller should wait
-  if (signals.ocrStatus === 'QUEUED' || signals.ocrStatus === 'IN_PROGRESS') {
-    reasons.push('OCR is still in progress');
+  if (
+    normalizedSignals.ocrStatus === 'QUEUED' ||
+    normalizedSignals.ocrStatus === 'IN_PROGRESS'
+  ) {
+    reasons.push('[OCR_IN_PROGRESS] OCR processing still in progress');
     return { route: 'OCR_REQUIRED', reasons };
   }
 
   // ── Second pass needed? ───────────────────────────────────────────
-  const needsSecondPass = shouldRunSecondPass(signals, thresholds, reasons);
-  if (needsSecondPass && signals.secondPassStatus === 'NOT_NEEDED') {
-    return { route: 'SECOND_PASS_REQUIRED', reasons };
+  const needsSecondPass = shouldRunSecondPass(normalizedSignals, thresholds, reasons);
+  if (needsSecondPass && normalizedSignals.secondPassStatus === 'NOT_NEEDED') {
+    return { route: 'SECOND_PASS_REQUIRED', reasons: dedupeReasons(reasons) };
   }
 
-  // Second pass in progress — caller should wait
   if (
-    signals.secondPassStatus === 'QUEUED' ||
-    signals.secondPassStatus === 'IN_PROGRESS'
+    normalizedSignals.secondPassStatus === 'QUEUED' ||
+    normalizedSignals.secondPassStatus === 'IN_PROGRESS'
   ) {
     reasons.push('Second pass is still in progress');
-    return { route: 'SECOND_PASS_REQUIRED', reasons };
+    return { route: 'SECOND_PASS_REQUIRED', reasons: dedupeReasons(reasons) };
   }
 
   // ── Exception review? ─────────────────────────────────────────────
-  const reviewReasons = collectReviewReasons(signals, thresholds);
+  const reviewReasons = collectReviewReasons(normalizedSignals, thresholds);
   if (reviewReasons.length > 0) {
-    return { route: 'EXCEPTION_REVIEW', reasons: reviewReasons };
+    return { route: 'EXCEPTION_REVIEW', reasons: dedupeReasons(reviewReasons) };
   }
 
   // ── Auto-commit eligible? ─────────────────────────────────────────
-  if (canAutoCommit(signals, thresholds, reasons)) {
-    return { route: 'AUTO_COMMIT', reasons: reasons.length > 0 ? reasons : ['All criteria met'] };
+  if (canAutoCommit(normalizedSignals, thresholds, reasons)) {
+    return {
+      route: 'AUTO_COMMIT',
+      reasons: dedupeReasons(reasons.length > 0 ? reasons : ['All criteria met']),
+    };
   }
 
   // ── Default: text-only processing path ────────────────────────────
-  return { route: 'TEXT_ONLY', reasons: ['Default text-only processing path'] };
+  return {
+    route: 'TEXT_ONLY',
+    reasons: ['Default text-only processing path'],
+  };
 }
 
 // =============================================================================
@@ -179,47 +234,47 @@ export function determineRoute(
 function shouldRunSecondPass(
   signals: RoutingSignals,
   thresholds: PolicyThresholds,
-  reasons: string[]
+  reasons: string[],
 ): boolean {
   if (signals.secondPassStatus !== 'NOT_NEEDED') return false;
 
-  // When cutting instructions come from deterministic text-layer segmentation
-  // and the part count passes, skip the second pass — the LLM can only make
-  // things worse by guessing or returning empty instructions.
-  if (
-    signals.deterministicSegmentation &&
-    signals.validPartCount >= thresholds.minPartsForAutoCommit
-  ) {
-    reasons.push(
-      'Skipping second pass — cutting instructions are deterministic with ' +
-      `${signals.validPartCount} valid part(s)`
-    );
-    return false;
-  }
-
   let needed = false;
 
-  if (
-    signals.segmentationConfidence !== null &&
-    signals.segmentationConfidence < thresholds.minSkipSecondPassConfidence
-  ) {
+  const metadataConfidence = clampConfidence(signals.metadataConfidence);
+  const segmentationConfidence =
+    signals.segmentationConfidence === null ? null : clampConfidence(signals.segmentationConfidence);
+
+  // Deterministic segmentation can suppress segmentation-based second pass,
+  // but it must NOT suppress metadata-conflict-driven review/adjudication.
+  const skipSegmentationDrivenSecondPass =
+    Boolean(signals.deterministicSegmentation) &&
+    signals.validPartCount >= thresholds.minPartsForAutoCommit;
+
+  if (!skipSegmentationDrivenSecondPass) {
+    if (
+      segmentationConfidence !== null &&
+      segmentationConfidence < thresholds.minSkipSecondPassConfidence
+    ) {
+      reasons.push(
+        `[SEGMENTATION_LOW_CONFIDENCE] Boundary detection confidence ${segmentationConfidence}%, below threshold ${thresholds.minSkipSecondPassConfidence}%`,
+      );
+      needed = true;
+    }
+  } else {
     reasons.push(
-      `Segmentation confidence (${signals.segmentationConfidence}%) ` +
-      `below threshold (${thresholds.minSkipSecondPassConfidence}%)`
+      `[DETERMINISTIC_SEGMENTATION] Skipping confidence-driven second pass — deterministic boundaries detected with ${signals.validPartCount} part(s)`,
     );
-    needed = true;
   }
 
-  if (signals.metadataConfidence < thresholds.minSkipSecondPassConfidence) {
+  if (metadataConfidence < thresholds.minSkipSecondPassConfidence) {
     reasons.push(
-      `Metadata confidence (${signals.metadataConfidence}%) ` +
-      `below threshold (${thresholds.minSkipSecondPassConfidence}%)`
+      `[METADATA_LOW_CONFIDENCE] Title/Composer confidence ${metadataConfidence}%, below threshold ${thresholds.minSkipSecondPassConfidence}%`,
     );
     needed = true;
   }
 
   if (signals.hasMetadataConflicts) {
-    reasons.push('Unresolved metadata conflicts remain');
+    reasons.push('[METADATA_CONFLICTS] Unresolved metadata conflicts in extracted boundaries');
     needed = true;
   }
 
@@ -231,32 +286,31 @@ function shouldRunSecondPass(
  */
 function collectReviewReasons(
   signals: RoutingSignals,
-  thresholds: PolicyThresholds
+  thresholds: PolicyThresholds,
 ): string[] {
   const reasons: string[] = [];
+  const effectiveConfidence = getEffectiveConfidence(signals);
 
   if (signals.hasDuplicateFlag) {
-    reasons.push('Duplicate detection flagged this session');
+    reasons.push('[DUPLICATE_DETECTED] Potential duplicate match in library');
   }
 
   if (signals.validPartCount < thresholds.minPartsForAutoCommit) {
     reasons.push(
-      `Only ${signals.validPartCount} valid parts (need ${thresholds.minPartsForAutoCommit})`
+      `[INSUFFICIENT_PARTS] Only ${signals.validPartCount} part(s) extracted, need ${thresholds.minPartsForAutoCommit}`,
     );
   }
 
   if (!thresholds.autonomousModeEnabled) {
-    reasons.push('Autonomous mode is disabled');
+    reasons.push('[AUTONOMOUS_MODE_DISABLED] Autonomous commit is globally disabled');
   }
 
-  // After second pass, if confidence is still very low
   if (
     signals.secondPassStatus === 'COMPLETE' &&
-    signals.metadataConfidence < thresholds.minAutoCommitConfidence
+    effectiveConfidence < thresholds.minAutoCommitConfidence
   ) {
     reasons.push(
-      `Post-second-pass confidence (${signals.metadataConfidence}%) ` +
-      `still below auto-commit threshold (${thresholds.minAutoCommitConfidence}%)`
+      `[CONFIDENCE_BELOW_AUTOCOMMIT] Effective confidence ${effectiveConfidence}% after second pass, below auto-commit threshold ${thresholds.minAutoCommitConfidence}%`,
     );
   }
 
@@ -269,15 +323,17 @@ function collectReviewReasons(
 function canAutoCommit(
   signals: RoutingSignals,
   thresholds: PolicyThresholds,
-  reasons: string[]
+  reasons: string[],
 ): boolean {
   if (!thresholds.autonomousModeEnabled) return false;
+
+  const effectiveConfidence = getEffectiveConfidence(signals);
 
   const secondPassDone =
     signals.secondPassStatus === 'COMPLETE' || signals.secondPassStatus === 'NOT_NEEDED';
   const commitReady =
     signals.commitStatus === 'NOT_STARTED' || signals.commitStatus === 'FAILED';
-  const confidentEnough = signals.metadataConfidence >= thresholds.minAutoCommitConfidence;
+  const confidentEnough = effectiveConfidence >= thresholds.minAutoCommitConfidence;
   const hasParts = signals.validPartCount >= thresholds.minPartsForAutoCommit;
   const noDupes = !signals.hasDuplicateFlag;
   const noConflicts = !signals.hasMetadataConflicts;
@@ -292,7 +348,9 @@ function canAutoCommit(
     noConflicts &&
     noReview
   ) {
-    reasons.push('All auto-commit criteria satisfied');
+    reasons.push(
+      `[AUTO_COMMIT_OK] All criteria satisfied: confidence=${effectiveConfidence}%, parts=${signals.validPartCount}, no conflicts/dupes/reviews pending`,
+    );
     return true;
   }
 
@@ -300,7 +358,7 @@ function canAutoCommit(
 }
 
 // =============================================================================
-// Convenience: decide whether OCR is needed based on text coverage alone
+// Convenience helpers
 // =============================================================================
 
 /**
@@ -308,9 +366,9 @@ function canAutoCommit(
  */
 export function needsOcr(
   textCoverage: number,
-  thresholds: PolicyThresholds = DEFAULT_THRESHOLDS
+  thresholds: PolicyThresholds = DEFAULT_THRESHOLDS,
 ): boolean {
-  return textCoverage < thresholds.minTextCoverage;
+  return clampFraction(textCoverage) < thresholds.minTextCoverage;
 }
 
 /**
@@ -319,12 +377,18 @@ export function needsOcr(
 export function needsSecondPass(
   metadataConfidence: number,
   segmentationConfidence: number | null,
-  thresholds: PolicyThresholds = DEFAULT_THRESHOLDS
+  thresholds: PolicyThresholds = DEFAULT_THRESHOLDS,
 ): boolean {
-  if (metadataConfidence < thresholds.minSkipSecondPassConfidence) return true;
+  const normalizedMetadataConfidence = clampConfidence(metadataConfidence);
+  const normalizedSegmentationConfidence =
+    segmentationConfidence === null ? null : clampConfidence(segmentationConfidence);
+
+  if (normalizedMetadataConfidence < thresholds.minSkipSecondPassConfidence) return true;
   if (
-    segmentationConfidence !== null &&
-    segmentationConfidence < thresholds.minSkipSecondPassConfidence
-  ) return true;
+    normalizedSegmentationConfidence !== null &&
+    normalizedSegmentationConfidence < thresholds.minSkipSecondPassConfidence
+  ) {
+    return true;
+  }
   return false;
 }

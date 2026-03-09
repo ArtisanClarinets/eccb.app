@@ -29,9 +29,12 @@ const nextConfig: NextConfig = {
   },
 
   // Native Node.js modules that cannot be bundled by webpack.
-  // @napi-rs/canvas and pdfjs-dist are used server-side for PDF→image rendering.
+  // @napi-rs/canvas is used server-side for PDF→image rendering.
   // sharp is used for image processing/resizing.
-  serverExternalPackages: ['@napi-rs/canvas', 'sharp', 'pdfjs-dist'],
+  // pdfjs-dist is a pure JS library and must be bundled; removing it
+  // from serverExternalPackages prevents Turbopack warnings about it
+  // being treated as an external ESM module.
+  serverExternalPackages: ['@napi-rs/canvas', 'sharp'],
 
   experimental: {
     optimizePackageImports: ['lucide-react', 'recharts', 'gsap'],

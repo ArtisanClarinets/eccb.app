@@ -75,7 +75,7 @@ describe('determineRoute — OCR routing', () => {
   it('returns OCR_REQUIRED when OCR is in progress (QUEUED)', () => {
     const result = determineRoute(makeSignals({ ocrStatus: 'QUEUED' }));
     expect(result.route).toBe('OCR_REQUIRED');
-    expect(result.reasons).toContain('OCR is still in progress');
+    expect(result.reasons.some(r => r.includes('[OCR_IN_PROGRESS]'))).toBe(true);
   });
 
   it('returns OCR_REQUIRED when OCR is IN_PROGRESS', () => {

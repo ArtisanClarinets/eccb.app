@@ -93,8 +93,8 @@ export interface SegmentDiagnostic {
 
 interface PageHashEntry {
   pageIndex: number;
-  hash: bigint;  // 64-bit aHash (8×8 grid, 1 bit per cell)
-  hashSmall: bigint;  // 32-bit aHash (8×4 grid) — used for boundary detection
+  /** Boundary-detection hash sized by hashWidth × hashHeight (default 32 bits). */
+  hashSmall: bigint;
 }
 
 interface Segment {
@@ -106,15 +106,35 @@ interface Segment {
   hashDistanceFromPrev: number | null;
 }
 
+interface OcrResult {
+  text: string;
+  confidence: number;
+}
+
+interface TesseractLike {
+  recognize(
+    image: string,
+    lang?: string,
+    options?: Record<string, unknown>,
+  ): Promise<{ data?: { text?: string; confidence?: number } }>;
+}
+
 // =============================================================================
 // Constants
 // =============================================================================
 
-const DEFAULT_CROP_HEIGHT  = 0.20;
-const DEFAULT_HASH_WIDTH   = 8;
-const DEFAULT_HASH_HEIGHT  = 4;
+const DEFAULT_CROP_HEIGHT = 0.20;
+const DEFAULT_RENDER_SCALE = 3;
+const DEFAULT_HASH_WIDTH = 8;
+const DEFAULT_HASH_HEIGHT = 4;
 const DEFAULT_HASH_THRESHOLD = 10; // bits out of 32
 const DEFAULT_MIN_SEGMENT_PAGES = 1;
+const DEFAULT_FALLBACK_CROP_FRACTIONS = [0.15, 0.25, 0.30];
+const DEFAULT_OCR_THRESHOLD = 128;
+const OCR_RENDER_MAX_WIDTH = 1600;
+
+// Minimal base64 prefix of the PLACEHOLDER_IMAGE used by pdf-renderer.
+const PLACEHOLDER_PREFIX = 'iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAYAAABw4pVU';
 
 // Minimum number of pages a PDF must have for segmentation to be worthwhile.
 const MIN_PAGES_TO_SEGMENT = 3;
@@ -133,15 +153,85 @@ const MAX_CONFIDENCE = 95;
 // Utilities
 // =============================================================================
 
+let tesseractModulePromise: Promise<TesseractLike | null> | null = null;
+
 function nowMs(): number {
   const perf = (globalThis as unknown as { performance?: { now(): number } }).performance;
   if (perf?.now) return perf.now();
   return Date.now();
 }
 
+function asError(err: unknown): Error {
+  return err instanceof Error ? err : new Error(String(err));
+}
+
 function safeErrorDetails(err: unknown) {
-  const e = err instanceof Error ? err : new Error(String(err));
-  return { errorMessage: e.message, errorName: e.name };
+  const error = asError(err);
+  return { errorMessage: error.message, errorName: error.name };
+}
+
+function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, value));
+}
+
+function clampInteger(value: unknown, min: number, max: number, fallback: number): number {
+  return Math.round(clampNumber(value, min, max, fallback));
+}
+
+function uniqueCropFractions(primary: number, fallbackCropFractions: number[]): number[] {
+  const seen = new Set<number>();
+  const fractions: number[] = [];
+
+  for (const raw of [primary, ...fallbackCropFractions]) {
+    const normalized = Number(clampNumber(raw, 0.05, 0.8, DEFAULT_CROP_HEIGHT).toFixed(4));
+    if (!seen.has(normalized)) {
+      seen.add(normalized);
+      fractions.push(normalized);
+    }
+  }
+
+  return fractions;
+}
+
+function clampConfidence(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function computeDistanceStats(distances: number[]): { min: number; max: number; avg: number } {
+  if (distances.length === 0) {
+    return { min: 0, max: 0, avg: 0 };
+  }
+
+  let min = distances[0];
+  let max = distances[0];
+  let sum = 0;
+
+  for (const value of distances) {
+    if (value < min) min = value;
+    if (value > max) max = value;
+    sum += value;
+  }
+
+  return {
+    min,
+    max,
+    avg: Math.round(sum / distances.length),
+  };
+}
+
+async function getTesseractModule(): Promise<TesseractLike | null> {
+  if (!tesseractModulePromise) {
+    tesseractModulePromise = import('tesseract.js')
+      .then((mod) => {
+        const maybeRecognizer = mod as unknown as TesseractLike;
+        return typeof maybeRecognizer?.recognize === 'function' ? maybeRecognizer : null;
+      })
+      .catch(() => null);
+  }
+
+  return tesseractModulePromise;
 }
 
 /**
@@ -153,7 +243,7 @@ function safeErrorDetails(err: unknown) {
  *  3. Each pixel bit = (pixel > mean) ? 1 : 0.
  *  4. Pack into a BigInt for fast Hamming distance comparison.
  *
- * Returns 0n on any error (hash comparison will yield high distance → boundary).
+ * Returns 0n on error to keep the pipeline deterministic.
  */
 async function computeAHash(
   base64Image: string,
@@ -168,15 +258,22 @@ async function computeAHash(
       .raw()
       .toBuffer({ resolveWithObject: true });
 
-    const pixels = new Uint8Array(data.buffer);
-    const mean = pixels.reduce((s, p) => s + p, 0) / pixels.length;
-    const allSame = pixels.every((pixel) => pixel === pixels[0]);
+    const pixels = Uint8Array.from(data);
+    if (pixels.length === 0) return 0n;
+
+    let sum = 0;
+    for (const pixel of pixels) sum += pixel;
+    const mean = sum / pixels.length;
+
+    const firstPixel = pixels[0];
+    const allSame = pixels.every((pixel) => pixel === firstPixel);
 
     let hash = 0n;
     for (let i = 0; i < pixels.length; i++) {
       const bit = allSame ? (pixels[i] > 127 ? 1n : 0n) : (pixels[i] > mean ? 1n : 0n);
       hash = (hash << 1n) | bit;
     }
+
     return hash;
   } catch {
     return 0n;
@@ -189,29 +286,172 @@ async function computeAHash(
 function hammingDistance(a: bigint, b: bigint): number {
   let xor = a ^ b;
   let count = 0;
+
   while (xor > 0n) {
     count += Number(xor & 1n);
     xor >>= 1n;
   }
+
   return count;
 }
 
 /**
  * Optional tesseract OCR. Returns '' on failure or if not installed.
  */
-async function tryOcr(base64Image: string): Promise<{ text: string; confidence: number }> {
+async function tryOcr(base64Image: string): Promise<OcrResult> {
   try {
-    const mod = await import('tesseract.js').catch(() => null) as any;
-    if (!mod?.recognize) return { text: '', confidence: 0 };
+    const mod = await getTesseractModule();
+    if (!mod) return { text: '', confidence: 0 };
 
     const dataUrl = `data:image/png;base64,${base64Image}`;
     const result = await mod.recognize(dataUrl, 'eng', { logger: () => undefined });
-    const text: string = typeof result?.data?.text === 'string' ? result.data.text.trim() : '';
-    const confidence: number = typeof result?.data?.confidence === 'number' ? result.data.confidence : 0;
+    const text = typeof result?.data?.text === 'string' ? result.data.text.trim() : '';
+    const confidence = typeof result?.data?.confidence === 'number' ? result.data.confidence : 0;
+
     return { text, confidence };
   } catch {
     return { text: '', confidence: 0 };
   }
+}
+
+async function preprocessMaybe(
+  base64Image: string,
+  options: OcrPreprocessOptions,
+): Promise<string> {
+  try {
+    return await preprocessForOcr(base64Image, options);
+  } catch {
+    return base64Image;
+  }
+}
+
+function buildAllPageIndices(totalPages: number): number[] {
+  return Array.from({ length: totalPages }, (_, index) => index);
+}
+
+function mergeSmallSegments(segments: Segment[], minSegmentPages: number): Segment[] {
+  if (minSegmentPages <= 1 || segments.length <= 1) {
+    return segments;
+  }
+
+  let working = [...segments];
+  let didMerge = true;
+
+  while (didMerge && working.length > 1) {
+    didMerge = false;
+    const merged: Segment[] = [];
+
+    for (let i = 0; i < working.length; i++) {
+      const current = working[i];
+      const pageCount = current.pageEnd - current.pageStart + 1;
+
+      if (pageCount < minSegmentPages) {
+        if (merged.length > 0) {
+          merged[merged.length - 1] = {
+            ...merged[merged.length - 1],
+            pageEnd: current.pageEnd,
+          };
+        } else if (i + 1 < working.length) {
+          working[i + 1] = {
+            ...working[i + 1],
+            pageStart: current.pageStart,
+            representativePageIndex: current.pageStart,
+            hashDistanceFromPrev: current.hashDistanceFromPrev,
+          };
+        } else {
+          merged.push({ ...current });
+        }
+
+        didMerge = true;
+      } else {
+        merged.push({ ...current });
+      }
+    }
+
+    working = merged;
+  }
+
+  return working;
+}
+
+async function detectRepresentativeLabel(
+  pdfBuffer: Buffer,
+  representativePageIndex: number,
+  initialCropBase64: string,
+  cropFractionsToTry: number[],
+  renderScale: number,
+  cacheTag: string | undefined,
+  preprocessing: OcrPreprocessOptions,
+): Promise<{ label: string | null; confidence: number; usedFallback: boolean; failed: boolean }> {
+  let bestResult: OcrResult = { text: '', confidence: 0 };
+  let usedFallback = false;
+
+  for (let i = 0; i < cropFractionsToTry.length; i++) {
+    const fraction = cropFractionsToTry[i];
+    let cropBase64 = initialCropBase64;
+
+    if (i > 0) {
+      usedFallback = true;
+
+      try {
+        const altCrops = await renderPdfHeaderCropBatch(pdfBuffer, [representativePageIndex], {
+          scale: Math.max(renderScale, DEFAULT_RENDER_SCALE),
+          maxWidth: OCR_RENDER_MAX_WIDTH,
+          quality: 90,
+          format: 'png',
+          cropHeightFraction: fraction,
+          cacheTag,
+        });
+
+        cropBase64 = altCrops[0] || '';
+      } catch {
+        continue;
+      }
+
+      if (!cropBase64 || cropBase64.startsWith(PLACEHOLDER_PREFIX)) {
+        continue;
+      }
+    }
+
+    const prepared = await preprocessMaybe(cropBase64, preprocessing);
+    const candidate = await tryOcr(prepared);
+
+    if (candidate.text && candidate.confidence > bestResult.confidence) {
+      bestResult = candidate;
+    }
+
+    if (candidate.text && candidate.confidence >= OCR_CONFIDENCE_MIN) {
+      break;
+    }
+  }
+
+  if (!bestResult.text || bestResult.confidence < OCR_CONFIDENCE_MIN) {
+    return {
+      label: null,
+      confidence: 0,
+      usedFallback,
+      failed: true,
+    };
+  }
+
+  const normalized = normalizeInstrumentLabel(bestResult.text);
+  const candidateLabel = normalized.instrument?.trim();
+
+  if (!candidateLabel || isForbiddenLabel(candidateLabel)) {
+    return {
+      label: null,
+      confidence: 0,
+      usedFallback,
+      failed: true,
+    };
+  }
+
+  return {
+    label: candidateLabel,
+    confidence: clampConfidence(bestResult.confidence),
+    usedFallback,
+    failed: false,
+  };
 }
 
 // =============================================================================
@@ -222,24 +462,10 @@ async function tryOcr(base64Image: string): Promise<{ text: string; confidence: 
  * Run local header-image segmentation on a PDF buffer.
  *
  * This is a drop-in replacement for the LLM header-label pass in
- * smart-upload-processor.ts.  It produces 0-indexed CuttingInstructions
+ * smart-upload-processor.ts. It produces 0-indexed CuttingInstructions
  * compatible with splitPdfByCuttingInstructions().
  *
  * Returns null when segmentation is not feasible (e.g. PDF too short).
- */
-/**
- * Run local header-image segmentation on a PDF buffer.
- *
- * This is a drop-in replacement for the LLM header-label pass in
- * smart-upload-processor.ts.  It produces 0-indexed CuttingInstructions
- * compatible with splitPdfByCuttingInstructions().
- *
- * Returns null when segmentation is not feasible (e.g. PDF too short).
- *
- * @param pdfBuffer - PDF buffer to segment
- * @param totalPages - Total number of pages in the PDF
- * @param options - Segmentation options
- * @returns Segmentation result or null
  */
 export async function segmentByHeaderImages(
   pdfBuffer: Buffer,
@@ -248,32 +474,57 @@ export async function segmentByHeaderImages(
 ): Promise<HeaderImageSegmentationResult | null> {
   const start = nowMs();
 
-  const {
-    cropHeightFraction = DEFAULT_CROP_HEIGHT,
-    renderScale = 3,  // Higher default for better OCR on sheet music
-    hashWidth = DEFAULT_HASH_WIDTH,
-    hashHeight = DEFAULT_HASH_HEIGHT,
-    hashDistanceThreshold = DEFAULT_HASH_THRESHOLD,
-    minSegmentPages = DEFAULT_MIN_SEGMENT_PAGES,
-    enableOcr = true,
-    fallbackCropFractions = [0.15, 0.25, 0.30],
-    cacheTag,
-    preprocessing,
-  } = options;
+  const cropHeightFraction = clampNumber(
+    options.cropHeightFraction,
+    0.05,
+    0.8,
+    DEFAULT_CROP_HEIGHT,
+  );
+  const renderScale = clampNumber(options.renderScale, 1, 8, DEFAULT_RENDER_SCALE);
+  const hashWidth = clampInteger(options.hashWidth, 2, 32, DEFAULT_HASH_WIDTH);
+  const hashHeight = clampInteger(options.hashHeight, 2, 32, DEFAULT_HASH_HEIGHT);
+  const hashDistanceThreshold = clampInteger(
+    options.hashDistanceThreshold,
+    0,
+    hashWidth * hashHeight,
+    DEFAULT_HASH_THRESHOLD,
+  );
+  const minSegmentPages = clampInteger(
+    options.minSegmentPages,
+    1,
+    Math.max(1, totalPages),
+    DEFAULT_MIN_SEGMENT_PAGES,
+  );
+  const enableOcr = options.enableOcr !== false;
+  const fallbackCropFractions = Array.isArray(options.fallbackCropFractions)
+    ? options.fallbackCropFractions
+    : DEFAULT_FALLBACK_CROP_FRACTIONS;
+  const cacheTag = options.cacheTag;
 
-  // Minimal base64 prefix of the PLACEHOLDER_IMAGE used by pdf-renderer when a
-  // page fails to render.  If ANY header crop is a placeholder the segmentation
-  // result would be unreliable — return null so the caller falls back safely.
-  const PLACEHOLDER_PREFIX = 'iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAYAAABw4pVU';
+  const cropFractionsToTry = uniqueCropFractions(cropHeightFraction, fallbackCropFractions);
 
-  // Skip segmentation for very short PDFs — boundary detection is meaningless.
+  const effectivePreprocessing: OcrPreprocessOptions = {
+    enableThreshold: options.preprocessing?.enableThreshold ?? true,
+    thresholdValue: clampInteger(
+      options.preprocessing?.thresholdValue,
+      0,
+      255,
+      DEFAULT_OCR_THRESHOLD,
+    ),
+    enableDeskew: options.preprocessing?.enableDeskew ?? false,
+    deskewTolerance: clampNumber(
+      options.preprocessing?.deskewTolerance,
+      0,
+      45,
+      5,
+    ),
+  };
+
   if (totalPages < MIN_PAGES_TO_SEGMENT) {
     return null;
   }
 
-  const allPageIndices = Array.from({ length: totalPages }, (_, i) => i);
-
-  // Track diagnostics
+  const allPageIndices = buildAllPageIndices(totalPages);
   const hashDistances: number[] = [];
   let ocrFailures = 0;
   let ocrFallbacks = 0;
@@ -283,7 +534,7 @@ export async function segmentByHeaderImages(
   try {
     headerCrops = await renderPdfHeaderCropBatch(pdfBuffer, allPageIndices, {
       scale: renderScale,
-      maxWidth: 1600, // Increased from 1024 for better OCR legibility on sheet music
+      maxWidth: OCR_RENDER_MAX_WIDTH,
       quality: 90,
       format: 'png',
       cropHeightFraction,
@@ -305,9 +556,7 @@ export async function segmentByHeaderImages(
     return null;
   }
 
-  // Guard: placeholder images indicate rendering failures — segmentation would
-  // be unreliable because all placeholder hashes are identical (distance ≈ 0).
-  const placeholderCount = headerCrops.filter(c => c.startsWith(PLACEHOLDER_PREFIX)).length;
+  const placeholderCount = headerCrops.filter((crop) => crop.startsWith(PLACEHOLDER_PREFIX)).length;
   if (placeholderCount > 0) {
     logger.warn('header-image-segmentation: placeholder renders detected — skipping segmentation', {
       totalPages,
@@ -318,18 +567,13 @@ export async function segmentByHeaderImages(
 
   // ── Step 2: Compute perceptual hashes ────────────────────────────────────
   const pageHashes: PageHashEntry[] = await Promise.all(
-    headerCrops.map(async (crop, i) => {
-      const hashSmall = await computeAHash(crop, hashWidth, hashHeight);
-      return {
-        pageIndex: i,
-        hash: hashSmall,
-        hashSmall,
-      };
-    })
+    headerCrops.map(async (crop, pageIndex) => ({
+      pageIndex,
+      hashSmall: await computeAHash(crop, hashWidth, hashHeight),
+    })),
   );
 
   // ── Step 3: Detect segment boundaries ────────────────────────────────────
-  // Collect boundary start indices first (never loses coverage).
   const boundaryStarts: number[] = [0];
 
   for (let i = 1; i < totalPages; i++) {
@@ -338,16 +582,22 @@ export async function segmentByHeaderImages(
       pageHashes[i].hashSmall,
     );
     const cropChanged = headerCrops[i - 1] !== headerCrops[i];
+
     hashDistances.push(hashDist);
-    if (hashDist >= hashDistanceThreshold || (hashDist === 0 && cropChanged && hashDistanceThreshold > 0)) {
+
+    if (
+      hashDist >= hashDistanceThreshold ||
+      (hashDist === 0 && cropChanged && hashDistanceThreshold > 0)
+    ) {
       boundaryStarts.push(i);
     }
   }
 
-  // Build raw segments from boundary list. By construction these are contiguous
-  // and cover all pages 0..totalPages-1 with no gaps and no overlaps.
   let rawSegments: Segment[] = boundaryStarts.map((pageStart, idx) => {
-    const pageEnd = idx + 1 < boundaryStarts.length ? boundaryStarts[idx + 1] - 1 : totalPages - 1;
+    const pageEnd = idx + 1 < boundaryStarts.length
+      ? boundaryStarts[idx + 1] - 1
+      : totalPages - 1;
+
     return {
       pageStart,
       pageEnd,
@@ -363,46 +613,9 @@ export async function segmentByHeaderImages(
     };
   });
 
-  // ── Merge segments that are smaller than minSegmentPages ──────────────────
-  // Instead of silently dropping small segments (which creates page gaps),
-  // absorb them into their nearest neighbour so coverage is always complete.
-  if (minSegmentPages > 1 && rawSegments.length > 1) {
-    let didMerge = true;
-    while (didMerge && rawSegments.length > 1) {
-      didMerge = false;
-      const merged: Segment[] = [];
-      for (let i = 0; i < rawSegments.length; i++) {
-        const seg = rawSegments[i];
-        const segLen = seg.pageEnd - seg.pageStart + 1;
-        if (segLen < minSegmentPages) {
-          if (merged.length > 0) {
-            // Absorb into the previous segment.
-            merged[merged.length - 1].pageEnd = seg.pageEnd;
-          } else if (i + 1 < rawSegments.length) {
-            // First segment is too small — extend the next segment's start.
-            rawSegments[i + 1] = {
-              ...rawSegments[i + 1],
-              pageStart: seg.pageStart,
-              representativePageIndex: seg.pageStart,
-              hashDistanceFromPrev: seg.hashDistanceFromPrev,
-            };
-          } else {
-            // Single segment case — keep it.
-            merged.push({ ...seg });
-          }
-          didMerge = true;
-        } else {
-          merged.push({ ...seg });
-        }
-      }
-      rawSegments = merged;
-    }
-  }
-
+  rawSegments = mergeSmallSegments(rawSegments, minSegmentPages);
   const segments = rawSegments;
 
-  // Fallback: if no boundaries found (only 1 segment), return null —
-  // the entire PDF is likely a single part and the standard pipeline handles it.
   if (segments.length <= 1) {
     logger.info('header-image-segmentation: no meaningful boundaries detected', {
       totalPages,
@@ -415,63 +628,34 @@ export async function segmentByHeaderImages(
 
   // ── Step 4: OCR one representative crop per segment ──────────────────────
   if (enableOcr) {
-    for (const seg of segments) {
+    for (let segmentIndex = 0; segmentIndex < segments.length; segmentIndex++) {
+      const seg = segments[segmentIndex];
       const repPage = seg.representativePageIndex;
       const cropBase64 = headerCrops[repPage];
 
-      // Always preprocess before OCR to improve accuracy on scanned sheet music.
-      // Binarisation + sharpening are effective for low-contrast scans.
-      const defaultPreprocessing = { enableThreshold: true, thresholdValue: 128 };
-      const effectivePreprocessing = { ...defaultPreprocessing, ...(preprocessing || {}) };
-      let initialCrop = cropBase64;
-      try {
-        initialCrop = await preprocessForOcr(cropBase64, effectivePreprocessing);
-      } catch { /* preprocessing is best-effort; fall back to raw crop */ }
-      let ocrResult = await tryOcr(initialCrop);
+      const labelResult = await detectRepresentativeLabel(
+        pdfBuffer,
+        repPage,
+        cropBase64,
+        cropFractionsToTry,
+        renderScale,
+        cacheTag,
+        effectivePreprocessing,
+      );
 
-      // Retry with fallback crop fractions if OCR returned no text
-      if ((!ocrResult.text || ocrResult.confidence < OCR_CONFIDENCE_MIN) && fallbackCropFractions.length > 0) {
+      if (labelResult.usedFallback) {
         ocrFallbacks++;
-        for (const altFraction of fallbackCropFractions) {
-          if (altFraction === cropHeightFraction) continue;
-          try {
-            const altCrops = await renderPdfHeaderCropBatch(pdfBuffer, [repPage], {
-              scale: Math.max(renderScale, 3), // Ensure high-res for OCR retry
-              maxWidth: 1600,
-              quality: 90,
-              format: 'png',
-              cropHeightFraction: altFraction,
-            });
-            if (altCrops[0] && !altCrops[0].startsWith(PLACEHOLDER_PREFIX)) {
-              let processedCrop = altCrops[0];
-              try {
-                processedCrop = await preprocessForOcr(processedCrop, effectivePreprocessing);
-              } catch { /* preprocessing is best-effort */ }
-              const altResult = await tryOcr(processedCrop);
-              if (altResult.text && altResult.confidence > ocrResult.confidence) {
-                ocrResult = altResult;
-                break;
-              }
-            }
-          } catch {
-            // try next fraction
-          }
-        }
       }
 
-      if (ocrResult.text && ocrResult.confidence >= OCR_CONFIDENCE_MIN) {
-        const normalized = normalizeInstrumentLabel(ocrResult.text);
-        const candidateLabel = normalized.instrument?.trim();
-        if (candidateLabel && !isForbiddenLabel(candidateLabel)) {
-          seg.label = candidateLabel;
-          seg.ocrConfidence = ocrResult.confidence;
-        }
+      if (labelResult.label) {
+        seg.label = labelResult.label;
+        seg.ocrConfidence = labelResult.confidence;
       } else {
         ocrFailures++;
       }
 
       logger.info('header-image-segmentation: segment OCR result', {
-        segmentIndex: segments.indexOf(seg),
+        segmentIndex,
         pageStart: seg.pageStart,
         pageEnd: seg.pageEnd,
         hasLabel: seg.label !== null,
@@ -492,9 +676,11 @@ export async function segmentByHeaderImages(
   // ── Step 6: Build cutting instructions (0-indexed) ───────────────────────
   const cuttingInstructions: CuttingInstruction[] = segments.map((seg, idx) => {
     const normalized = normalizeInstrumentLabel(seg.label ?? `Part ${idx + 1}`);
+    const instrument = normalized.instrument || seg.label || `Part ${idx + 1}`;
+
     return {
-      partName: normalized.instrument || seg.label!,
-      instrument: normalized.instrument || seg.label!,
+      partName: instrument,
+      instrument,
       section: (normalized.section ?? 'Other') as CuttingInstruction['section'],
       transposition: (normalized.transposition ?? 'C') as CuttingInstruction['transposition'],
       partNumber: idx + 1,
@@ -503,16 +689,18 @@ export async function segmentByHeaderImages(
   });
 
   // ── Compute confidence ────────────────────────────────────────────────────
-  const ocrLabelledCount = segments.filter((s) => s.ocrConfidence >= OCR_CONFIDENCE_MIN).length;
+  const ocrLabelledCount = segments.filter((seg) => seg.ocrConfidence >= OCR_CONFIDENCE_MIN).length;
   const ocrFraction = segments.length > 0 ? ocrLabelledCount / segments.length : 0;
   const hasOcrLabels = ocrLabelledCount > 0;
 
   const confidence = Math.min(
     MAX_CONFIDENCE,
-    Math.round(BASE_SEGMENT_CONFIDENCE + ocrFraction * LABEL_CONFIDENCE_BONUS * 2 * (segments.length / totalPages * 10)),
+    Math.round(
+      BASE_SEGMENT_CONFIDENCE +
+      ocrFraction * LABEL_CONFIDENCE_BONUS * 2 * ((segments.length / totalPages) * 10),
+    ),
   );
 
-  // Build diagnostics (no raw text)
   const diagnostics: SegmentDiagnostic[] = segments.map((seg, idx) => ({
     segmentIndex: idx,
     pageStart: seg.pageStart,
@@ -522,7 +710,6 @@ export async function segmentByHeaderImages(
     hashDistanceFromPrev: seg.hashDistanceFromPrev,
   }));
 
-  // Enhanced diagnostics logging
   logger.info('header-image-segmentation: segmentation complete', {
     totalPages,
     segmentCount: segments.length,
@@ -535,11 +722,7 @@ export async function segmentByHeaderImages(
     hashWidth,
     hashHeight,
     cropHeightFraction,
-    hashDistanceStats: {
-      min: hashDistances.length > 0 ? Math.min(...hashDistances) : 0,
-      max: hashDistances.length > 0 ? Math.max(...hashDistances) : 0,
-      avg: hashDistances.length > 0 ? Math.round(hashDistances.reduce((a, b) => a + b, 0) / hashDistances.length) : 0,
-    },
+    hashDistanceStats: computeDistanceStats(hashDistances),
   });
 
   return {
@@ -557,12 +740,6 @@ export async function segmentByHeaderImages(
 // =============================================================================
 
 /**
- * Preprocess a base64 PNG/JPEG for improved OCR accuracy.
- * Applies: grayscale → contrast normalization → mild sharpen → PNG re-encode.
- *
- * Returns the original base64 string on failure (so OCR can still attempt).
- */
-/**
  * Preprocess options for OCR
  */
 export interface OcrPreprocessOptions {
@@ -578,7 +755,8 @@ export interface OcrPreprocessOptions {
 
 /**
  * Preprocess a base64 PNG/JPEG for improved OCR accuracy.
- * Applies: grayscale → contrast normalization → optional threshold/binarization → optional deskew → mild sharpen → PNG re-encode.
+ * Applies: grayscale → contrast normalization → optional threshold/binarization
+ * → optional deskew → mild sharpen → PNG re-encode.
  *
  * @param base64Image - Input base64-encoded image
  * @param options - Preprocessing options
@@ -586,11 +764,11 @@ export interface OcrPreprocessOptions {
  */
 export async function preprocessForOcr(
   base64Image: string,
-  options?: OcrPreprocessOptions
+  options?: OcrPreprocessOptions,
 ): Promise<string> {
   const opts = options || {};
   const enableThreshold = opts.enableThreshold ?? false;
-  const thresholdValue = opts.thresholdValue ?? 128;
+  const thresholdValue = clampInteger(opts.thresholdValue, 0, 255, DEFAULT_OCR_THRESHOLD);
   const enableDeskew = opts.enableDeskew ?? false;
 
   try {
@@ -598,20 +776,20 @@ export async function preprocessForOcr(
 
     let pipeline = sharp(imageBuffer)
       .grayscale()
-      .normalise(); // contrast stretch
+      .normalise();
 
-    // Apply threshold/binarization if enabled
     if (enableThreshold) {
       pipeline = pipeline.threshold(thresholdValue);
     }
 
-    // Apply deskew if enabled (using rotate with auto-fallback)
+    // Sharp auto-rotate/detect behavior is the only available server-side deskew-like
+    // fallback here. deskewTolerance is retained in the API for compatibility.
     if (enableDeskew) {
-      pipeline = pipeline.rotate(); // Auto-detect and correct skew
+      pipeline = pipeline.rotate();
     }
 
     const processed = await pipeline
-      .sharpen({ sigma: 1.5, m2: 0.5 }) // mild sharpening
+      .sharpen({ sigma: 1.5, m2: 0.5 })
       .png({ compressionLevel: 1 })
       .toBuffer();
 
@@ -631,14 +809,16 @@ export async function preprocessForOcr(
  */
 export async function binarizeImage(
   base64Image: string,
-  threshold: number = 128
+  threshold: number = DEFAULT_OCR_THRESHOLD,
 ): Promise<string> {
+  const safeThreshold = clampInteger(threshold, 0, 255, DEFAULT_OCR_THRESHOLD);
+
   try {
     const imageBuffer = Buffer.from(base64Image, 'base64');
 
     const processed = await sharp(imageBuffer)
       .grayscale()
-      .threshold(threshold)
+      .threshold(safeThreshold)
       .png({ compressionLevel: 1 })
       .toBuffer();
 
