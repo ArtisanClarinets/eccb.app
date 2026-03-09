@@ -18,6 +18,33 @@ vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }));
 
+vi.mock('@/lib/services/file-upload', async () => {
+  const actual = await vi.importActual('@/lib/services/file-upload');
+  return {
+    ...actual,
+    saveProfilePhoto: vi.fn(async (file: File) => {
+      // Still validate file type to ensure tests can check rejection
+      const ALLOWED_IMAGE_TYPES = new Map([
+        ['image/jpeg', '.jpg'],
+        ['image/png', '.png'],
+        ['image/gif', '.gif'],
+        ['image/webp', '.webp'],
+      ]);
+      
+      if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
+        throw new Error('Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed.');
+      }
+      
+      if (file.size > 5 * 1024 * 1024) {
+        throw new Error('File size too large. Maximum size is 5MB.');
+      }
+      
+      return '/uploads/profiles/test123.png';
+    }),
+    deleteProfilePhoto: vi.fn().mockResolvedValue(undefined),
+  };
+});
+
 // Import after mocking
 import { prisma } from '@/lib/db';
 import { requireAuth } from '@/lib/auth/guards';

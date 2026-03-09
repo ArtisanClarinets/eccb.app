@@ -432,6 +432,7 @@ describe('Auto-commit Quality Gates (DoD §1.5)', () => {
         { instrument: 'Clarinet', partName: 'Clarinet', section: 'Woodwinds' as const, transposition: 'Bb' as const, partNumber: 2, pageRange: [3, 5] },
       ],
       segmentationConfidence: 55, // < 70 threshold → Gate 4 fires
+      pageLabels: [],
     } as any);
 
     // extractPdfPageHeaders must report hasTextLayer=true so detectPartBoundaries is used
