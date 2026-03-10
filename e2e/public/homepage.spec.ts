@@ -176,6 +176,17 @@ test.describe('Public Pages', () => {
       await page.goto('/gallery');
 
       await expect(page.getByRole('heading', { name: 'Photo Gallery' })).toBeVisible();
+
+      // ensure at least one image is visible in each tab
+      const tabs = ['Concerts', 'Rehearsals', 'Community Events'];
+      for (const tab of tabs) {
+        await page.getByRole('tab', { name: tab }).click();
+        // wait for potential images to load
+        await page.waitForTimeout(200);
+        const imgs = page.locator('img');
+        const count = await imgs.count();
+        expect(count).toBeGreaterThan(0);
+      }
     });
   });
 

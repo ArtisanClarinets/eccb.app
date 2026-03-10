@@ -14,19 +14,62 @@ const galleryCategories = [
     id: 'concerts',
     label: 'Concerts',
     icon: Music,
-    images: [] as { src: string; alt: string; date?: string }[],
+    images: [
+      {
+        src: '/gallery/concert1.jpg',
+        alt: 'Outdoor concert performance with band members on stage at Northwest Florida State College',
+        date: 'June 2025',
+      },
+      {
+        src: '/gallery/concert2.jpg',
+        alt: 'Close‑up of trumpet section during a summer concert',
+        date: 'June 2025',
+      },
+      {
+        src: '/gallery/concert3.jpg',
+        alt: 'Full ensemble rehearsing indoors with conductor in red jacket',
+        date: 'March 2025',
+      },
+    ],
   },
   {
     id: 'rehearsals',
     label: 'Rehearsals',
     icon: Users,
-    images: [] as { src: string; alt: string; date?: string }[],
+    images: [
+      {
+        src: '/gallery/rehearsal1.jpg',
+        alt: 'Band members gathered in a rehearsal room with instruments',
+        date: 'April 2025',
+      },
+      {
+        src: '/gallery/rehearsal2.jpg',
+        alt: 'Section leaders giving pointers during a percussion practice',
+        date: 'May 2025',
+      },
+    ],
   },
   {
     id: 'events',
     label: 'Community Events',
     icon: Calendar,
-    images: [] as { src: string; alt: string; date?: string }[],
+    images: [
+      {
+        src: '/gallery/event1.jpg',
+        alt: 'Holiday party group photo with festive decorations',
+        date: 'December 2024',
+      },
+      {
+        src: '/gallery/event2.jpg',
+        alt: 'Band members posing on a sleigh at a winter fundraiser',
+        date: 'December 2024',
+      },
+      {
+        src: '/gallery/event3.jpg',
+        alt: 'Members socializing at a local restaurant after rehearsal',
+        date: 'November 2024',
+      },
+    ],
   },
 ];
 
