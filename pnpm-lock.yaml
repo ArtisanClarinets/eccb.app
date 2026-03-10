@@ -17,12 +17,18 @@ importers:
       '@hookform/resolvers':
         specifier: ^3.9.1
         version: 3.10.0(react-hook-form@7.71.2(react@19.2.3))
+      '@napi-rs/canvas':
+        specifier: ^0.1.96
+        version: 0.1.96
       '@prisma/adapter-mariadb':
         specifier: ^7.4.2
         version: 7.4.2
       '@prisma/client':
         specifier: ^7.4.2
         version: 7.4.2(prisma@7.4.2(@types/react@19.2.14)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(typescript@5.9.3))(typescript@5.9.3)
+      '@prisma/config':
+        specifier: ^7.4.2
+        version: 7.4.2
       '@radix-ui/react-accordion':
         specifier: ^1.2.12
         version: 1.2.12(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
@@ -167,6 +173,9 @@ importers:
       mysql2:
         specifier: ^3.17.2
         version: 3.19.1(@types/node@20.19.37)
+      nanoid:
+        specifier: ^5.1.6
+        version: 5.1.6
       napi-rs:
         specifier: ^0.3.10
         version: 0.3.10(picomatch@4.0.3)
@@ -239,6 +248,9 @@ importers:
       vaul:
         specifier: ^1.1.2
         version: 1.1.2(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      vite:
+        specifier: ^7.3.1
+        version: 7.3.1(@types/node@20.19.37)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)
       webmidi:
         specifier: ^3.1.14
         version: 3.1.14
@@ -252,15 +264,9 @@ importers:
       '@eslint/js':
         specifier: ^9.20.0
         version: 9.39.4
-      '@napi-rs/canvas':
-        specifier: ^0.1.96
-        version: 0.1.96
       '@playwright/test':
         specifier: ^1.58.0
         version: 1.58.2
-      '@prisma/config':
-        specifier: ^7.4.2
-        version: 7.4.2
       '@tailwindcss/postcss':
         specifier: ^4
         version: 4.2.1
@@ -321,9 +327,6 @@ importers:
       jsdom:
         specifier: ^28.1.0
         version: 28.1.0(@noble/hashes@2.0.1)(canvas@3.2.1)
-      nanoid:
-        specifier: ^5.1.6
-        version: 5.1.6
       playwright:
         specifier: ^1.58.0
         version: 1.58.2
@@ -339,9 +342,6 @@ importers:
       typescript-eslint:
         specifier: ^8.56.0
         version: 8.57.0(eslint@9.39.4(jiti@2.6.1))(typescript@5.9.3)
-      vite:
-        specifier: ^7.3.1
-        version: 7.3.1(@types/node@20.19.37)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)
       vitest:
         specifier: ^4.0.18
         version: 4.0.18(@types/node@20.19.37)(jiti@2.6.1)(jsdom@28.1.0(@noble/hashes@2.0.1)(canvas@3.2.1))(lightningcss@1.31.1)(tsx@4.21.0)
