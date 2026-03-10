@@ -35,8 +35,10 @@ export async function GET(request: NextRequest, { params }: Params) {
     // Get and validate the storage key
     const { key } = await params;
     const storageKey = key.join('/');
-    if (!storageKey) {
-      return NextResponse.json({ error: 'Missing file key' }, { status: 400 });
+
+    // Prevent obvious path traversal attacks
+    if (!storageKey || storageKey.includes('..') || storageKey.includes('\0')) {
+      return NextResponse.json({ error: 'Invalid file path' }, { status: 400 });
     }
 
     const { searchParams } = new URL(request.url);
