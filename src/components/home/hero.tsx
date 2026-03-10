@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import Image from 'next/image';
-import heroBg from '@/assets/hero_bg.jpg';
+import heroBg from '@/assets/homepage-hero-bg.webp';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import gsap from 'gsap';

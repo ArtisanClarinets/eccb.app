@@ -1,7 +1,11 @@
+'use client';
+
 import { useEffect, useRef, useState } from 'react';
 import { gsap } from 'gsap';
 import { Music, ChevronRight, Play, Volume2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import Image from 'next/image';
+
 
 const instruments = [
   { id: 1, name: 'Bass Guitar', image: '/instrument-bass.jpg' },
@@ -128,10 +132,12 @@ export default function Hero() {
       {/* Background Image with Enhanced Ken Burns */}
       <div className="absolute inset-0 z-0">
         <div className="absolute inset-0 ken-burns-enhanced">
-          <img
-            src="/hero-bg.jpg"
+          <Image
+            src="/homepage-hero-bg.webp"
             alt="Musicians by the lake"
-            className="w-full h-full object-cover scale-110"
+            fill
+            className="object-cover scale-110"
+            priority
           />
         </div>
         {/* Multi-layer overlay for depth */}

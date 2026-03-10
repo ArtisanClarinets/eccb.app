@@ -1,5 +1,5 @@
 import React from 'react';
-import { Hero } from '@/components/home/hero';
+import Hero from '@/sections/Hero';
 import { UpcomingEvents } from '@/components/home/upcoming-events';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
