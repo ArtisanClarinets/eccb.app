@@ -44,13 +44,12 @@
     "start:sockets": "tsx src/server/socket-worker.ts"
   },
   "dependencies": {
+    "prisma": "^7.4.2",
     "@aws-sdk/client-s3": "^3.893.0",
     "@aws-sdk/s3-request-presigner": "^3.893.0",
     "@hookform/resolvers": "^3.9.1",
-    "@napi-rs/canvas": "^0.1.96",
     "@prisma/adapter-mariadb": "^7.4.2",
     "@prisma/client": "^7.4.2",
-    "@prisma/config": "^7.4.2",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-aspect-ratio": "^1.1.8",
@@ -99,7 +98,6 @@
     "jsonrepair": "^3.13.2",
     "lucide-react": "^0.563.0",
     "mysql2": "^3.17.2",
-    "nanoid": "^5.1.6",
     "napi-rs": "^0.3.10",
     "next": "16.1.6",
     "next-themes": "^0.4.6",
@@ -107,7 +105,6 @@
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^5.4.624",
     "pitchy": "^4.1.0",
-    "prisma": "^7.4.2",
     "react": "19.2.3",
     "react-day-picker": "^9.13.0",
     "react-dom": "19.2.3",
@@ -124,7 +121,6 @@
     "tesseract.js": "^7.0.0",
     "tonal": "^6.0.0",
     "vaul": "^1.1.2",
-    "vite": "^7.3.1",
     "webmidi": "^3.1.14",
     "zod": "^4.3.6",
     "zustand": "^5.0.0"
