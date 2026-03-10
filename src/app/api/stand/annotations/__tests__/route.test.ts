@@ -6,6 +6,12 @@ vi.mock('@/lib/rate-limit', () => ({
   applyRateLimit: vi.fn().mockResolvedValue(null),
 }));
 
+vi.mock('@/lib/stand/settings', () => ({
+  getStandSettings: vi.fn().mockResolvedValue({
+    maxStrokeDataSizeKB: 50,
+  }),
+}));
+
 // Mock auth
 vi.mock('@/lib/auth/config', () => ({
   auth: {

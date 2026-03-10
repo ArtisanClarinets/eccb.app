@@ -45,7 +45,7 @@ beforeEach(() => {
   mockRequirePermission.mockResolvedValue(true);
   mockFindUnique.mockResolvedValue({
     uploadSessionId: SESSION_ID,
-    parsedParts: [{ storageKey: 'part-key' }],
+    parsedParts: JSON.stringify([{ storageKey: 'part-key' }]),
   });
   mockDownloadFile.mockResolvedValue('http://download/url');
 

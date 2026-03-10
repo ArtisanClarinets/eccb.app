@@ -193,8 +193,11 @@ describe('Preferences API', () => {
 
       // The upsert should have been called with merged otherSettings
       const call = vi.mocked(prisma.userPreferences.upsert).mock.calls[0]?.[0];
-      const updateOther = call?.update?.otherSettings as Record<string, unknown>;
-      const createOther = call?.create?.otherSettings as Record<string, unknown>;
+      const updateOtherStr = call?.update?.otherSettings as string | undefined;
+      const createOtherStr = call?.create?.otherSettings as string | undefined;
+
+      const updateOther = updateOtherStr ? JSON.parse(updateOtherStr) : {};
+      const createOther = createOtherStr ? JSON.parse(createOtherStr) : {};
 
       // Update path should preserve existing keys
       expect(updateOther).toHaveProperty('audioTrackerSettings');
