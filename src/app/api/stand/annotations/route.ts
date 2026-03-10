@@ -129,7 +129,7 @@ export async function POST(request: NextRequest) {
         musicId,
         page,
         layer,
-        strokeData: strokeData as unknown as object,
+        strokeData: JSON.stringify(strokeData),
         userId: ctx.userId,
         sectionId: layer === 'SECTION' ? (sectionId ?? ctx.userSectionIds[0] ?? null) : null,
       },

@@ -152,7 +152,7 @@ export async function cleanupSmartUploadTempFiles(sessionId: string): Promise<vo
   try {
     await prisma.smartUploadSession.update({
       where: { uploadSessionId: sessionId },
-      data: { tempFiles: [] },
+      data: { tempFiles: JSON.stringify([]) },
     });
   } catch (err) {
     const details = safeErrorDetails(err);

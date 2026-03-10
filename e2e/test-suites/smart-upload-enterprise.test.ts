@@ -7,19 +7,19 @@
  * Run with: npm test -- pdf-splitter-adaptive.test.ts
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, _beforeEach, _vi } from 'vitest';
 import { PDFDocument } from 'pdf-lib';
 import {
-  adaptivelyExtractPages,
-  adaptiveSplitWithFallover,
+  _adaptivelyExtractPages,
+  _adaptiveSplitWithFallover,
 } from '@/lib/services/pdf-splitter-adaptive';
 
 describe('Adaptive PDF Extraction', () => {
   describe('adaptivelyExtractPages', () => {
     it('should succeed with pdf-lib on well-formed PDF', async () => {
       // This test would use a real well-formed PDF buffer
-      const wellFormedPdf = Buffer.from(''); // Load from test fixture
-      const document = await PDFDocument.create();
+      const _wellFormedPdf = Buffer.from(''); // Load from test fixture
+      const _document = await PDFDocument.create();
 
       // This test is a placeholder — real test would:
       // 1. Create a test PDF with 10 pages

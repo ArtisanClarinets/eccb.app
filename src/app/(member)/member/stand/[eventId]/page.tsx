@@ -253,23 +253,33 @@ export default async function StandPage({ params }: PageProps) {
     preferences: preferences
       ? {
           nightMode: preferences.nightMode,
-          metronomeSettings:
-            (preferences.metronomeSettings as Record<string, unknown>) ?? {},
-          midiMappings:
-            (preferences.midiMappings as Record<string, unknown>) ?? {},
+          metronomeSettings: preferences.metronomeSettings
+            ? (JSON.parse(preferences.metronomeSettings) as Record<
+                string,
+                unknown
+              >)
+            : {},
+          midiMappings: preferences.midiMappings
+            ? (JSON.parse(preferences.midiMappings) as Record<string, unknown>)
+            : {},
           tunerSettings:
-            ((preferences.otherSettings as any)?.tunerSettings as Record<
-              string,
-              unknown
-            >) || {},
+            preferences.otherSettings &&
+            (JSON.parse(preferences.otherSettings) as any)?.tunerSettings
+              ? ((JSON.parse(preferences.otherSettings) as any)
+                  .tunerSettings as Record<string, unknown>)
+              : {},
           pitchPipeSettings:
-            ((preferences.otherSettings as any)?.pitchPipeSettings as Record<
-              string,
-              unknown
-            >) || {},
+            preferences.otherSettings &&
+            (JSON.parse(preferences.otherSettings) as any)?.pitchPipeSettings
+              ? ((JSON.parse(preferences.otherSettings) as any)
+                  .pitchPipeSettings as Record<string, unknown>)
+              : {},
           audioTrackerSettings:
-            ((preferences.otherSettings as any)
-              ?.audioTrackerSettings as Record<string, unknown>) || {},
+            preferences.otherSettings &&
+            (JSON.parse(preferences.otherSettings) as any)?.audioTrackerSettings
+              ? ((JSON.parse(preferences.otherSettings) as any)
+                  .audioTrackerSettings as Record<string, unknown>)
+              : {},
         }
       : null,
     roster: roster.map((r) => ({

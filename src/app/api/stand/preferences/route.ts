@@ -3,7 +3,6 @@ import { prisma } from '@/lib/db';
 import { applyRateLimit } from '@/lib/rate-limit';
 import { requireStandAccess } from '@/lib/stand/access';
 import { z } from 'zod';
-import type { Prisma } from '@prisma/client';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -118,15 +117,17 @@ export async function POST(request: NextRequest) {
       create: {
         userId: ctx.userId,
         nightMode: validated.nightMode ?? false,
-        metronomeSettings: validated.metronomeSettings ?? {},
-        midiMappings: validated.midiMappings ?? {},
-        otherSettings: mergedOtherSettings as Prisma.InputJsonValue,
+        metronomeSettings: JSON.stringify(validated.metronomeSettings ?? {}),
+        midiMappings: JSON.stringify(validated.midiMappings ?? {}),
+        otherSettings: JSON.stringify(mergedOtherSettings),
       },
       update: {
         ...(validated.nightMode !== undefined && { nightMode: validated.nightMode }),
-        ...(validated.metronomeSettings && { metronomeSettings: validated.metronomeSettings }),
-        ...(validated.midiMappings && { midiMappings: validated.midiMappings }),
-        otherSettings: mergedOtherSettings as Prisma.InputJsonValue,
+        ...(validated.metronomeSettings && {
+          metronomeSettings: JSON.stringify(validated.metronomeSettings),
+        }),
+        ...(validated.midiMappings && { midiMappings: JSON.stringify(validated.midiMappings) }),
+        otherSettings: JSON.stringify(mergedOtherSettings),
       },
     });
 

@@ -237,11 +237,11 @@ export async function POST(request: NextRequest) {
         mimeType: 'application/pdf',
         storageKey,
         sourceSha256,
-        extractedMetadata: {
+        extractedMetadata: JSON.stringify({
           title: file.name.replace(/\.pdf$/i, ''),
           confidenceScore: 0,
           sourceSha256,
-        },
+        }),
         confidenceScore: 0,
         status: 'PENDING_REVIEW',
         uploadedBy: session.user.id,

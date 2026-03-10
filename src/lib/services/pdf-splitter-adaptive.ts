@@ -16,7 +16,7 @@
 
 import { PDFDocument } from 'pdf-lib';
 import { logger } from '@/lib/logger';
-import { asError, safeErrorDetails } from '@/lib/services/pdf-source';
+import { asError } from '@/lib/services/pdf-source';
 import type { CuttingInstruction } from '@/types/smart-upload';
 
 export interface AdaptiveSplitResult {
@@ -107,11 +107,13 @@ async function imageBasedEngine(params: ImageEngineHandlerParams): Promise<{
   buffer: Buffer;
   pageCount: number;
 }> {
-  const { pdfBuffer, pageIndices } = params;
+  const { pdfBuffer: _pdfBuffer, pageIndices } = params;
 
   try {
     // Dynamic import of pdfjs utilities
-    const { getDocument, GlobalWorkerOptions } = await import('pdfjs-dist');
+    const { getDocument: _getDocument, GlobalWorkerOptions } = await import(
+      'pdfjs-dist'
+    );
 
     // Set up worker if needed (in Node.js environment)
     if (typeof GlobalWorkerOptions !== 'undefined' && !GlobalWorkerOptions.workerSrc) {
@@ -158,7 +160,7 @@ async function rawSliceEngine(params: {
   pdfBuffer: Buffer;
   pageIndices: number[];
 }): Promise<{ buffer: Buffer; pageCount: number }> {
-  const { pdfBuffer, pageIndices } = params;
+  const { pdfBuffer: _pdfBuffer, pageIndices } = params;
 
   logger.debug('raw-slice fallback: Attempting minimal PDF reconstruction', {
     pageCount: pageIndices.length,

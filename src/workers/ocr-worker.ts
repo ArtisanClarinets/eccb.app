@@ -301,7 +301,7 @@ async function processOcrJob(job: Job<OcrProcessJobData>): Promise<void> {
       // These are optional but helpful for UI/ops:
       parseStatus: updateParseStatus ? 'OCR_FALLBACK_COMPLETE' : session.parseStatus,
       secondPassStatus: session.secondPassStatus || 'SKIPPED_OCR_FALLBACK',
-      secondPassResult: session.secondPassResult || { ocrFallback: true },
+      secondPassResult: session.secondPassResult || JSON.stringify({ ocrFallback: true }),
       updatedAt: new Date(),
     },
   });

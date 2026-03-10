@@ -91,7 +91,7 @@ export async function GET(
     let parsedParts: ParsedPart[] = [];
     if (uploadSession.parsedParts) {
       try {
-        parsedParts = uploadSession.parsedParts as ParsedPart[];
+        parsedParts = JSON.parse(uploadSession.parsedParts) as ParsedPart[];
       } catch {
         logger.warn('Failed to parse parsedParts JSON', { sessionId: id });
       }
