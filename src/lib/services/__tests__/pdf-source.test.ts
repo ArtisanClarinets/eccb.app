@@ -13,6 +13,9 @@ vi.mock('pdf-lib', () => ({
 
 vi.mock('pdfjs-dist/legacy/build/pdf.mjs', () => ({
   getDocument: mockPdfjsGetDocument,
+  GlobalWorkerOptions: {
+    workerSrc: '',
+  },
 }));
 
 import { getAuthoritativePdfPageCount } from '@/lib/services/pdf-source';

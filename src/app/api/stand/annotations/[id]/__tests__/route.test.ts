@@ -2,6 +2,12 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { PUT, DELETE } from '@/app/api/stand/annotations/[id]/route';
 import { NextRequest } from 'next/server';
 
+vi.mock('@/lib/stand/settings', () => ({
+  getStandSettings: vi.fn().mockResolvedValue({
+    maxStrokeDataSizeKB: 50,
+  }),
+}));
+
 // Mock auth
 vi.mock('@/lib/auth/config', () => ({
   auth: {
