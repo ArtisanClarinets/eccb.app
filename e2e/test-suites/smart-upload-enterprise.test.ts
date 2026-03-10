@@ -7,12 +7,8 @@
  * Run with: npm test -- pdf-splitter-adaptive.test.ts
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { PDFDocument } from 'pdf-lib';
-import {
-  adaptivelyExtractPages,
-  adaptiveSplitWithFallover,
-} from '@/lib/services/pdf-splitter-adaptive';
 
 describe('Adaptive PDF Extraction', () => {
   describe('adaptivelyExtractPages', () => {
