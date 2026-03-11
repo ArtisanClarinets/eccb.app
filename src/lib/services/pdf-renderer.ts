@@ -57,6 +57,12 @@ export interface PageImageWithInfo {
     width: number;
     height: number;
   };
+  /**
+   * When rendering fails we return a placeholder image along with an error
+   * message.  This property is optional so callers that only care about the
+   * successful shape can ignore it.
+   */
+  error?: string;
 }
 
 type PdfGetDocumentParams = Parameters<typeof pdfjsLib.getDocument>[0];

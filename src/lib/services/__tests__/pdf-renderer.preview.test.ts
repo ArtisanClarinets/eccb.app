@@ -100,6 +100,24 @@ describe('renderPdfPageToImageWithInfo', () => {
     expect(decoded[1]).toBe(0xd8);
   });
 
+  it('includes an error message and placeholder image when rendering fails', async () => {
+    const { renderPdfPageToImageWithInfo } = await import('../pdf-renderer');
+
+    // feed garbage data so pdfjs throws and we hit the catch block
+    const result = await renderPdfPageToImageWithInfo(Buffer.from('not a pdf'), {
+      pageIndex: 0,
+      scale: 2,
+      maxWidth: 500,
+      format: 'png',
+      quality: 80,
+      cacheTag: 'test-error',
+    });
+
+    expect(result.error).toBeDefined();
+    expect(typeof result.error).toBe('string');
+    expect(result.imageBase64.length).toBeGreaterThan(0);
+  });
+
   it('clamps scale and returns wasClamped=true when scale exceeds OOM limit', async () => {
     if (!hasPdf) return;
 
