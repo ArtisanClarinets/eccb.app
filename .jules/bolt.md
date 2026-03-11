@@ -12,3 +12,7 @@
 ## 2026-03-11 - Optimize Admin Monitoring DB Stats
 **Learning:** Found that `src/app/api/admin/monitoring/route.ts` was doing `prisma.event.findMany({ select: ... })` and fetching all rows into memory just to get lengths.
 **Action:** Replaced `.findMany({ select: ... }).length` calls with `.count({ where: ... })` to push calculations to the database. This significantly improves memory footprint and API latency as the database grows.
+
+## 2026-03-11 - Fix Prisma mock blocking test environment seeding
+**Learning:** Found that checking `process.env.NODE_ENV === 'test'` inside `src/lib/db/index.ts` to provide an empty Prisma mock breaks database seeding during CI testing.
+**Action:** Always constrain DB test mocking to explicitly the vitest runner (e.g. `process.env.VITEST`), because E2E tests and DB seeder scripts also execute with `NODE_ENV=test` but require a real client connection.
