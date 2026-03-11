@@ -8,3 +8,7 @@
 ## 2026-03-09 - N+1 Query Batching in Loops
 **Learning:** When loops execute sequential `findUnique` followed by `update`/`create` operations (e.g. tracking assignments or user states), it exhausts the database connection pool via N+1 queries.
 **Action:** Replace iterative database calls with a single bulk fetch (`findMany({ where: { id: { in: ids } } })`), filter in-memory, and use `validIds.flatMap(...)` to construct an array of `update`/`create` operations to pass into a single `prisma.$transaction(operations)`.
+
+## 2026-03-11 - Optimize Admin Monitoring DB Stats
+**Learning:** Found that `src/app/api/admin/monitoring/route.ts` was doing `prisma.event.findMany({ select: ... })` and fetching all rows into memory just to get lengths.
+**Action:** Replaced `.findMany({ select: ... }).length` calls with `.count({ where: ... })` to push calculations to the database. This significantly improves memory footprint and API latency as the database grows.

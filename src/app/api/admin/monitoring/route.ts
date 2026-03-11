@@ -93,9 +93,13 @@ async function checkRedisHealth(): Promise<'healthy' | 'degraded' | 'unhealthy'>
 async function getDatabaseStats(): Promise<DatabaseStats> {
   const [
     memberStats,
-    eventStats,
-    musicStats,
-    userStats,
+    eventTotalStats,
+    eventUpcomingCount,
+    eventPastCount,
+    musicTotalStats,
+    musicInCatalogCount,
+    userTotalStats,
+    userActiveCount,
     storageStats,
   ] = await Promise.all([
     // Member stats
@@ -104,16 +108,22 @@ async function getDatabaseStats(): Promise<DatabaseStats> {
       _count: true,
     }),
     // Event stats
-    prisma.event.findMany({
-      select: { id: true, startTime: true },
+    prisma.event.count(),
+    prisma.event.count({
+      where: { startTime: { gt: new Date() } }
+    }),
+    prisma.event.count({
+      where: { startTime: { lte: new Date() } }
     }),
     // Music stats
-    prisma.musicPiece.findMany({
-      select: { id: true, isArchived: true },
+    prisma.musicPiece.count(),
+    prisma.musicPiece.count({
+      where: { isArchived: false }
     }),
     // User stats
-    prisma.user.findMany({
-      select: { id: true, emailVerified: true },
+    prisma.user.count(),
+    prisma.user.count({
+      where: { emailVerified: true }
     }),
     // Storage stats
     prisma.musicFile.aggregate({
@@ -133,21 +143,21 @@ async function getDatabaseStats(): Promise<DatabaseStats> {
 
   // Process event stats
   const events = {
-    total: eventStats.length,
-    upcoming: eventStats.filter((e) => new Date(e.startTime) > now).length,
-    past: eventStats.filter((e) => new Date(e.startTime) <= now).length,
+    total: eventTotalStats,
+    upcoming: eventUpcomingCount,
+    past: eventPastCount,
   };
 
   // Process music stats
   const music = {
-    total: musicStats.length,
-    inCatalog: musicStats.filter((m) => !m.isArchived).length,
+    total: musicTotalStats,
+    inCatalog: musicInCatalogCount,
   };
 
   // Process user stats
   const users = {
-    total: userStats.length,
-    active: userStats.filter((u) => u.emailVerified).length,
+    total: userTotalStats,
+    active: userActiveCount,
   };
 
   // Process storage stats
