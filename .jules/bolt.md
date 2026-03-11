@@ -16,3 +16,7 @@
 ## 2026-03-11 - Fix Prisma mock blocking test environment seeding
 **Learning:** Found that checking `process.env.NODE_ENV === 'test'` inside `src/lib/db/index.ts` to provide an empty Prisma mock breaks database seeding during CI testing.
 **Action:** Always constrain DB test mocking to explicitly the vitest runner (e.g. `process.env.VITEST`), because E2E tests and DB seeder scripts also execute with `NODE_ENV=test` but require a real client connection.
+
+## 2026-03-11 - Next.js Build Needs Environment Secrets
+**Learning:** Found that Next.js build runs in `NODE_ENV=production` by default and evaluates `src/lib/env.ts`, which mandates `SUPER_ADMIN_PASSWORD` and other secrets. If CI build actions do not provide them, the `npm run build` will fail.
+**Action:** When adding new variables to `env.ts` or modifying GitHub actions, ensure dummy or explicit env variables (e.g. `SUPER_ADMIN_PASSWORD`) are passed into the `build` job's `.github/workflows/test.yml` `env` map.
