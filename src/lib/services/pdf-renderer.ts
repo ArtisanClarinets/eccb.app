@@ -257,6 +257,61 @@ function normalizeCropHeightFraction(value: unknown, fallback = 0.2): number {
 }
 
 /**
+ * Create a placeholder image with an error message.
+ * Returns a base64-encoded PNG showing the error text.
+ */
+function createPlaceholderImage(errorMessage: string, width: number): string {
+  // Create a simple SVG with the error message
+  const height = Math.round(width * 1.414); // A4 aspect ratio
+  const truncatedMessage = errorMessage.length > 200 
+    ? errorMessage.slice(0, 200) + '...' 
+    : errorMessage;
+  
+  // Escape special XML characters
+  const escapedMessage = truncatedMessage
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+  
+  // Split message into lines (max 60 chars per line)
+  const words = escapedMessage.split(' ');
+  const lines: string[] = [];
+  let currentLine = '';
+  
+  for (const word of words) {
+    if ((currentLine + ' ' + word).length > 60) {
+      if (currentLine) lines.push(currentLine);
+      currentLine = word;
+    } else {
+      currentLine = currentLine ? currentLine + ' ' + word : word;
+    }
+  }
+  if (currentLine) lines.push(currentLine);
+  
+  // Limit to 8 lines
+  const displayLines = lines.slice(0, 8);
+  const lineHeight = Math.min(24, Math.max(16, Math.floor(height / 12)));
+  const startY = Math.floor(height / 2) - (displayLines.length * lineHeight) / 2;
+  
+  const lineElements = displayLines.map((line, i) => 
+    `<text x="${width / 2}" y="${startY + i * lineHeight}" font-size="${lineHeight}" fill="#666" text-anchor="middle" font-family="sans-serif">${line}</text>`
+  ).join('');
+  
+  const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+  <rect width="100%" height="100%" fill="#f5f5f5"/>
+  <rect x="10" y="10" width="${width - 20}" height="${height - 20}" fill="none" stroke="#ddd" stroke-width="2" stroke-dasharray="10,5"/>
+  <text x="${width / 2}" y="${Math.floor(height / 4)}" font-size="${Math.floor(lineHeight * 1.5)}" fill="#999" text-anchor="middle" font-family="sans-serif" font-weight="bold">Preview Unavailable</text>
+  ${lineElements}
+</svg>`;
+  
+  // Convert SVG to base64
+  return Buffer.from(svg).toString('base64');
+}
+
+/**
  * Clear cached render results.
  * Call with a `tag` to clear only that session's entries,
  * or with no arguments to flush the entire cache.
@@ -931,7 +986,7 @@ export async function renderPdfPageToImageWithInfo(
       effective: rendered.effective,
     };
   } catch (error) {
-    logger.error('renderPdfPageToImageWithInfo: failed', {
+    logger.error('renderPdfPageToImageWithInfo: failed, returning placeholder', {
       ...safeErrorDetails(error),
       pageIndex: idx,
       format: fmt,
@@ -939,7 +994,24 @@ export async function renderPdfPageToImageWithInfo(
       maxWidth: mw,
       quality: q,
     });
-    throw asError(error);
+    
+    // Return a placeholder image instead of throwing
+    // This ensures the admin UI can still display something
+    const errorMessage = error instanceof Error ? error.message : 'Render failed';
+    const placeholderBase64 = createPlaceholderImage(errorMessage, mw);
+    
+    return {
+      imageBase64: placeholderBase64,
+      totalPages: 0,
+      mimeType: 'image/png',
+      effective: {
+        width: mw,
+        height: Math.round(mw * 1.414), // A4 aspect ratio
+        scale: sc,
+        wasClamped: false,
+      },
+      error: errorMessage,
+    };
   } finally {
     await cleanupPdfDocument(loadingTask, pdfDocument);
   }

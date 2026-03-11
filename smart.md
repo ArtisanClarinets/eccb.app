@@ -327,7 +327,7 @@ Relevant files / directories
   - src/lib/services/__tests__/part-boundary-detector.test.ts
   - src/lib/services/__tests__/gap-detection.test.ts
 - Docs inspected (smart upload)
-  - docs/SMART_UPLOAD.md
+  - docs/SMART_UPLOAD.md (now superseded by docs/smart-upload/SMART_UPLOAD_SYSTEM_GUIDE.md)
   - docs/smart-upload/SMART_UPLOAD_ENTERPRISE_CHECKLIST.md
   - docs/smart-upload/SMART_UPLOAD_ACTION_PLAN.md
   - docs/smart-upload/smart-upload-definition-of-done.md

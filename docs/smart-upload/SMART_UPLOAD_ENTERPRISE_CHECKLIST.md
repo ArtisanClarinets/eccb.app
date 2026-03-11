@@ -1,5 +1,9 @@
 # SMART_UPLOAD_ENTERPRISE_CHECKLIST
 
+> **NOTE:** The canonical documentation for the smart upload system lives in
+> [SMART_UPLOAD_SYSTEM_GUIDE.md](./SMART_UPLOAD_SYSTEM_GUIDE.md). This checklist
+> is kept for historic context only.
+
 **Repo:** ECCB Platform (Next.js/TypeScript)  
 **Scope:** Smart Upload → autonomous sheet-music ingestion (metadata + part detection + splitting + library commit)  
 **Goal:** “Enterprise, production-level” means: reliable, secure, observable, cost-controlled, idempotent, test-covered, and able to run unattended for the majority of real-world band PDFs.

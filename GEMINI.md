@@ -24,7 +24,7 @@ This project is strictly defined by the following documentation files. **All cod
 | **`README.md`** | Entry | Project entry point, quick start, and navigation. |
 | **`docs/SECURITY.md`** | Security | Security protocols, headers, CSRF, rate limiting, and audit tools. |
 | **`docs/ACCESSIBILITY.md`** | A11y | WCAG 2.1 AA standards, testing procedures, and component guidelines. |
-| **`docs/SMART_UPLOAD.md`** | Feature | AI-powered music PDF metadata extraction architecture and flow. |
+| **`docs/SMART_UPLOAD.md`** (deprecated; see `docs/smart-upload/SMART_UPLOAD_SYSTEM_GUIDE.md`) | Feature | AI-powered music PDF metadata extraction architecture and flow. |
 | **`docs/stand-*.md`** | Feature | Digital Music Stand architecture, rendering, annotations, and user guide. |
 | **`docs/DATABASE_SETUP_ARCHITECTURE.md`** | DB | Database setup wizard and repair system architecture. |
 | **System Settings** | Config | All application settings are database-driven via `/admin/settings` UI; env falls back only if db values missing. |

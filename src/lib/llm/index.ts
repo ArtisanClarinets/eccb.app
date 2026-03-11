@@ -26,6 +26,7 @@ import {
   type VisionRequest,
   type VisionResponse,
 } from './types';
+import { assertCapabilities } from './capabilities';
 
 // --- Error Classes ---
 
@@ -155,6 +156,18 @@ export async function callVisionModel(
     temperature: boundedTemperature,
     modelParams: inputModelParams,
   };
+
+  // --- Capability Validation ---
+  // Prevent wasted API calls to incompatible models
+  assertCapabilities(
+    config.llm_provider,
+    config.llm_vision_model ?? '',
+    images.length > 0 ? 'vision' : 'text',
+    {
+      imageCount: images.length,
+      requireJson: options?.responseFormat?.type === 'json',
+    }
+  );
 
   // --- Retry and Execution Loop ---
   let lastError: Error | undefined;

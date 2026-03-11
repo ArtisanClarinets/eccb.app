@@ -636,7 +636,17 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
       const segResult = detectPartBoundaries(pageHeaderResult.pageHeaders, totalPages, true);
       authoritativeTextSegmentation = segResult;
 
-      if (segResult.segments.length > 1 || segResult.segmentationConfidence >= 60) {
+      // Require BOTH multiple segments AND sufficient high-confidence labels
+      // to prevent accepting garbage segmentation (e.g., 78 segments but only 1 high-confidence label)
+      const MIN_HIGH_CONFIDENCE_PAGES = 3;
+      const highConfidencePages = segResult.pageLabels.filter(
+        (pl) => pl.confidence >= 70 && pl.label && !isForbiddenLabel(pl.label)
+      ).length;
+      
+      const meetsConfidenceThreshold = segResult.segmentationConfidence >= (llmConfig.skipParseThreshold ?? 60);
+      const hasEnoughHighConfidenceLabels = highConfidencePages >= MIN_HIGH_CONFIDENCE_PAGES;
+      
+      if (segResult.segments.length > 1 && meetsConfidenceThreshold && hasEnoughHighConfidenceLabels) {
         deterministicInstructions = segResult.cuttingInstructions;
         deterministicConfidence = segResult.segmentationConfidence;
 
@@ -650,6 +660,21 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
           sessionId,
           segments: segResult.segments.length,
           confidence: deterministicConfidence,
+          highConfidencePages,
+        });
+      } else {
+        logger.info('Deterministic segmentation rejected — insufficient quality', {
+          sessionId,
+          segments: segResult.segments.length,
+          confidence: segResult.segmentationConfidence,
+          highConfidencePages,
+          meetsConfidenceThreshold,
+          hasEnoughHighConfidenceLabels,
+          reason: !meetsConfidenceThreshold 
+            ? 'below confidence threshold' 
+            : !hasEnoughHighConfidenceLabels 
+              ? 'insufficient high-confidence labels' 
+              : 'single segment',
         });
       }
     } else if (pageHeaderResult.hasTextLayer) {

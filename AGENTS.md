@@ -35,7 +35,7 @@ Agents **MUST** consult these files for specific domain knowledge:
 - **[CHANGELOG.md](CHANGELOG.md)**: Version history.
 
 ### Feature-Specific Documentation
-- **[SMART_UPLOAD.md](docs/SMART_UPLOAD.md)**: AI-powered music PDF metadata extraction.
+- **[SMART_UPLOAD.md](docs/SMART_UPLOAD.md)** (deprecated; see [SMART_UPLOAD_SYSTEM_GUIDE.md](docs/smart-upload/SMART_UPLOAD_SYSTEM_GUIDE.md)): AI-powered music PDF metadata extraction.
 - **[stand-developer-guide.md](docs/stand-developer-guide.md)**: Digital Music Stand architecture and API.
 - **[stand-user-guide.md](docs/stand-user-guide.md)**: User manual for the Music Stand.
 - **[stand-annotation-system.md](docs/stand-annotation-system.md)**: Canvas drawing and sync logic.

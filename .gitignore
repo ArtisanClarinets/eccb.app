@@ -54,3 +54,10 @@ e2e/.auth/
 e2e/screenshots/
 e2e-results.json
 *.webm
+
+# local artifacts & caches
+/dev.db
+/logs/
+/outbox/
+/storage/
+

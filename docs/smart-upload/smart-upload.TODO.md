@@ -1,3 +1,7 @@
+> **NOTE:** The authoritative documentation for the running smart upload system is now maintained in the
+> [Smart Upload System Guide](./SMART_UPLOAD_SYSTEM_GUIDE.md). This TODO/implementation spec
+> is retained for historical/reference purposes only.
+
 Below is the **repo-mapped implementation spec** for turning this Smart Upload codebase into a **fully autonomous, enterprise-grade music ingest workflow**.
 
 This is based on the actual repo structure you uploaded.

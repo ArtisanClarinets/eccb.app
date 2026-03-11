@@ -225,6 +225,44 @@ function formatExceptionKind(kind: string | undefined): string {
   }
 }
 
+/**
+ * Sanitize display values from LLM extraction to prevent garbage text in UI.
+ * Removes control characters, normalizes Unicode, truncates excessive length.
+ */
+function sanitizeDisplayValue(value: string | undefined | null): string {
+  if (!value) return '-';
+  
+  // Remove control characters (except common whitespace)
+  let cleaned = value.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+  
+  // Normalize Unicode to prevent display issues
+  cleaned = cleaned.normalize('NFKC');
+  
+  // Trim whitespace
+  cleaned = cleaned.trim();
+  
+  // Truncate excessive length (likely garbage)
+  if (cleaned.length > 100) {
+    cleaned = cleaned.slice(0, 100) + '...';
+  }
+  
+  // Return placeholder if empty after cleaning
+  return cleaned || '-';
+}
+
+/**
+ * Check if a value contains likely garbage (excessive non-alphanumeric chars).
+ */
+function isLikelyGarbage(value: string | undefined | null): boolean {
+  if (!value || value.length < 3) return false;
+  
+  const alphanumericCount = (value.match(/[a-zA-Z0-9]/g) || []).length;
+  const ratio = alphanumericCount / value.length;
+  
+  // If less than 30% alphanumeric, likely garbage
+  return ratio < 0.3;
+}
+
 const _ZOOM_LEVELS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
 /**
@@ -1152,8 +1190,13 @@ function UploadReviewClient({
                           onClick={() => handlePartSelect(part)}
                           className="h-auto py-2 flex flex-col items-start"
                         >
-                          <span className="font-medium text-xs">{part.partName}</span>
-                          <span className="text-xs opacity-70">{part.instrument}</span>
+                          <span className="font-medium text-xs" title={isLikelyGarbage(part.partName) ? 'This value appears corrupted' : undefined}>
+                            {sanitizeDisplayValue(part.partName)}
+                            {isLikelyGarbage(part.partName) && (
+                              <span className="ml-1 text-amber-500">⚠️</span>
+                            )}
+                          </span>
+                          <span className="text-xs opacity-70">{sanitizeDisplayValue(part.instrument)}</span>
                           <span className="text-xs opacity-50">
                             {formatHumanRange(part.pageRange as [number, number])} ({part.pageCount} pages)
                           </span>
@@ -1485,8 +1528,11 @@ function UploadReviewClient({
                     <div className="bg-muted p-3 rounded-lg max-h-56 overflow-y-auto">
                       {editingSession.extractedMetadata.parts.map((part, index) => (
                         <div key={index} className="text-sm">
-                          <span className="font-medium">{part.instrument}</span>
-                          {part.partName && <span> - {part.partName}</span>}
+                          <span className="font-medium">{sanitizeDisplayValue(part.instrument)}</span>
+                          {part.partName && <span> - {sanitizeDisplayValue(part.partName)}</span>}
+                          {isLikelyGarbage(part.partName || '') && (
+                            <span className="ml-1 text-amber-500 text-xs">⚠️</span>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -1509,8 +1555,13 @@ function UploadReviewClient({
                             <TableBody>
                               {editingSession.parsedParts.map((part, index) => (
                                 <TableRow key={index}>
-                                  <TableCell>{part.partName}</TableCell>
-                                  <TableCell>{part.instrument}</TableCell>
+                                  <TableCell>
+                                    {sanitizeDisplayValue(part.partName)}
+                                    {isLikelyGarbage(part.partName) && (
+                                      <span className="ml-1 text-amber-500">⚠️</span>
+                                    )}
+                                  </TableCell>
+                                  <TableCell>{sanitizeDisplayValue(part.instrument)}</TableCell>
                                   <TableCell>{part.section}</TableCell>
                                   <TableCell>{part.transposition || '-'}</TableCell>
                                   <TableCell>{part.pageCount}</TableCell>
@@ -1564,8 +1615,13 @@ function UploadReviewClient({
                         <TableBody>
                           {editingSession.parsedParts.map((part, index) => (
                             <TableRow key={index}>
-                              <TableCell>{part.partName}</TableCell>
-                              <TableCell>{part.instrument}</TableCell>
+                              <TableCell>
+                                {sanitizeDisplayValue(part.partName)}
+                                {isLikelyGarbage(part.partName) && (
+                                  <span className="ml-1 text-amber-500">⚠️</span>
+                                )}
+                              </TableCell>
+                              <TableCell>{sanitizeDisplayValue(part.instrument)}</TableCell>
                               <TableCell>{part.section}</TableCell>
                               <TableCell>{part.transposition || '-'}</TableCell>
                               <TableCell>{part.pageCount}</TableCell>

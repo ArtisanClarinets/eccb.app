@@ -29,7 +29,7 @@ const OPENROUTER_FREE_URL = 'https://openrouter.ai/api/v1/models';
 
 const DEFAULT_OLLAMA_VISION_MODEL = 'llava:latest';
 const DEFAULT_GEMINI_VISION_MODEL = 'gemini-1.5-flash';
-const DEFAULT_OPENROUTER_FREE_VISION_MODEL = 'google/gemma-3-27b-it:free';
+const DEFAULT_OPENROUTER_FREE_VISION_MODEL = 'meta-llama/llama-3.2-11b-vision-instruct:free';
 
 // =============================================================================
 // Discovery Helpers
@@ -102,11 +102,20 @@ export async function discoverOpenRouter(apiKey: string | undefined): Promise<Di
       signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = (await res.json()) as { data?: Array<{ id: string; pricing?: { prompt: string } }> };
+    const data = (await res.json()) as { data?: Array<{ id: string; pricing?: { prompt: string }; architecture?: { modality?: string } }> };
     const freeModels = (data.data ?? [])
       .filter((m) => m.pricing?.prompt === '0' || m.id.endsWith(':free'))
       .map((m) => m.id);
-    const visionModel = freeModels.find((m) => /gemma|llama.*vision|llava|qwen.*vl/i.test(m)) ?? DEFAULT_OPENROUTER_FREE_VISION_MODEL;
+    
+    // Vision-capable model patterns (excluding text-only models like gemma-3-27b-it)
+    const VISION_CAPABLE_PATTERNS = /llama.*vision|llava|qwen.*vl|gemini|claude.*vision|gpt-4.*vision/i;
+    const TEXT_ONLY_EXCLUSIONS = /gemma-3-27b-it|gemma-2b-it|gemma-7b-it/i;
+    
+    const visionModel = freeModels.find((m) => {
+      // Must match vision pattern and NOT match text-only exclusions
+      return VISION_CAPABLE_PATTERNS.test(m) && !TEXT_ONLY_EXCLUSIONS.test(m);
+    }) ?? DEFAULT_OPENROUTER_FREE_VISION_MODEL;
+    
     return {
       provider: 'openrouter',
       available: true,

@@ -1,5 +1,9 @@
 # Smart Upload System: Enterprise-Level Upgrade Implementation
 
+> **NOTE:** Upgrade details have been consolidated under the
+> [Smart Upload System Guide](./smart-upload/SMART_UPLOAD_SYSTEM_GUIDE.md).
+> This document remains here for archival purposes.
+
 ## Overview
 
 This document details the production-ready upgrades implemented for the Smart Upload system, addressing critical failure points, security gaps, and observability issues identified in the March 9, 2026 testing session.

@@ -1,5 +1,9 @@
 # Smart Upload Enterprise Upgrade: Deployment Guide
 
+> **NOTE:** Deployment steps for smart upload have moved to the
+> [Smart Upload System Guide](./smart-upload/SMART_UPLOAD_SYSTEM_GUIDE.md).
+> This enterprise upgrade document remains for historical reference.
+
 ## Pre-Deployment Checklist
 
 ### Code Review

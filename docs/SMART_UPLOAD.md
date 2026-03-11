@@ -1,5 +1,10 @@
 # Smart Upload Documentation
 
+> **NOTE:** This file has been superseded by the comprehensive
+> [Smart Upload System Guide](./SMART_UPLOAD_SYSTEM_GUIDE.md).  Only refer to
+> the original documentation below for historical context; all new changes
+> must be reflected in the system guide.
+
 This document describes the Smart Upload feature, which uses Large Language Models (LLMs) with vision capabilities to automatically extract metadata from uploaded music PDF files. The system provides a two-pass extraction process for accurate metadata capture with human review workflow.
 
 ## Table of Contents

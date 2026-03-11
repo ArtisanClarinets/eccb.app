@@ -15,35 +15,69 @@ import { MUSIC_UPLOAD } from '@/lib/auth/permission-constants';
  * - sessionId: (optional) Filter events for a specific session
  */
 export async function GET(request: NextRequest) {
+  const sessionId = request.nextUrl.searchParams.get('sessionId');
+  const encoder = new TextEncoder();
+
   // Auth guard: require authenticated user with music upload permission
   const session = await getSession();
   if (!session?.user?.id) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+    // Return SSE-formatted error for protocol consistency
+    const errorStream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(`event: error\ndata: ${JSON.stringify({ error: 'Unauthorized', status: 401 })}\n\n`)
+        );
+        controller.close();
+      },
+    });
+    return new Response(errorStream, {
       status: 401,
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+      },
     });
   }
+  
   const hasPermission = await checkUserPermission(session.user.id, MUSIC_UPLOAD);
   if (!hasPermission) {
-    return new Response(JSON.stringify({ error: 'Forbidden' }), {
+    const errorStream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(`event: error\ndata: ${JSON.stringify({ error: 'Forbidden', status: 403 })}\n\n`)
+        );
+        controller.close();
+      },
+    });
+    return new Response(errorStream, {
       status: 403,
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+      },
     });
   }
-
-  const sessionId = request.nextUrl.searchParams.get('sessionId');
 
   initializeQueues();
   const queueEvents = getQueueEvents('SMART_UPLOAD');
 
   if (!queueEvents) {
-    return new Response(
-      JSON.stringify({ error: 'Queue events not available' }),
-      { status: 503, headers: { 'Content-Type': 'application/json' } }
-    );
+    const errorStream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(`event: error\ndata: ${JSON.stringify({ error: 'Queue events not available', status: 503 })}\n\n`)
+        );
+        controller.close();
+      },
+    });
+    return new Response(errorStream, {
+      status: 503,
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+      },
+    });
   }
-
-  const encoder = new TextEncoder();
 
   const stream = new ReadableStream({
     start(controller) {
