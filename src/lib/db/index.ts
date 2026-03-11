@@ -37,7 +37,7 @@ function parseDatabaseUrlForAdapter(url?: string) {
  * (default pool limit is 10).
  */
 const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build';
-const CONNECTION_LIMIT = isBuildPhase ? 1 : 10;
+const CONNECTION_LIMIT = isBuildPhase ? 5 : 10;
 
 let prisma: PrismaClient;
 

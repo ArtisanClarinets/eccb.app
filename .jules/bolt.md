@@ -20,3 +20,7 @@
 ## 2026-03-11 - Next.js Build Needs Environment Secrets
 **Learning:** Found that Next.js build runs in `NODE_ENV=production` by default and evaluates `src/lib/env.ts`, which mandates `SUPER_ADMIN_PASSWORD` and other secrets. If CI build actions do not provide them, the `npm run build` will fail.
 **Action:** When adding new variables to `env.ts` or modifying GitHub actions, ensure dummy or explicit env variables (e.g. `SUPER_ADMIN_PASSWORD`) are passed into the `build` job's `.github/workflows/test.yml` `env` map.
+
+## 2026-03-11 - Next.js Build Connection Pooling
+**Learning:** Limiting the Prisma connection pool to `1` during the Next.js build phase (`NEXT_PHASE === 'phase-production-build'`) will cause database connection timeouts during static generation. Pages that make sequential DB queries (like `member/stand/page.tsx`) will be starved of connections by other build workers.
+**Action:** Keep the build connection limit reasonably small to avoid overwhelming the database server during CI, but set it higher than 1 (e.g., 5) to allow individual build workers to complete complex static generation paths without `prisma:error pool timeout`.
