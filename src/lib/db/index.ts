@@ -41,7 +41,7 @@ const CONNECTION_LIMIT = isBuildPhase ? 1 : 10;
 
 let prisma: PrismaClient;
 
-if (process.env.NODE_ENV === 'test') {
+if (process.env.NODE_ENV === 'test' && process.env.VITEST) {
   // During tests we typically mock out prisma methods, so we avoid
   // instantiating the real client which currently requires an adapter
   // or accelerateUrl when the DATABASE_URL is missing.  Return an empty
