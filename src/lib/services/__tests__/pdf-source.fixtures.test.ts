@@ -7,7 +7,15 @@ import { validatePdfBuffer } from '../pdf-splitter';
 const TEST_MUSIC_DIR = path.join(process.cwd(), 'storage', 'test_music');
 
 async function collectFixturePdfs(dir: string): Promise<string[]> {
-  const entries = await readdir(dir, { withFileTypes: true });
+  let entries;
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch (err: any) {
+    if (err.code === 'ENOENT') {
+      return [];
+    }
+    throw err;
+  }
   const files: string[] = [];
 
   for (const entry of entries) {
