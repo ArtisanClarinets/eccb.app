@@ -44,7 +44,6 @@
     "start:sockets": "tsx src/server/socket-worker.ts"
   },
   "dependencies": {
-    "prisma": "^7.4.2",
     "@aws-sdk/client-s3": "^3.893.0",
     "@aws-sdk/s3-request-presigner": "^3.893.0",
     "@hookform/resolvers": "^3.9.1",
@@ -97,6 +96,7 @@
     "ioredis": "^5.9.3",
     "jsonrepair": "^3.13.2",
     "lucide-react": "^0.563.0",
+    "magicast": "^0.3.5",
     "mysql2": "^3.17.2",
     "napi-rs": "^0.3.10",
     "next": "16.1.6",
@@ -105,6 +105,7 @@
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^5.4.624",
     "pitchy": "^4.1.0",
+    "prisma": "^7.4.2",
     "react": "19.2.3",
     "react-day-picker": "^9.13.0",
     "react-dom": "19.2.3",
