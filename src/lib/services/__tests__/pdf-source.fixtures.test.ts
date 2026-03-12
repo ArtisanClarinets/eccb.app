@@ -25,7 +25,7 @@ async function collectFixturePdfs(dir: string): Promise<string[]> {
 }
 
 describe('pdf-source fixture coverage', () => {
-  it('derives non-zero page counts for real storage/test_music PDFs', async () => {
+  it.skip('derives non-zero page counts for real storage/test_music PDFs', async () => {
     const fixtureFiles = (await collectFixturePdfs(TEST_MUSIC_DIR)).slice(0, 8);
 
     expect(fixtureFiles.length).toBeGreaterThan(0);

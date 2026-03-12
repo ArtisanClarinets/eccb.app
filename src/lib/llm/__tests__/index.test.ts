@@ -28,6 +28,8 @@ const defaultConfig: LLMConfig = {
 };
 
 describe('callVisionModel retry logic', () => {
+  beforeEach(() => { vi.spyOn(console, 'error').mockImplementation(() => {}); });
+  afterEach(() => { vi.restoreAllMocks(); });
   beforeEach(() => {
     vi.useFakeTimers();
   });

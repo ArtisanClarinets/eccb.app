@@ -233,6 +233,7 @@ function sanitizeDisplayValue(value: string | undefined | null): string {
   if (!value) return '-';
   
   // Remove control characters (except common whitespace)
+  // eslint-disable-next-line no-control-regex
   let cleaned = value.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
   
   // Normalize Unicode to prevent display issues
