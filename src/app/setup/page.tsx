@@ -5,7 +5,9 @@
  * the database setup process.
  */
 
+import { redirect } from 'next/navigation';
 import { SetupWizard } from '@/components/setup/setup-wizard';
+import { getSetupState } from '@/lib/setup/state';
 
 export const metadata = {
   title: 'Setup | Emerald Coast Community Band',
@@ -19,6 +21,14 @@ interface SetupPageProps {
 export default async function SetupPage({ searchParams }: SetupPageProps): Promise<React.ReactNode> {
   const params = await searchParams;
   const isRepairMode = params.mode === 'repair';
+
+  // If system is already fully configured, redirect to login (unless in repair mode)
+  if (!isRepairMode) {
+    const setupState = await getSetupState().catch(() => null);
+    if (setupState?.readyForLogin) {
+      redirect('/login');
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">

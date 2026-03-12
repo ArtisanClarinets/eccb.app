@@ -388,3 +388,30 @@ export interface InitializeResult {
   /** Connection string for the app user */
   connectionString: string;
 }
+
+// =============================================================================
+// Setup State (authoritative readiness contract)
+// =============================================================================
+
+/**
+ * Authoritative contract returned by `getSetupState()`.
+ * All UI, middleware and API routes should rely on this shape.
+ */
+export interface SetupStateInfo {
+  /** Current setup phase. COMPLETE means the system is ready. */
+  phase: SetupPhase;
+  /** True only when the system is fully configured and safe for users to log in. */
+  readyForLogin: boolean;
+  /** Whether a database connection could be established. */
+  dbConnected: boolean;
+  /** Whether a SUPER_ADMIN role assignment exists in the database. */
+  hasSuperAdmin: boolean;
+  /** Detected database provider (sqlite | mysql | postgresql | unknown). */
+  provider?: string;
+  /** Number of pending migrations (0 when all are applied). */
+  pendingMigrations?: number;
+  /** Set to true in development when an empty DB was detected and SETUP_MODE was auto-enabled. */
+  autoSetupEnabled?: boolean;
+  /** Human-readable reason when readyForLogin is false. */
+  error?: string;
+}

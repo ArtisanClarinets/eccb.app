@@ -1,16 +1,13 @@
 /**
  * Setup Status API Route
  *
- * Get current setup status including:
- * - Database connection status
- * - Migration status
- * - Seed data status
+ * Returns the authoritative setup state via getSetupState().
+ * Includes database connection, migration, super-admin and auth-config checks.
  */
 
 import { NextResponse } from 'next/server';
 
-import { prisma } from '@/lib/db';
-import { checkMigrationStatus } from '@/lib/setup/schema-automation';
+import { getSetupState } from '@/lib/setup/state';
 import { SetupPhase } from '@/lib/setup/types';
 import { logger } from '@/lib/logger';
 import { validateSetupRequest } from '@/lib/setup/setup-guard';
@@ -25,6 +22,7 @@ interface StatusResponse {
   progress: number;
   status: 'not_started' | 'in_progress' | 'completed' | 'failed';
   message: string;
+  readyForLogin: boolean;
   details?: {
     database?: {
       connected: boolean;
@@ -34,40 +32,50 @@ interface StatusResponse {
       applied: boolean;
       pendingCount: number;
     };
-    seed?: {
-      applied: boolean;
+    superAdmin?: {
+      exists: boolean;
+    };
+    auth?: {
+      configured: boolean;
     };
   };
 }
 
 // =============================================================================
-// Helper Functions
+// Phase → progress / status / message mapping
 // =============================================================================
 
-/**
- * Check database connection status
- */
-async function checkDatabaseConnection(): Promise<{ connected: boolean; provider?: string }> {
-  try {
-    // Use the shared singleton – avoids creating a stray PrismaClient and
-    // burning an extra connection on every status check.
-    await prisma.$queryRaw`SELECT 1`;
-
-    // Get provider from DATABASE_URL
-    const databaseUrl = process.env.DATABASE_URL || '';
-    let provider = 'unknown';
-
-    if (databaseUrl.includes('.db') || databaseUrl.includes('sqlite')) {
-      provider = 'sqlite';
-    } else if (databaseUrl.includes('mysql') || databaseUrl.includes('mariadb')) {
-      provider = 'mysql';
-    } else if (databaseUrl.includes('postgres')) {
-      provider = 'postgresql';
-    }
-
-    return { connected: true, provider };
-  } catch {
-    return { connected: false };
+function phaseToMeta(
+  phase: SetupPhase,
+  state: Awaited<ReturnType<typeof getSetupState>>,
+): Pick<StatusResponse, 'progress' | 'status' | 'message'> {
+  switch (phase) {
+    case SetupPhase.COMPLETE:
+      return { progress: 100, status: 'completed', message: 'System is ready' };
+    case SetupPhase.MIGRATING:
+      return {
+        progress: 30,
+        status: 'in_progress',
+        message: state.pendingMigrations
+          ? `${state.pendingMigrations} migration(s) pending`
+          : 'Migrations have not been applied',
+      };
+    case SetupPhase.VERIFYING:
+      return {
+        progress: 70,
+        status: 'in_progress',
+        message: state.error ?? 'Verifying setup…',
+      };
+    case SetupPhase.SEEDING:
+      return { progress: 80, status: 'in_progress', message: 'Seeding database…' };
+    case SetupPhase.INITIALIZING:
+      return { progress: 10, status: 'not_started', message: 'Database initialized, migrations required' };
+    default: // CHECKING / CONFIGURING
+      return {
+        progress: 0,
+        status: state.dbConnected ? 'in_progress' : 'failed',
+        message: state.error ?? 'Checking system status…',
+      };
   }
 }
 
@@ -77,66 +85,52 @@ async function checkDatabaseConnection(): Promise<{ connected: boolean; provider
 
 /**
  * GET /api/setup/status
- * Get current setup status
+ * Returns the current setup state as a rich StatusResponse.
  */
 export async function GET(request: Request): Promise<NextResponse<StatusResponse> | NextResponse> {
-  // Validate request is authorized for setup
   const authResponse = validateSetupRequest(request);
   if (authResponse) return authResponse;
 
   try {
-    // Check database connection
-    const dbStatus = await checkDatabaseConnection();
-
-    // Check migration status
-    const migrationStatus = checkMigrationStatus();
-
-    // Determine overall status
-    let phase: SetupPhase = SetupPhase.CHECKING;
-    let progress = 0;
-    let status: StatusResponse['status'] = 'not_started';
-    let message = 'Checking system status...';
-
-    if (!dbStatus.connected) {
-      phase = SetupPhase.CHECKING;
-      progress = 0;
-      status = 'failed';
-      message = 'Database connection failed';
-    } else if (!migrationStatus.applied && migrationStatus.pendingCount > 0) {
-      phase = SetupPhase.MIGRATING;
-      progress = 30;
-      status = 'in_progress';
-      message = `${migrationStatus.pendingCount} migration(s) pending`;
-    } else if (!migrationStatus.applied && migrationStatus.pendingCount === 0) {
-      phase = SetupPhase.INITIALIZING;
-      progress = 10;
-      status = 'not_started';
-      message = 'Database initialized, migrations required';
-    } else if (migrationStatus.applied) {
-      phase = SetupPhase.COMPLETE;
-      progress = 100;
-      status = 'completed';
-      message = 'System is ready';
-    }
+    const state = await getSetupState();
+    const meta = phaseToMeta(state.phase, state);
 
     const response: StatusResponse = {
       success: true,
-      phase,
-      progress,
-      status,
-      message,
+      phase: state.phase,
+      progress: meta.progress,
+      status: meta.status,
+      message: meta.message,
+      readyForLogin: state.readyForLogin,
       details: {
-        database: dbStatus,
+        database: {
+          connected: state.dbConnected,
+          provider: state.provider,
+        },
         migrations: {
-          applied: migrationStatus.applied,
-          pendingCount: migrationStatus.pendingCount,
+          applied: (state.pendingMigrations ?? 0) === 0 && state.dbConnected,
+          pendingCount: state.pendingMigrations ?? 0,
+        },
+        superAdmin: {
+          exists: state.hasSuperAdmin,
+        },
+        auth: {
+          // auth is configured when we reached COMPLETE or VERIFYING past the super-admin check
+          configured:
+            state.phase === SetupPhase.COMPLETE ||
+            (state.phase === SetupPhase.VERIFYING &&
+              state.hasSuperAdmin &&
+              (state.error?.includes('auth') ?? false) === false),
         },
       },
     };
 
     return NextResponse.json(response);
   } catch (error) {
-    logger.error('Failed to get setup status', error instanceof Error ? error : new Error(String(error)));
+    logger.error(
+      'Failed to get setup status',
+      error instanceof Error ? error : new Error(String(error)),
+    );
 
     const response: StatusResponse = {
       success: false,
@@ -144,6 +138,7 @@ export async function GET(request: Request): Promise<NextResponse<StatusResponse
       progress: 0,
       status: 'failed',
       message: error instanceof Error ? error.message : 'Failed to check status',
+      readyForLogin: false,
     };
 
     return NextResponse.json(response, { status: 500 });

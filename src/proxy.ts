@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { randomUUID } from 'crypto';
 import { logger } from '@/lib/logger';
+import { getSetupState } from '@/lib/setup/state';
 
 // Route configuration for access control
 interface RouteConfig {
@@ -42,6 +43,14 @@ const PUBLIC_ROUTES = [
 
 // Auth API routes that should not be blocked
 const AUTH_API_PATHS = ['/api/auth'];
+
+// Paths that are always allowed regardless of setup state
+// (setup wizard, health check, and static assets bypass the gate)
+const SETUP_BYPASS_PATHS = [
+  '/setup',
+  '/api/setup',
+  '/api/health',
+];
 
 // Paths to skip logging (health checks, static assets)
 const SKIP_LOGGING_PATHS = [
@@ -120,6 +129,14 @@ function isPublicPath(pathname: string): boolean {
  */
 function isAuthApiPath(pathname: string): boolean {
   return AUTH_API_PATHS.some(path => pathname.startsWith(path));
+}
+
+/**
+ * Check if path is exempt from the setup-ready gate.
+ * This includes the setup wizard itself, its API, and the health endpoint.
+ */
+function isSetupBypassPath(pathname: string): boolean {
+  return SETUP_BYPASS_PATHS.some(p => pathname === p || pathname.startsWith(`${p}/`));
 }
 
 /**
@@ -213,7 +230,7 @@ function logResponse(
 /**
  * Proxy function - Next.js 16 middleware equivalent
  */
-export function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const requestId = generateRequestId();
   const startTime = Date.now();
@@ -265,6 +282,33 @@ export function proxy(request: NextRequest) {
     }
     return response;
   }
+
+  // ── Setup readiness gate ──────────────────────────────────────────────────
+  // If the system is not ready for login, redirect every non-bypass page
+  // request to the setup wizard.
+  if (!isSetupBypassPath(pathname)) {
+    try {
+      const setupState = await getSetupState();
+      if (!setupState.readyForLogin) {
+        requestLogger.info(`Setup not complete (${setupState.phase}), redirecting ${pathname} → /setup`);
+        const setupUrl = new URL('/setup', request.url);
+        const redirectResponse = NextResponse.redirect(setupUrl);
+        redirectResponse.headers.set('X-Request-Id', requestId);
+        applySecurityHeaders(redirectResponse);
+        if (!skipLogging) {
+          logResponse(request, redirectResponse, requestId, startTime, requestLogger);
+        }
+        return redirectResponse;
+      }
+    } catch (err) {
+      // If we cannot determine setup state, log and continue rather than
+      // hard-blocking the request – the page itself will handle the error.
+      requestLogger.warn('Failed to read setup state in proxy', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+  // ── End setup gate ────────────────────────────────────────────────────────
 
   // Allow public routes
   if (isPublicPath(pathname)) {

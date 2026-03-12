@@ -4,6 +4,7 @@ import { redis } from '@/lib/redis';
 import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
 import { startTimer } from '@/lib/performance';
+import { getSetupState } from '@/lib/setup/state';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,6 +33,14 @@ interface HealthResponse {
     database: ComponentHealth;
     redis: ComponentHealth;
     storage: ComponentHealth;
+  };
+  setup: {
+    phase: string;
+    readyForLogin: boolean;
+    dbConnected: boolean;
+    hasSuperAdmin: boolean;
+    pendingMigrations?: number;
+    error?: string;
   };
 }
 
@@ -182,10 +191,11 @@ export async function GET(): Promise<NextResponse<HealthResponse>> {
   const requestTimer = startTimer('health:check');
   
   // Run all health checks in parallel
-  const [database, redisHealth, storage] = await Promise.all([
+  const [database, redisHealth, storage, setupState] = await Promise.all([
     checkDatabase(),
     checkRedis(),
     checkStorage(),
+    getSetupState().catch(() => null),
   ]);
   
   const components = { database, redis: redisHealth, storage };
@@ -200,6 +210,14 @@ export async function GET(): Promise<NextResponse<HealthResponse>> {
     uptimeSeconds: uptime,
     timestamp: new Date().toISOString(),
     components,
+    setup: {
+      phase: setupState?.phase ?? 'unknown',
+      readyForLogin: setupState?.readyForLogin ?? false,
+      dbConnected: setupState?.dbConnected ?? false,
+      hasSuperAdmin: setupState?.hasSuperAdmin ?? false,
+      pendingMigrations: setupState?.pendingMigrations,
+      error: setupState?.error,
+    },
   };
   
   // Log health check result

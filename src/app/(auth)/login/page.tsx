@@ -1,18 +1,26 @@
 import React, { Suspense } from 'react';
 import Image from 'next/image';
+import { redirect } from 'next/navigation';
 import heroBg from '@/assets/hero_bg.jpg';
 import Link from 'next/link';
 import { Logo } from '@/components/icons/logo';
 import { ChevronLeft } from 'lucide-react';
 import { LoginForm } from '@/components/auth/login-form';
 import { Button } from '@/components/ui/button';
+import { getSetupState } from '@/lib/setup/state';
 
 export const metadata = {
   title: 'Sign In',
   description: 'Sign in to your ECCB member account',
 };
 
-export default function LoginPage() {
+export default async function LoginPage() {
+  // Guard: if system is not ready redirect to setup wizard
+  const setupState = await getSetupState().catch(() => null);
+  if (setupState && !setupState.readyForLogin) {
+    redirect('/setup');
+  }
+
   return (
     <div className="flex min-h-screen">
       {/* Left side: Dramatic Entry */}
