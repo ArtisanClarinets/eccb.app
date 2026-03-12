@@ -252,9 +252,15 @@ importers:
       '@eslint/js':
         specifier: ^9.20.0
         version: 9.39.4
+      '@napi-rs/canvas':
+        specifier: ^0.1.96
+        version: 0.1.96
       '@playwright/test':
         specifier: ^1.58.0
         version: 1.58.2
+      '@prisma/config':
+        specifier: ^7.5.0
+        version: 7.5.0
       '@tailwindcss/postcss':
         specifier: ^4
         version: 4.2.1
@@ -315,6 +321,9 @@ importers:
       jsdom:
         specifier: ^28.1.0
         version: 28.1.0(@noble/hashes@2.0.1)(canvas@3.2.1)
+      nanoid:
+        specifier: ^5.1.6
+        version: 5.1.6
       playwright:
         specifier: ^1.58.0
         version: 1.58.2
@@ -330,6 +339,9 @@ importers:
       typescript-eslint:
         specifier: ^8.56.0
         version: 8.57.0(eslint@9.39.4(jiti@2.6.1))(typescript@5.9.3)
+      vite:
+        specifier: ^8.0.0
+        version: 8.0.0(@types/node@20.19.37)(esbuild@0.27.4)(jiti@2.6.1)(tsx@4.21.0)
       vitest:
         specifier: ^4.0.18
         version: 4.1.0(@types/node@20.19.37)(jsdom@28.1.0(@noble/hashes@2.0.1)(canvas@3.2.1))(vite@8.0.0(@types/node@20.19.37)(esbuild@0.27.4)(jiti@2.6.1)(tsx@4.21.0))
@@ -4247,6 +4259,11 @@ packages:
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
     hasBin: true
 
+  nanoid@5.1.6:
+    resolution: {integrity: sha512-c7+7RQ+dMB5dPwwCp4ee1/iV/q2P6aK1mTZcfr1BTuVlyW9hJYiMPybJCcnBlQtuSmTIWNeazm/zqNoZSSElBg==}
+    engines: {node: ^18 || >=20}
+    hasBin: true
+
   nanostores@1.1.1:
     resolution: {integrity: sha512-EYJqS25r2iBeTtGQCHidXl1VfZ1jXM7Q04zXJOrMlxVVmD0ptxJaNux92n1mJ7c5lN3zTq12MhH/8x59nP+qmg==}
     engines: {node: ^20.0.0 || >=22.0.0}
@@ -6382,7 +6399,6 @@ snapshots:
       '@napi-rs/canvas-linux-x64-musl': 0.1.96
       '@napi-rs/canvas-win32-arm64-msvc': 0.1.96
       '@napi-rs/canvas-win32-x64-msvc': 0.1.96
-    optional: true
 
   '@napi-rs/wasm-runtime@1.1.1':
     dependencies:
@@ -9520,6 +9536,8 @@ snapshots:
       lru.min: 1.1.4
 
   nanoid@3.3.11: {}
+
+  nanoid@5.1.6: {}
 
   nanostores@1.1.1: {}
 
