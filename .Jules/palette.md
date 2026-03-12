@@ -4,3 +4,6 @@
 ## 2026-03-09 - Keyboard Accessibility for Smart Navigation Editor
 **Learning:** Discovered interactive elements in `SmartNavEditor` (hotspots, edit toggle buttons, configuration form inputs/buttons) lacked clear keyboard focus indicators, rendering keyboard navigation difficult or invisible. Specifically, `div` elements functioning as interactive hotspots need proper focus rings.
 **Action:** Always add `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1` to custom interactive components (like divs acting as buttons) and standard focus ring utilities (`focus-visible:ring-2`) to inputs/selects to ensure keyboard accessibility matches native expectations.
+## 2026-03-11 - Add ARIA Labels to Icon-Only Buttons
+**Learning:** Found several icon-only buttons (using `size="icon"`) across the codebase (e.g., sidebars, asset management, carpool board) that lacked `aria-label` attributes. This makes them inaccessible to screen readers, as the purpose of the button is only conveyed visually.
+**Action:** Always add an `aria-label` attribute to any button that only contains an icon to ensure its purpose is announced by screen readers.

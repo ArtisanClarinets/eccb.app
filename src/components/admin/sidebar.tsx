@@ -109,6 +109,7 @@ export function AdminSidebar() {
           size="icon"
           onClick={() => setMobileOpen(true)}
           className="bg-background"
+          aria-label="Open mobile menu"
         >
           <Menu className="h-5 w-5" />
         </Button>
@@ -135,6 +136,7 @@ export function AdminSidebar() {
             variant="ghost"
             size="icon"
             onClick={() => setMobileOpen(false)}
+            aria-label="Close mobile menu"
           >
             <X className="h-5 w-5" />
           </Button>
