@@ -117,13 +117,14 @@ function getExpectedOrigin(host: string | null): string | null {
   if (env.NODE_ENV === 'production') {
     try {
       const appUrl = new URL(env.NEXT_PUBLIC_APP_URL);
-      // Check if the host matches the configured URL
-      if (appUrl.host === host) {
-        return appUrl.origin;
+      // Strictly require the host to match the configured APP_URL.
+      // Accepting unverified Host header values is a CSRF bypass vector —
+      // an attacker could send Host: evil.com with Origin: https://evil.com
+      // and the constructed expected origin would equal the supplied origin.
+      if (appUrl.host !== host) {
+        return null;
       }
-      // If host doesn't match config, still allow it (could be custom domain)
-      const protocol = appUrl.protocol;
-      return `${protocol}//${host}`;
+      return appUrl.origin;
     } catch {
       return null;
     }

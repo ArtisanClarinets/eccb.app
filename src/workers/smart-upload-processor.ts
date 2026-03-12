@@ -1539,7 +1539,14 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
       metadata: extraction,
       totalPages,
       maxPagesPerPart: llmConfig.maxPagesPerPart ?? 12,
-      segmentationConfidence: extraction.segmentationConfidence,
+      // Prefer LLM-reported segmentation confidence; fall back to text-layer
+      // confidence from authoritativeTextSegmentation (which is set even when
+      // detectPartBoundaries returned only one segment and deterministicConfidence
+      // was not promoted — the text-layer quality signal still matters for gating).
+      segmentationConfidence:
+        extraction.segmentationConfidence ??
+        authoritativeTextSegmentation?.segmentationConfidence ??
+        undefined,
     });
 
     const ocrFirstUsed = extraction.notes?.includes('OCR-first pipeline') ?? false;

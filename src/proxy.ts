@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server';
 import { randomUUID } from 'crypto';
 import { logger } from '@/lib/logger';
 import { getSetupState } from '@/lib/setup/state';
+import { csrfValidationResponse } from '@/lib/csrf';
 
 // Route configuration for access control
 interface RouteConfig {
@@ -68,13 +69,20 @@ const SECURITY_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
   'Referrer-Policy': 'strict-origin-when-cross-origin',
   'Permissions-Policy': 'accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()',
+  // Enforce HTTPS for 1 year on all subdomains; include in browser preload list
+  'Strict-Transport-Security': 'max-age=31536000; includeSubDomains; preload',
+  // Prevent DNS prefetch leaking navigated origins
+  'X-DNS-Prefetch-Control': 'off',
 };
 
-// Content Security Policy - practical for Next.js
+// Content Security Policy.
+// unsafe-inline is required by Tailwind (style) and Next.js inline style injection.
+// unsafe-eval is NOT included — Next.js 16 production builds do not need it.
+// TODO: migrate to nonce-based CSP to fully remove unsafe-inline for script-src.
 const CSP_DIRECTIVES = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval'", // Next.js requires unsafe-inline for scripts
-  "style-src 'self' 'unsafe-inline'",                 // Tailwind requires unsafe-inline
+  "script-src 'self' 'unsafe-inline'",  // Next.js inline scripts; unsafe-eval intentionally omitted
+  "style-src 'self' 'unsafe-inline'",   // Tailwind / CSS-in-JS requires unsafe-inline
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
   "connect-src 'self' wss:",
@@ -273,6 +281,35 @@ export async function proxy(request: NextRequest) {
       logResponse(request, response, requestId, startTime, requestLogger);
     }
     return response;
+  }
+
+  // ── CSRF protection for mutating API requests ────────────────────────────
+  // Validate Origin/Referer for all state-changing API calls.
+  // Excluded paths: /api/auth (BetterAuth owns its CSRF), /api/setup, /api/health.
+  if (
+    pathname.startsWith('/api') &&
+    !isAuthApiPath(pathname) &&
+    !isSetupBypassPath(pathname)
+  ) {
+    const csrfError = csrfValidationResponse(request);
+    if (csrfError) {
+      requestLogger.warn('CSRF validation failed', {
+        method: request.method,
+        path: pathname,
+        origin: request.headers.get('origin'),
+        referer: request.headers.get('referer'),
+      });
+      const csrfResponse = NextResponse.json(
+        { error: 'CSRF validation failed' },
+        { status: 403 },
+      );
+      applySecurityHeaders(csrfResponse);
+      csrfResponse.headers.set('X-Request-Id', requestId);
+      if (!skipLogging) {
+        logResponse(request, csrfResponse, requestId, startTime, requestLogger);
+      }
+      return csrfResponse;
+    }
   }
 
   // Allow other API routes (they handle their own auth)

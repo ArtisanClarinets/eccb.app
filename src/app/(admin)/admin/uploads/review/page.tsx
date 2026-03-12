@@ -232,7 +232,8 @@ function formatExceptionKind(kind: string | undefined): string {
 function sanitizeDisplayValue(value: string | undefined | null): string {
   if (!value) return '-';
   
-  // Remove control characters (except common whitespace)
+  // Remove control characters (except common whitespace) that may appear in LLM-extracted text.
+  // eslint-disable-next-line no-control-regex
   let cleaned = value.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
   
   // Normalize Unicode to prevent display issues
