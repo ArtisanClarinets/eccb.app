@@ -26,6 +26,7 @@ export default async function SetupPage({ searchParams }: SetupPageProps): Promi
   if (!isRepairMode) {
     const setupState = await getSetupState().catch(() => null);
     if (setupState?.readyForLogin) {
+      // System is ready - redirect to login
       redirect('/login');
     }
   }
@@ -48,8 +49,18 @@ export default async function SetupPage({ searchParams }: SetupPageProps): Promi
 
           {/* Setup Wizard */}
           <SetupWizard repairMode={isRepairMode} />
+
+          {/* Post-setup instructions (shown in dev) */}
+          {process.env.NODE_ENV === 'development' && (
+            <div className="mt-8 p-4 bg-blue-900/30 border border-blue-700 rounded-lg text-center">
+              <p className="text-sm text-blue-200">
+                <strong>After setup completes:</strong> Set <code className="bg-blue-950 px-2 py-1 rounded">SETUP_MODE=false</code> in your .env file and restart the app.
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
+}
 }
