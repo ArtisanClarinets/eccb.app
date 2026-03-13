@@ -80,18 +80,25 @@ export function SetupWizard({ repairMode = false }: SetupWizardProps): React.Rea
 
     try {
       // Test database connection
+      // sanitize port: if user cleared the field it may be NaN which JSON
+      // serializes to null and zod will reject. Remove the property in that
+      // case and let the server default via env.
+      const payloadConfig: any = {
+        host: config.host,
+        database: config.database,
+        username: config.username,
+        password: config.password,
+      };
+      if (!Number.isNaN(config.port)) {
+        payloadConfig.port = config.port;
+      }
+
       const response = await fetch('/api/setup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'init',
-          config: {
-            host: config.host,
-            port: config.port,
-            database: config.database,
-            username: config.username,
-            password: config.password,
-          },
+          config: payloadConfig,
         }),
       });
 

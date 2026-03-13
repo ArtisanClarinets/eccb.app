@@ -1743,7 +1743,7 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
       ocrStatus: ocrProvenance.ocrEngine ? 'COMPLETE' : 'NOT_NEEDED',
       secondPassStatus,
       commitStatus: 'NOT_STARTED',
-      workflowStatus: 'PROCESSED',
+      workflowStatus: 'PROCESSING',
       deterministicSegmentation: deterministicConfidence > 0,
     };
 
@@ -1787,6 +1787,7 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
         cuttingInstructions: deepCloneJSON(extraction.cuttingInstructions ?? normalizedInstructionsOne) as any,
         tempFiles: deepCloneJSON(tempFiles) as any,
         autoApproved: shouldAutoCommit,
+        status: shouldAutoCommit ? 'AUTO_COMMITTING' : 'REQUIRES_REVIEW',
         requiresHumanReview: qualityGateFailed || undefined,
         secondPassStatus: secondPassStatus === 'NOT_NEEDED' ? 'NOT_NEEDED' : secondPassStatus,
         llmProvider: llmConfig.provider,

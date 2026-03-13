@@ -51,6 +51,7 @@ import {
   Play,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ConfidenceIndicator, ConfidenceWarningBanner } from '@/components/smart-upload/confidence-indicator';
 import type { ParsedPartRecord, ParseStatus, SecondPassStatus, CuttingInstruction } from '@/types/smart-upload';
 
 // =============================================================================
@@ -86,7 +87,7 @@ interface SmartUploadSession {
   mimeType: string;
   storageKey: string;
   confidenceScore: number | null;
-  status: 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED';
+  status: 'PROCESSING' | 'AUTO_COMMITTING' | 'AUTO_COMMITTED' | 'REQUIRES_REVIEW' | 'MANUALLY_APPROVED' | 'REJECTED' | 'FAILED' | 'PENDING_REVIEW' | 'APPROVED';
   uploadedBy: string;
   reviewedBy: string | null;
   reviewedAt: Date | null;
@@ -340,7 +341,7 @@ function UploadReviewClient({
   const fetchSessions = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/admin/uploads/review?status=PENDING_REVIEW');
+      const response = await fetch('/api/admin/uploads/review?status=REQUIRES_REVIEW');
 
       if (!response.ok) {
         return;
@@ -944,15 +945,12 @@ function UploadReviewClient({
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        className={cn(
-                          getConfidenceColor(session.confidenceScore),
-                        )}
-                      >
-                        {session.confidenceScore !== null
-                          ? `${session.confidenceScore}%`
-                          : 'N/A'}
-                      </Badge>
+                      <ConfidenceIndicator
+                        score={session.confidenceScore}
+                        threshold={70}
+                        autoApproveThreshold={90}
+                        showIcon={true}
+                      />
                     </TableCell>
                      <TableCell>
                        <div className="flex flex-col gap-1">
@@ -1327,26 +1325,25 @@ function UploadReviewClient({
                 )}
               </Tabs>
 
-              {/* Confidence Score */}
-              <div className="flex items-center gap-4">
-                <span className="text-sm font-medium">Confidence Score:</span>
-                <Badge
-                  className={cn(
-                    'text-lg px-3 py-1',
-                    getConfidenceColor(editingSession.confidenceScore)
-                  )}
-                >
-                  {editingSession.confidenceScore !== null
-                    ? `${editingSession.confidenceScore}%`
-                    : 'N/A'}
-                </Badge>
-                {editingSession.confidenceScore !== null &&
-                  editingSession.confidenceScore < 85 && (
-                    <span className="text-sm text-yellow-600">
-                      <AlertCircle className="inline h-4 w-4 mr-1" />
-                      Below threshold - requires careful review
-                    </span>
-                  )}
+              {/* Confidence Score with Warning */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-4">
+                  <span className="text-sm font-medium">Confidence Score:</span>
+                  <ConfidenceIndicator
+                    score={editingSession.confidenceScore}
+                    threshold={70}
+                    autoApproveThreshold={90}
+                    showIcon={true}
+                    detailed={true}
+                  />
+                </div>
+                {editingSession.confidenceScore !== null && editingSession.confidenceScore < 70 && (
+                  <ConfidenceWarningBanner
+                    score={editingSession.confidenceScore}
+                    threshold={70}
+                    provenance={editingSession.exceptionQueue?.provenance}
+                  />
+                )}
               </div>
 
               {editingSession.exceptionQueue && (

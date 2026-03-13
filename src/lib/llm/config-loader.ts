@@ -14,6 +14,7 @@ import { getDefaultEndpointForProvider } from './providers';
 import type { LLMProviderValue } from './providers';
 import { PROMPT_VERSION } from '@/lib/smart-upload/prompts';
 import { getPrimaryApiKey, getFallbackApiKey } from './api-key-service';
+import { validateCapabilities, getVisionModelRecommendations } from './capabilities';
 
 export interface LLMRuntimeConfig {
   provider: LLMProviderValue;
@@ -606,6 +607,46 @@ export async function buildAdapterConfigForStep(
       }
     } catch {
       // Fallback lookup failed — proceed without key
+    }
+  }
+
+  // P1.2 FIX: Validate that vision steps use vision-capable models
+  // For verification and header-label steps requiring vision, fall back if model doesn't support it
+  if ((stepName === 'verification' || stepName === 'header-label') && model) {
+    const capValidation = validateCapabilities(provider, model, 'vision');
+    
+    if (!capValidation.valid) {
+      logger.warn('Model does not support vision for step; attempting fallback', {
+        stepName,
+        provider,
+        model,
+        error: capValidation.error,
+      });
+
+      // Attempt to find a recommended vision model for this provider
+      const recommendations = getVisionModelRecommendations(provider);
+      
+      if (recommendations.length > 0) {
+        const fallbackModel = recommendations[0];
+        logger.info('Using fallback vision model', {
+          stepName,
+          provider,
+          originalModel: model,
+          fallbackModel,
+        });
+        
+        // Update model to the recommended fallback
+        // Do NOT update modelParams as they may not be suitable for fallback model
+        model = fallbackModel;
+      } else {
+        // No recommendations — log error but don't fail yet
+        // The actual LLM call will fail more gracefully with detailed error
+        logger.error('No vision-capable model recommendations available', {
+          stepName,
+          provider,
+          model,
+        });
+      }
     }
   }
 

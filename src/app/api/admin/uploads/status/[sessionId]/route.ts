@@ -9,7 +9,7 @@ function deriveWorkflowStage(
   secondPassStatus: string | null,
   status: string
 ): string {
-  if (status === 'APPROVED') return 'approved';
+  if (status === 'AUTO_COMMITTED' || status === 'MANUALLY_APPROVED' || status === 'APPROVED') return 'approved';
   if (status === 'REJECTED') return 'rejected';
   if (parseStatus === 'PARSE_FAILED') return 'parse_failed';
   if (secondPassStatus === 'FAILED') return 'second_pass_failed';
@@ -87,7 +87,7 @@ export async function GET(
       requiresHumanReview: Boolean(session.requiresHumanReview),
       parseFailed: session.parseStatus === 'PARSE_FAILED',
       secondPassFailed: session.secondPassStatus === 'FAILED',
-      completed: session.status === 'APPROVED' || session.status === 'REJECTED',
+      completed: session.status === 'AUTO_COMMITTED' || session.status === 'MANUALLY_APPROVED' || session.status === 'APPROVED' || session.status === 'REJECTED' || session.status === 'FAILED',
       parseStatus: session.parseStatus,
       ocrStatus: session.ocrTextChars && session.ocrTextChars > 0 ? 'COMPLETED' : 'NOT_USED',
       secondPassStatus: session.secondPassStatus,

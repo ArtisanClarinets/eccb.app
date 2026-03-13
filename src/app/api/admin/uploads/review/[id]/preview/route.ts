@@ -7,6 +7,7 @@ import { downloadFile } from '@/lib/services/storage';
 import { renderPdfPageToImageWithInfo } from '@/lib/services/pdf-renderer';
 import { parseRenderParams } from '@/lib/review-preview/render-params';
 import { logger } from '@/lib/logger';
+import { SmartUploadErrorCode, SmartUploadError } from '@/lib/smart-upload/error-codes';
 import type { DownloadResult } from '@/lib/services/storage';
 
 // =============================================================================
@@ -114,18 +115,53 @@ export async function GET(
     );
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
-    // pdfjs throws "Page index X out of range" when request is out of bounds.
+    
+    // P2.3 FIX: Enhanced error handling with error codes and better diagnostics
+    
+    // Classify the error
+    let errorCode: SmartUploadErrorCode;
+    let statusCode = 500;
+    let detail = err.message;
+    
     if (err.message.includes('out of range')) {
-      logger.warn('PDF preview page out of range', { message: err.message });
-      return NextResponse.json(
-        { error: 'Page out of range', detail: err.message },
-        { status: 400 }
-      );
+      errorCode = SmartUploadErrorCode.PROCESS_PAGE_TOO_LARGE;
+      statusCode = 400;
+      detail = `Page index out of range. Requested page may exceed PDF page count.`;
+    } else if (err.message.includes('Failed to download')) {
+      errorCode = SmartUploadErrorCode.STORAGE_DOWNLOAD_FAILED;
+      statusCode = 503;
+      detail = `Unable to retrieve PDF from storage. Please retry.`;
+    } else if (err.message.includes('render') || err.message.includes('Render')) {
+      errorCode = SmartUploadErrorCode.PROCESS_RENDERING_FAILED;
+      statusCode = 500;
+      detail = `PDF rendering failed. The PDF may be corrupted or unsupported.`;
+    } else if (err.message.includes('Unauthorized')) {
+      errorCode = SmartUploadErrorCode.AUTH_UNAUTHORIZED;
+      statusCode = 401;
+    } else if (err.message.includes('Forbidden')) {
+      errorCode = SmartUploadErrorCode.AUTH_FORBIDDEN;
+      statusCode = 403;
+    } else {
+      errorCode = SmartUploadErrorCode.UNKNOWN_ERROR;
     }
-    logger.error('Failed to generate PDF preview', { error: err.message });
+    
+    // Log with context
+    logger.error('PDF preview endpoint error', {
+      errorCode,
+      sessionId: (await params).id,
+      statusCode,
+      message: err.message,
+      stack: err.stack,
+    });
+    
     return NextResponse.json(
-      { error: 'Failed to generate preview', detail: err.message },
-      { status: 500 }
+      {
+        error: 'Preview generation failed',
+        errorCode,
+        detail,
+        timestamp: new Date().toISOString(),
+      },
+      { status: statusCode }
     );
   }
 }

@@ -82,7 +82,7 @@ export async function POST(
     }
 
     // Only allow resplit for sessions that haven't been committed yet
-    if (uploadSession.status === 'APPROVED' || uploadSession.status === 'REJECTED') {
+    if (uploadSession.status === 'AUTO_COMMITTED' || uploadSession.status === 'MANUALLY_APPROVED' || uploadSession.status === 'APPROVED' || uploadSession.status === 'REJECTED') {
       return NextResponse.json(
         { error: `Session is already ${uploadSession.status.toLowerCase()}` },
         { status: 400 }

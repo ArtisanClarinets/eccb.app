@@ -20,50 +20,50 @@ import {
 } from '../state';
 
 describe('State Machine — Workflow Transitions', () => {
-  it('allows UPLOADED → QUEUED', () => {
-    expect(isValidWorkflowTransition('UPLOADED', 'QUEUED')).toBe(true);
+  it('allows PROCESSING → AUTO_COMMITTING', () => {
+    expect(isValidWorkflowTransition('PROCESSING', 'AUTO_COMMITTING')).toBe(true);
   });
 
-  it('allows UPLOADED → FAILED', () => {
-    expect(isValidWorkflowTransition('UPLOADED', 'FAILED')).toBe(true);
+  it('allows AUTO_COMMITTING → AUTO_COMMITTED', () => {
+    expect(isValidWorkflowTransition('AUTO_COMMITTING', 'AUTO_COMMITTED')).toBe(true);
   });
 
-  it('rejects UPLOADED → APPROVED (skip)', () => {
-    expect(isValidWorkflowTransition('UPLOADED', 'APPROVED')).toBe(false);
+  it('rejects PROCESSING → AUTO_COMMITTED (skip steps)', () => {
+    expect(isValidWorkflowTransition('PROCESSING', 'AUTO_COMMITTED')).toBe(false);
   });
 
-  it('allows QUEUED → PROCESSING', () => {
-    expect(isValidWorkflowTransition('QUEUED', 'PROCESSING')).toBe(true);
+  it('allows AUTO_COMMITTING → REQUIRES_REVIEW', () => {
+    expect(isValidWorkflowTransition('AUTO_COMMITTING', 'REQUIRES_REVIEW')).toBe(true);
   });
 
-  it('allows PROCESSING → PROCESSED', () => {
-    expect(isValidWorkflowTransition('PROCESSING', 'PROCESSED')).toBe(true);
+  it('allows PROCESSING → REQUIRES_REVIEW', () => {
+    expect(isValidWorkflowTransition('PROCESSING', 'REQUIRES_REVIEW')).toBe(true);
   });
 
-  it('allows PROCESSING → PENDING_REVIEW', () => {
-    expect(isValidWorkflowTransition('PROCESSING', 'PENDING_REVIEW')).toBe(true);
+  it('allows REQUIRES_REVIEW → MANUALLY_APPROVED', () => {
+    expect(isValidWorkflowTransition('REQUIRES_REVIEW', 'MANUALLY_APPROVED')).toBe(true);
   });
 
   it('allows PROCESSING → FAILED', () => {
     expect(isValidWorkflowTransition('PROCESSING', 'FAILED')).toBe(true);
   });
 
-  it('allows COMMITTING → COMMITTED', () => {
-    expect(isValidWorkflowTransition('COMMITTING', 'COMMITTED')).toBe(true);
+  it('allows AUTO_COMMITTING → FAILED', () => {
+    expect(isValidWorkflowTransition('AUTO_COMMITTING', 'FAILED')).toBe(true);
   });
 
-  it('allows COMMITTING → APPROVED', () => {
-    expect(isValidWorkflowTransition('COMMITTING', 'APPROVED')).toBe(true);
+  it('allows REQUIRES_REVIEW → REJECTED', () => {
+    expect(isValidWorkflowTransition('REQUIRES_REVIEW', 'REJECTED')).toBe(true);
   });
 
   it('rejects transitions from terminal states', () => {
     expect(isValidWorkflowTransition('APPROVED', 'PROCESSING')).toBe(false);
-    expect(isValidWorkflowTransition('COMMITTED', 'QUEUED')).toBe(false);
-    expect(isValidWorkflowTransition('REJECTED', 'QUEUED')).toBe(false);
+    expect(isValidWorkflowTransition('AUTO_COMMITTED', 'PROCESSING')).toBe(false);
+    expect(isValidWorkflowTransition('REJECTED', 'PROCESSING')).toBe(false);
   });
 
-  it('allows retry from FAILED → QUEUED', () => {
-    expect(isValidWorkflowTransition('FAILED', 'QUEUED')).toBe(true);
+  it('allows retry from REQUIRES_REVIEW → FAILED', () => {
+    expect(isValidWorkflowTransition('REQUIRES_REVIEW', 'FAILED')).toBe(true);
   });
 
   it('allows retry from FAILED → PROCESSING', () => {
@@ -71,13 +71,13 @@ describe('State Machine — Workflow Transitions', () => {
   });
 
   it('assertWorkflowTransition throws on invalid transition', () => {
-    expect(() => assertWorkflowTransition('UPLOADED', 'COMMITTED')).toThrow(
+    expect(() => assertWorkflowTransition('PROCESSING', 'AUTO_COMMITTED')).toThrow(
       /Invalid workflow transition/
     );
   });
 
   it('assertWorkflowTransition does not throw on valid transition', () => {
-    expect(() => assertWorkflowTransition('UPLOADED', 'QUEUED')).not.toThrow();
+    expect(() => assertWorkflowTransition('PROCESSING', 'AUTO_COMMITTING')).not.toThrow();
   });
 });
 
@@ -190,27 +190,27 @@ describe('State Machine — Decision Helpers', () => {
   });
 
   it('canAutoCommit returns true when all criteria met', () => {
-    expect(canAutoCommit('PROCESSED', 'NOT_STARTED', 'NOT_NEEDED', true)).toBe(true);
+    expect(canAutoCommit('PROCESSING', 'NOT_STARTED', 'NOT_NEEDED', true)).toBe(true);
   });
 
   it('canAutoCommit returns false when not auto-approved', () => {
-    expect(canAutoCommit('PROCESSED', 'NOT_STARTED', 'NOT_NEEDED', false)).toBe(false);
+    expect(canAutoCommit('PROCESSING', 'NOT_STARTED', 'NOT_NEEDED', false)).toBe(false);
   });
 
   it('canAutoCommit returns false when second pass incomplete', () => {
-    expect(canAutoCommit('PROCESSED', 'NOT_STARTED', 'IN_PROGRESS', true)).toBe(false);
+    expect(canAutoCommit('PROCESSING', 'NOT_STARTED', 'IN_PROGRESS', true)).toBe(false);
   });
 
   it('canAutoCommit returns false when already committed', () => {
-    expect(canAutoCommit('PROCESSED', 'COMPLETE', 'NOT_NEEDED', true)).toBe(false);
+    expect(canAutoCommit('PROCESSING', 'COMPLETE', 'NOT_NEEDED', true)).toBe(false);
   });
 
   it('canEnterReview returns true for eligible sessions', () => {
-    expect(canEnterReview('PROCESSED', true)).toBe(true);
+    expect(canEnterReview('PROCESSING', true)).toBe(true);
   });
 
   it('canEnterReview returns false when not flagged', () => {
-    expect(canEnterReview('PROCESSED', false)).toBe(false);
+    expect(canEnterReview('PROCESSING', false)).toBe(false);
   });
 
   it('canEnterReview returns false for terminal states', () => {
@@ -227,7 +227,8 @@ describe('State Machine — Decision Helpers', () => {
 
   it('isTerminalWorkflow identifies terminal states', () => {
     expect(isTerminalWorkflow('APPROVED')).toBe(true);
-    expect(isTerminalWorkflow('COMMITTED')).toBe(true);
+    expect(isTerminalWorkflow('AUTO_COMMITTED')).toBe(true);
+    expect(isTerminalWorkflow('MANUALLY_APPROVED')).toBe(true);
     expect(isTerminalWorkflow('REJECTED')).toBe(true);
     expect(isTerminalWorkflow('PROCESSING')).toBe(false);
   });

@@ -314,7 +314,7 @@ describe('Idempotency — Duplicate Commit Handling', () => {
     expect(prisma.smartUploadSession.update).toHaveBeenCalledWith({
       where: { uploadSessionId: SESSION_ID },
       data: expect.objectContaining({
-        status: 'APPROVED',
+        status: 'AUTO_COMMITTED',
         commitStatus: 'COMPLETE',
         committedPieceId: PIECE_ID,
         committedFileId: FILE_ID,

@@ -22,6 +22,8 @@ import { queueSmartUploadAutoCommit } from '@/lib/jobs/smart-upload';
 import { evaluateQualityGates, isForbiddenLabel } from '@/lib/smart-upload/quality-gates';
 import { buildPartStorageSlug, buildPartFilename } from '@/lib/smart-upload/part-naming';
 import { parseJsonLenient } from '@/lib/smart-upload/json';
+import { recordMetricSuccess, recordMetricError, recordLatency } from '@/lib/smart-upload/metrics';
+import { SmartUploadErrorCode } from '@/lib/smart-upload/error-codes';
 import { logger } from '@/lib/logger';
 import {
   buildVerificationPrompt,
@@ -645,6 +647,7 @@ async function finalizeSmartUploadSession(
 
 async function processSecondPass(job: Job<SmartUploadSecondPassJobData>): Promise<void> {
   const { sessionId } = job.data;
+  const startTime = Date.now();
 
   /** Convenience wrapper that always includes sessionId in progress payloads */
   const progress = (step: string, percent: number, message: string) =>
@@ -675,6 +678,25 @@ async function processSecondPass(job: Job<SmartUploadSecondPassJobData>): Promis
     currentSecondPassStatus !== 'FAILED'
   ) {
     throw new Error(`Session is not eligible for second pass. Current status: ${currentSecondPassStatus}`);
+  }
+
+  // P1.3 FIX: Hard stop if gaps detected in first pass
+  // If the first-pass processor detected gaps (uncovered page ranges),
+  // it sets routingDecision to 'no_parse_second_pass'. Never run second-pass
+  // on such sessions; they must go to human review.
+  if (smartSession.routingDecision === 'no_parse_second_pass') {
+    logger.warn('Skipping second-pass for session with gaps detected in first pass', {
+      sessionId,
+      routingDecision: smartSession.routingDecision,
+    });
+    
+    await prisma.smartUploadSession.update({
+      where: { uploadSessionId: sessionId },
+      data: { secondPassStatus: 'NOT_NEEDED' },
+    });
+    
+    await progress('skipped', 100, 'Gaps detected in first pass; routing to human review');
+    return; // Do NOT process second pass
   }
 
   await progress('starting', 10, 'Session validated');
@@ -859,13 +881,35 @@ async function processSecondPass(job: Job<SmartUploadSecondPassJobData>): Promis
       ) + '\n\n' + promptContent;
 
       // Call the verification LLM — pass PDF document or labeled images
-      const { parsed: secondPassResult, raw: secondPassRaw } = await callVerificationLLM(
-        originalPageImages,
-        llmConfig,
-        verificationPrompt,
-        labeledImages.length > 0 ? labeledImages : undefined,
-        pdfDocument ? [pdfDocument] : undefined,
-      );
+      // P1.5 FIX: Enhanced error handling with provider context for fallback diagnostics
+      let secondPassResult;
+      let secondPassRaw;
+      
+      try {
+        const result = await callVerificationLLM(
+          originalPageImages,
+          llmConfig,
+          verificationPrompt,
+          labeledImages.length > 0 ? labeledImages : undefined,
+          pdfDocument ? [pdfDocument] : undefined,
+        );
+        secondPassResult = result.parsed;
+        secondPassRaw = result.raw;
+      } catch (verificationError) {
+        // P1.5: Log provider info for fallback decision
+        const verificationConfig = await buildAdapterConfigForStep(llmConfig, 'verification');
+        
+        logger.error('Verification LLM call failed — check provider configuration for fallback', {
+          sessionId,
+          provider: verificationConfig.provider,
+          model: verificationConfig.model,
+          error: verificationError instanceof Error ? verificationError.message : String(verificationError),
+          recommendation: 'Operator should retry with alternative provider or manually review',
+        });
+
+        // Rethrow to trigger session failure + human review
+        throw verificationError;
+      }
 
       const verificationConfidence = normalizeConfidence(
         (secondPassResult as unknown as Record<string, unknown>).verificationConfidence
@@ -1080,9 +1124,18 @@ Include a "corrections" field explaining any corrections made from the first pas
       sessionId,
       secondPassStatus: 'COMPLETE',
     });
+
+    const duration = Date.now() - startTime;
+    recordMetricSuccess(sessionId, 'verification', duration, {
+      model: llmConfig.verificationModel,
+      provider: llmConfig.provider,
+    });
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
     logger.error('Second pass failed', { error: err, sessionId });
+
+    const duration = Date.now() - startTime;
+    recordMetricError(sessionId, SmartUploadErrorCode.SU_500_VERIFY_LLM_FAILURE, 'verification', duration);
 
     // Set secondPassStatus to FAILED
     await prisma.smartUploadSession.update({

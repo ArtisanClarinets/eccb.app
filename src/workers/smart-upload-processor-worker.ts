@@ -20,6 +20,8 @@ import { commitSmartUploadSessionToLibrary } from '@/lib/smart-upload/commit';
 import { cleanupSmartUploadTempFiles } from '@/lib/services/smart-upload-cleanup';
 import { SMART_UPLOAD_JOB_NAMES } from '@/lib/jobs/smart-upload';
 import { loadSmartUploadRuntimeConfig } from '@/lib/llm/config-loader';
+import { recordMetricSuccess, recordMetricError } from '@/lib/smart-upload/metrics';
+import { SmartUploadErrorCode } from '@/lib/smart-upload/error-codes';
 import { logger } from '@/lib/logger';
 import type { SmartUploadSecondPassJobData } from '@/lib/jobs/definitions';
 
@@ -57,6 +59,7 @@ export async function startSmartUploadProcessorWorker(): Promise<void> {
     concurrency: config.concurrency,
     processor: async (job: Job) => {
       const sessionId = (job.data as { sessionId?: string })?.sessionId;
+      const startTime = Date.now();
       try {
         // IMPORTANT: Each branch MUST return a value so BullMQ stores it as
         // job.returnvalue. The SSE endpoint filters completed events by
@@ -68,6 +71,10 @@ export async function startSmartUploadProcessorWorker(): Promise<void> {
 
           case SMART_UPLOAD_JOB_NAMES.SECOND_PASS: {
             await processSecondPass(job as Job<SmartUploadSecondPassJobData>);
+            if (sessionId) {
+              const duration = Date.now() - startTime;
+              recordMetricSuccess(sessionId, 'verification', duration);
+            }
             return { status: 'second_pass_complete', sessionId };
           }
 
@@ -75,6 +82,10 @@ export async function startSmartUploadProcessorWorker(): Promise<void> {
             logger.info('Running auto-commit for session', { sessionId, jobId: job.id });
             await commitSmartUploadSessionToLibrary(sessionId!, {}, 'system:auto-commit');
             logger.info('Auto-commit complete', { sessionId });
+            if (sessionId) {
+              const duration = Date.now() - startTime;
+              recordMetricSuccess(sessionId, 'overall', duration, { action: 'auto_commit' });
+            }
             return { status: 'auto_commit_complete', sessionId };
           }
 
@@ -88,6 +99,12 @@ export async function startSmartUploadProcessorWorker(): Promise<void> {
             );
         }
       } catch (error) {
+        // Record error metric
+        if (sessionId) {
+          const duration = Date.now() - startTime;
+          recordMetricError(sessionId, SmartUploadErrorCode.SU_999_UNKNOWN_ERROR, 'overall', duration);
+        }
+
         // Only destroy temp files on the FINAL attempt to preserve idempotency
         // on retries: a subsequent attempt may need to re-download sampled parts
         // that were uploaded to storage during the failing attempt.
