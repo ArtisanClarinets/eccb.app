@@ -232,7 +232,7 @@ export async function POST(request: Request): Promise<NextResponse<SetupResponse
             data: { connection: { ok: true } },
           });
         } catch (err) {
-          logger.warn('Connection test failed', err);
+          logger.warn('Connection test failed', { error: err });
           return NextResponse.json(
             {
               success: false,

@@ -37,7 +37,6 @@ export function ConfidenceIndicator({
   // Determine risk level
   const isAutoApproved = score >= autoApproveThreshold;
   const isConfident = score >= threshold;
-  const isLowConfidence = score < threshold;
 
   if (isAutoApproved) {
     return (

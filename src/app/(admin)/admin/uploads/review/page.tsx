@@ -156,13 +156,6 @@ function formatDate(date: Date | string): string {
   });
 }
 
-function getConfidenceColor(score: number | null): string {
-  if (score === null) return 'bg-gray-100 text-gray-700';
-  if (score >= 85) return 'bg-green-100 text-green-700';
-  if (score >= 60) return 'bg-yellow-100 text-yellow-700 border border-yellow-400';
-  return 'bg-red-100 text-red-700 border border-red-400';
-}
-
 function getParseStatusBadge(parseStatus: ParseStatus | null): React.ReactNode {
   switch (parseStatus) {
     case 'PARSED':

@@ -8,7 +8,6 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { prisma } from '@/lib/db';
-import type { SmartUploadSession } from '@prisma/client';
 
 interface E2ETestContext {
   testSessionId: string;
@@ -146,7 +145,7 @@ describe('Smart Upload E2E Tests — Phase 1-2 Validation', () => {
     describe('P1.4 - Header Extraction Window Fix', () => {
       it('should limit header extraction to reasonable size', async () => {
         // This validates that pdf-text-extractor limits header to 200 chars + 10% window
-        const { extractTextFromPdf } = await import('@/lib/services/pdf-text-extractor');
+        await import('@/lib/services/pdf-text-extractor');
 
         // Headers should be reasonable length (typically 20-50 chars)
         // Not 800-1000 chars as before the fix

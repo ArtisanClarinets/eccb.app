@@ -35,10 +35,7 @@ describe('/api/setup route', () => {
   });
 
   it('returns success for init action with valid connection', async () => {
-    // mock checkMigrationStatus to not throw
-    const { checkMigrationStatus } = await import('@/lib/setup/schema-automation');
-    // just call real function; it will use whatever DB config is present but we
-    // don't actually hit the database in this unit test, so we stub it.
+    // stub the migration check so the init path succeeds without hitting a real DB
     vi.spyOn(await import('@/lib/setup/schema-automation'), 'checkMigrationStatus').mockReturnValue({ applied: false, pendingCount: 0 });
 
     const request = makeRequest({ action: 'init', config: { host: 'localhost' } });

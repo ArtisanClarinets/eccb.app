@@ -22,7 +22,7 @@ import { queueSmartUploadAutoCommit } from '@/lib/jobs/smart-upload';
 import { evaluateQualityGates, isForbiddenLabel } from '@/lib/smart-upload/quality-gates';
 import { buildPartStorageSlug, buildPartFilename } from '@/lib/smart-upload/part-naming';
 import { parseJsonLenient } from '@/lib/smart-upload/json';
-import { recordMetricSuccess, recordMetricError, recordLatency } from '@/lib/smart-upload/metrics';
+import { recordMetricSuccess, recordMetricError } from '@/lib/smart-upload/metrics';
 import { SmartUploadErrorCode } from '@/lib/smart-upload/error-codes';
 import { logger } from '@/lib/logger';
 import {
@@ -1135,7 +1135,7 @@ Include a "corrections" field explaining any corrections made from the first pas
     logger.error('Second pass failed', { error: err, sessionId });
 
     const duration = Date.now() - startTime;
-    recordMetricError(sessionId, SmartUploadErrorCode.SU_500_VERIFY_LLM_FAILURE, 'verification', duration);
+    recordMetricError(sessionId, SmartUploadErrorCode.VERIFY_LLM_FAILED, 'verification', duration);
 
     // Set secondPassStatus to FAILED
     await prisma.smartUploadSession.update({

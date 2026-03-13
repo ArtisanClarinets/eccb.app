@@ -7,7 +7,7 @@ import { downloadFile } from '@/lib/services/storage';
 import { renderPdfPageToImageWithInfo } from '@/lib/services/pdf-renderer';
 import { parseRenderParams } from '@/lib/review-preview/render-params';
 import { logger } from '@/lib/logger';
-import { SmartUploadErrorCode, SmartUploadError } from '@/lib/smart-upload/error-codes';
+import { SmartUploadErrorCode } from '@/lib/smart-upload/error-codes';
 import type { DownloadResult } from '@/lib/services/storage';
 
 // =============================================================================

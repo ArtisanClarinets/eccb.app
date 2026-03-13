@@ -102,7 +102,7 @@ export async function startSmartUploadProcessorWorker(): Promise<void> {
         // Record error metric
         if (sessionId) {
           const duration = Date.now() - startTime;
-          recordMetricError(sessionId, SmartUploadErrorCode.SU_999_UNKNOWN_ERROR, 'overall', duration);
+          recordMetricError(sessionId, SmartUploadErrorCode.UNKNOWN_ERROR, 'overall', duration);
         }
 
         // Only destroy temp files on the FINAL attempt to preserve idempotency

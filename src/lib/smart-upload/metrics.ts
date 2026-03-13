@@ -116,7 +116,7 @@ class SmartUploadMetrics implements MetricsCollector {
     // Example: sendToPrometheus(events)
   }
 
-  private async flush(): Promise<void> {
+  async flush(): Promise<void> {
     if (this.buffer.length === 0) return;
 
     const events = this.buffer.splice(0, this.buffer.length);
