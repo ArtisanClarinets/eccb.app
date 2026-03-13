@@ -66,6 +66,7 @@ export function CarpoolBoard({ eventId, entries, currentMemberId }: CarpoolBoard
                            size="icon"
                            className="absolute top-2 right-2 h-6 w-6 text-destructive"
                            onClick={() => deleteCarpoolEntry(entry.id, eventId)}
+                           aria-label="Delete carpool entry"
                          >
                            <Trash2 className="h-4 w-4" />
                          </Button>
@@ -95,6 +96,7 @@ export function CarpoolBoard({ eventId, entries, currentMemberId }: CarpoolBoard
                            size="icon"
                            className="absolute top-2 right-2 h-6 w-6 text-destructive"
                            onClick={() => deleteCarpoolEntry(entry.id, eventId)}
+                           aria-label="Delete carpool entry"
                          >
                            <Trash2 className="h-4 w-4" />
                          </Button>
