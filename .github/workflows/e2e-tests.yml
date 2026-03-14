@@ -47,7 +47,10 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10.30.3
+      - run: pnpm install --frozen-lockfile
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium firefox webkit
@@ -75,12 +78,12 @@ jobs:
         run: npm run db:seed
 
       - name: Run E2E setup
-        run: npm run test:e2e:setup
+        run: pnpm run test:e2e:setup
         env:
           CI: true
 
       - name: Run E2E tests
-        run: npm run test:e2e:ci
+        run: pnpm run test:e2e:ci
         env:
           CI: true
           PLAYWRIGHT_BASE_URL: http://localhost:3000
@@ -147,7 +150,10 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10.30.3
+      - run: pnpm install --frozen-lockfile
 
       - name: Install Playwright
         run: npx playwright install chromium
@@ -215,7 +221,10 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10.30.3
+      - run: pnpm install --frozen-lockfile
 
       - name: Install Playwright
         run: npx playwright install chromium
