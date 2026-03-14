@@ -45,6 +45,62 @@ const steps: SetupStepData[] = [
   { id: 'complete', name: 'Complete', description: 'Setup finished' },
 ];
 
+function CompleteStep(): React.ReactElement {
+  const [countdown, setCountdown] = useState<number>(3);
+  const [hasRedirected, setHasRedirected] = useState(false);
+
+  useEffect(() => {
+    if (hasRedirected) return;
+
+    // Auto-redirect after 3 seconds
+    const interval = setInterval(() => {
+      setCountdown((prev) => prev - 1);
+    }, 1000);
+
+    const timeout = setTimeout(() => {
+      setHasRedirected(true);
+      // Redirect to homepage instead of admin to let proper auth flow handle it
+      window.location.href = '/login';
+    }, 3000);
+
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timeout);
+    };
+  }, [hasRedirected]);
+
+  return (
+    <Card className="border-slate-700 bg-slate-800/50">
+      <CardContent className="pt-6">
+        <div className="text-center space-y-4">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-500/20">
+            <CheckCircle2 className="h-8 w-8 text-green-500" />
+          </div>
+          <h2 className="text-2xl font-bold text-white">Setup Complete!</h2>
+          <p className="text-slate-400 max-w-md mx-auto">
+            Your database has been set up successfully. You can now sign in and manage your band
+            content.
+          </p>
+          <p className="text-sm text-slate-500">
+            Redirecting to login in {countdown} second{countdown !== 1 ? 's' : ''}...
+          </p>
+          <div className="pt-4">
+            <Button
+              onClick={() => {
+                setHasRedirected(true);
+                window.location.href = '/login';
+              }}
+              className="bg-primary hover:bg-primary/90 text-white gap-2"
+            >
+              Sign In Now <ArrowRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function SetupWizard({ repairMode = false }: SetupWizardProps): React.ReactElement {
   const [currentStep, setCurrentStep] = useState<SetupStep>('welcome');
   const [isLoading, setIsLoading] = useState(false);
@@ -367,61 +423,6 @@ export function SetupWizard({ repairMode = false }: SetupWizardProps): React.Rea
     </Card>
   );
 
-  const renderCompleteStep = (): React.ReactElement => {
-    const [countdown, setCountdown] = useState<number>(3);
-    const [hasRedirected, setHasRedirected] = useState(false);
-
-    useEffect(() => {
-      if (hasRedirected) return;
-
-      // Auto-redirect after 3 seconds
-      const interval = setInterval(() => {
-        setCountdown((prev) => prev - 1);
-      }, 1000);
-
-      const timeout = setTimeout(() => {
-        setHasRedirected(true);
-        // Redirect to homepage instead of admin to let proper auth flow handle it
-        window.location.href = '/login';
-      }, 3000);
-
-      return () => {
-        clearInterval(interval);
-        clearTimeout(timeout);
-      };
-    }, [hasRedirected]);
-
-    return (
-      <Card className="border-slate-700 bg-slate-800/50">
-        <CardContent className="pt-6">
-          <div className="text-center space-y-4">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-500/20">
-              <CheckCircle2 className="h-8 w-8 text-green-500" />
-            </div>
-            <h2 className="text-2xl font-bold text-white">Setup Complete!</h2>
-            <p className="text-slate-400 max-w-md mx-auto">
-              Your database has been set up successfully. You can now sign in and manage your band
-              content.
-            </p>
-            <p className="text-sm text-slate-500">
-              Redirecting to login in {countdown} second{countdown !== 1 ? 's' : ''}...
-            </p>
-            <div className="pt-4">
-              <Button
-                onClick={() => {
-                  setHasRedirected(true);
-                  window.location.href = '/login';
-                }}
-                className="bg-primary hover:bg-primary/90 text-white gap-2"
-              >
-                Sign In Now <ArrowRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  };
 
   const renderStep = (): React.ReactElement => {
     switch (currentStep) {
@@ -434,7 +435,7 @@ export function SetupWizard({ repairMode = false }: SetupWizardProps): React.Rea
       case 'progress':
         return renderProgressStep();
       case 'complete':
-        return renderCompleteStep();
+        return <CompleteStep />;
       default:
         return <div>Unknown step</div>;
     }

@@ -63,4 +63,3 @@ export default async function SetupPage({ searchParams }: SetupPageProps): Promi
     </div>
   );
 }
-}

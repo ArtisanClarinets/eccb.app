@@ -142,7 +142,8 @@ export function Metronome() {
             max={240}
             value={metronomeSettings.bpm}
             onChange={handleChange('bpm')}
-            className="w-28"
+            className="w-28 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+            aria-label="Metronome BPM"
           />
         </label>
 
@@ -155,7 +156,8 @@ export function Metronome() {
               max={12}
               value={metronomeSettings.numerator}
               onChange={handleChange('numerator')}
-              className="w-12 border rounded px-1 py-0.5 text-center bg-background"
+              className="w-12 border rounded px-1 py-0.5 text-center bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+              aria-label="Beats per measure"
             />
           </label>
           <span className="text-muted-foreground">/</span>
@@ -167,7 +169,8 @@ export function Metronome() {
               max={16}
               value={metronomeSettings.denominator}
               onChange={handleChange('denominator')}
-              className="w-12 border rounded px-1 py-0.5 text-center bg-background"
+              className="w-12 border rounded px-1 py-0.5 text-center bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+              aria-label="Beat note value"
             />
           </label>
         </div>
@@ -180,7 +183,8 @@ export function Metronome() {
               const val = parseInt(e.target.value, 10);
               updateMetronomeSettings({ subdivision: val } as Parameters<typeof updateMetronomeSettings>[0]);
             }}
-            className="border rounded px-1 py-0.5 bg-background text-sm"
+            className="border rounded px-1 py-0.5 bg-background text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+            aria-label="Metronome subdivision"
           >
             <option value={1}>Quarter note</option>
             <option value={2}>Eighth note</option>
