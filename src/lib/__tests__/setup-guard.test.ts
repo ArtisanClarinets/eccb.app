@@ -30,6 +30,10 @@ import { validateSetupRequest } from '../setup/setup-guard';
 
 describe('validateSetupRequest', () => {
   beforeEach(() => {
+    // Ensure we test the fallback behavior by clearing process env overrides.
+    delete process.env.SETUP_MODE;
+    delete process.env.SETUP_TOKEN;
+
     mockSetupMode = false;
     mockSetupToken = undefined;
   });
@@ -89,5 +93,18 @@ describe('validateSetupRequest', () => {
     const res = validateSetupRequest(req);
 
     expect(res).toBeNull();
+  });
+
+  it('should respect process.env overrides for setup mode', () => {
+    // Force setup mode off at runtime, even if env module says true
+    mockSetupMode = true;
+    process.env.SETUP_MODE = 'false';
+
+    const req = new Request('http://localhost');
+    const res = validateSetupRequest(req) as any;
+
+    expect(res).not.toBeNull();
+    expect(res.status).toBe(403);
+    expect(res.body.error).toBe('Setup mode is disabled');
   });
 });

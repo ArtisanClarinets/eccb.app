@@ -20,6 +20,8 @@ import {
 } from '@/lib/setup/types';
 import { logger } from '@/lib/logger';
 import { validateSetupRequest } from '@/lib/setup/setup-guard';
+import { invalidateSetupStateCache } from '@/lib/setup/state';
+import { setEnvVariable } from '@/lib/setup/env-manager';
 
 // =============================================================================
 // Types
@@ -130,6 +132,18 @@ async function runFullSetup(): Promise<SetupResponse> {
         progress: 70,
         error: seedResult.error || 'Seeding failed',
       };
+    }
+
+    // Invalidate any cached setup state so the proxy/router can re-evaluate readiness
+    invalidateSetupStateCache();
+
+    // Persist that setup mode should be disabled going forward (helps local dev).
+    // This is best-effort; if the .env file isn't writable, we still succeed.
+    try {
+      process.env.SETUP_MODE = 'false';
+      setEnvVariable('SETUP_MODE', 'false');
+    } catch {
+      // Ignore failures; this is only a convenience.
     }
 
     // Complete

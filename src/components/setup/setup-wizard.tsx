@@ -7,7 +7,8 @@
 
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 import { ArrowLeft, ArrowRight, CheckCircle2, Database, Settings, Sparkles } from 'lucide-react';
 
@@ -46,26 +47,23 @@ const steps: SetupStepData[] = [
 ];
 
 export function SetupWizard({ repairMode = false }: SetupWizardProps): React.ReactElement {
+  const router = useRouter();
   const [currentStep, setCurrentStep] = useState<SetupStep>('welcome');
   const [isLoading, setIsLoading] = useState(false);
   const [setupStatus, setSetupStatus] = useState<SetupStatus | null>(null);
-
-  // The setup token is required when SETUP_TOKEN is configured in the server env.
-  // It is stored in localStorage so users don't have to re-enter it on page refresh.
   const [setupToken, setSetupToken] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       return window.localStorage.getItem('setupToken') ?? '';
     }
     return '';
   });
-
   const [error, setError] = useState<string | null>(null);
 
   const stepIndex = steps.findIndex((s) => s.id === currentStep);
   const _progress = Math.round(((stepIndex + 1) / steps.length) * 100);
 
   // Resolve headers for setup requests (includes token if configured)
-  const getSetupHeaders = useCallback((): Record<string, string> => {
+  const getSetupHeaders = (): Record<string, string> => {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
@@ -75,17 +73,11 @@ export function SetupWizard({ repairMode = false }: SetupWizardProps): React.Rea
     }
 
     return headers;
-  }, [setupToken]);
+  };
 
   // Fetch initial status on mount
   useEffect(() => {
     async function fetchStatus() {
-      if (!setupToken) {
-        // If a setup token is required, we won't be able to call the status endpoint
-        // successfully until the user provides it. Avoid spamming 401 errors.
-        return;
-      }
-
       try {
         const response = await fetch('/api/setup/status', {
           headers: getSetupHeaders(),
@@ -103,17 +95,6 @@ export function SetupWizard({ repairMode = false }: SetupWizardProps): React.Rea
     }
 
     fetchStatus();
-  }, [getSetupHeaders, setupToken]);
-
-  // Persist setup token in localStorage so it survives refreshes
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    if (setupToken) {
-      window.localStorage.setItem('setupToken', setupToken);
-    } else {
-      window.localStorage.removeItem('setupToken');
-    }
   }, [setupToken]);
 
   const handleDatabaseSubmit = async (config: DatabaseConfig): Promise<void> => {
@@ -135,9 +116,18 @@ export function SetupWizard({ repairMode = false }: SetupWizardProps): React.Rea
         payloadConfig.port = config.port;
       }
 
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      // If the project is configured to require a setup token, forward it.
+      if (process.env.NEXT_PUBLIC_SETUP_TOKEN) {
+        headers['x-setup-token'] = process.env.NEXT_PUBLIC_SETUP_TOKEN;
+      }
+
       const response = await fetch('/api/setup', {
         method: 'POST',
-        headers: getSetupHeaders(),
+        headers,
         body: JSON.stringify({
           action: 'init',
           config: payloadConfig,
@@ -178,21 +168,13 @@ export function SetupWizard({ repairMode = false }: SetupWizardProps): React.Rea
         throw new Error(data.error || 'Setup failed');
       }
 
-      // Wait a moment for the database to settle, then verify setup is actually complete
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      // Verify setup is ready
-      const verifyResponse = await fetch('/api/setup/verify', {
-        headers: getSetupHeaders(),
-      });
-
-      const verifyData = await verifyResponse.json();
-
-      if (!verifyData.success) {
-        throw new Error(verifyData.error || 'Setup verification failed');
-      }
-
       setCurrentStep('complete');
+
+      // Redirect to login/home once the system is ready (setup may have cached state)
+      // Give the user a short moment to read the success message.
+      setTimeout(() => {
+        router.push('/login');
+      }, 1200);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Setup failed');
       setCurrentStep('database');
@@ -230,23 +212,6 @@ export function SetupWizard({ repairMode = false }: SetupWizardProps): React.Rea
     }
   };
 
-  const renderSetupTokenInput = (): React.ReactElement => (
-    <div className="mt-4 p-4 bg-slate-900 border border-slate-700 rounded-lg text-left">
-      <p className="text-sm font-medium text-white">Setup Token (optional)</p>
-      <p className="text-xs text-slate-400 mb-2">
-        If your environment requires a setup token, enter it here. This value will be
-        sent with all setup API requests as the <code>x-setup-token</code> header.
-      </p>
-      <input
-        type="text"
-        value={setupToken}
-        onChange={(e) => setSetupToken(e.target.value)}
-        placeholder="Enter setup token"
-        className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-white"
-      />
-    </div>
-  );
-
   const renderWelcomeStep = (): React.ReactElement => (
     <Card className="border-slate-700 bg-slate-800/50">
       <CardContent className="pt-6">
@@ -262,9 +227,6 @@ export function SetupWizard({ repairMode = false }: SetupWizardProps): React.Rea
               ? "We'll diagnose and fix any issues with your database connection and configuration."
               : 'This wizard will guide you through setting up your database and getting everything running.'}
           </p>
-
-          {renderSetupTokenInput()}
-
           <div className="pt-4">
             <Button
               onClick={goToNextStep}
@@ -280,7 +242,6 @@ export function SetupWizard({ repairMode = false }: SetupWizardProps): React.Rea
 
   const renderDatabaseStep = (): React.ReactElement => (
     <div className="space-y-4">
-      {renderSetupTokenInput()}
       {error && (
         <StatusDisplay
           type="error"
@@ -313,7 +274,22 @@ export function SetupWizard({ repairMode = false }: SetupWizardProps): React.Rea
             <StatusDisplay type="error" title="Setup Error" message={error} className="mt-4" />
           )}
 
-          {renderSetupTokenInput()}
+          {!setupToken && (
+            <div className="mt-4 p-4 bg-slate-900 border border-slate-700 rounded-lg text-left">
+              <p className="text-sm font-medium text-white">Setup Token (optional)</p>
+              <p className="text-xs text-slate-400 mb-2">
+                If your environment requires a setup token, enter it here. This value will be
+                sent with all setup API requests as the <code>x-setup-token</code> header.
+              </p>
+              <input
+                type="text"
+                value={setupToken}
+                onChange={(e) => setSetupToken(e.target.value)}
+                placeholder="Enter setup token"
+                className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-white"
+              />
+            </div>
+          )}
 
           <div className="pt-4 flex gap-3 justify-center">
             <Button
@@ -367,61 +343,32 @@ export function SetupWizard({ repairMode = false }: SetupWizardProps): React.Rea
     </Card>
   );
 
-  const renderCompleteStep = (): React.ReactElement => {
-    const [countdown, setCountdown] = useState<number>(3);
-    const [hasRedirected, setHasRedirected] = useState(false);
-
-    useEffect(() => {
-      if (hasRedirected) return;
-
-      // Auto-redirect after 3 seconds
-      const interval = setInterval(() => {
-        setCountdown((prev) => prev - 1);
-      }, 1000);
-
-      const timeout = setTimeout(() => {
-        setHasRedirected(true);
-        // Redirect to homepage instead of admin to let proper auth flow handle it
-        window.location.href = '/login';
-      }, 3000);
-
-      return () => {
-        clearInterval(interval);
-        clearTimeout(timeout);
-      };
-    }, [hasRedirected]);
-
-    return (
-      <Card className="border-slate-700 bg-slate-800/50">
-        <CardContent className="pt-6">
-          <div className="text-center space-y-4">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-500/20">
-              <CheckCircle2 className="h-8 w-8 text-green-500" />
-            </div>
-            <h2 className="text-2xl font-bold text-white">Setup Complete!</h2>
-            <p className="text-slate-400 max-w-md mx-auto">
-              Your database has been set up successfully. You can now sign in and manage your band
-              content.
-            </p>
-            <p className="text-sm text-slate-500">
-              Redirecting to login in {countdown} second{countdown !== 1 ? 's' : ''}...
-            </p>
-            <div className="pt-4">
-              <Button
-                onClick={() => {
-                  setHasRedirected(true);
-                  window.location.href = '/login';
-                }}
-                className="bg-primary hover:bg-primary/90 text-white gap-2"
-              >
-                Sign In Now <ArrowRight className="h-4 w-4" />
-              </Button>
-            </div>
+  const renderCompleteStep = (): React.ReactElement => (
+    <Card className="border-slate-700 bg-slate-800/50">
+      <CardContent className="pt-6">
+        <div className="text-center space-y-4">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-500/20">
+            <CheckCircle2 className="h-8 w-8 text-green-500" />
           </div>
-        </CardContent>
-      </Card>
-    );
-  };
+          <h2 className="text-2xl font-bold text-white">Setup Complete!</h2>
+          <p className="text-slate-400 max-w-md mx-auto">
+            Your database has been set up successfully. You can now access the admin dashboard
+            and manage your band content.
+          </p>
+          <div className="pt-4">
+            <Button
+              onClick={() => {
+                window.location.href = '/admin';
+              }}
+              className="bg-primary hover:bg-primary/90 text-white gap-2"
+            >
+              Go to Dashboard <ArrowRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
 
   const renderStep = (): React.ReactElement => {
     switch (currentStep) {
