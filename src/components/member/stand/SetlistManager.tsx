@@ -61,7 +61,7 @@ export function SetlistManager() {
                 key={piece.id}
                 onClick={() => setCurrentPieceIndex(idx)}
                 className={cn(
-                  'w-full text-left px-3 py-2 text-xs hover:bg-accent/50 transition-colors border-l-2',
+                  'w-full text-left px-3 py-2 text-xs hover:bg-accent/50 transition-colors border-l-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset',
                   isActive
                     ? 'border-l-primary bg-primary/10 font-semibold text-primary'
                     : 'border-l-transparent text-foreground'
@@ -105,12 +105,14 @@ export function SetlistManager() {
                 key={piece.id}
                 onClick={() => setCurrentPieceIndex(idx)}
                 className={cn(
-                  'w-6 h-6 rounded-full text-[9px] font-bold flex items-center justify-center transition-colors',
+                  'w-6 h-6 rounded-full text-[9px] font-bold flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
                   isActive
                     ? 'bg-primary text-primary-foreground'
                     : 'bg-muted text-muted-foreground hover:bg-accent'
                 )}
                 title={`${idx + 1}. ${piece.title}`}
+                aria-label={`Piece ${idx + 1}: ${piece.title}`}
+                aria-current={isActive ? 'true' : undefined}
               >
                 {idx + 1}
               </button>
