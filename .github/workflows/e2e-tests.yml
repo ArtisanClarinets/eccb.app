@@ -47,7 +47,10 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10.30.3
+      - run: pnpm install
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium firefox webkit
@@ -66,13 +69,13 @@ jobs:
           echo "SUPER_ADMIN_PASSWORD=some-secure-test-password-123!" >> .env
 
       - name: Generate Prisma client
-        run: npm run db:generate
+        run: pnpm db:generate
 
       - name: Run database migrations
-        run: npm run db:migrate:deploy
+        run: pnpm db:migrate:deploy
 
       - name: Seed database
-        run: npm run db:seed
+        run: pnpm db:seed
 
       - name: Run E2E setup
         run: npm run test:e2e:setup
@@ -147,7 +150,10 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10.30.3
+      - run: pnpm install
 
       - name: Install Playwright
         run: npx playwright install chromium
@@ -166,13 +172,13 @@ jobs:
           echo "SUPER_ADMIN_PASSWORD=some-secure-test-password-123!" >> .env
 
       - name: Generate Prisma client
-        run: npm run db:generate
+        run: pnpm db:generate
 
       - name: Run database migrations
-        run: npm run db:migrate:deploy
+        run: pnpm db:migrate:deploy
 
       - name: Seed database
-        run: npm run db:seed
+        run: pnpm db:seed
 
       - name: Run performance tests
         run: npx playwright test e2e/public/homepage.spec.ts --grep "Performance" --reporter=list
@@ -215,7 +221,10 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10.30.3
+      - run: pnpm install
 
       - name: Install Playwright
         run: npx playwright install chromium
@@ -234,13 +243,13 @@ jobs:
           echo "SUPER_ADMIN_PASSWORD=some-secure-test-password-123!" >> .env
 
       - name: Generate Prisma client
-        run: npm run db:generate
+        run: pnpm db:generate
 
       - name: Run database migrations
-        run: npm run db:migrate:deploy
+        run: pnpm db:migrate:deploy
 
       - name: Seed database
-        run: npm run db:seed
+        run: pnpm db:seed
 
       - name: Run accessibility tests
         run: npx playwright test e2e/public/homepage.spec.ts --grep "Accessibility" --reporter=list
