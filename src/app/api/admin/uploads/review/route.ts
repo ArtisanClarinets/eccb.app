@@ -98,8 +98,8 @@ export async function GET(request: NextRequest) {
       status: status as 'PROCESSING' | 'AUTO_COMMITTING' | 'AUTO_COMMITTED' | 'REQUIRES_REVIEW' | 'MANUALLY_APPROVED' | 'REJECTED' | 'FAILED' | 'PENDING_REVIEW' | 'APPROVED',
     };
 
-    // Fetch sessions with pagination and counts
-    const [sessions, totalCount, statusCounts] = await Promise.all([
+    // Fetch sessions with pagination
+    const [sessions, totalCount] = await Promise.all([
       prisma.smartUploadSession.findMany({
         where,
         orderBy: { createdAt: 'desc' },
@@ -107,12 +107,6 @@ export async function GET(request: NextRequest) {
         take: limit,
       }),
       prisma.smartUploadSession.count({ where }),
-      // Get counts by status (optimized into a single query)
-      prisma.smartUploadSession.groupBy({
-        by: ['status'],
-        where: { status: { in: ['REQUIRES_REVIEW', 'MANUALLY_APPROVED', 'AUTO_COMMITTED', 'REJECTED', 'FAILED', 'PROCESSING', 'AUTO_COMMITTING', 'PENDING_REVIEW', 'APPROVED'] } },
-        _count: { _all: true },
-      }),
     ]);
 
     // Transform sessions to include extracted metadata and new fields
@@ -171,6 +165,13 @@ export async function GET(request: NextRequest) {
           },
         },
       };
+    });
+
+    // Get counts by status (optimized into a single query)
+    const statusCounts = await prisma.smartUploadSession.groupBy({
+      by: ['status'],
+      where: { status: { in: ['REQUIRES_REVIEW', 'MANUALLY_APPROVED', 'AUTO_COMMITTED', 'REJECTED', 'FAILED', 'PROCESSING', 'AUTO_COMMITTING', 'PENDING_REVIEW', 'APPROVED'] } },
+      _count: { _all: true },
     });
 
     // Map grouped counts to individual variables

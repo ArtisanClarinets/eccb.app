@@ -30,10 +30,10 @@ jobs:
         uses: pnpm/action-setup@v3
         with:
           version: 10.30.3
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install
 
       - name: Run ESLint
-        run: pnpm run lint
+        run: pnpm lint
 
       - name: Run TypeScript type check
         run: npx tsc --noEmit
@@ -97,13 +97,13 @@ jobs:
         uses: pnpm/action-setup@v3
         with:
           version: 10.30.3
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install
 
       - name: Setup test database
         run: npx prisma migrate deploy
 
       - name: Run tests
-        run: pnpm run test -- --run --coverage
+        run: pnpm test -- --run --coverage
 
       - name: Upload coverage report
         uses: codecov/codecov-action@v4
@@ -134,7 +134,7 @@ jobs:
         uses: pnpm/action-setup@v3
         with:
           version: 10.30.3
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install
 
       - name: Run link integrity check
         run: npx tsx scripts/check-routes.ts
@@ -171,10 +171,10 @@ jobs:
         uses: pnpm/action-setup@v3
         with:
           version: 10.30.3
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install
 
       - name: Build application
-        run: pnpm run build
+        run: pnpm build
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -200,7 +200,7 @@ jobs:
           cache: 'npm'
 
       - name: Run npm audit
-        run: npm audit --audit-level=high
+        run: pnpm audit --audit-level=high
         continue-on-error: true
 
       - name: Run dependency review
