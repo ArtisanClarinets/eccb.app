@@ -619,7 +619,8 @@ export function AnnotationLayer() {
             onClick={() => setShowStampPalette((v) => !v)}
             className="px-3 py-1 bg-card border rounded shadow text-xs font-medium hover:bg-muted transition-colors"
             title="Select stamp"
-            aria-label="Toggle stamp palette"
+            aria-expanded={showStampPalette}
+            aria-haspopup="true"
           >
             Stamp: {STAMPS.find((s) => s.id === selectedStampId)?.label ?? selectedStampId}
           </button>
