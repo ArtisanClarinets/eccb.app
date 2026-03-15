@@ -88,7 +88,7 @@ function phaseToMeta(
  * Returns the current setup state as a rich StatusResponse.
  */
 export async function GET(request: Request): Promise<NextResponse<StatusResponse> | NextResponse> {
-  const authResponse = validateSetupRequest(request);
+  const authResponse = await validateSetupRequest(request);
   if (authResponse) return authResponse;
 
   try {

@@ -18,9 +18,9 @@ import {
   type MigrationStatus,
   type SetupProgressStatus,
 } from '@/lib/setup/types';
+import { invalidateSetupStateCache } from '@/lib/setup/state';
 import { logger } from '@/lib/logger';
 import { validateSetupRequest } from '@/lib/setup/setup-guard';
-import { invalidateSetupStateCache } from '@/lib/setup/state';
 import { setEnvVariable } from '@/lib/setup/env-manager';
 
 // =============================================================================
@@ -174,7 +174,7 @@ async function runFullSetup(): Promise<SetupResponse> {
  */
 export async function GET(request: Request): Promise<NextResponse<SetupResponse> | NextResponse> {
   // Validate request is authorized for setup
-  const authResponse = validateSetupRequest(request);
+  const authResponse = await validateSetupRequest(request);
   if (authResponse) return authResponse;
 
   try {
@@ -207,7 +207,7 @@ export async function GET(request: Request): Promise<NextResponse<SetupResponse>
  */
 export async function POST(request: Request): Promise<NextResponse<SetupResponse> | NextResponse> {
   // Validate request is authorized for setup
-  const authResponse = validateSetupRequest(request);
+  const authResponse = await validateSetupRequest(request);
   if (authResponse) return authResponse;
 
   try {
@@ -284,7 +284,11 @@ export async function POST(request: Request): Promise<NextResponse<SetupResponse
       }
 
       case 'full': {
-        return NextResponse.json(await runFullSetup());
+        const result = await runFullSetup();
+        if (result.success) {
+          invalidateSetupStateCache();
+        }
+        return NextResponse.json(result);
       }
 
       default:
