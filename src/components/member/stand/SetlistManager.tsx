@@ -111,6 +111,7 @@ export function SetlistManager() {
                     : 'bg-muted text-muted-foreground hover:bg-accent'
                 )}
                 title={`${idx + 1}. ${piece.title}`}
+                aria-label={`Jump to piece ${idx + 1}: ${piece.title}`}
               >
                 {idx + 1}
               </button>
