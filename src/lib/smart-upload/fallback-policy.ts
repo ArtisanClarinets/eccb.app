@@ -152,8 +152,9 @@ export function determineRoute(
 
   // ── Terminal / already-committed guard ─────────────────────────────
   if (
+    normalizedSignals.workflowStatus === 'AUTO_COMMITTED' ||
+    normalizedSignals.workflowStatus === 'MANUALLY_APPROVED' ||
     normalizedSignals.workflowStatus === 'APPROVED' ||
-    normalizedSignals.workflowStatus === 'COMMITTED' ||
     normalizedSignals.workflowStatus === 'REJECTED'
   ) {
     return {
@@ -244,25 +245,28 @@ function shouldRunSecondPass(
   const segmentationConfidence =
     signals.segmentationConfidence === null ? null : clampConfidence(signals.segmentationConfidence);
 
-  // Deterministic segmentation can suppress segmentation-based second pass,
-  // but it must NOT suppress metadata-conflict-driven review/adjudication.
-  const skipSegmentationDrivenSecondPass =
-    Boolean(signals.deterministicSegmentation) &&
-    signals.validPartCount >= thresholds.minPartsForAutoCommit;
-
-  if (!skipSegmentationDrivenSecondPass) {
-    if (
-      segmentationConfidence !== null &&
-      segmentationConfidence < thresholds.minSkipSecondPassConfidence
-    ) {
-      reasons.push(
-        `[SEGMENTATION_LOW_CONFIDENCE] Boundary detection confidence ${segmentationConfidence}%, below threshold ${thresholds.minSkipSecondPassConfidence}%`,
-      );
-      needed = true;
-    }
-  } else {
+  // CRITICAL FIX: Deterministic segmentation is NOT automatically trusted.
+  // Even if we have deterministic boundaries, if confidence is too low, we must
+  // trigger second pass to verify. Deterministic ≠ correct.
+  // Always check confidence threshold FIRST before deciding to skip second pass.
+  if (
+    segmentationConfidence !== null &&
+    segmentationConfidence < thresholds.minSkipSecondPassConfidence
+  ) {
     reasons.push(
-      `[DETERMINISTIC_SEGMENTATION] Skipping confidence-driven second pass — deterministic boundaries detected with ${signals.validPartCount} part(s)`,
+      `[SEGMENTATION_LOW_CONFIDENCE] Boundary detection confidence ${segmentationConfidence}%, below threshold ${thresholds.minSkipSecondPassConfidence}% — triggering second pass verification despite deterministic segmentation`,
+    );
+    needed = true;
+  } else if (
+    Boolean(signals.deterministicSegmentation) &&
+    signals.validPartCount >= thresholds.minPartsForAutoCommit &&
+    segmentationConfidence !== null
+  ) {
+    // Only skip second pass if BOTH conditions are met:
+    // 1. Deterministic segmentation produced parts
+    // 2. Confidence is HIGH ENOUGH to trust the deterministic output
+    reasons.push(
+      `[DETERMINISTIC_SEGMENTATION_TRUSTED] Boundaries have high confidence (${segmentationConfidence}%), deterministic segmentation accepted`,
     );
   }
 

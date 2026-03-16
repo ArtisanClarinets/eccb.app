@@ -12,7 +12,7 @@ The Emerald Coast Community Band (ECCB) Management Platform is a production-grad
 -   **Public Website:** CMS-driven pages with cinematic animations.
 -   **Member Portal:** Secure dashboard for musicians (Music, Schedule, Profile).
 -   **Digital Music Stand:** Interactive PDF viewer with annotations and real-time sync.
--   **Smart Upload:** AI-powered music library ingestion.
+-   **Smart Upload:** OCR-Driven AI-powered music library ingestion.
 -   **Operations:** Attendance tracking, event management, and role-based access control.
 
 ## Documentation Index (Knowledge Base)
@@ -36,6 +36,7 @@ Agents **MUST** consult these files for specific domain knowledge:
 
 ### Feature-Specific Documentation
 - **[SMART_UPLOAD.md](docs/SMART_UPLOAD.md)** (deprecated; see [SMART_UPLOAD_SYSTEM_GUIDE.md](docs/smart-upload/SMART_UPLOAD_SYSTEM_GUIDE.md)): AI-powered music PDF metadata extraction.
+- **[Smart Upload Agent Guide](docs/smart-upload/SMART_UPLOAD_AGENT_GUIDE.md)**: concise, agent‑oriented reference for the OCR‑first autonomous music upload/management system. Agents should consult this file when adding features or diagnosing issues in the smart‑upload pipeline.
 - **[stand-developer-guide.md](docs/stand-developer-guide.md)**: Digital Music Stand architecture and API.
 - **[stand-user-guide.md](docs/stand-user-guide.md)**: User manual for the Music Stand.
 - **[stand-annotation-system.md](docs/stand-annotation-system.md)**: Canvas drawing and sync logic.

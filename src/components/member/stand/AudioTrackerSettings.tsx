@@ -105,7 +105,7 @@ export function AudioTrackerSettings() {
           aria-label={enabled ? 'Disable audio tracking' : 'Enable audio tracking'}
           className={cn(
             'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-            'focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
             enabled ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-600',
             isLoading && 'opacity-50 cursor-not-allowed'
           )}
@@ -131,7 +131,7 @@ export function AudioTrackerSettings() {
           <button
             onClick={() => setShowAdvanced(!showAdvanced)}
             aria-expanded={showAdvanced}
-            className="flex items-center gap-1 text-sm text-primary hover:text-primary-dark transition-colors"
+            className="flex items-center gap-1 text-sm text-primary hover:text-primary-dark transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded"
           >
             <Settings className="w-4 h-4" />
             {showAdvanced ? 'Hide Settings' : 'Show Settings'}

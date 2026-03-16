@@ -299,6 +299,7 @@ export const QUEUE_NAMES = {
   CLEANUP: 'eccb-cleanup',
   DEAD_LETTER: 'eccb-dead-letter',
   SMART_UPLOAD: 'eccb-smart-upload',
+  OCR: 'eccb-ocr',
 } as const;
 
 export type QueueName = typeof QUEUE_NAMES[keyof typeof QUEUE_NAMES];

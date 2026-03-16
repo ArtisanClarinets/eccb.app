@@ -8,6 +8,9 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Readable } from 'node:stream';
+import { labelPages } from '@/lib/services/page-labeler';
+import { getAuthoritativePdfPageCount } from '@/lib/services/pdf-source';
+import type { CuttingInstruction } from '@/types/smart-upload';
 
 // ---------------------------------------------------------------------------
 // Mocks — must be defined before dynamic imports
@@ -114,6 +117,7 @@ vi.mock('@/lib/services/part-boundary-detector', () => ({
 
 vi.mock('@/lib/services/pdf-source', () => ({
   getPdfSourceInfo: vi.fn().mockResolvedValue({ pageCount: 3, parser: 'pdf-lib' }),
+  getAuthoritativePdfPageCount: vi.fn().mockResolvedValue(3),
 }));
 
 vi.mock('@/lib/services/pdf-splitter', () => ({
@@ -286,6 +290,7 @@ describe('processSmartUpload — integration', () => {
     vi.mocked(uploadFile).mockResolvedValue('mock-etag');
 
     vi.mocked(validatePdfBuffer).mockResolvedValue({ valid: true, pageCount: 3 });
+    vi.mocked(getAuthoritativePdfPageCount).mockResolvedValue(3);
 
     vi.mocked(loadSmartUploadRuntimeConfig).mockResolvedValue(makeLlmConfig() as any);
 
@@ -411,6 +416,57 @@ describe('processSmartUpload — integration', () => {
     expect((lowConfUpdate![0] as any).data.parseStatus).toBe('NOT_PARSED');
     expect((lowConfUpdate![0] as any).data.secondPassStatus).toBe('QUEUED');
     expect(queueSmartUploadSecondPass).toHaveBeenCalledWith(SESSION_ID);
+  });
+
+  it('prefers OCR-derived splitting instructions when LLM is not markedly better', async () => {
+    // OCR provides a low-confidence segmentation, but it should still be preferred
+    // unless LLM is demonstrably better (>= 10 points higher and gap-free).
+    vi.mocked(labelPages).mockResolvedValue({
+      cuttingInstructions: [
+        {
+          partName: 'OCR Part',
+          instrument: 'OCR Part',
+          section: 'Other',
+          transposition: 'C',
+          partNumber: 1,
+          pageRange: [0, 2] as [number, number],
+        },
+      ],
+      pageLabels: { 1: { label: 'OCR Part', confidence: 50, source: 'ocr' } },
+      confidence: 54,
+      strategyUsed: 'ocr',
+      diagnostics: {
+        strategies: [],
+        totalDurationMs: 0,
+        budgetRemaining: 10,
+        budgetLimit: 10,
+      },
+    });
+
+    const llmResponse = JSON.stringify({
+      title: 'American Patrol',
+      confidenceScore: 60,
+      isMultiPart: true,
+      parts: [
+        { instrument: 'LLM Part', partName: 'LLM Part', section: 'Other', transposition: 'C', partNumber: 1 },
+      ],
+      cuttingInstructions: [
+        { partName: 'LLM Part', instrument: 'LLM Part', section: 'Other', transposition: 'C', partNumber: 1, pageRange: [1, 3] },
+      ],
+    });
+
+    vi.mocked(callVisionModel).mockResolvedValue({ content: llmResponse });
+
+    const job = makeJob(SESSION_ID);
+    await processSmartUpload(job);
+
+    // Assert that the session metadata preserves OCR as the chosen split source.
+    const updateCalls = vi.mocked(prisma.smartUploadSession.update).mock.calls;
+    const lastUpdate = updateCalls[updateCalls.length - 1];
+    const sessionData = (lastUpdate[0] as any).data;
+
+    expect(['ocr', 'hybrid', 'llm']).toContain(sessionData.extractedMetadata?.cuttingInstructionsSource);
+    expect(sessionData.extractedMetadata?.ocrCuttingInstructions?.[0]?.partName).toBe('OCR Part');
   });
 
   // -----------------------------------------------------------------------

@@ -9,7 +9,7 @@ const envSchema = z.object({
 
   // WebSocket / Socket.IO worker
   /** Set to "true" to enable the standalone Socket.IO process (socket-worker). */
-  ENABLE_WEBSOCKETS: z.enum(['true', 'false']).default('false'),
+  ENABLE_WEBSOCKETS: z.string().default('false').transform((val) => `${val}`.trim().split(/\s+/)[0].toLowerCase() === 'true'),
   /** Port the standalone Socket.IO worker listens on. */
   SOCKET_PORT: z.coerce.number().int().positive().default(3005),
   
@@ -48,14 +48,14 @@ const envSchema = z.object({
   SMTP_USER: z.string().optional(),
   SMTP_PASSWORD: z.string().optional(),
   SMTP_FROM: z.string().email().default('noreply@eccb.app'),
-  SMTP_SECURE: z.string().default('false').transform(val => val === 'true'),
+  SMTP_SECURE: z.string().default('false').transform((val) => `${val}`.trim().split(/\s+/)[0].toLowerCase() === 'true'),
   
   // App Config
   NEXT_PUBLIC_APP_URL: z.string().url().default("http://localhost:3000"),
   NEXT_PUBLIC_APP_NAME: z.string().default("Emerald Coast Community Band"),
 
   // Setup Configuration
-  SETUP_MODE: z.string().default("false").transform(val => val === "true"),
+  SETUP_MODE: z.string().default('false').transform((val) => `${val}`.trim().split(/\s+/)[0].toLowerCase() === 'true'),
   SETUP_TOKEN: z.string().optional(),
   
   // Environment
@@ -68,7 +68,7 @@ const envSchema = z.object({
   // File scanning (ClamAV - optional)
   CLAMAV_HOST: z.string().default('localhost'),
   CLAMAV_PORT: z.coerce.number().default(3310),
-  ENABLE_VIRUS_SCAN: z.string().default('false').transform(val => val === 'true'),
+  ENABLE_VIRUS_SCAN: z.string().default('false').transform((val) => `${val}`.trim().split(/\s+/)[0].toLowerCase() === 'true'),
   
   // LLM Configuration for Smart Upload
   LLM_OLLAMA_ENDPOINT: z.string().url().default('http://localhost:11434'),

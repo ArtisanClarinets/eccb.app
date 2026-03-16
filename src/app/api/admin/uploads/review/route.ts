@@ -88,14 +88,14 @@ export async function GET(request: NextRequest) {
 
     // Get search params
     const searchParams = request.nextUrl.searchParams;
-    const status = searchParams.get('status') || 'PENDING_REVIEW';
+    const status = searchParams.get('status') || 'REQUIRES_REVIEW';
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '50', 10)));
     const skip = (page - 1) * limit;
 
     // Build where clause — default to exception sessions (PENDING_REVIEW)
     const where = {
-      status: status as 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED',
+      status: status as 'PROCESSING' | 'AUTO_COMMITTING' | 'AUTO_COMMITTED' | 'REQUIRES_REVIEW' | 'MANUALLY_APPROVED' | 'REJECTED' | 'FAILED' | 'PENDING_REVIEW' | 'APPROVED',
     };
 
     // Fetch sessions with pagination
@@ -170,14 +170,20 @@ export async function GET(request: NextRequest) {
     // Get counts by status (optimized into a single query)
     const statusCounts = await prisma.smartUploadSession.groupBy({
       by: ['status'],
-      where: { status: { in: ['PENDING_REVIEW', 'APPROVED', 'REJECTED'] } },
+      where: { status: { in: ['REQUIRES_REVIEW', 'MANUALLY_APPROVED', 'AUTO_COMMITTED', 'REJECTED', 'FAILED', 'PROCESSING', 'AUTO_COMMITTING', 'PENDING_REVIEW', 'APPROVED'] } },
       _count: { _all: true },
     });
 
     // Map grouped counts to individual variables
-    const pendingCount = statusCounts.find(c => c.status === 'PENDING_REVIEW')?._count._all ?? 0;
-    const approvedCount = statusCounts.find(c => c.status === 'APPROVED')?._count._all ?? 0;
+    const pendingCount = (statusCounts.find(c => c.status === 'REQUIRES_REVIEW')?._count._all ?? 0)
+      + (statusCounts.find(c => c.status === 'PENDING_REVIEW')?._count._all ?? 0);
+    const approvedCount = (statusCounts.find(c => c.status === 'MANUALLY_APPROVED')?._count._all ?? 0)
+      + (statusCounts.find(c => c.status === 'AUTO_COMMITTED')?._count._all ?? 0)
+      + (statusCounts.find(c => c.status === 'APPROVED')?._count._all ?? 0);
     const rejectedCount = statusCounts.find(c => c.status === 'REJECTED')?._count._all ?? 0;
+    const processingCount = (statusCounts.find(c => c.status === 'PROCESSING')?._count._all ?? 0)
+      + (statusCounts.find(c => c.status === 'AUTO_COMMITTING')?._count._all ?? 0);
+    const failedCount = statusCounts.find(c => c.status === 'FAILED')?._count._all ?? 0;
 
     return NextResponse.json({
       sessions: transformedSessions,
@@ -191,6 +197,8 @@ export async function GET(request: NextRequest) {
         pending: pendingCount,
         approved: approvedCount,
         rejected: rejectedCount,
+        processing: processingCount,
+        failed: failedCount,
       },
     });
   } catch (error) {

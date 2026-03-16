@@ -67,8 +67,8 @@ export async function POST(
     if (!existingSession) {
       return NextResponse.json({ error: 'Upload session not found' }, { status: 404 });
     }
-    if (existingSession.status !== 'PENDING_REVIEW') {
-      return NextResponse.json({ error: 'Session is not pending review' }, { status: 400 });
+    if (existingSession.status !== 'REQUIRES_REVIEW' && existingSession.status !== 'PENDING_REVIEW') {
+      return NextResponse.json({ error: 'Session is not awaiting review' }, { status: 400 });
     }
 
     const overrides: CommitOverrides = {

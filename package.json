@@ -91,7 +91,7 @@
     "dotenv": "^17.2.4",
     "embla-carousel-react": "^8.6.0",
     "gsap": "^3.14.2",
-    "hono": "^4.12.4",
+    "hono": "^4.12.7",
     "input-otp": "^1.4.2",
     "ioredis": "^5.9.3",
     "jsonrepair": "^3.13.2",
@@ -128,7 +128,9 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.20.0",
+    "@napi-rs/canvas": "^0.1.96",
     "@playwright/test": "^1.58.0",
+    "@prisma/config": "^7.5.0",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
@@ -149,12 +151,14 @@
     "globals": "^15.14.0",
     "jest-canvas-mock": "^2.5.2",
     "jsdom": "^28.1.0",
+    "nanoid": "^5.1.6",
     "playwright": "^1.58.0",
     "prisma": "^7.4.2",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.56.0",
+    "vite": "^8.0.0",
     "vitest": "^4.0.18"
   },
   "overrides": {

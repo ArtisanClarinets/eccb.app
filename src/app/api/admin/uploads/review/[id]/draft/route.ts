@@ -89,7 +89,7 @@ export async function POST(
     }
 
     // Only allow drafts for sessions that haven't been committed yet
-    if (existingSession.status === 'APPROVED' || existingSession.status === 'REJECTED') {
+    if (existingSession.status === 'AUTO_COMMITTED' || existingSession.status === 'MANUALLY_APPROVED' || existingSession.status === 'APPROVED' || existingSession.status === 'REJECTED') {
       return NextResponse.json(
         { error: `Session is already ${existingSession.status.toLowerCase()}` },
         { status: 400 }

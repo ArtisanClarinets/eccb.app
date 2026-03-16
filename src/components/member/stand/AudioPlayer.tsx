@@ -121,7 +121,7 @@ export function AudioPlayer() {
         <select
           value={currentLink.id}
           onChange={(e) => selectAudioLink(e.target.value)}
-          className="w-full border rounded px-1 py-0.5 bg-background mb-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="w-full border rounded px-1 py-0.5 bg-background mb-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
         >
           {audioLinks.map((l) => (
             <option key={l.id} value={l.id}>

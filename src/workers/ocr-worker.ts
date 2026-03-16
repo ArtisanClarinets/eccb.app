@@ -5,6 +5,7 @@ import Redis from 'ioredis';
 
 import { prisma } from '@/lib/db';
 import { logger } from '@/lib/logger';
+import { QUEUE_NAMES } from '@/lib/jobs/definitions';
 import { loadSmartUploadRuntimeConfig } from '@/lib/llm/config-loader';
 import { downloadFile } from '@/lib/services/storage';
 import { extractOcrFallbackMetadata, type OcrFallbackOptions } from '@/lib/services/ocr-fallback';
@@ -36,7 +37,7 @@ import { extractOcrFallbackMetadata, type OcrFallbackOptions } from '@/lib/servi
  * Dedicated OCR queue name.
  * Keep this stable; you will enqueue OCR jobs to this queue.
  */
-const OCR_QUEUE_NAME = process.env.OCR_QUEUE_NAME || 'eccb-ocr';
+const OCR_QUEUE_NAME = QUEUE_NAMES.OCR;
 
 /**
  * Concurrency setting - infra-only, not related to Smart Upload behavior.

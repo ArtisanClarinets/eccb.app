@@ -198,7 +198,7 @@ export async function POST(request: NextRequest) {
           duplicate: true,
           conflictType: 'existing_session',
           code: 'SMART_UPLOAD_DUPLICATE_SESSION',
-          reason: existingSession.status === 'APPROVED' ? 'approved_session' : 'pending_session',
+          reason: (existingSession.status === 'AUTO_COMMITTED' || existingSession.status === 'MANUALLY_APPROVED' || existingSession.status === 'APPROVED') ? 'approved_session' : 'pending_session',
           existingSession: {
             id: existingSession.uploadSessionId,
             status: existingSession.status,
@@ -211,7 +211,7 @@ export async function POST(request: NextRequest) {
             resumeSessionPath: `/admin/uploads/review?sessionId=${existingSession.uploadSessionId}`,
             reviewQueuePath: '/admin/uploads/review',
           },
-          message: `This exact file was already uploaded on ${existingSession.createdAt.toISOString().slice(0, 10)} and is ${existingSession.status === 'PENDING_REVIEW' ? 'pending review' : 'already approved'}. Re-use the existing session rather than uploading again.`,
+          message: `This exact file was already uploaded on ${existingSession.createdAt.toISOString().slice(0, 10)} and is ${(existingSession.status === 'REQUIRES_REVIEW' || existingSession.status === 'PENDING_REVIEW') ? 'pending review' : 'already processed'}. Re-use the existing session rather than uploading again.`,
         },
         { status: 409 }
       );
@@ -243,7 +243,7 @@ export async function POST(request: NextRequest) {
           sourceSha256,
         }),
         confidenceScore: 0,
-        status: 'PENDING_REVIEW',
+        status: 'PROCESSING',
         uploadedBy: session.user.id,
         parseStatus: 'NOT_PARSED' as ParseStatus,
         secondPassStatus: 'NOT_NEEDED' as SecondPassStatus,
