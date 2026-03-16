@@ -74,7 +74,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (endpoint?.trim()) {
+    // Only validate endpoint for providers that actually use it
+    const providersUsingEndpoint = ['ollama', 'ollama-cloud', 'custom'];
+    if (endpoint?.trim() && providersUsingEndpoint.includes(provider)) {
       const endpointPolicy = provider === 'ollama' || provider === 'ollama-cloud'
         ? 'allow-local'
         : 'strict-public';

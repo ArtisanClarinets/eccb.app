@@ -124,18 +124,35 @@ export class SchemaAutomationService {
   getMigrationStatus(): SchemaMigrationStatus {
     try {
       const output = executePrismaCommand(['migrate', 'status'], { databaseUrl: this.databaseUrl });
+      const normalized = output.replace(/\r\n/g, '\n');
 
-      // Parse the output
-      const hasPendingMigrations = output.includes('migration pending');
-      const appliedCountMatch = output.match(/(\d+) migration[s]?\s+applied/i);
-      const pendingCountMatch = output.match(/(\d+) migration[s]?\s+pending/i);
+      // Prisma CLI output can change between versions. The main goal here is to
+      // determine whether the database schema is up to date with the migrations
+      // folder (and whether there are any pending migrations).
+      const isUpToDate = /database schema is up to date/i.test(normalized);
+      const appliedCountMatch = normalized.match(/(\d+) migration[s]?\s+(?:applied|already applied)/i);
+      const pendingCountMatch = normalized.match(/(\d+) migration[s]?\s+(?:pending|to apply|not applied|unapplied)/i);
 
       const appliedCount = appliedCountMatch ? parseInt(appliedCountMatch[1], 10) : 0;
       const pendingCount = pendingCountMatch ? parseInt(pendingCountMatch[1], 10) : 0;
 
+      const hasPendingMigrations = pendingCount > 0;
+      const applied = isUpToDate || (appliedCount > 0 && !hasPendingMigrations);
+
+      // If there are no migration files at all, consider the schema "up-to-date".
+      // This can happen in initial dev setups where migrations haven't been created yet.
+      if (getMigrationFiles().length === 0) {
+        return {
+          applied: true,
+          pendingCount: 0,
+        };
+      }
+
+      // If Prisma produced output we can't interpret, default to treating it as pending
+      // so that the setup flow doesn't mistakenly skip required work.
       return {
-        applied: !hasPendingMigrations && appliedCount > 0,
-        pendingCount: pendingCount,
+        applied,
+        pendingCount,
       };
     } catch (error) {
       // If there's an error, migrations may not be set up yet

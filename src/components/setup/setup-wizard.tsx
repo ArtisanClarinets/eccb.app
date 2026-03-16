@@ -81,8 +81,9 @@ export function SetupWizard({ repairMode = false }: SetupWizardProps): React.Rea
       'Content-Type': 'application/json',
     };
 
-    if (setupToken) {
-      headers['x-setup-token'] = setupToken;
+    const token = setupToken.trim();
+    if (token) {
+      headers['x-setup-token'] = token;
     }
 
     return headers;
@@ -245,7 +246,8 @@ export function SetupWizard({ repairMode = false }: SetupWizardProps): React.Rea
         value={setupToken}
         onChange={(e) => {
           setError(null);
-          setSetupToken(e.target.value);
+          const trimmed = e.target.value.trim();
+          setSetupToken(trimmed);
         }}
         placeholder="Enter setup token"
         className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-white"

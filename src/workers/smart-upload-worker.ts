@@ -31,6 +31,7 @@ import {
   DEFAULT_ADJUDICATOR_SYSTEM_PROMPT,
   buildAdjudicatorPrompt,
 } from '@/lib/smart-upload/prompts';
+import { chooseBestCuttingInstructions } from '@/lib/smart-upload/cutting-instruction-selection';
 import type {
   CuttingInstruction,
   ExtractedMetadata,
@@ -365,6 +366,9 @@ async function finalizeSmartUploadSession(
   const firstPassSegConf = firstPassMeta?.segmentationConfidence;
   const hasSecondPassInstructions = (finalMetadata.cuttingInstructions?.length ?? 0) > 0;
 
+  // Use a trusted page count for evaluation (gaps, split validation, etc.).
+  const totalPages = (await getAuthoritativePdfPageCount(originalPdfBuffer)) ?? 0;
+
   if (finalMetadata.segmentationConfidence === undefined) {
     if (hasSecondPassInstructions) {
       // Second pass LLM produced cutting instructions — use LLM confidence
@@ -454,6 +458,38 @@ async function finalizeSmartUploadSession(
         fileType: finalMetadata.fileType,
       });
     }
+  }
+
+  // Choose best cutting instructions between first-pass (OCR/deterministic) and second-pass LLM.
+  const firstPassCuts =
+    (firstPassMeta?.ocrCuttingInstructions as CuttingInstruction[] | null) ??
+    (smartSession.cuttingInstructions as CuttingInstruction[] | null) ??
+    firstPassMeta?.cuttingInstructions ??
+    [];
+  const firstPassConfidence =
+    (firstPassMeta?.segmentationConfidence as number | undefined) ??
+    (firstPassMeta?.confidenceScore as number | undefined) ??
+    (smartSession as any)?.confidenceScore ??
+    0;
+
+  const selection = chooseBestCuttingInstructions({
+    totalPages,
+    ocrInstructions: firstPassCuts,
+    ocrConfidence: firstPassConfidence,
+    llmInstructions: correctedCuttingInstructions ?? [],
+    llmConfidence: finalConfidence,
+  });
+
+  correctedCuttingInstructions = selection.chosenInstructions;
+  finalMetadata.cuttingInstructions = selection.chosenInstructions;
+  finalMetadata.cuttingInstructionsSource = selection.source;
+  finalMetadata.ocrCuttingInstructions = selection.ocrInstructions;
+  finalMetadata.llmCuttingInstructions = selection.llmInstructions;
+
+  if (selection.source !== 'ocr') {
+    finalMetadata.notes = finalMetadata.notes
+      ? `${finalMetadata.notes} | Cutting instructions chosen from ${selection.source}`
+      : `Cutting instructions chosen from ${selection.source}`;
   }
 
   // Gap detection — ensure no pages are silently dropped when the LLM doesn't cover
