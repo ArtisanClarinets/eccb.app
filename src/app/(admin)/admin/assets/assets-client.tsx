@@ -428,6 +428,7 @@ export function AssetsClient({ initialAssets, stats }: AssetsClientProps) {
               size="icon"
               onClick={() => setViewMode('grid')}
               className="rounded-r-none"
+              aria-label="Grid view"
             >
               <Grid className="h-4 w-4" />
             </Button>
@@ -436,6 +437,7 @@ export function AssetsClient({ initialAssets, stats }: AssetsClientProps) {
               size="icon"
               onClick={() => setViewMode('list')}
               className="rounded-l-none"
+              aria-label="List view"
             >
               <List className="h-4 w-4" />
             </Button>

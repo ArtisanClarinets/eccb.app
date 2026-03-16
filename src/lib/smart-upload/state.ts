@@ -13,22 +13,35 @@ import type { ParseStatus, SecondPassStatus } from '../../types/smart-upload';
 // =============================================================================
 
 /**
- * Top-level workflow status (maps to SmartUploadStatus Prisma enum + runtime
- * extensions). The Prisma enum currently has PENDING_REVIEW | APPROVED | REJECTED.
- * Runtime code also uses PROCESSING, PROCESSED, READY_TO_COMMIT, COMMITTED, FAILED.
+ * Top-level workflow status — aligned 1:1 with the Prisma SmartUploadStatus
+ * enum.  Do NOT add values here that are not also in the DB enum.
+ *
+ * Active states:
+ *   PROCESSING       – worker is parsing / classifying
+ *   AUTO_COMMITTING  – passed quality gates, queued for autonomous commit
+ *
+ * Terminal / resolution states:
+ *   AUTO_COMMITTED    – committed by the autonomous pipeline
+ *   REQUIRES_REVIEW   – needs human review (exception path)
+ *   MANUALLY_APPROVED – human approved & committed to library
+ *   REJECTED          – human rejected
+ *   FAILED            – unrecoverable failure
+ *
+ * Legacy values kept for backward-compat (no new sessions should use these):
+ *   PENDING_REVIEW   → maps to REQUIRES_REVIEW
+ *   APPROVED         → maps to MANUALLY_APPROVED
  */
 export type WorkflowStatus =
-  | 'UPLOADED'
-  | 'QUEUED'
   | 'PROCESSING'
-  | 'PROCESSED'
-  | 'PENDING_REVIEW'
-  | 'READY_TO_COMMIT'
-  | 'COMMITTING'
-  | 'APPROVED'    // = committed via manual approval
-  | 'COMMITTED'   // = committed via autonomous path
+  | 'AUTO_COMMITTING'
+  | 'AUTO_COMMITTED'
+  | 'REQUIRES_REVIEW'
+  | 'MANUALLY_APPROVED'
   | 'REJECTED'
-  | 'FAILED';
+  | 'FAILED'
+  // legacy — avoid using in new code
+  | 'PENDING_REVIEW'
+  | 'APPROVED';
 
 /**
  * OCR sub-status.
@@ -58,17 +71,18 @@ export type CommitStatus =
  * Allowed next states for each WorkflowStatus.
  */
 const WORKFLOW_TRANSITIONS: Record<WorkflowStatus, readonly WorkflowStatus[]> = {
-  UPLOADED:         ['QUEUED', 'FAILED'],
-  QUEUED:           ['PROCESSING', 'FAILED'],
-  PROCESSING:       ['PROCESSED', 'PENDING_REVIEW', 'FAILED'],
-  PROCESSED:        ['READY_TO_COMMIT', 'PENDING_REVIEW', 'FAILED'],
-  PENDING_REVIEW:   ['APPROVED', 'REJECTED', 'READY_TO_COMMIT', 'FAILED'],
-  READY_TO_COMMIT:  ['COMMITTING', 'PENDING_REVIEW', 'FAILED'],
-  COMMITTING:       ['APPROVED', 'COMMITTED', 'FAILED'],
-  APPROVED:         [],  // terminal
-  COMMITTED:        [],  // terminal
-  REJECTED:         [],  // terminal
-  FAILED:           ['QUEUED', 'PROCESSING'],  // allow retry
+  // Active states
+  PROCESSING:        ['AUTO_COMMITTING', 'REQUIRES_REVIEW', 'FAILED'],
+  AUTO_COMMITTING:   ['AUTO_COMMITTED', 'REQUIRES_REVIEW', 'FAILED'],
+  // Terminal / resolution states
+  AUTO_COMMITTED:    [],  // terminal
+  REQUIRES_REVIEW:   ['MANUALLY_APPROVED', 'REJECTED', 'FAILED'],
+  MANUALLY_APPROVED: [],  // terminal
+  REJECTED:          [],  // terminal
+  FAILED:            ['PROCESSING'],  // allow retry from FAILED
+  // Legacy values
+  PENDING_REVIEW:    ['MANUALLY_APPROVED', 'REJECTED', 'REQUIRES_REVIEW', 'FAILED'],
+  APPROVED:          [],  // terminal (legacy)
 };
 
 /**
@@ -225,8 +239,8 @@ export function canAutoCommit(
   secondPassStatus: SecondPassStatus,
   autoApproved: boolean
 ): boolean {
-  // Must be processed or ready to commit
-  const eligibleWorkflow = workflowStatus === 'PROCESSED' || workflowStatus === 'READY_TO_COMMIT';
+  // Must be in a processing-complete state ready for autonomous commit
+  const eligibleWorkflow = workflowStatus === 'PROCESSING' || workflowStatus === 'AUTO_COMMITTING';
   // Must not already be committed or in progress
   const eligibleCommit = commitStatus === 'NOT_STARTED' || commitStatus === 'FAILED';
   // Second pass must be complete or not needed
@@ -242,7 +256,7 @@ export function canEnterReview(
   workflowStatus: WorkflowStatus,
   requiresHumanReview: boolean
 ): boolean {
-  const eligible = workflowStatus === 'PROCESSED' || workflowStatus === 'READY_TO_COMMIT';
+  const eligible = workflowStatus === 'PROCESSING' || workflowStatus === 'AUTO_COMMITTING';
   return eligible && requiresHumanReview;
 }
 
@@ -257,7 +271,14 @@ export function canRetryCommit(commitStatus: CommitStatus): boolean {
  * Whether a workflow is in a terminal state.
  */
 export function isTerminalWorkflow(status: WorkflowStatus): boolean {
-  return status === 'APPROVED' || status === 'COMMITTED' || status === 'REJECTED';
+  return (
+    status === 'AUTO_COMMITTED' ||
+    status === 'MANUALLY_APPROVED' ||
+    status === 'REJECTED' ||
+    status === 'FAILED' ||
+    // legacy
+    status === 'APPROVED'
+  );
 }
 
 /**

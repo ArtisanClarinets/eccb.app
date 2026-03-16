@@ -67,6 +67,7 @@ import {
   DEFAULT_VISION_SYSTEM_PROMPT,
   PROMPT_VERSION,
 } from '@/lib/smart-upload/prompts';
+import { chooseBestCuttingInstructions } from '@/lib/smart-upload/cutting-instruction-selection';
 import type {
   CuttingInstruction,
   ExtractedMetadata,
@@ -811,6 +812,13 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
     let capturedRawOcrText: string | null = null;
     let capturedOcrTextChars: number | null = null;
 
+    // These allow us to compare OCR-derived vs LLM-derived cutting instructions
+    // and choose the most reliable set for splitting while keeping both for audit.
+    let ocrCuttingInstructions: CuttingInstruction[] | undefined;
+    let ocrCuttingConfidence: number | undefined;
+    let llmCuttingInstructions: CuttingInstruction[] | undefined;
+    let llmCuttingConfidence: number | undefined;
+
     if (!useFullVisionLLM) {
       const ocrMeta = await extractOcrFallbackMetadata({
         pdfBuffer,
@@ -868,6 +876,12 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
         confidence: extraction.confidenceScore,
         strategyUsed: pageLabelerResult?.strategyUsed ?? 'unknown',
       });
+
+      // Audit: keep the OCR-derived instructions separate from any later LLM outputs.
+      ocrCuttingInstructions = extraction.cuttingInstructions;
+      ocrCuttingConfidence = extraction.confidenceScore;
+      llmCuttingInstructions = [];
+      llmCuttingConfidence = undefined;
 
       strategyHistory.push({
         strategy: `ocr-first-${pageLabelerResult?.strategyUsed ?? 'unknown'}`,
@@ -1307,6 +1321,14 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
         llmFallbackReasons: [...new Set(ocrProvenance.llmFallbackReasons)],
       };
 
+      // Audit: keep both OCR (deterministic + page-labeler) and LLM cutting instructions for later comparison.
+      ocrCuttingInstructions = toOneIndexedInstructions(
+        deterministicInstructions ?? (pageLabelerResult?.cuttingInstructions ?? []),
+      );
+      ocrCuttingConfidence = deterministicConfidence ?? (pageLabelerResult?.confidence ?? 0);
+      llmCuttingInstructions = extraction.cuttingInstructions;
+      llmCuttingConfidence = extraction.segmentationConfidence ?? extraction.confidenceScore;
+
       firstPassRaw = visionResult.content;
     }
 
@@ -1342,6 +1364,31 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
         totalPages,
         fileType: extraction.fileType,
       });
+    }
+
+    // Choose best cutting instructions between OCR (deterministic) and LLM
+    // (preferring OCR unless LLM is demonstrably better).
+    const cuttingChoice = chooseBestCuttingInstructions({
+      totalPages,
+      ocrInstructions: ocrCuttingInstructions,
+      ocrConfidence: ocrCuttingConfidence,
+      llmInstructions: llmCuttingInstructions,
+      llmConfidence: llmCuttingConfidence,
+    });
+
+    extraction.cuttingInstructions = cuttingChoice.chosenInstructions;
+    extraction.cuttingInstructionsSource = cuttingChoice.source;
+    if (cuttingChoice.ocrInstructions) {
+      extraction.ocrCuttingInstructions = cuttingChoice.ocrInstructions;
+    }
+    if (cuttingChoice.llmInstructions) {
+      extraction.llmCuttingInstructions = cuttingChoice.llmInstructions;
+    }
+
+    if (cuttingChoice.source !== 'ocr') {
+      extraction.notes = extraction.notes
+        ? `${extraction.notes} | Cutting instructions chosen from ${cuttingChoice.source}`
+        : `Cutting instructions chosen from ${cuttingChoice.source}`;
     }
 
     // Step 3: Validate cutting instructions
@@ -1743,7 +1790,7 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
       ocrStatus: ocrProvenance.ocrEngine ? 'COMPLETE' : 'NOT_NEEDED',
       secondPassStatus,
       commitStatus: 'NOT_STARTED',
-      workflowStatus: 'PROCESSED',
+      workflowStatus: 'PROCESSING',
       deterministicSegmentation: deterministicConfidence > 0,
     };
 
@@ -1787,6 +1834,7 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
         cuttingInstructions: deepCloneJSON(extraction.cuttingInstructions ?? normalizedInstructionsOne) as any,
         tempFiles: deepCloneJSON(tempFiles) as any,
         autoApproved: shouldAutoCommit,
+        status: shouldAutoCommit ? 'AUTO_COMMITTING' : 'REQUIRES_REVIEW',
         requiresHumanReview: qualityGateFailed || undefined,
         secondPassStatus: secondPassStatus === 'NOT_NEEDED' ? 'NOT_NEEDED' : secondPassStatus,
         llmProvider: llmConfig.provider,

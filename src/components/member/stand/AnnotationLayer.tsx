@@ -6,7 +6,7 @@ import { STAMPS, loadStampImage } from '@/lib/stamps';
 
 // Generate unique ID for strokes
 function generateId(): string {
-  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  return crypto.randomUUID();
 }
 
 // Render scheduler using requestAnimationFrame for performance
@@ -617,7 +617,7 @@ export function AnnotationLayer() {
         <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-50">
           <button
             onClick={() => setShowStampPalette((v) => !v)}
-            className="px-3 py-1 bg-card border rounded shadow text-xs font-medium hover:bg-muted transition-colors"
+            className="px-3 py-1 bg-card border rounded shadow text-xs font-medium hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             title="Select stamp"
           >
             Stamp: {STAMPS.find((s) => s.id === selectedStampId)?.label ?? selectedStampId}
@@ -632,7 +632,7 @@ export function AnnotationLayer() {
                     setCurrentTool(Tool.STAMP);
                     setShowStampPalette(false);
                   }}
-                  className={`px-1 py-1 text-xs border rounded hover:bg-primary/10 transition-colors truncate ${
+                  className={`px-1 py-1 text-xs border rounded hover:bg-primary/10 transition-colors truncate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                     selectedStampId === stamp.id ? 'border-primary bg-primary/10 font-semibold' : ''
                   }`}
                   title={stamp.label}

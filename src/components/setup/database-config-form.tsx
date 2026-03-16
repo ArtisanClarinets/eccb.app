@@ -17,6 +17,7 @@ import { StatusDisplay } from './status-display';
 interface DatabaseConfigFormProps {
   onSubmit: (config: DatabaseConfig) => Promise<void>;
   isLoading?: boolean;
+  disableSubmit?: boolean;
 }
 
 export interface DatabaseConfig {
@@ -32,6 +33,7 @@ type FormStatus = 'idle' | 'testing' | 'success' | 'error';
 export function DatabaseConfigForm({
   onSubmit,
   isLoading = false,
+  disableSubmit = false,
 }: DatabaseConfigFormProps): React.ReactElement {
   const [formData, setFormData] = useState<DatabaseConfig>({
     host: 'localhost',
@@ -171,7 +173,7 @@ export function DatabaseConfigForm({
           {/* Submit Button */}
           <Button
             type="submit"
-            disabled={isLoading || status === 'testing'}
+            disabled={isLoading || status === 'testing' || disableSubmit}
             className="w-full bg-primary hover:bg-primary/90"
           >
             {isLoading ? 'Connecting...' : 'Test & Continue'}

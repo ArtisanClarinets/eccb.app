@@ -62,7 +62,7 @@ export async function POST(
     }
 
     // Only allow rejection of sessions that are pending review
-    if (uploadSession.status !== 'PENDING_REVIEW') {
+    if (uploadSession.status !== 'REQUIRES_REVIEW' && uploadSession.status !== 'PENDING_REVIEW') {
       return NextResponse.json(
         {
           error: 'Session is not pending review',

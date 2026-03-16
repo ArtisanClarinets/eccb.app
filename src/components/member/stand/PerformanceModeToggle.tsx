@@ -162,7 +162,7 @@ export function PerformanceModeToggle() {
               </p>
               <button
                 onClick={dismissFallbackNotice}
-                className="text-xs text-yellow-800 dark:text-yellow-200 underline mt-2 hover:no-underline"
+                className="text-xs text-yellow-800 dark:text-yellow-200 underline mt-2 hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-600 rounded px-1"
               >
                 Dismiss
               </button>

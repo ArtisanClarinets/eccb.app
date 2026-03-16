@@ -168,7 +168,7 @@ export async function commitSmartUploadSessionToLibrary(
     await prisma.smartUploadSession.update({
       where: { uploadSessionId: sessionId },
       data: {
-        status: 'APPROVED',
+        status: approvedBy.startsWith('system:') ? 'AUTO_COMMITTED' : 'MANUALLY_APPROVED',
         reviewedBy: approvedBy,
         reviewedAt: uploadSession.reviewedAt ?? now,
         commitStatus: 'COMPLETE',
@@ -200,8 +200,8 @@ export async function commitSmartUploadSessionToLibrary(
   const isAutonomousCommit = approvedBy.startsWith('system:');
   const allowedStatuses = new Set(
     isAutonomousCommit
-      ? ['PENDING_REVIEW', 'APPROVED']
-      : ['PENDING_REVIEW']
+      ? ['AUTO_COMMITTING', 'REQUIRES_REVIEW', 'PENDING_REVIEW', 'AUTO_COMMITTED', 'APPROVED']
+      : ['REQUIRES_REVIEW', 'PENDING_REVIEW']
   );
 
   if (!allowedStatuses.has(uploadSession.status)) {
@@ -735,7 +735,7 @@ export async function commitSmartUploadSessionToLibrary(
       await tx.smartUploadSession.update({
         where: { uploadSessionId: sessionId },
         data: {
-          status: 'APPROVED',
+          status: isAutonomousCommit ? 'AUTO_COMMITTED' : 'MANUALLY_APPROVED',
           reviewedBy: approvedBy,
           reviewedAt: new Date(),
           commitStatus: 'COMPLETE',

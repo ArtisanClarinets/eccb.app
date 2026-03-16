@@ -44,6 +44,8 @@ const mockPrisma = prisma as unknown as {
 };
 
 describe('Settings Actions', () => {
+  beforeEach(() => { vi.spyOn(console, 'error').mockImplementation(() => {}); });
+  afterEach(() => { vi.restoreAllMocks(); });
   beforeEach(() => {
     vi.resetAllMocks();
     // restore requirePermission behaviour after reset

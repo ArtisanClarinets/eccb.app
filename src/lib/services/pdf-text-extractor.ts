@@ -88,11 +88,13 @@ export interface PdfTextExtractionOptions {
 // =============================================================================
 
 /** Fraction of page height considered "header" */
-const HEADER_HEIGHT_FRACTION = 0.20;
+const HEADER_HEIGHT_FRACTION = 0.10;
 /** Minimum characters to consider a page as having a text layer */
 const MIN_TEXT_CHARS = 10;
 /** Maximum chars to capture from full page (for fallback analysis) */
 const MAX_FULL_TEXT_CHARS = 500;
+/** P1.4 FIX: Maximum reasonable header text chars (headers normally 20-50 chars) */
+const MAX_HEADER_CHARS = 200;
 /** Strong text-layer threshold (unchanged semantics) */
 const TEXT_LAYER_THRESHOLD = 0.6;
 
@@ -279,22 +281,28 @@ function extractHeaderTextFromItems(items: ReadonlyArray<unknown>, pageHeight: n
     const text = item.str.trim();
     if (!text) continue;
 
+    // P1.4 FIX: Early exit if header already exceeds reasonable size
+    if (headerText.length >= MAX_HEADER_CHARS) {
+      break;
+    }
+
     // Primary path: use transform[5] y-coordinate to determine whether the text
     // appears in the header band near the top of the page.
     if (Array.isArray(item.transform) && typeof item.transform[5] === 'number') {
       const yPos = item.transform[5];
       const distFromTop = pageHeight - yPos;
 
-      // Preserve existing effective header region behavior (+50 slack)
-      if (distFromTop <= pageHeight * HEADER_HEIGHT_FRACTION + 50) {
+      // Preserve existing effective header region behavior (reduced slack: 30 instead of 50)
+      if (distFromTop <= pageHeight * HEADER_HEIGHT_FRACTION + 30) {
         headerText += `${text} `;
       }
       continue;
     }
 
     // Fallback path when transform is absent.
-    // Keep previous heuristic behavior for compatibility.
-    if (headerText.length < pageHeight * HEADER_HEIGHT_FRACTION) {
+    // P1.4 FIX: Use reasonable character limit instead of comparing text.length to pageHeight
+    // Normal headers are 20-50 chars; MAX_HEADER_CHARS = 200 is generous upper bound
+    if (headerText.length < MAX_HEADER_CHARS) {
       headerText += `${text} `;
     }
   }

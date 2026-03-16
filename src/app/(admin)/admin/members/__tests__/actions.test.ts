@@ -22,6 +22,8 @@ vi.mock('@/lib/services/audit', () => ({
 }));
 
 describe('Member Actions', () => {
+  beforeEach(() => { vi.spyOn(console, 'error').mockImplementation(() => {}); });
+  afterEach(() => { vi.restoreAllMocks(); });
   beforeEach(() => {
     vi.clearAllMocks();
     (requirePermission as any).mockResolvedValue({ user: { id: 'test-user' } });

@@ -18,8 +18,10 @@ import {
   type MigrationStatus,
   type SetupProgressStatus,
 } from '@/lib/setup/types';
+import { invalidateSetupStateCache } from '@/lib/setup/state';
 import { logger } from '@/lib/logger';
 import { validateSetupRequest } from '@/lib/setup/setup-guard';
+import { setEnvVariable } from '@/lib/setup/env-manager';
 
 // =============================================================================
 // Types
@@ -57,7 +59,13 @@ const setupSchema = z.object({
   config: z
     .object({
       host: z.string().optional(),
-      port: z.number().optional(),
+      port: z.preprocess((v) => {
+        if (typeof v === 'string') {
+          const n = parseInt(v, 10);
+          return Number.isNaN(n) ? undefined : n;
+        }
+        return typeof v === 'number' ? v : undefined;
+      }, z.number().optional()),
       database: z.string().optional(),
       username: z.string().optional(),
       password: z.string().optional(),
@@ -126,6 +134,18 @@ async function runFullSetup(): Promise<SetupResponse> {
       };
     }
 
+    // Invalidate any cached setup state so the proxy/router can re-evaluate readiness
+    invalidateSetupStateCache();
+
+    // Persist that setup mode should be disabled going forward (helps local dev).
+    // This is best-effort; if the .env file isn't writable, we still succeed.
+    try {
+      process.env.SETUP_MODE = 'false';
+      setEnvVariable('SETUP_MODE', 'false');
+    } catch {
+      // Ignore failures; this is only a convenience.
+    }
+
     // Complete
     return {
       success: true,
@@ -154,7 +174,7 @@ async function runFullSetup(): Promise<SetupResponse> {
  */
 export async function GET(request: Request): Promise<NextResponse<SetupResponse> | NextResponse> {
   // Validate request is authorized for setup
-  const authResponse = validateSetupRequest(request);
+  const authResponse = await validateSetupRequest(request);
   if (authResponse) return authResponse;
 
   try {
@@ -187,7 +207,7 @@ export async function GET(request: Request): Promise<NextResponse<SetupResponse>
  */
 export async function POST(request: Request): Promise<NextResponse<SetupResponse> | NextResponse> {
   // Validate request is authorized for setup
-  const authResponse = validateSetupRequest(request);
+  const authResponse = await validateSetupRequest(request);
   if (authResponse) return authResponse;
 
   try {
@@ -211,6 +231,34 @@ export async function POST(request: Request): Promise<NextResponse<SetupResponse
 
     // Handle different actions
     switch (action) {
+      case 'init': {
+        // simply verify that the provided or current database is reachable
+        logger.info('Running connection test');
+        try {
+          // checkMigrationStatus executes a lightweight query; it will throw if
+          // the connection cannot be established.
+          const status = checkMigrationStatus();
+          return NextResponse.json({
+            success: true,
+            phase: status.applied ? SetupPhase.COMPLETE : SetupPhase.CHECKING,
+            progress: status.applied ? 100 : 0,
+            message: 'Connection successful',
+            data: { connection: { ok: true } },
+          });
+        } catch (err) {
+          logger.warn('Connection test failed', { error: err });
+          return NextResponse.json(
+            {
+              success: false,
+              phase: SetupPhase.CHECKING,
+              progress: 0,
+              error: err instanceof Error ? err.message : 'Connection failed',
+            },
+            { status: 400 },
+          );
+        }
+      }
+
       case 'migrate': {
         logger.info('Running migrations');
         const migrationResult = runMigrations({ skipSeed: true });
@@ -236,7 +284,11 @@ export async function POST(request: Request): Promise<NextResponse<SetupResponse
       }
 
       case 'full': {
-        return NextResponse.json(await runFullSetup());
+        const result = await runFullSetup();
+        if (result.success) {
+          invalidateSetupStateCache();
+        }
+        return NextResponse.json(result);
       }
 
       default:

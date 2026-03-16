@@ -51,6 +51,7 @@ import {
   Play,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ConfidenceIndicator, ConfidenceWarningBanner } from '@/components/smart-upload/confidence-indicator';
 import type { ParsedPartRecord, ParseStatus, SecondPassStatus, CuttingInstruction } from '@/types/smart-upload';
 
 // =============================================================================
@@ -86,7 +87,7 @@ interface SmartUploadSession {
   mimeType: string;
   storageKey: string;
   confidenceScore: number | null;
-  status: 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED';
+  status: 'PROCESSING' | 'AUTO_COMMITTING' | 'AUTO_COMMITTED' | 'REQUIRES_REVIEW' | 'MANUALLY_APPROVED' | 'REJECTED' | 'FAILED' | 'PENDING_REVIEW' | 'APPROVED';
   uploadedBy: string;
   reviewedBy: string | null;
   reviewedAt: Date | null;
@@ -153,13 +154,6 @@ function formatDate(date: Date | string): string {
     hour: '2-digit',
     minute: '2-digit',
   });
-}
-
-function getConfidenceColor(score: number | null): string {
-  if (score === null) return 'bg-gray-100 text-gray-700';
-  if (score >= 85) return 'bg-green-100 text-green-700';
-  if (score >= 60) return 'bg-yellow-100 text-yellow-700 border border-yellow-400';
-  return 'bg-red-100 text-red-700 border border-red-400';
 }
 
 function getParseStatusBadge(parseStatus: ParseStatus | null): React.ReactNode {
@@ -232,7 +226,7 @@ function formatExceptionKind(kind: string | undefined): string {
 function sanitizeDisplayValue(value: string | undefined | null): string {
   if (!value) return '-';
   
-  // Remove control characters (except common whitespace) that may appear in LLM-extracted text.
+  // Remove control characters (except common whitespace)
   // eslint-disable-next-line no-control-regex
   let cleaned = value.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
   
@@ -340,7 +334,7 @@ function UploadReviewClient({
   const fetchSessions = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/admin/uploads/review?status=PENDING_REVIEW');
+      const response = await fetch('/api/admin/uploads/review?status=REQUIRES_REVIEW');
 
       if (!response.ok) {
         return;
@@ -944,15 +938,12 @@ function UploadReviewClient({
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        className={cn(
-                          getConfidenceColor(session.confidenceScore),
-                        )}
-                      >
-                        {session.confidenceScore !== null
-                          ? `${session.confidenceScore}%`
-                          : 'N/A'}
-                      </Badge>
+                      <ConfidenceIndicator
+                        score={session.confidenceScore}
+                        threshold={70}
+                        autoApproveThreshold={90}
+                        showIcon={true}
+                      />
                     </TableCell>
                      <TableCell>
                        <div className="flex flex-col gap-1">
@@ -1327,26 +1318,25 @@ function UploadReviewClient({
                 )}
               </Tabs>
 
-              {/* Confidence Score */}
-              <div className="flex items-center gap-4">
-                <span className="text-sm font-medium">Confidence Score:</span>
-                <Badge
-                  className={cn(
-                    'text-lg px-3 py-1',
-                    getConfidenceColor(editingSession.confidenceScore)
-                  )}
-                >
-                  {editingSession.confidenceScore !== null
-                    ? `${editingSession.confidenceScore}%`
-                    : 'N/A'}
-                </Badge>
-                {editingSession.confidenceScore !== null &&
-                  editingSession.confidenceScore < 85 && (
-                    <span className="text-sm text-yellow-600">
-                      <AlertCircle className="inline h-4 w-4 mr-1" />
-                      Below threshold - requires careful review
-                    </span>
-                  )}
+              {/* Confidence Score with Warning */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-4">
+                  <span className="text-sm font-medium">Confidence Score:</span>
+                  <ConfidenceIndicator
+                    score={editingSession.confidenceScore}
+                    threshold={70}
+                    autoApproveThreshold={90}
+                    showIcon={true}
+                    detailed={true}
+                  />
+                </div>
+                {editingSession.confidenceScore !== null && editingSession.confidenceScore < 70 && (
+                  <ConfidenceWarningBanner
+                    score={editingSession.confidenceScore}
+                    threshold={70}
+                    provenance={editingSession.exceptionQueue?.provenance}
+                  />
+                )}
               </div>
 
               {editingSession.exceptionQueue && (

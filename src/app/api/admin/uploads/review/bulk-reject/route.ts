@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
     const uploadSessions = await prisma.smartUploadSession.findMany({
       where: {
         uploadSessionId: { in: sessionIds },
-        status: 'PENDING_REVIEW',
+        status: { in: ['REQUIRES_REVIEW', 'PENDING_REVIEW'] },
       },
       select: {
         uploadSessionId: true,
