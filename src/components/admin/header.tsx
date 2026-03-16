@@ -56,7 +56,7 @@ export function AdminHeader() {
           </Button>
 
           {/* Notifications */}
-          <Button variant="ghost" size="icon" asChild>
+          <Button variant="ghost" size="icon" asChild aria-label="Notifications">
             <Link href="/admin/notifications">
               <Bell className="h-5 w-5" />
               <span className="sr-only">Notifications</span>

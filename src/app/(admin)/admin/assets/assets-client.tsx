@@ -475,13 +475,13 @@ export function AssetsClient({ initialAssets, stats }: AssetsClientProps) {
                   </div>
                 )}
                 <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                  <Button size="icon" variant="secondary" onClick={() => copyUrl(asset)} aria-label="Copy asset URL">
+                  <Button size="icon" variant="secondary" onClick={() => copyUrl(asset)} aria-label="Copy URL">
                     <Copy className="h-4 w-4" />
                   </Button>
-                  <Button size="icon" variant="secondary" onClick={() => openEditDialog(asset)} aria-label="Edit asset">
+                  <Button size="icon" variant="secondary" onClick={() => openEditDialog(asset)} aria-label="Edit Details">
                     <Edit className="h-4 w-4" />
                   </Button>
-                  <Button size="icon" variant="destructive" onClick={() => openDeleteDialog(asset)} aria-label="Delete asset">
+                  <Button size="icon" variant="destructive" onClick={() => openDeleteDialog(asset)} aria-label="Delete Asset">
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
@@ -525,7 +525,7 @@ export function AssetsClient({ initialAssets, stats }: AssetsClientProps) {
                     </div>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" aria-label="More actions">
+                        <Button variant="ghost" size="icon" aria-label="Actions">
                           <MoreHorizontal className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>

@@ -29,6 +29,7 @@ export function NavigationControls() {
         size="icon"
         onClick={prevPiece}
         disabled={currentPieceIndex === 0}
+        aria-label="Previous piece"
       >
         <ChevronLeft className="h-4 w-4" />
       </Button>
@@ -43,6 +44,7 @@ export function NavigationControls() {
         size="icon"
         onClick={nextPiece}
         disabled={currentPieceIndex >= pieces.length - 1}
+        aria-label="Next piece"
       >
         <ChevronRight className="h-4 w-4" />
       </Button>
