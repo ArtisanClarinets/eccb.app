@@ -224,7 +224,7 @@ export function Toolbar({
                       setShowColorPicker(false);
                     }}
                     className={cn(
-                      'w-8 h-8 rounded-full border-2 min-w-[44px] min-h-[44px] flex items-center justify-center',
+                      'w-8 h-8 rounded-full border-2 min-w-[44px] min-h-[44px] flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
                       color.value === '#ffffff' ? 'border-gray-400' : 'border-transparent',
                       toolColor === color.value && 'ring-2 ring-primary'
                     )}
@@ -319,7 +319,7 @@ export function Toolbar({
           <ZoomOut className="h-4 w-4" aria-hidden="true" />
         </Button>
         <button
-          className="text-xs tabular-nums w-12 text-center bg-muted rounded px-1 py-1 hover:bg-muted/80"
+          className="text-xs tabular-nums w-12 text-center bg-muted rounded px-1 py-1 hover:bg-muted/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           onClick={() => setZoom(100)}
           title="Reset zoom to 100%"
           aria-label={`Zoom ${zoom}%, click to reset`}
