@@ -405,9 +405,11 @@ describe('Smart Upload Integration Tests', () => {
 
   beforeAll(() => {
     // Set crypto mock for UUID generation
+    const originalCrypto = global.crypto;
     Object.defineProperty(global, 'crypto', {
       value: {
-        randomUUID: () => `test-uuid-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        ...originalCrypto,
+        randomUUID: () => originalCrypto.randomUUID(),
       },
       configurable: true,
     });

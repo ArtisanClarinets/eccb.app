@@ -6,7 +6,7 @@ import { STAMPS, loadStampImage } from '@/lib/stamps';
 
 // Generate unique ID for strokes
 function generateId(): string {
-  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  return crypto.randomUUID();
 }
 
 // Render scheduler using requestAnimationFrame for performance
