@@ -69,6 +69,7 @@ export function MemberSidebar({ user, enabledFeatures }: MemberSidebarProps) {
           size="icon"
           onClick={() => setMobileOpen(true)}
           className="bg-background"
+          aria-label="Open mobile menu"
         >
           <Menu className="h-5 w-5" />
         </Button>
@@ -96,6 +97,7 @@ export function MemberSidebar({ user, enabledFeatures }: MemberSidebarProps) {
             size="icon"
             onClick={() => setMobileOpen(false)}
             className="text-white hover:bg-white/10"
+            aria-label="Close mobile menu"
           >
             <X className="h-5 w-5" />
           </Button>

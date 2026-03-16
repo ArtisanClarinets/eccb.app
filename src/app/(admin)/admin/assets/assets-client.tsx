@@ -428,6 +428,7 @@ export function AssetsClient({ initialAssets, stats }: AssetsClientProps) {
               size="icon"
               onClick={() => setViewMode('grid')}
               className="rounded-r-none"
+              aria-label="Grid view"
             >
               <Grid className="h-4 w-4" />
             </Button>
@@ -436,6 +437,7 @@ export function AssetsClient({ initialAssets, stats }: AssetsClientProps) {
               size="icon"
               onClick={() => setViewMode('list')}
               className="rounded-l-none"
+              aria-label="List view"
             >
               <List className="h-4 w-4" />
             </Button>
@@ -473,13 +475,13 @@ export function AssetsClient({ initialAssets, stats }: AssetsClientProps) {
                   </div>
                 )}
                 <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                  <Button size="icon" variant="secondary" onClick={() => copyUrl(asset)}>
+                  <Button size="icon" variant="secondary" onClick={() => copyUrl(asset)} aria-label="Copy asset URL">
                     <Copy className="h-4 w-4" />
                   </Button>
-                  <Button size="icon" variant="secondary" onClick={() => openEditDialog(asset)}>
+                  <Button size="icon" variant="secondary" onClick={() => openEditDialog(asset)} aria-label="Edit asset">
                     <Edit className="h-4 w-4" />
                   </Button>
-                  <Button size="icon" variant="destructive" onClick={() => openDeleteDialog(asset)}>
+                  <Button size="icon" variant="destructive" onClick={() => openDeleteDialog(asset)} aria-label="Delete asset">
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
@@ -523,7 +525,7 @@ export function AssetsClient({ initialAssets, stats }: AssetsClientProps) {
                     </div>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
+                        <Button variant="ghost" size="icon" aria-label="More actions">
                           <MoreHorizontal className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
