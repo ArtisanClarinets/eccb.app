@@ -107,6 +107,8 @@ export interface ExtractedMetadata {
   cuttingInstructions?: CuttingInstruction[];
   /** Source of the chosen cuttingInstructions (for audit) */
   cuttingInstructionsSource?: 'ocr' | 'llm' | 'hybrid' | 'none';
+  /** Whether OCR-splitting enforcement was enabled for the run */
+  enforceOcrSplitting?: boolean;
   /** OCR-derived cutting instructions (for auditing / reproducibility) */
   ocrCuttingInstructions?: CuttingInstruction[];
   /** LLM-derived cutting instructions (for auditing / reproducibility) */

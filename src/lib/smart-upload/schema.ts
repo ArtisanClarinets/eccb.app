@@ -130,6 +130,8 @@ export const SMART_UPLOAD_SETTING_KEYS = [
   // ========================================
   // Master OCR-first enable switch
   'smart_upload_enable_ocr_first',
+  // Enforce OCR-based page splitting (LLM used only as fallback)
+  'smart_upload_enforce_ocr_splitting',
   // Text layer quality threshold (0-100)
   'smart_upload_text_layer_threshold_pct',
   // OCR mode: header, full, or both
@@ -371,6 +373,13 @@ export const SmartUploadSettingsSchema = z.object({
     .union([z.boolean(), z.string()])
     .transform((v) => (typeof v === 'string' ? v === 'true' : v))
     .default(true),
+
+  // When true, prefer OCR-derived cutting instructions even if LLM appears more confident.
+  // LLM is still used as a fallback when OCR results are invalid or missing.
+  smart_upload_enforce_ocr_splitting: z
+    .union([z.boolean(), z.string()])
+    .transform((v) => (typeof v === 'string' ? v === 'true' : v))
+    .default(false),
 
   // Text layer quality threshold (0-100)
   smart_upload_text_layer_threshold_pct: z

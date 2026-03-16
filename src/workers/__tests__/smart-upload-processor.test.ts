@@ -10,7 +10,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Readable } from 'node:stream';
 import { labelPages } from '@/lib/services/page-labeler';
 import { getAuthoritativePdfPageCount } from '@/lib/services/pdf-source';
-import type { CuttingInstruction } from '@/types/smart-upload';
 
 // ---------------------------------------------------------------------------
 // Mocks — must be defined before dynamic imports
@@ -211,6 +210,7 @@ function makeLlmConfig(overrides: Record<string, unknown> = {}) {
     // Default: use PDF mode so full vision response (with cuttingInstructions) is trusted
     sendFullPdfToLlm: true,
     enableOcrFirst: true,
+    enforceOcrSplitting: false,
     ocrEngine: 'native' as const,
     ocrMode: 'both' as const,
     textProbePages: 3,
@@ -466,6 +466,55 @@ describe('processSmartUpload — integration', () => {
     const sessionData = (lastUpdate[0] as any).data;
 
     expect(['ocr', 'hybrid', 'llm']).toContain(sessionData.extractedMetadata?.cuttingInstructionsSource);
+    expect(sessionData.extractedMetadata?.ocrCuttingInstructions?.[0]?.partName).toBe('OCR Part');
+  });
+
+  it('honors enforceOcrSplitting by sticking with OCR splits even when LLM confidence is higher', async () => {
+    vi.mocked(labelPages).mockResolvedValue({
+      cuttingInstructions: [
+        {
+          partName: 'OCR Part',
+          instrument: 'OCR Part',
+          section: 'Other',
+          transposition: 'C',
+          partNumber: 1,
+          pageRange: [0, 2] as [number, number],
+        },
+      ],
+      pageLabels: { 1: { label: 'OCR Part', confidence: 50, source: 'ocr' } },
+      confidence: 40,
+      strategyUsed: 'ocr',
+      diagnostics: {
+        strategies: [],
+        totalDurationMs: 0,
+        budgetRemaining: 10,
+        budgetLimit: 10,
+      },
+    });
+
+    const llmResponse = JSON.stringify({
+      title: 'American Patrol',
+      confidenceScore: 95,
+      isMultiPart: true,
+      parts: [
+        { instrument: 'LLM Part', partName: 'LLM Part', section: 'Other', transposition: 'C', partNumber: 1 },
+      ],
+      cuttingInstructions: [
+        { partName: 'LLM Part', instrument: 'LLM Part', section: 'Other', transposition: 'C', partNumber: 1, pageRange: [1, 3] },
+      ],
+    });
+
+    vi.mocked(callVisionModel).mockResolvedValue({ content: llmResponse });
+    vi.mocked(loadSmartUploadRuntimeConfig).mockResolvedValue(makeLlmConfig({ enforceOcrSplitting: true }) as any);
+
+    const job = makeJob(SESSION_ID);
+    await processSmartUpload(job);
+
+    const loginCalls = vi.mocked(prisma.smartUploadSession.update).mock.calls;
+    const lastUpdate = loginCalls[loginCalls.length - 1];
+    const sessionData = (lastUpdate[0] as any).data;
+
+    expect(sessionData.extractedMetadata?.cuttingInstructionsSource).toBe('ocr');
     expect(sessionData.extractedMetadata?.ocrCuttingInstructions?.[0]?.partName).toBe('OCR Part');
   });
 

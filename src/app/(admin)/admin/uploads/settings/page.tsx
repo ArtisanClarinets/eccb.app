@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { SmartUploadSettingsForm } from '@/components/admin/music/smart-upload-settings-form';
 import { ApiKeyManager } from '@/components/admin/music/api-key-manager';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, FileText } from 'lucide-react';
 
 interface SystemSetting {
   id: string;
@@ -108,11 +109,20 @@ export default function SmartUploadSettingsPage() {
   return (
     <div className="container mx-auto px-4 py-8 max-w-[calc(100%-2rem)]">
       <div className="space-y-6 w-full max-w-3xl lg:max-w-4xl xl:max-w-5xl">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Smart Upload Settings</h1>
-          <p className="text-muted-foreground mt-1">
-            Configure the AI/LLM models used for automatic metadata extraction from music PDFs.
-          </p>
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Smart Upload Settings</h1>
+            <p className="text-muted-foreground mt-1">
+              Configure the AI/LLM models used for automatic metadata extraction from music PDFs.
+            </p>
+          </div>
+          <Link
+            href="/admin/uploads/report"
+            className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90"
+          >
+            <FileText className="h-4 w-4" />
+            View Report
+          </Link>
         </div>
 
         <ApiKeyManager />

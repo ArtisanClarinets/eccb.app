@@ -64,6 +64,8 @@ export interface LLMRuntimeConfig {
   sendFullPdfToLlm: boolean;
   /** Enable OCR-first pipeline. When true, OCR is attempted before LLM. */
   enableOcrFirst: boolean;
+  /** When true, prefer OCR-derived cutting instructions whenever valid. */
+  enforceOcrSplitting: boolean;
   /** Minimum text layer confidence (0-100) to trust embedded text over OCR. */
   textLayerThresholdPct: number;
   /** OCR mode: 'header' | 'full' | 'both' */
@@ -147,7 +149,7 @@ const DB_KEYS = [
   'smart_upload_max_pages_per_part',
   'smart_upload_send_full_pdf_to_llm',
   // OCR-first settings (new)
-  'smart_upload_enable_ocr_first', 'smart_upload_text_layer_threshold_pct',
+  'smart_upload_enable_ocr_first', 'smart_upload_enforce_ocr_splitting', 'smart_upload_text_layer_threshold_pct',
   'smart_upload_ocr_mode',
   'smart_upload_ocr_max_pages',
   'smart_upload_text_probe_pages',
@@ -286,6 +288,7 @@ export async function loadLLMConfig(): Promise<LLMRuntimeConfig> {
 
   // ── OCR-first settings (DB-only, no env fallback) ──────────────────────────
   const enableOcrFirst = (db['smart_upload_enable_ocr_first'] ?? 'true') === 'true';
+  const enforceOcrSplitting = (db['smart_upload_enforce_ocr_splitting'] ?? 'false') === 'true';
   const textLayerThresholdPct = Number(db['smart_upload_text_layer_threshold_pct'] ?? 40);
   const ocrMode = (db['smart_upload_ocr_mode'] || 'both') as 'header' | 'full' | 'both';
   const ocrMaxPages = Number(db['smart_upload_ocr_max_pages'] ?? 3);
@@ -401,6 +404,7 @@ export async function loadLLMConfig(): Promise<LLMRuntimeConfig> {
     adjudicatorUserPrompt: db['llm_adjudicator_user_prompt'] || undefined,
     // ── OCR-first settings (new) ───────────────────────────────────────────
     enableOcrFirst,
+    enforceOcrSplitting,
     textLayerThresholdPct,
     ocrMode,
     ocrMaxPages,

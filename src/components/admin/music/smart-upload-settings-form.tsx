@@ -203,6 +203,7 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
       llm_two_pass_enabled: parseBool(settings['llm_two_pass_enabled']),
       smart_upload_enable_autonomous_mode: parseBool(settings['smart_upload_enable_autonomous_mode']),
       smart_upload_enable_ocr_first: parseBool(settings['smart_upload_enable_ocr_first']),
+      smart_upload_enforce_ocr_splitting: parseBool(settings['smart_upload_enforce_ocr_splitting']),
       smart_upload_store_raw_ocr_text: parseBool(settings['smart_upload_store_raw_ocr_text']),
       smart_upload_text_layer_threshold_pct: parseNum(settings['smart_upload_text_layer_threshold_pct']),
       smart_upload_ocr_max_pages: parseNum(settings['smart_upload_ocr_max_pages']),
@@ -1147,6 +1148,27 @@ export function SmartUploadSettingsForm({ settings }: SmartUploadSettingsFormPro
                     <FormLabel>Enable OCR-first Pipeline</FormLabel>
                     <FormDescription className="text-xs">
                       Run OCR ahead of the LLM to improve accuracy on scanned PDFs.
+                    </FormDescription>
+                  </div>
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="smart_upload_enforce_ocr_splitting"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-center space-x-3 space-y-0">
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                  <div className="space-y-1 leading-none">
+                    <FormLabel>Enforce OCR for splitting</FormLabel>
+                    <FormDescription className="text-xs">
+                      Prefer OCR-derived page splitting instructions even when the LLM is more confident.
+                      LLM is still used as a fallback when OCR results are invalid.
                     </FormDescription>
                   </div>
                 </FormItem>

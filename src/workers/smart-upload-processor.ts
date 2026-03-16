@@ -1374,10 +1374,12 @@ export async function processSmartUpload(job: Job<SmartUploadProcessData>): Prom
       ocrConfidence: ocrCuttingConfidence,
       llmInstructions: llmCuttingInstructions,
       llmConfidence: llmCuttingConfidence,
+      enforceOcr: llmConfig.enforceOcrSplitting,
     });
 
     extraction.cuttingInstructions = cuttingChoice.chosenInstructions;
     extraction.cuttingInstructionsSource = cuttingChoice.source;
+    extraction.enforceOcrSplitting = llmConfig.enforceOcrSplitting;
     if (cuttingChoice.ocrInstructions) {
       extraction.ocrCuttingInstructions = cuttingChoice.ocrInstructions;
     }

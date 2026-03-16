@@ -171,6 +171,8 @@ function makeLlmConfig(overrides: Record<string, unknown> = {}) {
     visionModelParams: {},
     verificationModelParams: {},
     promptVersion: '1.0',
+    enableOcrFirst: true,
+    enforceOcrSplitting: false,
     ...overrides,
   };
 }

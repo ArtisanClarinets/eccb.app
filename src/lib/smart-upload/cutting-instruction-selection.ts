@@ -37,6 +37,7 @@ export function chooseBestCuttingInstructions(params: {
   ocrConfidence?: number;
   llmInstructions?: CuttingInstruction[];
   llmConfidence?: number;
+  enforceOcr?: boolean;
 }): CuttingInstructionsAudit {
   const {
     totalPages,
@@ -44,6 +45,7 @@ export function chooseBestCuttingInstructions(params: {
     ocrConfidence,
     llmInstructions = [],
     llmConfidence,
+    enforceOcr = false,
   } = params;
 
   const ocrResult = ocrInstructions.length
@@ -72,6 +74,7 @@ export function chooseBestCuttingInstructions(params: {
   const llmConf = typeof llmConfidence === 'number' ? Math.max(0, Math.min(100, Math.round(llmConfidence))) : undefined;
 
   const shouldOverrideWithLlm = (): boolean => {
+    if (enforceOcr && ocrValid) return false;
     if (!llmValid) return false;
     if (!ocrValid) return true;
 
@@ -89,6 +92,12 @@ export function chooseBestCuttingInstructions(params: {
   };
 
   const chosenSource: CuttingInstructionsSource = (() => {
+    if (enforceOcr) {
+      if (ocrValid) return 'ocr';
+      if (llmValid) return 'llm';
+      return 'none';
+    }
+
     if (shouldOverrideWithLlm()) return 'llm';
     if (ocrValid) return llmValid ? 'hybrid' : 'ocr';
     if (llmValid) return 'llm';

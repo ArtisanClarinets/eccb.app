@@ -463,7 +463,6 @@ async function finalizeSmartUploadSession(
   // Choose best cutting instructions between first-pass (OCR/deterministic) and second-pass LLM.
   const firstPassCuts =
     (firstPassMeta?.ocrCuttingInstructions as CuttingInstruction[] | null) ??
-    (smartSession.cuttingInstructions as CuttingInstruction[] | null) ??
     firstPassMeta?.cuttingInstructions ??
     [];
   const firstPassConfidence =
@@ -478,11 +477,13 @@ async function finalizeSmartUploadSession(
     ocrConfidence: firstPassConfidence,
     llmInstructions: correctedCuttingInstructions ?? [],
     llmConfidence: finalConfidence,
+    enforceOcr: llmConfig.enforceOcrSplitting,
   });
 
   correctedCuttingInstructions = selection.chosenInstructions;
   finalMetadata.cuttingInstructions = selection.chosenInstructions;
   finalMetadata.cuttingInstructionsSource = selection.source;
+  finalMetadata.enforceOcrSplitting = llmConfig.enforceOcrSplitting;
   finalMetadata.ocrCuttingInstructions = selection.ocrInstructions;
   finalMetadata.llmCuttingInstructions = selection.llmInstructions;
 

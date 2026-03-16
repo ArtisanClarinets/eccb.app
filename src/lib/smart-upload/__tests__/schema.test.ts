@@ -19,6 +19,7 @@ import {
   SMART_UPLOAD_SCHEMA_VERSION,
   dbRecordToSettings,
   settingsToDbRecord,
+  SMART_UPLOAD_SETTING_KEYS,
 } from '../schema';
 import { PROMPT_VERSION } from '../prompts';
 
@@ -809,6 +810,10 @@ describe('settingsToDbRecord', () => {
 
     // Should have entries for all keys that have values
     expect(Object.keys(record).length).toBeGreaterThan(0);
+  });
+
+  it('should include enforceOcrSplitting key in SMART_UPLOAD_SETTING_KEYS', () => {
+    expect(SMART_UPLOAD_SETTING_KEYS).toContain('smart_upload_enforce_ocr_splitting');
   });
 });
 

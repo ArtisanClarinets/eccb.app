@@ -76,6 +76,8 @@ interface ExtractedMetadata {
   timeSignature?: string;
   tempo?: string;
   cuttingInstructions?: CuttingInstruction[];
+  cuttingInstructionsSource?: 'ocr' | 'llm' | 'hybrid' | 'none';
+  enforceOcrSplitting?: boolean;
   verificationConfidence?: number;
   corrections?: string | null;
 }
@@ -1320,7 +1322,7 @@ function UploadReviewClient({
 
               {/* Confidence Score with Warning */}
               <div className="space-y-3">
-                <div className="flex items-center gap-4">
+                <div className="flex flex-wrap items-center gap-4">
                   <span className="text-sm font-medium">Confidence Score:</span>
                   <ConfidenceIndicator
                     score={editingSession.confidenceScore}
@@ -1329,6 +1331,11 @@ function UploadReviewClient({
                     showIcon={true}
                     detailed={true}
                   />
+                  <span className="text-xs text-muted-foreground">
+                    Enforce OCR splitting:
+                    {' '}
+                    {editingSession.extractedMetadata?.enforceOcrSplitting ? 'Yes' : 'No'}
+                  </span>
                 </div>
                 {editingSession.confidenceScore !== null && editingSession.confidenceScore < 70 && (
                   <ConfidenceWarningBanner
@@ -1359,6 +1366,10 @@ function UploadReviewClient({
                       <div>OCR engine: {editingSession.exceptionQueue.provenance.ocrEngineUsed || 'none recorded'}</div>
                       <div>OCR chars: {editingSession.exceptionQueue.provenance.ocrTextChars ?? 0}</div>
                       <div>Raw OCR text: {editingSession.exceptionQueue.provenance.rawOcrTextAvailable ? 'available' : 'not stored'}</div>
+                      <div>
+                        Split source:{' '}
+                        {editingSession.extractedMetadata?.cuttingInstructionsSource ?? 'unknown'}
+                      </div>
                       <div>Strategy attempts: {editingSession.exceptionQueue.provenance.strategyHistoryCount ?? 0}</div>
                       {editingSession.exceptionQueue.provenance.llmFallbackReasons && editingSession.exceptionQueue.provenance.llmFallbackReasons.length > 0 && (
                         <div>
