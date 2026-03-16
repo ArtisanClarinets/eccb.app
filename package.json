@@ -96,6 +96,7 @@
     "ioredis": "^5.9.3",
     "jsonrepair": "^3.13.2",
     "lucide-react": "^0.563.0",
+    "magicast": "^0.3.5",
     "mysql2": "^3.17.2",
     "napi-rs": "^0.3.10",
     "next": "16.1.6",
