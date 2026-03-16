@@ -49,10 +49,10 @@ describe('Smart Upload E2E Tests — Phase 1-2 Validation', () => {
             confidenceScore: 64, // Trigger low confidence
             status: 'REQUIRES_REVIEW',
             uploadedBy: 'test-user',
-            extractedMetadata: {
+            extractedMetadata: JSON.stringify({
               title: 'Test',
               confidenceScore: 64,
-            },
+            }),
             parseStatus: 'NOT_PARSED',
             secondPassStatus: 'QUEUED',
           },
@@ -62,9 +62,15 @@ describe('Smart Upload E2E Tests — Phase 1-2 Validation', () => {
 
         // Verify confidence is below threshold
         const fallbackPolicy = await import('@/lib/smart-upload/fallback-policy');
-        const shouldBypass = fallbackPolicy.skipSegmentationDrivenSecondPass?.(64, 70) ?? false;
+        const needsSecondPass = fallbackPolicy.needsSecondPass(64, null, {
+          minTextCoverage: 0.1,
+          minSkipSecondPassConfidence: 70,
+          minAutoCommitConfidence: 85,
+          minPartsForAutoCommit: 1,
+          autonomousModeEnabled: true,
+        });
 
-        expect(shouldBypass).toBe(false);
+        expect(needsSecondPass).toBe(true);
         expect(session.confidenceScore).toBeLessThan(70);
       });
 
@@ -79,10 +85,10 @@ describe('Smart Upload E2E Tests — Phase 1-2 Validation', () => {
             confidenceScore: 92, // High confidence
             status: 'AUTO_COMMITTED',
             uploadedBy: 'test-user',
-            extractedMetadata: {
+            extractedMetadata: JSON.stringify({
               title: 'Test',
               confidenceScore: 92,
-            },
+            }),
             parseStatus: 'PARSED',
             secondPassStatus: 'NOT_NEEDED',
           },
@@ -119,10 +125,10 @@ describe('Smart Upload E2E Tests — Phase 1-2 Validation', () => {
             status: 'REQUIRES_REVIEW',
             uploadedBy: 'test-user',
             routingDecision: 'no_parse_second_pass', // Indicates gaps detected
-            extractedMetadata: {
+            extractedMetadata: JSON.stringify({
               title: 'Test with Gaps',
               confidenceScore: 75,
-            },
+            }),
             parseStatus: 'PARSED',
             secondPassStatus: 'QUEUED',
           },
@@ -162,8 +168,8 @@ describe('Smart Upload E2E Tests — Phase 1-2 Validation', () => {
         // Verify error codes are available and properly structured
         const { SmartUploadErrorCode } = await import('@/lib/smart-upload/error-codes');
 
-        expect(SmartUploadErrorCode.SU_500_VERIFY_LLM_FAILURE).toBeDefined();
-        expect(typeof SmartUploadErrorCode.SU_500_VERIFY_LLM_FAILURE).toBe('string');
+        expect(SmartUploadErrorCode.VERIFY_LLM_FAILED).toBeDefined();
+        expect(typeof SmartUploadErrorCode.VERIFY_LLM_FAILED).toBe('string');
       });
     });
   });
@@ -197,8 +203,8 @@ describe('Smart Upload E2E Tests — Phase 1-2 Validation', () => {
         expect(codes.length).toBeGreaterThan(0);
 
         // Verify SmartUploadError class works
-        const err = new SmartUploadError('Test error', SmartUploadErrorCode.SU_001_CONFIG_MISSING);
-        expect(err.code).toBe(SmartUploadErrorCode.SU_001_CONFIG_MISSING);
+        const err = new SmartUploadError(SmartUploadErrorCode.CONFIG_MISSING_ENV, 'Test error');
+        expect(err.code).toBe(SmartUploadErrorCode.CONFIG_MISSING_ENV);
         expect(err.message).toContain('Test error');
       });
     });
@@ -209,8 +215,8 @@ describe('Smart Upload E2E Tests — Phase 1-2 Validation', () => {
         const { SmartUploadErrorCode } = await import('@/lib/smart-upload/error-codes');
 
         // Verify error codes for preview endpoint exist
-        expect(SmartUploadErrorCode.SU_700_STORAGE_DOWNLOAD_FAILED).toBeDefined();
-        expect(SmartUploadErrorCode.SU_705_RENDERING_FAILED).toBeDefined();
+        expect(SmartUploadErrorCode.STORAGE_DOWNLOAD_FAILED).toBeDefined();
+        expect(SmartUploadErrorCode.VERIFY_RENDERING_FAILED).toBeDefined();
       });
     });
 
@@ -237,8 +243,8 @@ describe('Smart Upload E2E Tests — Phase 1-2 Validation', () => {
         expect(metrics.recordMetric).toBeDefined();
 
         // Test recording
-        recordMetricSuccess('test-session', 'vision', 100, { confidence: 85 });
-        recordMetricError('test-session', 'SU_001' as any, 'verification', 50);
+        recordMetricSuccess('test-session', 'vision', 100);
+        recordMetricError('test-session', 'SU-001' as any, 'verification', 50);
       });
     });
   });
@@ -258,10 +264,10 @@ describe('Smart Upload E2E Tests — Phase 1-2 Validation', () => {
           confidenceScore: 85,
           status: 'AUTO_COMMITTED',
           uploadedBy: 'test-user',
-          extractedMetadata: {
+          extractedMetadata: JSON.stringify({
             title: 'Lifecycle Test',
             confidenceScore: 85,
-          },
+          }),
           parseStatus: 'PARSED',
           secondPassStatus: 'COMPLETE',
         },
@@ -293,8 +299,9 @@ describe('Smart Upload E2E Tests — Phase 1-2 Validation', () => {
           parts: 3,
           title: 'Test',
           cuttingInstructions: [],
-        } as any,
-        { autoApproveThreshold: 90, confidenceThreshold: 70 }
+          autoApproveThreshold: 90,
+          confidenceThreshold: 70,
+        } as any
       );
 
       expect(gate).toBeDefined();
@@ -315,10 +322,10 @@ describe('Smart Upload E2E Tests — Phase 1-2 Validation', () => {
           confidenceScore: 55, // Very low
           status: 'REQUIRES_REVIEW',
           uploadedBy: 'test-user',
-          extractedMetadata: {
+          extractedMetadata: JSON.stringify({
             title: 'Regression Test',
             confidenceScore: 55,
-          },
+          }),
           parseStatus: 'NOT_PARSED',
           secondPassStatus: 'QUEUED',
         },
