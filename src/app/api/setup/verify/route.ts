@@ -24,7 +24,7 @@ interface VerifyResponse {
  * Verifies setup completion by force-refreshing state.
  */
 export async function POST(request: Request): Promise<NextResponse<VerifyResponse>> {
-  const authResponse = validateSetupRequest(request);
+  const authResponse = await validateSetupRequest(request);
   if (authResponse) return authResponse as NextResponse<VerifyResponse>;
 
   try {

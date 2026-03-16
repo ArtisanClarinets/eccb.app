@@ -5,6 +5,19 @@ import { magicLink, twoFactor, admin, openAPI } from 'better-auth/plugins';
 import { sendEmail } from '@/lib/email';
 import { env } from '@/lib/env';
 
+/**
+ * Escape HTML entities to prevent injection in email body content.
+ * Only call on user-supplied strings before interpolation into HTML.
+ */
+function htmlEscape(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
+}
+
 // Session configuration constants
 const SESSION_CONFIG = {
   // Session expiration: 7 days
@@ -31,12 +44,13 @@ export const auth = betterAuth({
     // Password reset token expiration (15 minutes)
     resetPasswordTokenExpiresIn: SESSION_CONFIG.PASSWORD_RESET_EXPIRATION,
     sendResetPassword: async ({ user, url }: { user: { email: string; name?: string | null }; url: string }) => {
+      const safeName = user.name ? htmlEscape(user.name) : 'there';
       await sendEmail({
         to: user.email,
         subject: 'Reset your password - ECCB Platform',
         html: `
           <h2>Password Reset Request</h2>
-          <p>Hi ${user.name || 'there'},</p>
+          <p>Hi ${safeName},</p>
           <p>We received a request to reset your password. Click the link below to create a new password:</p>
           <p><a href="${url}" style="padding: 12px 24px; background: #0f766e; color: white; text-decoration: none; border-radius: 6px;">Reset Password</a></p>
           <p>Or copy this link: ${url}</p>
@@ -48,12 +62,13 @@ export const auth = betterAuth({
       });
     },
     sendVerificationEmail: async ({ user, url }: { user: { email: string; name?: string | null }; url: string }) => {
+      const safeName = user.name ? htmlEscape(user.name) : 'there';
       await sendEmail({
         to: user.email,
         subject: 'Verify your email - ECCB Platform',
         html: `
           <h2>Welcome to ECCB Platform!</h2>
-          <p>Hi ${user.name || 'there'},</p>
+          <p>Hi ${safeName},</p>
           <p>Thank you for registering. Please verify your email address by clicking the link below:</p>
           <p><a href="${url}" style="padding: 12px 24px; background: #0f766e; color: white; text-decoration: none; border-radius: 6px;">Verify Email</a></p>
           <p>Or copy this link: ${url}</p>
@@ -129,7 +144,9 @@ export const auth = betterAuth({
       name: 'better-auth.session_token',
       attributes: {
         httpOnly: true,
-        sameSite: env.NODE_ENV === 'production' ? 'lax' : 'lax',
+        // Use 'strict' in production to require same-site origin on every
+        // request carrying the session cookie (prevents CSRF on top-level nav).
+        sameSite: env.NODE_ENV === 'production' ? 'strict' : 'lax',
         path: '/',
         secure: env.NODE_ENV === 'production',
         // Set domain in production for subdomain sharing if needed

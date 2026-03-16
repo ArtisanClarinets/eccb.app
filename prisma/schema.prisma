@@ -375,7 +375,7 @@ model SmartUploadSession {
   storageKey          String
   extractedMetadata   String?                         @db.LongText
   confidenceScore     Int?
-  status              SmartUploadStatus               @default(PENDING_REVIEW)
+  status              SmartUploadStatus               @default(PROCESSING)
   uploadedBy          String
   reviewedBy          String?
   reviewedAt          DateTime?
@@ -401,6 +401,10 @@ model SmartUploadSession {
   adjudicatorStatus   String?
   finalConfidence     Int?
   llmAdjudicatorModel String?
+  /// LLM provider used for header-label classification (may differ from main provider).
+  llmHeaderLabelProvider String?
+  /// Model name used for header-label classification.
+  llmHeaderLabelModel    String?
   requiresHumanReview Boolean                         @default(false)
   /// Total LLM calls consumed by this session (persisted so retries don't reset the budget).
   llmCallCount        Int                             @default(0)
@@ -1229,9 +1233,18 @@ model TaskModelConfig {
 }
 
 enum SmartUploadStatus {
-  PENDING_REVIEW
-  APPROVED
-  REJECTED
+  // ── Active states ────────────────────────────────────────────────────────
+  PROCESSING        // Worker is actively parsing/classifying the upload
+  AUTO_COMMITTING   // Passed quality gates; queued for autonomous commit
+  // ── Terminal / resolution states ────────────────────────────────────────
+  AUTO_COMMITTED    // Successfully committed by the autonomous pipeline
+  REQUIRES_REVIEW   // Processing finished but needs human review (exception)
+  MANUALLY_APPROVED // Human reviewer approved & committed to the library
+  REJECTED          // Human reviewer rejected the upload
+  FAILED            // Unrecoverable processing or commit failure
+  // ── Legacy values (kept for backward-compatibility during migration) ─────
+  PENDING_REVIEW    // @deprecated — use REQUIRES_REVIEW for new sessions
+  APPROVED          // @deprecated — use MANUALLY_APPROVED for new sessions
 }
 
 enum SmartUploadSessionCommitStatus {

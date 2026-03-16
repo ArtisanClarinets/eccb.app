@@ -685,18 +685,21 @@ export async function GET(request: NextRequest) {
     const apiKey = await getPrimaryApiKey(provider as LLMProviderValue);
     const endpoint = await resolveEndpoint(provider, clientEndpoint);
 
-    const endpointPolicy = provider === 'ollama' || provider === 'ollama-cloud'
-      ? 'allow-local'
-      : 'strict-public';
-    const validatedEndpoint = endpoint
-      ? validateOutboundEndpoint(endpoint, endpointPolicy)
-      : null;
+    // Only validate endpoint for providers that actually use it
+    let safeEndpoint = endpoint;
+    const providersUsingEndpoint = ['ollama', 'ollama-cloud', 'custom'];
+    if (providersUsingEndpoint.includes(provider) && endpoint) {
+      const endpointPolicy = provider === 'ollama' || provider === 'ollama-cloud'
+        ? 'allow-local'
+        : 'strict-public';
+      const validatedEndpoint = validateOutboundEndpoint(endpoint, endpointPolicy);
 
-    if (validatedEndpoint && !validatedEndpoint.valid) {
-      return NextResponse.json({ error: validatedEndpoint.error }, { status: 400 });
+      if (!validatedEndpoint.valid) {
+        return NextResponse.json({ error: validatedEndpoint.error }, { status: 400 });
+      }
+
+      safeEndpoint = validatedEndpoint.url.toString();
     }
-
-    const safeEndpoint = validatedEndpoint?.valid ? validatedEndpoint.url.toString() : endpoint;
 
     // Fetch models based on provider
     let models: ModelInfo[];

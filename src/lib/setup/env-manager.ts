@@ -948,6 +948,43 @@ export function generateSecret(length: number = 32): string {
   return generateSecureSecret(length);
 }
 
+/**
+ * Update a single key in the .env file.
+ *
+ * This is used to persist runtime modifications (like disabling setup mode) so
+ * that the next restart picks up the new value.
+ */
+export function setEnvVariable(key: string, value: string, envPath: string = ENV_FILE_PATH): boolean {
+  try {
+    if (!existsSync(envPath)) {
+      return false;
+    }
+
+    const content = readFileSync(envPath, 'utf-8');
+    const lines = content.split(/\r?\n/);
+    let found = false;
+
+    const updated = lines.map((line) => {
+      const trimmed = line.trim();
+      // Match keys at the start of the line (allow optional whitespace and comments)
+      if (trimmed.startsWith(`${key}=`) || trimmed.startsWith(`${key} =`)) {
+        found = true;
+        return `${key}=${value}`;
+      }
+      return line;
+    });
+
+    if (!found) {
+      updated.push(`${key}=${value}`);
+    }
+
+    writeFileSync(envPath, updated.join('\n'), 'utf-8');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // =============================================================================
 // Export
 // =============================================================================
@@ -958,4 +995,5 @@ export default {
   validateEnvironment,
   generateEnvFile,
   generateSecret,
+  setEnvVariable,
 };

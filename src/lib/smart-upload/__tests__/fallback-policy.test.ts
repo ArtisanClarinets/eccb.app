@@ -26,7 +26,7 @@ function makeSignals(overrides: Partial<RoutingSignals> = {}): RoutingSignals {
     ocrStatus: 'NOT_NEEDED',
     secondPassStatus: 'NOT_NEEDED',
     commitStatus: 'NOT_STARTED',
-    workflowStatus: 'PROCESSED',
+    workflowStatus: 'PROCESSING',
     ...overrides,
   };
 }
@@ -41,8 +41,8 @@ describe('determineRoute — Terminal states', () => {
     expect(result.reasons).toContain('Session is in a terminal state');
   });
 
-  it('returns EXCEPTION_REVIEW for COMMITTED workflow', () => {
-    const result = determineRoute(makeSignals({ workflowStatus: 'COMMITTED' }));
+  it('returns EXCEPTION_REVIEW for AUTO_COMMITTED workflow', () => {
+    const result = determineRoute(makeSignals({ workflowStatus: 'AUTO_COMMITTED' }));
     expect(result.route).toBe('EXCEPTION_REVIEW');
   });
 

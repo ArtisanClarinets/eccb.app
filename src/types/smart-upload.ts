@@ -105,6 +105,12 @@ export interface ExtractedMetadata {
   tempo?: string;
   parts?: Array<{ instrument: string; partName: string }>;
   cuttingInstructions?: CuttingInstruction[];
+  /** Source of the chosen cuttingInstructions (for audit) */
+  cuttingInstructionsSource?: 'ocr' | 'llm' | 'hybrid' | 'none';
+  /** OCR-derived cutting instructions (for auditing / reproducibility) */
+  ocrCuttingInstructions?: CuttingInstruction[];
+  /** LLM-derived cutting instructions (for auditing / reproducibility) */
+  llmCuttingInstructions?: CuttingInstruction[];
   verificationConfidence?: number;
   corrections?: string | null;
   subtitle?: string;
