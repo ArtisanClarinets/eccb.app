@@ -50,12 +50,6 @@ export default async function AttendanceReportsPage({
   const sectionId = params.sectionId || '';
   const eventType = params.eventType || '';
 
-  // Fetch sections for filter dropdown
-  const sections = await prisma.section.findMany({
-    select: { id: true, name: true },
-    orderBy: { name: 'asc' },
-  });
-
   // Build where clause for attendance stats
   const attendanceWhere: Record<string, unknown> = {
     event: {
@@ -77,12 +71,83 @@ export default async function AttendanceReportsPage({
     };
   }
 
-  // Get overall attendance stats
-  const attendanceStats = await prisma.attendance.groupBy({
-    by: ['status'],
-    where: attendanceWhere,
-    _count: true,
-  });
+  // Fetch sections for filter dropdown and all other data concurrently
+  const [
+    sections,
+    attendanceStats,
+    sectionAttendanceData,
+    attendanceByEventType,
+    topMembers,
+    recentEvents,
+  ] = await Promise.all([
+    prisma.section.findMany({
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    }),
+    prisma.attendance.groupBy({
+      by: ['status'],
+      where: attendanceWhere,
+      _count: true,
+    }),
+    getSectionAttendanceStats(
+      new Date(startDate),
+      new Date(endDate),
+      eventType
+    ),
+    prisma.event.findMany({
+      where: {
+        startTime: { gte: new Date(startDate), lte: new Date(endDate) },
+        isCancelled: false,
+      },
+      select: {
+        type: true,
+        attendance: {
+          select: { status: true },
+        },
+      },
+    }),
+    prisma.member.findMany({
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        sections: { select: { section: { select: { name: true } } } },
+        _count: {
+          select: {
+            attendance: {
+              where: {
+                ...attendanceWhere,
+                status: 'PRESENT',
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        attendance: { _count: 'desc' },
+      },
+      take: 10,
+    }),
+    prisma.event.findMany({
+      where: {
+        startTime: { gte: new Date(startDate), lte: new Date(endDate) },
+        isCancelled: false,
+        ...(eventType ? { type: eventType as EventType } : {}),
+      },
+      select: {
+        id: true,
+        title: true,
+        type: true,
+        startTime: true,
+        location: true,
+        attendance: {
+          select: { status: true },
+        },
+      },
+      orderBy: { startTime: 'desc' },
+      take: 15,
+    })
+  ]);
 
   const totals = {
     present: attendanceStats.find((a) => a.status === 'PRESENT')?._count || 0,
@@ -95,27 +160,6 @@ export default async function AttendanceReportsPage({
   const attendanceRate = totalRecords > 0
     ? Math.round((totals.present / totalRecords) * 100)
     : 0;
-
-    // Get section attendance counts (optimized)
-  const sectionAttendanceData = await getSectionAttendanceStats(
-    new Date(startDate),
-    new Date(endDate),
-    eventType
-  );
-
-  // Get attendance by event type
-  const attendanceByEventType = await prisma.event.findMany({
-    where: {
-      startTime: { gte: new Date(startDate), lte: new Date(endDate) },
-      isCancelled: false,
-    },
-    select: {
-      type: true,
-      attendance: {
-        select: { status: true },
-      },
-    },
-  });
 
   // Group by event type and calculate stats
   const eventTypeMap = new Map<string, { present: number; total: number }>();
@@ -135,51 +179,6 @@ export default async function AttendanceReportsPage({
     total: stats.total,
     rate: stats.total > 0 ? Math.round((stats.present / stats.total) * 100) : 0,
   }));
-
-  // Get top members by attendance
-  const topMembers = await prisma.member.findMany({
-    select: {
-      id: true,
-      firstName: true,
-      lastName: true,
-      sections: { select: { section: { select: { name: true } } } },
-      _count: {
-        select: {
-          attendance: {
-            where: {
-              ...attendanceWhere,
-              status: 'PRESENT',
-            },
-          },
-        },
-      },
-    },
-    orderBy: {
-      attendance: { _count: 'desc' },
-    },
-    take: 10,
-  });
-
-  // Get recent events with attendance
-  const recentEvents = await prisma.event.findMany({
-    where: {
-      startTime: { gte: new Date(startDate), lte: new Date(endDate) },
-      isCancelled: false,
-      ...(eventType ? { type: eventType as EventType } : {}),
-    },
-    select: {
-      id: true,
-      title: true,
-      type: true,
-      startTime: true,
-      location: true,
-      attendance: {
-        select: { status: true },
-      },
-    },
-    orderBy: { startTime: 'desc' },
-    take: 15,
-  });
 
   const eventAttendanceData = recentEvents.map((event) => {
     const present = event.attendance.filter(

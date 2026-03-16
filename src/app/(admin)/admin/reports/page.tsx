@@ -29,30 +29,42 @@ export default async function AdminReportsPage() {
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
   const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
 
-  // Member stats
-  const [totalMembers, activeMembers, newMembers] = await Promise.all([
+  // Execute all database queries concurrently
+  const [
+    totalMembers,
+    activeMembers,
+    newMembers,
+    membersBySection,
+    totalEvents,
+    upcomingEvents,
+    completedEvents,
+    attendanceStats,
+    totalPieces,
+    recentPieces,
+    topAttenders,
+    recentEvents,
+  ] = await Promise.all([
+    // Member stats
     prisma.member.count(),
     prisma.member.count({ where: { status: 'ACTIVE' } }),
     prisma.member.count({
       where: { joinDate: { gte: thirtyDaysAgo } },
     }),
-  ]);
 
-  // Get members by section
-  const membersBySection = await prisma.section.findMany({
-    select: {
-      name: true,
-      _count: {
-        select: { members: true },
+    // Get members by section
+    prisma.section.findMany({
+      select: {
+        name: true,
+        _count: {
+          select: { members: true },
+        },
       },
-    },
-    orderBy: {
-      members: { _count: 'desc' },
-    },
-  });
+      orderBy: {
+        members: { _count: 'desc' },
+      },
+    }),
 
-  // Event stats
-  const [totalEvents, upcomingEvents, completedEvents] = await Promise.all([
+    // Event stats
     prisma.event.count(),
     prisma.event.count({
       where: { startTime: { gte: now }, isCancelled: false },
@@ -60,18 +72,74 @@ export default async function AdminReportsPage() {
     prisma.event.count({
       where: { endTime: { lt: now }, isCancelled: false },
     }),
-  ]);
 
-  // Attendance stats for last 90 days
-  const attendanceStats = await prisma.attendance.groupBy({
-    by: ['status'],
-    where: {
-      event: {
-        startTime: { gte: ninetyDaysAgo, lte: now },
+    // Attendance stats for last 90 days
+    prisma.attendance.groupBy({
+      by: ['status'],
+      where: {
+        event: {
+          startTime: { gte: ninetyDaysAgo, lte: now },
+        },
       },
-    },
-    _count: true,
-  });
+      _count: true,
+    }),
+
+    // Music library stats
+    prisma.musicPiece.count(),
+    prisma.musicPiece.count({
+      where: { createdAt: { gte: thirtyDaysAgo } },
+    }),
+
+    // Top members by attendance (last 90 days)
+    prisma.member.findMany({
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        sections: {
+          select: {
+            section: { select: { name: true } },
+          },
+        },
+        _count: {
+          select: {
+            attendance: {
+              where: {
+                status: 'PRESENT',
+                event: { startTime: { gte: ninetyDaysAgo } },
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        attendance: { _count: 'desc' },
+      },
+      take: 10,
+    }),
+
+    // Recent events with attendance
+    prisma.event.findMany({
+      where: {
+        endTime: { lt: now },
+        isCancelled: false,
+      },
+      select: {
+        id: true,
+        title: true,
+        type: true,
+        startTime: true,
+        _count: {
+          select: { attendance: true },
+        },
+        attendance: {
+          select: { status: true },
+        },
+      },
+      orderBy: { startTime: 'desc' },
+      take: 10,
+    }),
+  ]);
 
   const attendanceTotals = {
     present: attendanceStats.find((a) => a.status === 'PRESENT')?._count || 0,
@@ -83,64 +151,6 @@ export default async function AdminReportsPage() {
   const attendanceRate = totalAttendanceRecords > 0
     ? Math.round(((attendanceTotals.present + attendanceTotals.late) / totalAttendanceRecords) * 100)
     : 0;
-
-  // Music library stats
-  const [totalPieces, recentPieces] = await Promise.all([
-    prisma.musicPiece.count(),
-    prisma.musicPiece.count({
-      where: { createdAt: { gte: thirtyDaysAgo } },
-    }),
-  ]);
-
-  // Top members by attendance (last 90 days)
-  const topAttenders = await prisma.member.findMany({
-    select: {
-      id: true,
-      firstName: true,
-      lastName: true,
-      sections: {
-        select: {
-          section: { select: { name: true } },
-        },
-      },
-      _count: {
-        select: {
-          attendance: {
-            where: {
-              status: 'PRESENT',
-              event: { startTime: { gte: ninetyDaysAgo } },
-            },
-          },
-        },
-      },
-    },
-    orderBy: {
-      attendance: { _count: 'desc' },
-    },
-    take: 10,
-  });
-
-  // Recent events with attendance
-  const recentEvents = await prisma.event.findMany({
-    where: {
-      endTime: { lt: now },
-      isCancelled: false,
-    },
-    select: {
-      id: true,
-      title: true,
-      type: true,
-      startTime: true,
-      _count: {
-        select: { attendance: true },
-      },
-      attendance: {
-        select: { status: true },
-      },
-    },
-    orderBy: { startTime: 'desc' },
-    take: 10,
-  });
 
   return (
     <div className="space-y-6">
