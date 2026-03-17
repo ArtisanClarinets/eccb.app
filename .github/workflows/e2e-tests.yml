@@ -52,7 +52,7 @@ jobs:
           cache: 'pnpm'
 
       - name: Install dependencies
-        run: ppnpm install --frozen-lockfile --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium firefox webkit
@@ -157,7 +157,7 @@ jobs:
           cache: 'pnpm'
 
       - name: Install dependencies
-        run: ppnpm install --frozen-lockfile --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Install Playwright
         run: pnpm exec playwright install chromium
@@ -230,7 +230,7 @@ jobs:
           cache: 'pnpm'
 
       - name: Install dependencies
-        run: ppnpm install --frozen-lockfile --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Install Playwright
         run: pnpm exec playwright install chromium

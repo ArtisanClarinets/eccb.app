@@ -32,7 +32,7 @@ jobs:
           cache: 'pnpm'
 
       - name: Install dependencies
-        run: ppnpm install --frozen-lockfile --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Run ESLint
         run: pnpm lint
@@ -101,7 +101,7 @@ jobs:
           cache: 'pnpm'
 
       - name: Install dependencies
-        run: ppnpm install --frozen-lockfile --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Setup test database
         run: pnpm exec prisma migrate deploy
@@ -140,7 +140,7 @@ jobs:
           cache: 'pnpm'
 
       - name: Install dependencies
-        run: ppnpm install --frozen-lockfile --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Run link integrity check
         run: pnpm exec tsx scripts/check-routes.ts
@@ -181,7 +181,7 @@ jobs:
           cache: 'pnpm'
 
       - name: Install dependencies
-        run: ppnpm install --frozen-lockfile --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Build application
         run: pnpm build
@@ -214,8 +214,8 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
 
-      - name: Run ppnpm audit
-        run: ppnpm audit --audit-level=high
+      - name: Run pnpm audit
+        run: pnpm audit --audit-level=high
         continue-on-error: true
 
       - name: Run dependency review
