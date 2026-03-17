@@ -59,15 +59,15 @@ export function getS3Client(): S3Client {
 // Path Validation (Security)
 // =============================================================================
 
+
 /**
- * Validates and resolves a storage key to prevent path traversal attacks.
- * Only used for LOCAL storage driver.
+ * Validates a storage key for basic path traversal and invalid characters.
+ * Enforced for all storage drivers.
  * 
  * @param key - The storage key to validate
- * @returns The resolved absolute path within the storage directory
- * @throws Error if path traversal is detected
+ * @throws Error if key is invalid
  */
-function validateAndResolvePath(key: string): string {
+function validateStorageKey(key: string): void {
   // Reject null bytes
   if (key.includes('\0')) {
     throw new Error('Invalid key: null bytes not allowed');
@@ -89,7 +89,17 @@ function validateAndResolvePath(key: string): string {
   if (decodedKey.includes('..')) {
     throw new Error('Invalid key: encoded path traversal not allowed');
   }
-  
+}
+
+/**
+ * Validates and resolves a storage key to prevent path traversal attacks.
+ * Only used for LOCAL storage driver.
+ *
+ * @param key - The storage key to validate
+ * @returns The resolved absolute path within the storage directory
+ * @throws Error if path traversal is detected
+ */
+function validateAndResolvePath(key: string): string {
   // Resolve the full path
   const storagePath = path.resolve(env.LOCAL_STORAGE_PATH);
   const fullPath = path.resolve(storagePath, key);
@@ -146,6 +156,8 @@ export async function uploadFile(
   file: Buffer | NodeJS.ReadableStream,
   options: UploadOptions
 ): Promise<string> {
+  validateStorageKey(key);
+
   if (env.STORAGE_DRIVER === 'S3') {
     return uploadToS3(key, file, options);
   }
@@ -226,6 +238,8 @@ async function uploadToLocal(
  * @returns Download result with stream or URL
  */
 export async function downloadFile(key: string): Promise<DownloadResult | string> {
+  validateStorageKey(key);
+
   if (env.STORAGE_DRIVER === 'S3') {
     return getSignedDownloadUrl(key);
   }
@@ -277,6 +291,8 @@ async function downloadFromLocal(key: string): Promise<DownloadResult> {
  * @returns Presigned URL or API route URL
  */
 export async function getSignedDownloadUrl(key: string, expiresIn: number = 3600): Promise<string> {
+  validateStorageKey(key);
+
   if (env.STORAGE_DRIVER === 'S3') {
     const client = getS3Client();
     
@@ -311,6 +327,8 @@ export async function generateSecureDownloadUrl(
   key: string,
   _options: SecureUrlOptions = {}
 ): Promise<string> {
+  validateStorageKey(key);
+
   const expiresIn = _options.expiresIn || 3600;
   
   if (env.STORAGE_DRIVER === 'S3') {
@@ -337,6 +355,8 @@ export async function generateSecureDownloadUrl(
  * @param key - Storage key (path) for the file
  */
 export async function deleteFile(key: string): Promise<void> {
+  validateStorageKey(key);
+
   if (env.STORAGE_DRIVER === 'S3') {
     const client = getS3Client();
     
@@ -375,6 +395,8 @@ export async function deleteFile(key: string): Promise<void> {
  * @returns True if file exists
  */
 export async function fileExists(key: string): Promise<boolean> {
+  validateStorageKey(key);
+
   if (env.STORAGE_DRIVER === 'S3') {
     const client = getS3Client();
     
@@ -413,6 +435,8 @@ export async function fileExists(key: string): Promise<boolean> {
  * @returns File metadata
  */
 export async function getFileMetadata(key: string): Promise<FileMetadata> {
+  validateStorageKey(key);
+
   if (env.STORAGE_DRIVER === 'S3') {
     const client = getS3Client();
     
@@ -460,6 +484,8 @@ export async function getFileMetadata(key: string): Promise<FileMetadata> {
  * @returns URL to access the file
  */
 export async function getFileUrl(key: string): Promise<string> {
+  validateStorageKey(key);
+
   return getSignedDownloadUrl(key);
 }
 
