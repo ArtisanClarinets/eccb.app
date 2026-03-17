@@ -41,13 +41,18 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Node.js
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10
+
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
+          cache: 'pnpm'
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: ppnpm install --frozen-lockfile --frozen-lockfile
 
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium firefox webkit
@@ -141,13 +146,18 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Node.js
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10
+
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
+          cache: 'pnpm'
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: ppnpm install --frozen-lockfile --frozen-lockfile
 
       - name: Install Playwright
         run: pnpm exec playwright install chromium
@@ -209,13 +219,18 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Node.js
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10
+
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
+          cache: 'pnpm'
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: ppnpm install --frozen-lockfile --frozen-lockfile
 
       - name: Install Playwright
         run: pnpm exec playwright install chromium
