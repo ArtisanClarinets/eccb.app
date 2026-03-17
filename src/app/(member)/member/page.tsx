@@ -22,63 +22,66 @@ export const metadata: Metadata = {
 };
 
 async function getDashboardData(userId: string) {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    include: {
-      member: {
-        include: {
-          musicAssignments: {
-            include: {
-              piece: true,
+  // Execute database queries concurrently to reduce TTFB
+  const [user, upcomingEvents, announcements] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        member: {
+          include: {
+            musicAssignments: {
+              include: {
+                piece: true,
+              },
+              orderBy: { assignedAt: 'desc' },
+              take: 5,
             },
-            orderBy: { assignedAt: 'desc' },
-            take: 5,
-          },
-          attendance: {
-            include: {
-              event: true,
+            attendance: {
+              include: {
+                event: true,
+              },
+              orderBy: { event: { startTime: 'desc' } },
+              take: 5,
             },
-            orderBy: { event: { startTime: 'desc' } },
-            take: 5,
           },
         },
+        notifications: {
+          where: { isRead: false },
+          orderBy: { createdAt: 'desc' },
+          take: 5,
+        },
       },
-      notifications: {
-        where: { isRead: false },
-        orderBy: { createdAt: 'desc' },
-        take: 5,
+    }),
+
+    // Upcoming events
+    prisma.event.findMany({
+      where: {
+        isPublished: true,
+        isCancelled: false,
+        startTime: { gte: new Date() },
+        deletedAt: null,
       },
-    },
-  });
+      orderBy: { startTime: 'asc' },
+      take: 3,
+      include: {
+        venue: true,
+      },
+    }),
 
-  // Upcoming events
-  const upcomingEvents = await prisma.event.findMany({
-    where: {
-      isPublished: true,
-      isCancelled: false,
-      startTime: { gte: new Date() },
-      deletedAt: null,
-    },
-    orderBy: { startTime: 'asc' },
-    take: 3,
-    include: {
-      venue: true,
-    },
-  });
-
-  // Recent announcements
-  const announcements = await prisma.announcement.findMany({
-    where: {
-      status: 'PUBLISHED',
-      publishedAt: { lte: new Date() },
-      OR: [
-        { expiresAt: null },
-        { expiresAt: { gt: new Date() } },
-      ],
-    },
-    orderBy: { publishedAt: 'desc' },
-    take: 3,
-  });
+    // Recent announcements
+    prisma.announcement.findMany({
+      where: {
+        status: 'PUBLISHED',
+        publishedAt: { lte: new Date() },
+        OR: [
+          { expiresAt: null },
+          { expiresAt: { gt: new Date() } },
+        ],
+      },
+      orderBy: { publishedAt: 'desc' },
+      take: 3,
+    })
+  ]);
 
   return { user, upcomingEvents, announcements };
 }

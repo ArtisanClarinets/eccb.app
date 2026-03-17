@@ -31,53 +31,56 @@ export default async function StandHubPage() {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user) redirect('/login');
 
-  // Upcoming events that have music assigned
-  const upcomingEvents = await prisma.event.findMany({
-    where: {
-      isPublished: true,
-      startTime: { gte: new Date() },
-      music: { some: {} },
-    },
-    include: {
-      music: {
-        include: {
-          piece: { include: { composer: { select: { fullName: true } } } },
+  // Execute database queries concurrently to reduce TTFB
+  const [upcomingEvents, pastEvents, allPieces] = await Promise.all([
+    // Upcoming events that have music assigned
+    prisma.event.findMany({
+      where: {
+        isPublished: true,
+        startTime: { gte: new Date() },
+        music: { some: {} },
+      },
+      include: {
+        music: {
+          include: {
+            piece: { include: { composer: { select: { fullName: true } } } },
+          },
+          orderBy: { sortOrder: 'asc' },
         },
-        orderBy: { sortOrder: 'asc' },
+        _count: { select: { music: true } },
       },
-      _count: { select: { music: true } },
-    },
-    orderBy: { startTime: 'asc' },
-    take: 10,
-  });
+      orderBy: { startTime: 'asc' },
+      take: 10,
+    }),
 
-  // Past events with music (last 20) – for post-rehearsal review
-  const pastEvents = await prisma.event.findMany({
-    where: {
-      isPublished: true,
-      endTime: { lt: new Date() },
-      music: { some: {} },
-    },
-    include: {
-      _count: { select: { music: true } },
-    },
-    orderBy: { startTime: 'desc' },
-    take: 20,
-  });
-
-  // All music pieces in the library (published, not archived)
-  const allPieces = await prisma.musicPiece.findMany({
-    where: { isArchived: false },
-    include: {
-      composer: { select: { fullName: true } },
-      files: {
-        where: { mimeType: 'application/pdf', isArchived: false },
-        select: { id: true, storageKey: true, partLabel: true },
-        take: 1,
+    // Past events with music (last 20) – for post-rehearsal review
+    prisma.event.findMany({
+      where: {
+        isPublished: true,
+        endTime: { lt: new Date() },
+        music: { some: {} },
       },
-    },
-    orderBy: { title: 'asc' },
-  });
+      include: {
+        _count: { select: { music: true } },
+      },
+      orderBy: { startTime: 'desc' },
+      take: 20,
+    }),
+
+    // All music pieces in the library (published, not archived)
+    prisma.musicPiece.findMany({
+      where: { isArchived: false },
+      include: {
+        composer: { select: { fullName: true } },
+        files: {
+          where: { mimeType: 'application/pdf', isArchived: false },
+          select: { id: true, storageKey: true, partLabel: true },
+          take: 1,
+        },
+      },
+      orderBy: { title: 'asc' },
+    })
+  ]);
 
   const eventTypeColors: Record<string, 'default' | 'secondary' | 'outline'> = {
     REHEARSAL: 'secondary',
