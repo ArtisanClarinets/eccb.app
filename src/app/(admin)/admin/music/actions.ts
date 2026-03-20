@@ -806,25 +806,25 @@ export async function createMusicPiece(formData: FormData) {
     });
 
     // Upload files if any
-    const uploadedFiles = [];
-    for (const file of files) {
-      if (file && file.size > 0) {
+    const validFiles = files.filter(f => f && f.size > 0);
+    const uploadedFiles = await Promise.all(
+      validFiles.map(async (file) => {
         const buffer = await file.arrayBuffer();
         const key = `music/${piece.id}/${Date.now()}-${file.name}`;
         await uploadFile(key, Buffer.from(buffer), {
           contentType: file.type,
         });
         
-        uploadedFiles.push({
+        return {
           pieceId: piece.id,
           fileName: file.name,
           storageKey: key,
           mimeType: file.type,
           fileSize: file.size,
           fileType: getFileType(file.type),
-        });
-      }
-    }
+        };
+      })
+    );
 
     if (uploadedFiles.length > 0) {
       await prisma.musicFile.createMany({
@@ -917,9 +917,7 @@ export async function deleteMusicPiece(id: string) {
     });
 
     // Delete files from storage
-    for (const file of files) {
-      await deleteFile(file.storageKey);
-    }
+    await Promise.all(files.map(file => deleteFile(file.storageKey)));
 
     // Delete from database (cascading will handle related records)
     const piece = await prisma.musicPiece.delete({
